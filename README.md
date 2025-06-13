@@ -1,15 +1,15 @@
 # INSTALL ROS JAZZY
-As if the os was new on 24.04:
+## As if the os was new on 24.04
 According to https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html
 
-Install vscode and nano if you dont have them:
+## Install vscode and nano if you dont have them
 
 ```bash
     sudo apt update
     sudo apt install nano
 ```
 
-And VScode:
+## And VScode
 ```bash
     # Install dependencies
     sudo apt install wget gpg apt-transport-https
@@ -32,7 +32,7 @@ And VScode:
     sudo apt install code
 ```
 
-set locale:
+## set locale
 
 ```bash
     locale  # check for UTF-8
@@ -41,7 +41,9 @@ set locale:
 ```bash
     sudo apt update && sudo apt install locales
     sudo locale-gen en_US en_US.UTF-8
-    sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+```
+# SUDO UPDATE LOCALE LC ALL EN US.UTF 8 LANG EN US.UTF 8
+```bash
     export LANG=en_US.UTF-8
 ```
 
@@ -49,7 +51,7 @@ set locale:
     locale  # verify settings
 ```
 
-Enable reqs:
+## Enable reqs
 
 ```bash
     sudo apt install software-properties-common
@@ -71,16 +73,14 @@ Now add the ROS 2 GPG key with apt.
 
 Then add the repository to your sources list.
 
-```bash
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-```
+# ECHO "DEB [ARCH $(DPKG PRINT ARCHITECTURE) SIGNED BY /USR/SHARE/KEYRINGS/ROS ARCHIVE KEYRING.GPG] HTTP://PACKAGES.ROS.ORG/ROS2/UBUNTU $(. /ETC/OS RELEASE && ECHO $UBUNTU CODENAME) MAIN" SUDO TEE /ETC/APT/SOURCES.LIST.D/ROS2.LIST /DEV/NULL
 
-Install tools:
+## Install tools
 ```bash
     sudo apt update && sudo apt install ros-dev-tools
 ```
 
-Install el ROS:
+## Install el ROS
 ```bash
     sudo apt update
 ```
@@ -89,13 +89,13 @@ Install el ROS:
     sudo apt upgrade
 ```
 
-We go for desktop install:
+## We go for desktop install
 
 ```bash
     sudo apt install ros-jazzy-desktop
 ```
 
-setup environment:
+## setup environment
 ```bash
     source /opt/ros/jazzy/setup.bash
     (you may add this to the bashrc to avoid doing it always with:)
@@ -105,13 +105,11 @@ setup environment:
     nano ~/.bashrc
     (go to the end and paste: source /opt/ros/jazzy/setup.bash    then save and exit)
     
-```
 source the bashrc 
-```bash
     source ~/.bashrc
 ```
 
-CREATE THE WORKSPACE and build!:
+## CREATE THE WORKSPACE and build!
 
 ```bash
     mkdir -p ~/ros2_ws/src
@@ -125,27 +123,29 @@ add the source of the workspace to the bashrc too either with nano or with this 
     echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
 ```
 
-We source again:
+## We source again
 
 ```bash
     source ~/.bashrc
 ```
 You can try the install by running a demo node talker and listener in different terminals:
+## on one terminal run
 ```bash
-    on one terminal run:
      ros2 run demo_nodes_cpp talker
-    on the other run:
+```
+## on the other run
+```bash
      ros2 run demo_nodes_py listener
 ```
 if everything works they should coordinate!
 
-## EL FIN
+# EL FIN
 
-<<<<<<<<<<<<<<INSTALL Moveit2 from Source>>>>>>>>>>>>>>>
+# INSTALL MOVEIT2 FROM SOURCE
 WE WILL BE MISSING THE TUTORIAL FILES AND EXAMPLES NOTE THAT (the version with tutorials is in the nextr chunk)
 According to: https://moveit.ai/install-moveit2/source/
 
-Install Prerequisites:
+## Install Prerequisites
 
 ```bash
     sudo apt install -y \
@@ -160,74 +160,78 @@ Install Prerequisites:
     wget
 ```
 
-now send:
+## now send
 
+```bash
    sudo rosdep init
+```
 
-then:
+## then
 ```bash
     sudo apt update
     sudo apt dist-upgrade
     rosdep update
 ```
-Source jik:
+## Source jik
+```bash
    source /opt/ros/jazzy/setup.bash
+```
 
-Uninstall preexistances:
+## Uninstall preexistances
 ```bash
     sudo apt remove ros-jazzy-moveit*
 ```
 
-go to src in workspace:
+## go to src in workspace
 
 ```bash
     cd ~/ros2_ws/src
 ```
 
-CLONE IT: 
+## CLONE IT
 ```bash
     git clone https://github.com/moveit/moveit2.git -b jazzy
     for repo in moveit2/moveit2.repos $(f="moveit2/moveit2_jazzy.repos"; test -r $f && echo $f); do vcs import < "$repo"; done
-    rosdep install -r --from-paths . --ignore-src --rosdistro jazzy -y
 ```
+# ROSDEP INSTALL R FROM PATHS . IGNORE SRC ROSDISTRO JAZZY Y
 
 (THIS ONLY WORK BY DOING THIS FIREWALL TRICK) Then do the middleware thing for using cyclone as they recommend:
-```bash
-    sudo apt update && sudo apt install -y ros-jazzy-rmw-cyclonedds-cpp && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc && source ~/.bashrc
-```
+# SUDO APT UPDATE && SUDO APT INSTALL Y ROS JAZZY RMW CYCLONEDDS CPP && ECHO "EXPORT RMW IMPLEMENTATION RMW CYCLONEDDS CPP" ~/.BASHRC && SOURCE ~/.BASHRC
 
-(FUCKYOU CYCLONE AND MOVEIT DEVS)If youy check with this command you should see rmw_cyclonedds_cpp:
+If you check with this command you should see rmw_cyclonedds_cpp:
 
 ```bash
     echo $RMW_IMPLEMENTATION
 ```
 
-DO THIS FIREWALL THINGY TO MAKE THIS CYCLONE MIDDLEWARE WORK:
+## DO THIS FIREWALL THINGY TO MAKE THIS CYCLONE MIDDLEWARE WORK
 
+```bash
 sudo ufw allow in proto udp to 224.0.0.0/4
 sudo ufw allow in proto udp from 224.0.0.0/4
 sudo ufw reload  # To refresh the firewall with new rules
+```
 
 Now back to the workspace and build (if the computer is limited to 16gb of ram you should use the executor sequential command)
 
 ```bash
     cd ~/ros2_ws/
-    colcon build --event-handlers desktop_notification- status- --cmake-args -DCMAKE_BUILD_TYPE=Release --executor sequential
 ```
+# COLCON BUILD EVENT HANDLERS DESKTOP NOTIFICATION STATUS CMAKE ARGS DCMAKE BUILD TYPE RELEASE EXECUTOR SEQUENTIAL
 
-## EL FIN
+# EL FIN
 
-<<<<<<<<<<<<<<INSTALL Moveit2 from Source and tutorials>>>>>>>>>>>>>>>
+# INSTALL MOVEIT2 FROM SOURCE AND TUTORIALS
 According to https://moveit.picknik.ai/main/doc/tutorials/getting_started/getting_started.html
 
-Be sure to have rosdeps and colcon mixin:
+## Be sure to have rosdeps and colcon mixin
 ```bash
     sudo rosdep init
     rosdep update
     sudo apt update
     sudo apt dist-upgrade
 ```
-mixin:
+## mixin
 ```bash
     sudo apt install python3-colcon-common-extensions
     sudo apt install python3-colcon-mixin
@@ -235,7 +239,7 @@ mixin:
     colcon mixin update default
 ```
 
-Clone tutorials and dependencies in src folder with:
+## Clone tutorials and dependencies in src folder with
 ```bash
     cd ~/ros2_ws/src
     git clone -b main https://github.com/moveit/moveit2_tutorials
@@ -245,43 +249,45 @@ Clone tutorials and dependencies in src folder with:
     vcs import --recursive < moveit2_tutorials/moveit2_tutorials.repos
 ```
 
-Remove binary id installed:
+## Remove binary id installed
 ```bash
     sudo apt remove ros-jazzy-moveit*
 ```
-Update pkgs:
-```bash
-    sudo apt update && rosdep install -r --from-paths . --ignore-src --rosdistro jazzy -y
-```
-Build in workspace folder:
+## Update pkgs
+# SUDO APT UPDATE && ROSDEP INSTALL R FROM PATHS . IGNORE SRC ROSDISTRO JAZZY Y
+## Build in workspace folder
 ```bash
     cd ~/ros2_ws
     colcon build --mixin release
 ```
 
 You now can try the sample files for moving a panda robot:
+## Run this in one terminal
 ```bash
-    Run this in one terminal:
         ros2 launch moveit2_tutorials move_group.launch.py
-    In another with that terminal running do:
+```
+## In another with that terminal running do
+```bash
         ros2 launch moveit2_tutorials move_group_interface_tutorial.launch.py
 ```
 
 SOURCE COMMANDS
 
+```bash
 source ~/ros2_ws/install/setup.bash
 source ~/.bashrc
+```
 
 For the jazzy_ws in docker
+## Before opening image use
 ```bash
-    Before opening image use: 
     xhost +local:docker
-```
 source /opt/ros/jazzy/setup.bash
 source /workspace/jazzy_ws/install/setup.bash
+```
 
 
-## UR MOVEIT SETUP
+# UR MOVEIT SETUP
 
 Here we will se how to setup a custom robot in this case the UR into the a moveit launchfile. The idea is to take the original sample file and replicate it with the UR10e.
 
@@ -317,8 +323,8 @@ There are two ways for building the UR files and configurations choose only one:
 
 ```bash
     A) (Build Ur Drivers from src (might not be really necessary but it works))
-        Clone Ur drivers and files:
 ```
+## Clone Ur drivers and files
 
 ```bash
             sudo apt install python3-colcon-common-extensions python3-vcstool
@@ -326,13 +332,13 @@ There are two ways for building the UR files and configurations choose only one:
             git clone -b jazzy https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver.git
             cd ~/ros2_ws/
             rosdep update
-            rosdep install --from-paths src --ignore-src -r -y
+```
+# ROSDEP INSTALL FROM PATHS SRC IGNORE SRC R Y
+```bash
             source install/setup.bash
 ```
 
-```bash
-        Build:
-```
+## Build
 
 ```bash
             colcon build --mixin release
@@ -345,10 +351,12 @@ There are two ways for building the UR files and configurations choose only one:
 
 ```bash
         # 1) Bring up the UR10e “fake” hardware + controllers
-        ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur10e robot_ip:=yyy.yyy.yyy.yyy use_mock_hardware:=true
-        # 2) Bring up MoveIt2 (planning, RViz, etc.) against the fake hardware (Some times you have to manually move the joint/nullspace sliders in the motionplanning panel to be able to use the gimball)
-        ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur10e launch_rviz:=true
 ```
+# ROS2 LAUNCH UR ROBOT DRIVER UR CONTROL.LAUNCH.PY UR TYPE: UR10E ROBOT IP: YYY.YYY.YYY.YYY USE MOCK HARDWARE: TRUE
+```bash
+        # 2) Bring up MoveIt2 (planning, RViz, etc.) against the fake hardware (Some times you have to manually move the joint/nullspace sliders in the motionplanning panel to be able to use the gimball)
+```
+# ROS2 LAUNCH UR MOVEIT CONFIG UR MOVEIT.LAUNCH.PY UR TYPE: UR10E LAUNCH RVIZ: TRUE
 
 
 
@@ -366,9 +374,7 @@ There are two ways for building the UR files and configurations choose only one:
             sudo apt install ros-jazzy-ur-description
 ```
 
-```bash
-        Install UR drivers: 
-```
+## Install UR drivers
 
 ```bash
             sudo apt install ros-jazzy-ur-robot-driver
@@ -380,14 +386,14 @@ There are two ways for building the UR files and configurations choose only one:
 
 ```bash
             cd ~/ros2_ws
-            rosdep install --from-paths src --ignore-src -r -y
+```
+# ROSDEP INSTALL FROM PATHS SRC IGNORE SRC R Y
+```bash
             colcon build
             source install/setup.bash
 ```
 
-```bash
-        check if its there:
-```
+## check if its there
 
 ```bash
             ros2 pkg prefix ur_description     # prints /opt/ros/jazzy
@@ -416,26 +422,26 @@ There are two ways for building the UR files and configurations choose only one:
 
 ```bash
         # 1) Bring up the UR10e “fake” hardware + controllers
-        ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur10e robot_ip:=yyy.yyy.yyy.yyy use_mock_hardware:=true
-        # 2) Bring up MoveIt2 (planning, RViz, etc.) against the fake hardware (Some times you have to manually move the joint/nullspace sliders in the motionplanning panel to be able to use the gimball)
-        ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur10e launch_rviz:=true
 ```
+# ROS2 LAUNCH UR ROBOT DRIVER UR CONTROL.LAUNCH.PY UR TYPE: UR10E ROBOT IP: YYY.YYY.YYY.YYY USE MOCK HARDWARE: TRUE
+```bash
+        # 2) Bring up MoveIt2 (planning, RViz, etc.) against the fake hardware (Some times you have to manually move the joint/nullspace sliders in the motionplanning panel to be able to use the gimball)
+```
+# ROS2 LAUNCH UR MOVEIT CONFIG UR MOVEIT.LAUNCH.PY UR TYPE: UR10E LAUNCH RVIZ: TRUE
 
 
 
-## 
->>>>>>>>>>>>>>>>UR move it and Launch File WIP:<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# UR MOVE IT AND LAUNCH FILE WIP:
 
-Go to src folder:
+## Go to src folder
 ```bash
     cd ~/ros2_ws/src
 ```
 
-Create pkg with dependencies it will be called ur_moveit_demos:
+## Create pkg with dependencies it will be called ur_moveit_demos
 
-```bash
-    ros2 pkg create ur_moveit_demos --build-type ament_python --dependencies rclpy moveit_ros_planning_interface launch launch_ros
-```
+# ROS2 PKG CREATE UR MOVEIT DEMOS BUILD TYPE AMENT PYTHON DEPENDENCIES RCLPY MOVEIT ROS PLANNING INTERFACE LAUNCH LAUNCH ROS
 
 Enter the folder and create this folders (Just to have them in order)
 
@@ -445,10 +451,10 @@ Enter the folder and create this folders (Just to have them in order)
 
 ```bash
     mkdir launch
-```
  //   mkdir config
+```
 
-Modify setup.py inside the pck to leave it like:
+## Modify setup.py inside the pck to leave it like
 
 ```bash
     from setuptools import find_packages, setup
@@ -485,7 +491,7 @@ Modify setup.py inside the pck to leave it like:
         },
     )
 ```
-Compile and verify:
+## Compile and verify
 
 ```bash
     cd ~/ros2_ws
@@ -494,12 +500,12 @@ Compile and verify:
     source ~/.bashrc
 ```
 
-Check that its there:
+## Check that its there
 ```bash
     ros2 pkg list | grep ur_moveit_demos
 ```
 
-Now we will create the launch files:
+## Now we will create the launch files
 ```bash
     cd ~/ros2_ws/src/ur_moveit_demos/launch
     nano ur10e_moveit_system.launch.py
@@ -519,9 +525,7 @@ Now we will create the launch files:
 ```
 
 
-```bash
-        def generate_launch_description():
-```
+## def generate_launch_description()
 
 ```bash
             ur_launch_dir = os.path.join(
@@ -596,7 +600,7 @@ Now we will create the launch files:
 ```
 
 
-Build and source:
+## Build and source
 
 ```bash
     cd ~/ros2_ws
@@ -605,7 +609,7 @@ Build and source:
     source ~/.bashrc
 ```
 
-You can run the lunch with:
+## You can run the lunch with
 ```bash
     ros2 launch ur_moveit_demos ur10e_moveit_system.launch.py
 ```
@@ -613,20 +617,22 @@ You can run the lunch with:
 We will create a Ros pkg to store our launch nodes
 
 
-## C MOVEMENT EXAMPLE:
+# C MOVEMENT EXAMPLE:
 
+```bash
 cd ~/ros2_ws/src
 ros2 pkg create ur10e_moveit_tutorials --build-type ament_cmake \
+```
   --dependencies rclcpp moveit_ros_planning_interface moveit_msgs
 
-c++ commands node:
+## c++ commands node
 
 ```bash
     cd ur10e_moveit_tutorials/src
     nano move_group_interface_ur10e.cpp
 ```
 
-Paste inside (This is a simple goal pose example):
+## Paste inside (This is a simple goal pose example)
 
 ```bash
         #include <rclcpp/rclcpp.hpp>
@@ -706,12 +712,12 @@ Paste inside (This is a simple goal pose example):
         int main(int argc, char** argv)
         {
 ```
-## /*
+# /*
 ```bash
         * 1.  Initialize ROS and create a node that inherits parameters
         *     declared elsewhere (e.g. robot_description, planning pipelines).
 ```
-## * */
+# * */
 ```bash
         rclcpp::init(argc, argv);
         rclcpp::NodeOptions node_opts;
@@ -719,24 +725,24 @@ Paste inside (This is a simple goal pose example):
         auto node = rclcpp::Node::make_shared("ur10e_move_group_interface", node_opts);
 ```
 
-## /*
+# /*
 ```bash
         * 2.  Spin the node in a *background* thread so that MoveIt’s
         *     CurrentStateMonitor can continuously receive /joint_states.
 ```
-## * */
+# * */
 ```bash
         rclcpp::executors::SingleThreadedExecutor executor;
         executor.add_node(node);
         std::thread([&executor]() { executor.spin(); }).detach();
 ```
 
-## /*
+# /*
 ```bash
         * 3.  Construct MoveGroupInterface for the UR10e manipulator
         *     and tell it which link is the end-effector.
 ```
-## * */
+# * */
 ```bash
         const std::string PLANNING_GROUP = "ur_manipulator";
         const std::string EEF_LINK       = "tool0";
@@ -747,11 +753,11 @@ Paste inside (This is a simple goal pose example):
         move_group.setEndEffectorLink(EEF_LINK);
 ```
 
-## /*
+# /*
 ```bash
         * 4.  Wait (max 2 s) for a valid RobotState; abort if none arrives.
 ```
-## * */
+# * */
 ```bash
         moveit::core::RobotStatePtr current_state = move_group.getCurrentState(2.0);
         if (!current_state)
@@ -762,12 +768,12 @@ Paste inside (This is a simple goal pose example):
         }
 ```
 
-## /*
+# /*
 ```bash
         * 5.  Define a new pose goal = current pose + 0.05 m in X, Y, Z.
         *     Orientation is kept unchanged.
 ```
-## * */
+# * */
 ```bash
         geometry_msgs::msg::Pose target = move_group.getCurrentPose().pose;
         target.position.x += 0.05;
@@ -776,11 +782,11 @@ Paste inside (This is a simple goal pose example):
         move_group.setPoseTarget(target);
 ```
 
-## /*
+# /*
 ```bash
         * 6.  Plan and execute the motion.
 ```
-## * */
+# * */
 ```bash
         moveit::planning_interface::MoveGroupInterface::Plan plan;
         bool success = (move_group.plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
@@ -802,7 +808,7 @@ Paste inside (This is a simple goal pose example):
         }
 ```
 
-Create Launchfile for the node:
+## Create Launchfile for the node
 
 ```bash
     cd ~/ros2_ws/src/ur10e_moveit_tutorials
@@ -811,17 +817,15 @@ Create Launchfile for the node:
     nano move_group_interface_ur10e.launch.py
 ```
 
-```bash
-    Inside you add:
-```
+## Inside you add
 
 ```bash
         from launch import LaunchDescription
         from launch_ros.actions import Node
 ```
 
+## def generate_launch_description()
 ```bash
-        def generate_launch_description():
             return LaunchDescription([
                 Node(
                     package="ur10e_moveit_tutorials",
@@ -868,8 +872,8 @@ Edit cmakelists inside the pkg folder like this (there are some extra packages t
     endif()
 ```
 
+# ADD EXECUTABLE(UR10E MOVE GROUP INTERFACE SRC/MOVE GROUP INTERFACE UR10E.CPP)
 ```bash
-    add_executable(ur10e_move_group_interface src/move_group_interface_ur10e.cpp)
     ament_target_dependencies(ur10e_move_group_interface
     rclcpp
     moveit_ros_planning_interface
@@ -893,7 +897,7 @@ Edit cmakelists inside the pkg folder like this (there are some extra packages t
     ament_package()
 ```
 
-Build and source:
+## Build and source
 
 ```bash
     cd ~/ros2_ws
@@ -908,26 +912,30 @@ Run the launch file with Rviz, Moveit and the UR robot drivers:
     ros2 launch ur_moveit_demos ur10e_moveit_system.launch.py
 ```
 
-Run in another terminal:
+## Run in another terminal
 
 ```bash
     ros2 launch ur10e_moveit_tutorials move_group_interface_ur10e.launch.py
 ```
 
 
-## Unsorted useful commands
+# UNSORTED USEFUL COMMANDS
 
 
 To get current State (ros2 topic echo /joint_states --once)
 
 FOR MOVING EACH JOINT INDIVIDUALLY joint_names match positions order BEWARE OF CRUSHING:
 
+```bash
 ros2 action send_goal /scaled_joint_trajectory_controller/follow_joint_trajectory \
+```
   control_msgs/action/FollowJointTrajectory \
   "{
 ```bash
     trajectory: {
-      joint_names: ['shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint', 'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint'],
+```
+# JOINT NAMES: ['SHOULDER PAN JOINT', 'SHOULDER LIFT JOINT', 'ELBOW JOINT', 'WRIST 1 JOINT', 'WRIST 2 JOINT', 'WRIST 3 JOINT'],
+```bash
       points: [
         {
           positions: [0.12895223915576935, -1.5521489896676322, 1.5388830343829554, 0.07252506792034907, -0.2845042387591761, -0.012816254292623341],
@@ -939,21 +947,29 @@ ros2 action send_goal /scaled_joint_trajectory_controller/follow_joint_trajector
 ```
   }"
 
-For activating the movement in the physical robot:
+## For activating the movement in the physical robot
 
+```bash
 ros2 service call /dashboard_client/play std_srvs/srv/Trigger
+```
 
-For cleaning the docker log file:
+## For cleaning the docker log file
+```bash
 sudo truncate -s 0 /var/log/syslog
+```
 
-Joint states:
+## Joint states
+```bash
 ros2 topic echo /joint_states --once
+```
 
+```bash
 source /opt/ros/jazzy/setup.bash
 source /workspace/jazzy_ws/install/setup.bash
+```
 
 TO BE DONE
-## 
+---
 
 FIGURE OUT TIME PARAMETRIZATION AND IF IT WORKS WITH CARTESIAN MOVEMENTS
 
