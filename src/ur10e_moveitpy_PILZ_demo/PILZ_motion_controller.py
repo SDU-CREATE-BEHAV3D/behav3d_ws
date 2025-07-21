@@ -1,8 +1,7 @@
-"""Pilz Motion Controller utilities and teleoperation helpers."""
 #!/usr/bin/env python3
 
-from ament_index_python.packages import get_package_share_directory
 import math
+import random
 
 import rclpy
 from rclpy.node import Node
@@ -16,9 +15,7 @@ from moveit_py.pose_goal_builder import create_pose_goal
 from moveit.planning import PlanRequestParameters
 from moveit.core.robot_trajectory import RobotTrajectory
 from moveit_msgs.srv import GetMotionSequence
-from moveit_msgs.msg import MotionPlanRequest, MotionSequenceItem, MotionSequenceRequest
-from moveit_msgs.msg import Constraints, PositionConstraint, OrientationConstraint, BoundingVolume
-from shape_msgs.msg import SolidPrimitive
+from moveit_msgs.msg import MotionSequenceItem, MotionSequenceRequest
 
 from typing import List, Optional
 
@@ -40,7 +37,7 @@ class PilzMotionController(Node):
         group: str = "ur_manipulator",
         root_link: str = "base_link",
         eef_link: str = "tool0",
-        home_pose: Optional[PoseStamped | RobotState | None],
+        home_pose: Optional[PoseStamped | RobotState | None] = None,
         default_lin_scaling: float = 0.5,
         default_ptp_scaling: float = 0.5,
         default_acc_scaling: float = 0.5,
@@ -270,56 +267,6 @@ class PilzMotionController(Node):
             self.root_link,
         )
 
-    # === Utility & waypoint generators ===
-    def make_square(
-        self,
-        *,
-        center_pose: Optional[PoseStamped] | None = None,
-        r: float = 0.2,
-        z_fixed: float = 0.5,
-    ) -> List[PoseStamped]:
-        from copy import deepcopy as _dc
-
-        if center_pose is None:
-            self.planning_component.set_start_state_to_current_state()
-            start_ps = self.planning_component.get_start_state().get_pose(self.eef_link)
-            base_pose = _dc(start_ps)
-        else:
-            base_pose = _dc(center_pose.pose)
-
-        base_pose.position.z = z_fixed
-
-        wp = []
-        # bottom‑left
-        p0 = _dc(base_pose)
-        p0.position.x -= r
-        p0.position.y -= r
-        wp.append(p0)
-        # top‑left
-        p1 = _dc(base_pose)
-        p1.position.x -= r
-        p1.position.y += r
-        wp.append(p1)
-        # top‑right
-        p2 = _dc(base_pose)
-        p2.position.x += r
-        p2.position.y += r
-        wp.append(p2)
-        # bottom‑right
-        p3 = _dc(base_pose)
-        p3.position.x += r
-        p3.position.y -= r
-        wp.append(p3)
-
-        # Wrap into PoseStamped messages
-        waypoints = []
-        for pose in wp:
-            ps = PoseStamped()
-            ps.header.frame_id = self.root_link
-            ps.pose = pose
-            waypoints.append(ps)
-        return waypoints
-
     # === Diagnostics & reachability ===
     
     def is_reachable(self, pose: PoseStamped) -> bool:
@@ -450,8 +397,10 @@ class PilzMotionController(Node):
         pose.pose.orientation.w = qw
         return pose
 
-class PilzRemote(Node):
-    """Minimal remote control node that listens to ``/user_input`` and calls the controller."""
+class PilzDemo(Node):
+    """Remote‑control demo node that maps textual commands on ``/user_input`` to
+    high‑level motions executed by a :class:`PilzMotionController` instance."""
+
     def __init__(self, controller: PilzMotionController):
         super().__init__("pilz_remote")
         self.ctrl = controller
@@ -461,26 +410,167 @@ class PilzRemote(Node):
             self.cb,
             10,
         )
-        self.get_logger().info("PilzRemote ready. Use 'h','l','q' on /user_input.")
+        self.get_logger().info(
+            "PilzDemo ready. Commands: "
+            "'home', 'draw_square', 'draw_square_blended', 'draw_line', 'draw_sine', 'quit'"
+        )
 
+    # ------------------------------------------------------------------
+    # Command dispatcher
+    # ------------------------------------------------------------------
     def cb(self, msg: String):
-        """Handle single‑character remote control commands received on ``/user_input``."""
+        """Dispatch text commands received on ``/user_input``."""
         cmd = msg.data.strip().lower()
-        if cmd == "h":
-            self.ctrl.go_to_target(self.ctrl.home_state, motion_type="PTP")
-        elif cmd == "l":
-            waypoints = self.ctrl.make_square(r=0.2, z_fixed=0.5)
-            self.ctrl.go_to_trajectory(waypoints)
-        elif cmd == "q":
-            self.get_logger().info("Quit; shutting down.")
-            rclpy.shutdown()
-        else:
+        dispatch = {
+            "home": self.home,
+            "draw_square": self.draw_square,
+            "draw_square_blended": self.draw_square_blended,
+            "draw_line": self.draw_line,
+            "draw_sine": self.draw_sine,
+            "quit": self._quit,
+            "q": self._quit,  # backwards compatibility
+        }
+        func = dispatch.get(cmd)
+        if func is None:
             self.get_logger().info(f"Unknown command '{cmd}'")
+        else:
+            func()
+
+    # ------------------------------------------------------------------
+    # Command implementations
+    # ------------------------------------------------------------------
+    def home(self):
+        self.ctrl.go_to_target(self.ctrl.home_state, motion_type="PTP")
+
+    def draw_square(self, *, side: float = 0.4, z_fixed: float = 0.5):
+        from copy import deepcopy as _dc
+
+        self.home()
+
+        center_ps = self.ctrl.compute_fk(self.ctrl.home_state)  # start from home pose
+        base = _dc(center_ps.pose)
+        base.position.z = z_fixed
+        half = side / 2.0
+
+        # Corner sequence (BL → TL → TR → BR → BL)
+        offsets = [(-half, -half), (-half, half), (half, half), (half, -half), (-half, -half)]
+
+        for dx, dy in offsets:
+            ps = PoseStamped()
+            ps.header.frame_id = self.ctrl.root_link
+            ps.pose = _dc(base)
+            ps.pose.position.x += dx
+            ps.pose.position.y += dy
+            self.ctrl.go_to_target(ps, motion_type="LIN")
+
+        self.home()
+
+    def draw_square_blended(
+        self,
+        *,
+        side: float = 0.4,
+        z_fixed: float = 0.5,
+        blend_radius: float = 0.05,
+    ):
+        from copy import deepcopy as _dc
+
+        self.home()
+
+        center_ps = self.ctrl.compute_fk(self.ctrl.home_state)
+        base = _dc(center_ps.pose)
+        base.position.z = z_fixed
+        half = side / 2.0
+
+        waypoints = []
+        offsets = [(-half, -half), (-half, half), (half, half), (half, -half), (-half, -half)]
+
+        for dx, dy in offsets:
+            ps = PoseStamped()
+            ps.header.frame_id = self.ctrl.root_link
+            ps.pose = _dc(base)
+            ps.pose.position.x += dx
+            ps.pose.position.y += dy
+            waypoints.append(ps)
+
+        self.ctrl.go_to_trajectory(
+            waypoints,
+            motion_type="LIN",
+            blend_radius=blend_radius,
+        )
+
+        self.home()
+
+    def draw_line(self):
+        # Workspace bounds (metres) in the robot base frame
+        x_min, x_max = -0.2, 0.2
+        y_min, y_max = 0.4, 0.6
+        z_min, z_max = 0.4, 0.6
+
+        def random_ps():
+            ps = PoseStamped()
+            ps.header.frame_id = self.ctrl.root_link
+            ps.pose.position.x = random.uniform(x_min, x_max)
+            ps.pose.position.y = random.uniform(y_min, y_max)
+            ps.pose.position.z = random.uniform(y_min, y_max)
+            # copy end‑effector orientation from home
+            home_ori = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
+            ps.pose.orientation = home_ori
+            return ps
+
+        start = random_ps()
+        end = random_ps()
+
+        self.home()
+        self.ctrl.go_to_target(start, motion_type="PTP")
+        self.ctrl.go_to_target(end, motion_type="LIN")
+        self.home()
+
+    def draw_sine(
+        self,
+        *,
+        length: float = 0.4,
+        amplitude: float = 0.025,
+        cycles: int = 2,
+        points: int = 100,
+    ):
+        from math import sin, pi
+        from copy import deepcopy as _dc
+
+        self.home()
+
+        origin_ps = self.ctrl.compute_fk(self.ctrl.home_state)
+        origin = _dc(origin_ps.pose)
+        origin.position.x -= 0.2        # offset forward
+        origin.position.z = 0.4          # working height
+
+        waypoints = []
+        for i in range(points):
+            t = i / (points - 1)
+            ps = PoseStamped()
+            ps.header.frame_id = self.ctrl.root_link
+            ps.pose = _dc(origin)
+            ps.pose.position.x += t * length
+            ps.pose.position.y += amplitude * sin(2.0 * pi * cycles * t)
+            waypoints.append(ps)
+
+        self.ctrl.go_to_trajectory(
+            waypoints,
+            motion_type="LIN",
+            blend_radius=amplitude,
+        )
+
+        self.home()
+
+    # ------------------------------------------------------------------
+    # Miscellaneous helpers
+    # ------------------------------------------------------------------
+    def _quit(self):
+        rclpy.shutdown()
 
 def main():
     rclpy.init()
     controller = PilzMotionController()
-    remote     = PilzRemote(controller)
+    remote     = PilzDemo(controller)
     executor   = MultiThreadedExecutor()
     executor.add_node(controller)
     executor.add_node(remote)
