@@ -91,7 +91,7 @@ class PilzMotionController(Node):
         else:
             raise ValueError("Either pose_goal or robot_state_goal must be supplied.")
 
-        params = PRP(self.robot, "pilz_industrial_motion_planner")
+        params = PRP(self.robot, "pilz_lin")
         params.planner_id = planner_id
         params.max_velocity_scaling_factor = vel
         params.max_acceleration_scaling_factor = acc
@@ -115,7 +115,7 @@ class PilzMotionController(Node):
             mpr.max_velocity_scaling_factor = vel
             mpr.max_acceleration_scaling_factor = acc
             if idx == 0:
-                mpr.start_state = self.pc.get_start_state().to_msg()
+                mpr.start_state = self.pc.get_start_state().to_robot_state_msg()
             # Build goal_constraints from pose
             goal = construct_link_constraint(
                 self.pc.get_start_state(),
