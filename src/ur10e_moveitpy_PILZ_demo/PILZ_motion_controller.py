@@ -47,6 +47,14 @@ class PilzMotionController(Node):
         self.root_link = root_link
         self.eef_link = eef_link
 
+        self.default_lin_scaling = default_lin_scaling
+        self.default_ptp_scaling = default_ptp_scaling
+        self.default_acc_scaling = default_acc_scaling
+
+        # Start MoveItPy (spins its own executor)
+        self.robot = MoveItPy(node_name=f"{node_name}_moveit")
+        self.pc     = self.robot.get_planning_component(self.group)
+
         # ─── Home pose ───────────────────────────────────────────────────────
         if home_pose is None:
             joint_deg = [90., -120., 120., -90., -90., 0.]
@@ -60,14 +68,6 @@ class PilzMotionController(Node):
             self.home_state = home_pose
         else:
             raise TypeError("home_pose must be PoseStamped, RobotState, or None")
-
-        self.default_lin_scaling = default_lin_scaling
-        self.default_ptp_scaling = default_ptp_scaling
-        self.default_acc_scaling = default_acc_scaling
-
-        # Start MoveItPy (spins its own executor)
-        self.robot = MoveItPy(node_name=f"{node_name}_moveit")
-        self.pc     = self.robot.get_planning_component(self.group)
 
         self.get_logger().info("PilzMotionController initialised.")
 
