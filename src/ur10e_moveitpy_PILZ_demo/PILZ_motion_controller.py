@@ -13,7 +13,6 @@ from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
 from moveit.planning import PlanRequestParameters as PRP
 from moveit.core.robot_trajectory import RobotTrajectory
-from moveit_msgs.srv import GetCartesianPath
 from moveit_msgs.srv import GetMotionSequence
 from moveit_msgs.msg import MotionPlanRequest, MotionSequenceItem, MotionSequenceRequest
 
@@ -44,6 +43,10 @@ class PilzMotionController(Node):
     ):
         super().__init__(node_name)
 
+        self.group = group
+        self.root_link = root_link
+        self.eef_link = eef_link
+
         # ─── Home pose ───────────────────────────────────────────────────────
         if home_pose is None:
             joint_deg = [90., -120., 120., -90., -90., 0.]
@@ -57,10 +60,6 @@ class PilzMotionController(Node):
             self.home_state = home_pose
         else:
             raise TypeError("home_pose must be PoseStamped, RobotState, or None")
-
-        self.group = group
-        self.root_link = root_link
-        self.eef_link = eef_link
 
         self.default_lin_scaling = default_lin_scaling
         self.default_ptp_scaling = default_ptp_scaling
@@ -269,27 +268,33 @@ class PilzMotionController(Node):
         vel: Optional[float] = None,
         acc: Optional[float] = None,
     ) -> bool:
-        """Plan & execute a single target with either LIN or PTP."""
         motion_type = motion_type.upper()
         if motion_type not in ("LIN", "PTP"):
             raise ValueError("motion_type must be 'LIN' or 'PTP'")
 
+        # default scaling
         if vel is None:
             vel = self.default_lin_scaling if motion_type == "LIN" else self.default_ptp_scaling
         if acc is None:
             acc = self.default_acc_scaling
 
-        result = self._plan_target(
-            planner_id=motion_type,
-            vel=vel,
-            acc=acc,
-            pose_goal=target,
-        )
-        ok = self._execute(result)
-        self.get_logger().info(
-            f"go_to_target({motion_type}) {'executed' if ok else 'planning failed'}."
-        )
-        return ok
+        if motion_type == "PTP":
+            # ensure RobotState goal
+            rs_goal = target if isinstance(target, RobotState) else self.compute_ik(target)
+            if rs_goal is None:
+                self.get_logger().error("IK failed; cannot plan PTP")
+                return False
+            plan = self._plan_target(
+                planner_id="PTP", vel=vel, acc=acc, robot_state_goal=rs_goal
+            )
+        else:  # LIN
+            if isinstance(target, RobotState):
+                raise TypeError("LIN motion requires a PoseStamped target")
+            plan = self._plan_target(
+                planner_id="LIN", vel=vel, acc=acc, pose_goal=target
+            )
+
+        return self._execute_target(plan)
 
     # -------------------------------------------------------
     # Multi‑waypoint Cartesian (LIN) trajectory
@@ -380,8 +385,14 @@ class PilzTeleop(Node):
 def main():
     rclpy.init()
     controller = PilzMotionController()
-    rclpy.spin(controller)
+    teleop     = PilzTeleop(controller)
+    executor   = MultiThreadedExecutor()
+    executor.add_node(controller)
+    executor.add_node(teleop)
+    executor.spin()
+    executor.shutdown()
     controller.destroy_node()
+    teleop.destroy_node()
     rclpy.shutdown()
 
 if __name__ == "__main__":
