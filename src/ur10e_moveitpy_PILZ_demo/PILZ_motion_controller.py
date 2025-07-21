@@ -11,7 +11,7 @@ from rclpy.executors import MultiThreadedExecutor
 from moveit.planning import MoveItPy
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
-from moveit.planning import PlanRequestParameters as PRP
+from moveit.planning import PlanRequestParameters
 from moveit.core.robot_trajectory import RobotTrajectory
 from moveit_msgs.srv import GetMotionSequence
 from moveit_msgs.msg import MotionPlanRequest, MotionSequenceItem, MotionSequenceRequest
@@ -49,7 +49,7 @@ class PilzMotionController(Node):
 
         # Start MoveItPy (spins its own executor)
         self.robot = MoveItPy(node_name=f"{node_name}_moveit")
-        self.pc     = self.robot.get_planning_component(self.group)
+        self.planning_component = self.robot.get_planning_component(self.group)
 
         # ─── Home pose ───────────────────────────────────────────────────────
         if home_pose is None:
@@ -78,21 +78,21 @@ class PilzMotionController(Node):
         pose_goal: Optional[PoseStamped] = None,
         robot_state_goal: Optional[RobotState] = None,
     ):
-        self.pc.set_start_state_to_current_state()
+        self.planning_component.set_start_state_to_current_state()
 
         if pose_goal:
-            self.pc.set_goal_state(pose_stamped_msg=pose_goal, pose_link=self.eef_link)
+            self.planning_component.set_goal_state(pose_stamped_msg=pose_goal, pose_link=self.eef_link)
         elif robot_state_goal:
-            self.pc.set_goal_state(robot_state=robot_state_goal)
+            self.planning_component.set_goal_state(robot_state=robot_state_goal)
         else:
             raise ValueError("Either pose_goal or robot_state_goal must be supplied.")
 
-        params = PRP(self.robot, "pilz_lin")
+        params = PlanRequestParameters(self.robot, "pilz_lin")
         params.planner_id = planner_id
         params.max_velocity_scaling_factor = vel
         params.max_acceleration_scaling_factor = acc
 
-        return self.pc.plan(single_plan_parameters=params)
+        return self.planning_component.plan(single_plan_parameters=params)
 
     def _plan_sequence(
         self,
@@ -186,7 +186,7 @@ class PilzMotionController(Node):
     # ─── IK/FK helpers ───────────────────────────────────────────────────
 
     def compute_ik(self, pose: PoseStamped) -> Optional[RobotState]:
-        current_rs = self.pc.get_start_state()
+        current_rs = self.planning_component.get_start_state()
         rs = RobotState(self.robot.get_robot_model())
         rs.set_joint_group_positions(
             self.group,
@@ -222,30 +222,38 @@ class PilzMotionController(Node):
         r: float = 0.2,
         z_fixed: float = 0.5,
     ) -> List[PoseStamped]:
-        import copy as _cp
+        from copy import deepcopy as _dc
 
         if center_pose is None:
-            self.pc.set_start_state_to_current_state()
-            start_ps = self.pc.get_start_state().get_pose(self.eef_link)
-            base_pose = _cp.deepcopy(start_ps)
+            self.planning_component.set_start_state_to_current_state()
+            start_ps = self.planning_component.get_start_state().get_pose(self.eef_link)
+            base_pose = _dc(start_ps)
         else:
-            base_pose = _cp.deepcopy(center_pose.pose)
+            base_pose = _dc(center_pose.pose)
 
         base_pose.position.z = z_fixed
 
         wp = []
         # bottom‑left
-        p0 = _cp.deepcopy(base_pose)
-        p0.position.x -= r; p0.position.y -= r; wp.append(p0)
+        p0 = _dc(base_pose)
+        p0.position.x -= r
+        p0.position.y -= r
+        wp.append(p0)
         # top‑left
-        p1 = _cp.deepcopy(base_pose)
-        p1.position.x -= r; p1.position.y += r; wp.append(p1)
+        p1 = _dc(base_pose)
+        p1.position.x -= r
+        p1.position.y += r
+        wp.append(p1)
         # top‑right
-        p2 = _cp.deepcopy(base_pose)
-        p2.position.x += r; p2.position.y += r; wp.append(p2)
+        p2 = _dc(base_pose)
+        p2.position.x += r
+        p2.position.y += r
+        wp.append(p2)
         # bottom‑right
-        p3 = _cp.deepcopy(base_pose)
-        p3.position.x += r; p3.position.y -= r; wp.append(p3)
+        p3 = _dc(base_pose)
+        p3.position.x += r
+        p3.position.y -= r
+        wp.append(p3)
 
         # Wrap into PoseStamped messages
         waypoints = []
@@ -265,7 +273,7 @@ class PilzMotionController(Node):
 
         # Collision check via PlanningComponent if available
         try:
-            return bool(self.pc.is_state_valid(robot_state=rs))
+            return bool(self.planning_component.is_state_valid(robot_state=rs))
         except AttributeError:
             # Fallback: assume reachable if IK worked
             return True
@@ -295,7 +303,7 @@ class PilzMotionController(Node):
                 robot_state_goal = target
             else:
                 robot_state_goal = self.compute_ik(target)
-                self.get_logger().info("Converted PoseStamped to RobotState via IK for PTP target.")
+                self.get_logger().debug("Converted PoseStamped to RobotState via IK for PTP target.")
                 if robot_state_goal is None:
                     self.get_logger().error("IK failed; cannot plan PTP")
                     return False
@@ -307,7 +315,7 @@ class PilzMotionController(Node):
                 pose_goal = target
             else:
                 pose_goal = self.compute_fk(target)
-                self.get_logger().info("Converted RobotState to PoseStamped via FK for LIN target")
+                self.get_logger().debug("Converted RobotState to PoseStamped via FK for LIN target")
             plan = self._plan_target(
                 planner_id="LIN", vel=vel, acc=acc, pose_goal=pose_goal
             )
@@ -377,7 +385,7 @@ class PilzMotionController(Node):
         ps.pose.orientation.w = qw
         return ps
 
-class PilzTeleop(Node):
+class PilzRemote(Node):
     def __init__(self, controller: PilzMotionController):
         super().__init__("pilz_teleop")
         self.ctrl = controller
@@ -387,7 +395,7 @@ class PilzTeleop(Node):
             self.cb,
             10,
         )
-        self.get_logger().info("PilzTeleop ready. Use 'h','l','q' on /user_input.")
+        self.get_logger().info("PilzRemote ready. Use 'h','l','q' on /user_input.")
 
     def cb(self, msg: String):
         cmd = msg.data.strip().lower()
@@ -405,14 +413,14 @@ class PilzTeleop(Node):
 def main():
     rclpy.init()
     controller = PilzMotionController()
-    teleop     = PilzTeleop(controller)
+    remote     = PilzRemote(controller)
     executor   = MultiThreadedExecutor()
     executor.add_node(controller)
-    executor.add_node(teleop)
+    executor.add_node(remote)
     executor.spin()
     executor.shutdown()
     controller.destroy_node()
-    teleop.destroy_node()
+    remote.destroy_node()
     rclpy.shutdown()
 
 if __name__ == "__main__":
