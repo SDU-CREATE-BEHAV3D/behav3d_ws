@@ -1,3 +1,4 @@
+"""Pilz Motion Controller utilities and teleoperation helpers."""
 #!/usr/bin/env python3
 
 from ament_index_python.packages import get_package_share_directory
@@ -11,6 +12,7 @@ from rclpy.executors import MultiThreadedExecutor
 from moveit.planning import MoveItPy
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
+from moveit_py.pose_goal_builder import create_pose_goal
 from moveit.planning import PlanRequestParameters
 from moveit.core.robot_trajectory import RobotTrajectory
 from moveit_msgs.srv import GetMotionSequence
@@ -21,10 +23,17 @@ from shape_msgs.msg import SolidPrimitive
 from typing import List, Optional
 
 
-def angles_to_radians(angles : List[float]):
-    return [math.radians(angle) for angle in angles]
+def degrees_to_radians(degrees : List[float]):
+    """Convert a list of joint angles from degrees to radians."""
+    return [math.radians(degree) for degree in degrees]
+
+def radians_to_degrees(radians : List[float]):
+    """Convert a list of joint angles from radians to degrees."""
+    return [math.degrees(radian) for radian in radians]
 
 class PilzMotionController(Node):
+    """High‑level wrapper around MoveItPy and PILZ industrial planners.
+    """
     def __init__(
         self,
         *,
@@ -37,6 +46,27 @@ class PilzMotionController(Node):
         default_acc_scaling: float = 0.5,
         node_name: str = "pilz_motion",
     ):
+        """Instantiate a ``PilzMotionController``.
+
+        Parameters
+        ----------
+        group : str
+            MoveIt planning group name.
+        root_link : str
+            Name of the robot’s root link.
+        eef_link : str
+            End‑effector link name.
+        home_pose : Optional[PoseStamped | RobotState | None]
+            Desired home position.  If ``None``, a built‑in joint preset is used.
+        default_lin_scaling : float
+            Default velocity scaling for LIN moves.
+        default_ptp_scaling : float
+            Default velocity scaling for PTP moves.
+        default_acc_scaling : float
+            Default acceleration scaling factor.
+        node_name : str
+            ROS 2 node name.
+        """
         super().__init__(node_name)
 
         self.group = group
@@ -51,7 +81,7 @@ class PilzMotionController(Node):
         self.robot = MoveItPy(node_name=f"{node_name}_moveit")
         self.planning_component = self.robot.get_planning_component(self.group)
 
-        # ─── Home pose ───────────────────────────────────────────────────────
+        # === Home Pose ===
         if home_pose is None:
             joint_deg = [45., -120., 120., -90., -90., 0.]
             self.home_state = self.RobotState_from_joints(angles_to_radians(joint_deg))
@@ -67,7 +97,7 @@ class PilzMotionController(Node):
 
         self.get_logger().info("PilzMotionController initialised.")
 
-    # ─── Planning helpers ───────────────────────────────────────────────────
+    # === Planning helpers ===
 
     def _plan_target(
         self,
@@ -78,6 +108,7 @@ class PilzMotionController(Node):
         pose_goal: Optional[PoseStamped] = None,
         robot_state_goal: Optional[RobotState] = None,
     ):
+        """Plan a single PTP or LIN motion toward a pose or joint‑state target."""
         self.planning_component.set_start_state_to_current_state()
 
         if pose_goal:
@@ -99,75 +130,100 @@ class PilzMotionController(Node):
         pose_goals: List[PoseStamped],
         vel: float,
         acc: float,
-        blend_radius: float = 0.0,
-    ) -> RobotTrajectory:
-        """Plan a Pilz LIN MotionSequence using GoalConstraints instead of construct_link_constraint."""
+        blend_radius: float | List[float] = 0.0,
+        timeout: float = 5.0,
+    ) -> Optional[RobotTrajectory]:
+        """Plan a Pilz LIN MotionSequence.
 
-        # Build a Constraints message for each waypoint
-        def to_constraints(ps: PoseStamped) -> Constraints:
-            con = Constraints()
+        Parameters
+        ----------
+        pose_goals : list[PoseStamped]
+            Way‑points the TCP should visit (≥ 2, same frame_id).
+        vel / acc : float
+            Cartesian velocity/acceleration scaling factors (0…1).
+        blend_radius : float | list[float]
+            • If a single float, the same radius is used between every
+              consecutive pair of segments.
+            • If a list, it must contain ``len(pose_goals)‑1`` values.
+              ``0.0`` forces a complete stop between segments.
+        timeout : float
+            Seconds to wait for ``/plan_sequence_path`` to appear.
 
-            # Position constraint (small sphere)
-            pc = PositionConstraint()
-            pc.header.frame_id = ps.header.frame_id
-            pc.link_name = self.eef_link
-            sph = SolidPrimitive()
-            sph.type = SolidPrimitive.SPHERE
-            sph.dimensions = [0.001]  # 1 mm tolerance
-            pc.constraint_region = BoundingVolume()
-            pc.constraint_region.primitives.append(sph)
-            pc.constraint_region.primitive_poses.append(ps.pose)
-            con.position_constraints.append(pc)
-
-            # Orientation constraint (≈0.6 deg tolerance)
-            oc = OrientationConstraint()
-            oc.header.frame_id = ps.header.frame_id
-            oc.link_name = self.eef_link
-            oc.orientation = ps.pose.orientation
-            oc.absolute_x_axis_tolerance = 0.01
-            oc.absolute_y_axis_tolerance = 0.01
-            oc.absolute_z_axis_tolerance = 0.01
-            con.orientation_constraints.append(oc)
-            return con
-
-        seq_req = MotionSequenceRequest()
-        for idx, ps in enumerate(pose_goals):
-            item = MotionSequenceItem()
-            item.blend_radius = blend_radius if idx < len(pose_goals) - 1 else 0.0
-
-            mpr = MotionPlanRequest()
-            mpr.group_name = self.group
-            mpr.planner_id = "LIN"
-            mpr.max_velocity_scaling_factor = vel
-            mpr.max_acceleration_scaling_factor = acc
-            mpr.goal_constraints.append(to_constraints(ps))
-            item.req = mpr
-            seq_req.items.append(item)
-
-        # Call Pilz sequence service
-        client = self.create_client(GetMotionSequence, "plan_sequence_path")
-        if not client.wait_for_service(timeout_sec=5.0):
-            self.get_logger().error("plan_sequence_path service not available")
+        Returns
+        -------
+        moveit.core.robot_trajectory.RobotTrajectory | None
+            A ready‑to‑execute trajectory on success, otherwise *None*.
+        """
+        # --- Validate input -------------------------------------------------
+        if len(pose_goals) < 2:
+            self.get_logger().error("Need at least two way‑points for a sequence.")
             return None
 
-        srv = GetMotionSequence.Request()
-        srv.request = seq_req
-        fut = client.call_async(srv)
-        rclpy.spin_until_future_complete(self, fut)
-        resp = fut.result()
-        if resp is None or resp.response.error_code.val != resp.response.error_code.SUCCESS:
-            self.get_logger().error("Sequence planning failed")
+        if isinstance(blend_radius, list):
+            radii = blend_radius
+        else:
+            radii = [float(blend_radius)] * (len(pose_goals) - 1)
+
+        if len(radii) != len(pose_goals) - 1:
+            self.get_logger().error(
+                "blend_radius list must have len(pose_goals)‑1 entries."
+            )
+            return None
+
+        # --- Build MotionSequenceRequest -----------------------------------
+        seq_req = MotionSequenceRequest()
+
+        for idx, pose in enumerate(pose_goals):
+            item = MotionSequenceItem()
+
+            # Apply blending except for the very last segment
+            if idx < len(radii):
+                item.blend_radius = radii[idx]
+
+            req = item.req
+            req.group_name = self.group
+            req.planner_id = "LIN"
+            req.max_velocity_scaling_factor = vel
+            req.max_acceleration_scaling_factor = acc
+            req.allowed_planning_time = 5.0
+
+            # Cart. goal: let MoveItPy build the constraints boilerplate
+            req.goal_constraints.append(
+                create_pose_goal(link_name=self.eef_link, target_pose=pose)
+            )
+
+            seq_req.items.append(item)
+
+        # --- Call the Pilz sequence service ---------------------------------
+        client = self.create_client(GetMotionSequence, "/plan_sequence_path")
+        if not client.wait_for_service(timeout_sec=timeout):
+            self.get_logger().error("/plan_sequence_path service not available.")
+            return None
+
+        future = client.call_async(GetMotionSequence.Request(request=seq_req))
+        rclpy.spin_until_future_complete(self, future)
+
+        resp = future.result()
+        if resp is None:
+            self.get_logger().error("No response from /plan_sequence_path.")
+            return None
+
+        if resp.response.error_code.val != resp.response.error_code.SUCCESS:
+            self.get_logger().error(
+                f"Sequence planning failed (code={resp.response.error_code.val})."
+            )
             return None
 
         return resp.response.planned_trajectory
 
-    # ─── Execution helpers ───────────────────────────────────────────────────
+    # === Execution helpers ===
 
     def _apply_time_parameterization(self, traj: RobotTrajectory) -> None:
         """Apply time parameterization (TOTG) to the trajectory."""
         traj.apply_totg_time_parameterization(1.0, 1.0, path_tolerance=0.01, resample_dt=0.01)
     
     def _execute_target(self, result) -> bool:
+        """Time‑parameterize and execute a single‑segment trajectory."""
         if not result:
             return False
         traj = result.trajectory
@@ -183,7 +239,7 @@ class PilzMotionController(Node):
         self.robot.execute(traj, controllers=[])
         return True
 
-    # ─── IK/FK helpers ───────────────────────────────────────────────────
+    # === IK/FK helpers ===
 
     def compute_ik(self, pose: PoseStamped) -> Optional[RobotState]:
         current_rs = self.planning_component.get_start_state()
@@ -214,7 +270,7 @@ class PilzMotionController(Node):
             self.root_link,
         )
 
-    # ─── Utility & waypoint generators ──────────────────────────────────────
+    # === Utility & waypoint generators ===
     def make_square(
         self,
         *,
@@ -264,7 +320,8 @@ class PilzMotionController(Node):
             waypoints.append(ps)
         return waypoints
 
-    # ─── Diagnostics & reachability ─────────────────────────────────────────
+    # === Diagnostics & reachability ===
+    
     def is_reachable(self, pose: PoseStamped) -> bool:
         """Return True if pose has an IK solution and is collision‑free."""
         rs = self.compute_ik(pose)
@@ -278,7 +335,6 @@ class PilzMotionController(Node):
             # Fallback: assume reachable if IK worked
             return True
 
-
     # -------------------------------------------------------
     # Generic single‑target motion primitive
     # -------------------------------------------------------
@@ -290,7 +346,11 @@ class PilzMotionController(Node):
         vel: Optional[float] = None,
         acc: Optional[float] = None,
     ) -> bool:
-        
+        """Plan and execute one motion toward ``target``.
+
+        The function automatically chooses IK or FK depending on the
+        combination of ``motion_type`` and the target’s data type.
+        """
         motion_type = motion_type.upper()
 
         if vel is None:
@@ -353,41 +413,47 @@ class PilzMotionController(Node):
         return self._execute_sequence(traj)
 
 
-    # ----------- 
+    def RobotState_from_joints(self, joints: List[float], radians = False) -> RobotState:
+        """Create a RobotState from a 6-element list [J1, J2, J3, J4, J5, J6]."""
+        
+        assert(len(joints) == 6)
 
-    def RobotState_from_joints(self, joints: List[float]) -> RobotState:
-        """Create a RobotState from joint values."""
-        rs = RobotState(self.robot.get_robot_model())
-        rs.set_joint_group_positions(self.group, joints)
-        rs.update()
-        return rs
+        if not radians:
+            joints = degrees_to_radians(joints)
+        
+        robot_state = RobotState(self.robot.get_robot_model())
+        robot_state.set_joint_group_positions(self.group, joints)
+        robot_state.update()
+
+        return robot_state
 
     @staticmethod
     def PoseStamped_from_xyzq(
-        x: float,
-        y: float,
-        z: float,
-        qx: float,
-        qy: float,
-        qz: float,
-        qw: float,
+        xyzq: List[float],
         frame_id: str
     ) -> PoseStamped:
-        """Build a PoseStamped from XYZ and quaternion."""
-        ps = PoseStamped()
-        ps.header.frame_id = frame_id
-        ps.pose.position.x = x
-        ps.pose.position.y = y
-        ps.pose.position.z = z
-        ps.pose.orientation.x = qx
-        ps.pose.orientation.y = qy
-        ps.pose.orientation.z = qz
-        ps.pose.orientation.w = qw
-        return ps
+        """Build a PoseStamped from a 7-element list [x, y, z, qx, qy, qz, qw]."""
+
+        assert(len(xyzq) == 7)
+
+        pose = PoseStamped()
+        pose.header.frame_id = frame_id
+
+        x, y, z, qx, qy, qz, qw = xyzq
+        
+        pose.pose.position.x = x
+        pose.pose.position.y = y
+        pose.pose.position.z = z
+        pose.pose.orientation.x = qx
+        pose.pose.orientation.y = qy
+        pose.pose.orientation.z = qz
+        pose.pose.orientation.w = qw
+        return pose
 
 class PilzRemote(Node):
+    """Minimal remote control node that listens to ``/user_input`` and calls the controller."""
     def __init__(self, controller: PilzMotionController):
-        super().__init__("pilz_teleop")
+        super().__init__("pilz_remote")
         self.ctrl = controller
         self.create_subscription(
             String,
@@ -398,6 +464,7 @@ class PilzRemote(Node):
         self.get_logger().info("PilzRemote ready. Use 'h','l','q' on /user_input.")
 
     def cb(self, msg: String):
+        """Handle single‑character remote control commands received on ``/user_input``."""
         cmd = msg.data.strip().lower()
         if cmd == "h":
             self.ctrl.go_to_target(self.ctrl.home_state, motion_type="PTP")
