@@ -509,13 +509,13 @@ class PilzDemo(Node):
         start = PoseStamped()
         start.pose.position.x = -0.2
         start.pose.position.y = 0.2
-        start.pose.position.x = 0.4
+        start.pose.position.z = 0.4
         start.pose.orientation = home_orientation
 
         end = PoseStamped()
         end.pose.position.x = 0.2
         end.pose.position.y = 0.6
-        end.pose.position.x = 0.8
+        end.pose.position.z = 0.8
         end.pose.orientation = home_orientation
 
         self.home()
