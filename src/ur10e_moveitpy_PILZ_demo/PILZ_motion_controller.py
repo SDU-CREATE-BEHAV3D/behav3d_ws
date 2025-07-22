@@ -259,13 +259,11 @@ class PilzMotionController(Node):
         return rs
 
     def compute_fk(self, state: RobotState) -> PoseStamped:
-        tf = state.get_global_link_transform(self.eef_link)
-        q  = tf.rotation.quaternion
-        return self.PoseStamped_from_xyzq(
-            tf.translation[0], tf.translation[1], tf.translation[2],
-            q[0], q[1], q[2], q[3],
-            self.root_link,
-        )
+        pose = state.get_pose(self.eef_link)
+        ps = PoseStamped()
+        ps.header.frame_id = self.root_link
+        ps.pose = pose
+        return ps
 
     # === Diagnostics & reachability ===
     
