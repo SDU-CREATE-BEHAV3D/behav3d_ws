@@ -11,7 +11,7 @@ from rclpy.executors import MultiThreadedExecutor
 from moveit.planning import MoveItPy
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
-# from moveit_py.pose_goal_builder import create_pose_goal
+from moveit.core.kinematic_constraints import construct_link_constraint
 from moveit.planning import PlanRequestParameters
 from moveit.core.robot_trajectory import RobotTrajectory
 from moveit_msgs.srv import GetMotionSequence
@@ -186,7 +186,7 @@ class PilzMotionController(Node):
 
             # Cart. goal: let MoveItPy build the constraints boilerplate
             req.goal_constraints.append(
-                create_pose_goal(link_name=self.eef_link, target_pose=pose)
+                construct_link_constraint(link_name=self.eef_link, target_pose=pose)
             )
 
             seq_req.items.append(item)
