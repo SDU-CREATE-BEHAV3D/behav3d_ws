@@ -428,7 +428,7 @@ class PilzDemo(Node):
         )
         self.get_logger().info(
             "PilzDemo ready. Commands: "
-            "'home', 'draw_square', 'draw_square_blended', 'draw_line', 'draw_sine', 'quit'"
+            "'home', 'draw_square', 'draw_square_seq', 'draw_line', 'draw_sine', 'quit'"
         )
 
     # ------------------------------------------------------------------
@@ -440,7 +440,7 @@ class PilzDemo(Node):
         dispatch = {
             "home": self.home,
             "draw_square": self.draw_square,
-            "draw_square_blended": self.draw_square_blended,
+            "draw_square_seq": self.draw_square_seq,
             "draw_line": self.draw_line,
             "draw_sine": self.draw_sine,
             "quit": self._quit,
@@ -483,22 +483,26 @@ class PilzDemo(Node):
             ps.pose.position.y += dy
             self.ctrl.go_to_target(ps, motion_type="LIN")
 
-    def draw_square_blended(
+    def draw_square_seq(
         self,
         *,
         side: float = 0.4,
         z_fixed: float = 0.5,
-        blend_radius: float = 0.05,
+        blend_radius: float = 0.001,
     ):
         from copy import deepcopy as _dc
 
         self.home()
 
+        home_orientation = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
+        
         center = PoseStamped()
-        center.pose.position.y = 0.4
+        center.pose.position.x = 0.0
+        center.pose.position.y = 0.6
+        center.pose.position.z = z_fixed
+        center.pose.orientation = home_orientation
         
         base = _dc(center.pose)
-        base.position.z = z_fixed
         half = side / 2.0
 
         waypoints = []
