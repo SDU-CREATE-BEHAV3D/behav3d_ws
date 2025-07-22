@@ -440,16 +440,18 @@ class PilzDemo(Node):
     def home(self):
         self.ctrl.go_to_target(self.ctrl.home_state, motion_type="PTP")
 
-    def draw_square(self, *, side: float = 0.4, z_fixed: float = 0.5):
+    def draw_square(self, *, side: float = 0.4, z_fixed: float = 0.4):
         from copy import deepcopy as _dc
 
+        home_orientation = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
+        
         center = PoseStamped()
-        center.pose.position.y = 0.3
-        center.pose.rotation.w = 1
-        center.pose.rotation.z = -1
+        center.pose.position.x = 0.0
+        center.pose.position.y = 0.4
+        center.pose.position.z = z_fixed
+        center.pose.orientation = home_orientation
 
         base = _dc(center.pose)
-        base.position.z = z_fixed
         half = side / 2.0
 
         # Corner sequence (BL → TL → TR → BR → BL)
@@ -501,23 +503,20 @@ class PilzDemo(Node):
         self.home()
 
     def draw_line(self):
-        x_min, x_max = -0.2, 0.2
-        y_min, y_max = 0.4, 0.6
-        z_min, z_max = 0.4, 0.6
+        
+        home_orientation = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
 
-        def random_ps():
-            ps = PoseStamped()
-            ps.header.frame_id = self.ctrl.root_link
-            ps.pose.position.x = random.uniform(x_min, x_max)
-            ps.pose.position.y = random.uniform(y_min, y_max)
-            ps.pose.position.z = random.uniform(z_min, z_max)
-            # copy end‑effector orientation from home
-            home_ori = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
-            ps.pose.orientation = home_ori
-            return ps
+        start = PoseStamped()
+        start.pose.position.x = -0.4
+        start.pose.position.y = 0.2
+        start.pose.position.x = 0.2
+        start.pose.orientation = home_orientation
 
-        start = random_ps()
-        end = random_ps()
+        end = PoseStamped()
+        end.pose.position.x = 0.4
+        end.pose.position.y = 0.2
+        end.pose.position.x = 0.2
+        end.pose.orientation = home_orientation
 
         self.home()
         self.ctrl.go_to_target(start, motion_type="PTP")
