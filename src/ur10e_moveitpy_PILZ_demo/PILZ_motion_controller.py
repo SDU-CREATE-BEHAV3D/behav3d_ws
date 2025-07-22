@@ -443,10 +443,10 @@ class PilzDemo(Node):
     def draw_square(self, *, side: float = 0.4, z_fixed: float = 0.5):
         from copy import deepcopy as _dc
 
-        self.home()
+        center = PoseStamped()
+        center.pose.position.y = 0.3
 
-        center_ps = self.ctrl.compute_fk(self.ctrl.home_state)  # start from home pose
-        base = _dc(center_ps.pose)
+        base = _dc(center.pose)
         base.position.z = z_fixed
         half = side / 2.0
 
@@ -461,8 +461,6 @@ class PilzDemo(Node):
             ps.pose.position.y += dy
             self.ctrl.go_to_target(ps, motion_type="LIN")
 
-        self.home()
-
     def draw_square_blended(
         self,
         *,
@@ -474,8 +472,10 @@ class PilzDemo(Node):
 
         self.home()
 
-        center_ps = self.ctrl.compute_fk(self.ctrl.home_state)
-        base = _dc(center_ps.pose)
+        center = PoseStamped()
+        center.pose.position.y = 0.3
+        
+        base = _dc(center.pose)
         base.position.z = z_fixed
         half = side / 2.0
 
@@ -499,7 +499,6 @@ class PilzDemo(Node):
         self.home()
 
     def draw_line(self):
-        # Workspace bounds (metres) in the robot base frame
         x_min, x_max = -0.2, 0.2
         y_min, y_max = 0.4, 0.6
         z_min, z_max = 0.4, 0.6
