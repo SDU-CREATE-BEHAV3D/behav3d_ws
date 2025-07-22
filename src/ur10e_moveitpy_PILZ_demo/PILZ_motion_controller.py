@@ -11,7 +11,7 @@ from rclpy.executors import MultiThreadedExecutor
 from moveit.planning import MoveItPy
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
-from moveit_py.pose_goal_builder import create_pose_goal
+# from moveit_py.pose_goal_builder import create_pose_goal
 from moveit.planning import PlanRequestParameters
 from moveit.core.robot_trajectory import RobotTrajectory
 from moveit_msgs.srv import GetMotionSequence
@@ -81,7 +81,7 @@ class PilzMotionController(Node):
         # === Home Pose ===
         if home_pose is None:
             joint_deg = [45., -120., 120., -90., -90., 0.]
-            self.home_state = self.RobotState_from_joints(angles_to_radians(joint_deg))
+            self.home_state = self.RobotState_from_joints(joint_deg)
         elif isinstance(home_pose, RobotState):
             self.home_state = home_pose
         elif isinstance(home_pose, PoseStamped):
@@ -511,7 +511,7 @@ class PilzDemo(Node):
             ps.header.frame_id = self.ctrl.root_link
             ps.pose.position.x = random.uniform(x_min, x_max)
             ps.pose.position.y = random.uniform(y_min, y_max)
-            ps.pose.position.z = random.uniform(y_min, y_max)
+            ps.pose.position.z = random.uniform(z_min, z_max)
             # copy end‑effector orientation from home
             home_ori = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
             ps.pose.orientation = home_ori
