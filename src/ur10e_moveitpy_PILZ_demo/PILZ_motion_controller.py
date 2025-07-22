@@ -459,6 +459,8 @@ class PilzDemo(Node):
     def draw_square(self, *, side: float = 0.4, z_fixed: float = 0.4):
         from copy import deepcopy as _dc
 
+        self.home()
+
         home_orientation = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
         
         center = PoseStamped()
@@ -480,6 +482,8 @@ class PilzDemo(Node):
             ps.pose.position.x += dx
             ps.pose.position.y += dy
             self.ctrl.go_to_target(ps, motion_type="LIN")
+
+        self.home()
 
     def draw_square_seq(
         self,
