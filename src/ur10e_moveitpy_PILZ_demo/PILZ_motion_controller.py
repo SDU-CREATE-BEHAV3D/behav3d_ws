@@ -445,6 +445,8 @@ class PilzDemo(Node):
 
         center = PoseStamped()
         center.pose.position.y = 0.3
+        center.pose.rotation.w = 1
+        center.pose.rotation.z = -1
 
         base = _dc(center.pose)
         base.position.z = z_fixed
