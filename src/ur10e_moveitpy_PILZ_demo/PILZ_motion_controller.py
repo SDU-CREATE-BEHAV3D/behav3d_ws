@@ -42,7 +42,6 @@ class PilzMotionController(Node):
         default_ptp_scaling: float = 0.5,
         default_acc_scaling: float = 0.5,
         node_name: str = "pilz_motion",
-        spin_node: bool = True,
     ):
         """Instantiate a ``PilzMotionController``.
 
@@ -75,10 +74,8 @@ class PilzMotionController(Node):
         self.default_ptp_scaling = default_ptp_scaling
         self.default_acc_scaling = default_acc_scaling
 
-        self.spin_node = spin_node
-
         # Start MoveItPy (spins its own executor)
-        self.robot = MoveItPy(node_name=f"{node_name}_moveit", spin_node=self.spin_node)
+        self.robot = MoveItPy(node_name=f"{node_name}_moveit")
         self.planning_component = self.robot.get_planning_component(self.group)
 
         # === Home Pose ===
