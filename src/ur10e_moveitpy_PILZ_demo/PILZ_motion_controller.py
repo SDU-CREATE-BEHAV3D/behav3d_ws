@@ -184,9 +184,27 @@ class PilzMotionController(Node):
             req.max_acceleration_scaling_factor = acc
             req.allowed_planning_time = 5.0
 
-            # Cart. goal: let MoveItPy build the constraints boilerplate
+            # Build separate Cartesian‑position and orientation arrays for the helper
+            cart_pos = [
+                pose.pose.position.x,
+                pose.pose.position.y,
+                pose.pose.position.z,
+            ]
+            quat = [
+                pose.pose.orientation.x,
+                pose.pose.orientation.y,
+                pose.pose.orientation.z,
+                pose.pose.orientation.w,
+            ]
             req.goal_constraints.append(
-                construct_link_constraint(link_name=self.eef_link, target_pose=pose)
+                construct_link_constraint(
+                    link_name=self.eef_link,
+                    source_frame=pose.header.frame_id,
+                    cartesian_position=cart_pos,
+                    cartesian_position_tolerance=0.001,   # 1 mm
+                    orientation=quat,
+                    orientation_tolerance=0.01,           # ≈ 0.6°
+                )
             )
 
             seq_req.items.append(item)
