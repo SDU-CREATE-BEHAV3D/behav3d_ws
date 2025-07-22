@@ -27,29 +27,32 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='depth_to_color_tf',
         arguments=[
-            '0','0','0',        # x y z
-            '0','0','0',        # roll pitch yaw
+            '0','0','0',    # x y z
+            '0','0','0',    # roll pitch yaw
             'camera_depth_frame',
             'camera_color_frame'
         ],
         output='screen',
     )
 
-    # 3) Fused XYZRGB pointcloud node
+    # 3) Fused RGB pointcloud node (standalone)
     pc_node = Node(
         package='depth_image_proc',
-        executable='point_cloud_xyzrgb_node',  # <— corrected name
+        executable='point_cloud_xyzrgb_node',
         name='point_cloud_xyzrgb',
         remappings=[
-            ('image_rect',           '/camera/depth/image_raw'),
-            ('camera_info',          '/camera/depth/camera_info'),
-            ('image_rect_color',     '/camera/color/image_raw'),
-            ('camera_info_color',    '/camera/color/camera_info'),
-            ('points',               '/point_cloud_xyzrgb/points'),
+            # depth image + its camera_info
+            ('image_rect',        '/camera/depth/image_raw'),
+            ('camera_info',       '/depth/camera_info'),
+
+            # color image + its camera_info
+            ('image_rect_color',  '/camera/color/image_raw'),
+            ('camera_info_color', '/color/camera_info'),
+
+            # output pointcloud
+            ('points',            '/point_cloud_xyzrgb/points'),
         ],
-        parameters=[{
-            'use_color': True
-        }],
+        parameters=[{ 'use_color': True }],
         output='screen',
     )
 

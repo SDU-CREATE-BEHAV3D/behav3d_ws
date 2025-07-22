@@ -256,16 +256,3 @@ ament_export_libraries(${PROJECT_NAME})
 ament_export_dependencies(${dependencies} ${ORBBEC_LIBS})
 
 ament_package()
-
-# Install launch files into share/<pkg>/launch
-install(
-  DIRECTORY launch/
-  DESTINATION share/${PROJECT_NAME}/launch
-)
-
-# Install RViz configs into share/<pkg>/rviz
-install(
-  DIRECTORY rviz/
-  DESTINATION share/${PROJECT_NAME}/rviz
-)
-
