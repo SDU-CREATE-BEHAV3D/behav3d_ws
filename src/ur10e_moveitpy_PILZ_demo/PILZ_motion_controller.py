@@ -31,6 +31,7 @@ from moveit_msgs.msg import (
     OrientationConstraint,
     PositionConstraint
 )
+from moveit_msgs.msg import MoveItErrorCodes
 
 from typing import List, Optional
 
@@ -136,7 +137,6 @@ class PilzMotionController(Node):
             raise ValueError("Either pose_goal or robot_state_goal must be supplied.")
 
         params = PlanRequestParameters(self.robot, "pilz_lin")
-        params.pipeline_id = "pilz_industrial_motion_planner" 
         params.planner_id = planner_id
         params.max_velocity_scaling_factor = vel
         params.max_acceleration_scaling_factor = acc
@@ -247,13 +247,13 @@ class PilzMotionController(Node):
         rclpy.spin_until_future_complete(self, result_future)
         result = result_future.result().result
 
-        if result.error_code.val != result.error_code.SUCCESS:
+        if result.response.error_code.val != MoveItErrorCodes.SUCCESS:
             self.get_logger().error(
-                f"Sequence planning failed (code={result.error_code.val})."
+                f"Sequence planning failed (code={result.response.error_code.val})."
             )
             return None
 
-        return result.planned_trajectory
+        return result.response.planned_trajectories
 
     # === Execution helpers ===
 
@@ -451,7 +451,7 @@ class PilzDemo(Node):
         )
         self.get_logger().info(
             "PilzDemo ready. Commands: "
-            "'home', 'draw_square', 'draw_square_seq', 'draw_line', 'draw_sine', 'quit'"
+            "'home', 'draw_line', 'draw_square', 'draw_square_seq', 'quit'"
         )
 
     # ------------------------------------------------------------------
