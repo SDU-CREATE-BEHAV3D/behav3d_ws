@@ -360,6 +360,9 @@ class PilzMotionController(Node):
         acc: Optional[float] = None,
     ) -> bool:
         """Execute a list of waypoints as a multi-waypoint (LIN) trajectory."""
+        
+        assert(len(targets) > 1)
+
         motion_type = motion_type.upper()
         if motion_type != "LIN":
             raise ValueError("motion_type must be 'LIN'")
@@ -367,10 +370,6 @@ class PilzMotionController(Node):
             vel = self.default_lin_scaling
         if acc is None:
             acc = self.default_acc_scaling
-        if len(targets) == 1:
-            return self.go_to_target(
-                targets[0], motion_type=motion_type, vel=vel, acc=acc
-            )
         # Plan and execute a multi-waypoint (LIN) trajectory
         traj = self._plan_sequence(targets, vel, acc, blend_radius)
         return self._execute_sequence(traj)
@@ -508,7 +507,7 @@ class PilzDemo(Node):
         half = side / 2.0
 
         waypoints = []
-        offsets = [(-half, -half), (-half, half), (half, half), (half, -half), (-half, -half)]
+        offsets = [(-half, -half), (-half, half), (half, half), (half, -half)]#, (-half, -half)]
 
         for dx, dy in offsets:
             ps = PoseStamped()
