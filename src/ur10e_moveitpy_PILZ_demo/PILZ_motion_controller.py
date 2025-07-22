@@ -275,7 +275,7 @@ class PilzMotionController(Node):
         if traj is None:
             return False
         # self._apply_time_parameterization(traj)
-        self.robot.execute(traj, controllers=[])
+        # self.robot.execute(traj, controllers=[])
         return True
 
     # === IK/FK helpers ===
