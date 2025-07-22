@@ -7,15 +7,30 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.action import ActionClient
 
-from moveit.planning import MoveItPy
-from moveit.core.robot_state import RobotState
-from geometry_msgs.msg import PoseStamped
+from moveit.planning import MoveItPy, PlanRequestParameters
 from moveit.core.kinematic_constraints import construct_link_constraint
-from moveit.planning import PlanRequestParameters
+from moveit.core.robot_state import RobotState
 from moveit.core.robot_trajectory import RobotTrajectory
-from moveit_msgs.srv import GetMotionSequence
-from moveit_msgs.msg import MotionSequenceItem, MotionSequenceRequest
+
+from geometry_msgs.msg import (
+    Point,
+    Pose,
+    Quaternion,
+    PoseStamped
+)
+
+from moveit_msgs.action import MoveGroupSequence
+from moveit_msgs.msg import (
+    BoundingVolume,
+    Constraints,
+    MotionPlanRequest,
+    MotionSequenceItem,
+    MotionSequenceRequest,
+    OrientationConstraint,
+    PositionConstraint
+)
 
 from typing import List, Optional
 
@@ -78,6 +93,11 @@ class PilzMotionController(Node):
         self.robot = MoveItPy(node_name=f"{node_name}_moveit")
         self.planning_component = self.robot.get_planning_component(self.group)
 
+        # Action client for Pilz MoveGroupSequence interface
+        self.sequence_client = ActionClient(self, MoveGroupSequence, "/sequence_move_group")
+        while not self.sequence_client.wait_for_server(timeout_sec=1.0):
+            self.get_logger().info("Waiting for /sequence_move_group action server...")
+
         # === Home Pose ===
         if home_pose is None:
             joint_deg = [45., -120., 120., -90., -90., 0.]
@@ -116,6 +136,7 @@ class PilzMotionController(Node):
             raise ValueError("Either pose_goal or robot_state_goal must be supplied.")
 
         params = PlanRequestParameters(self.robot, "pilz_lin")
+        params.pipeline_id = "pilz_industrial_motion_planner" 
         params.planner_id = planner_id
         params.max_velocity_scaling_factor = vel
         params.max_acceleration_scaling_factor = acc
@@ -179,6 +200,7 @@ class PilzMotionController(Node):
 
             req = item.req
             req.group_name = self.group
+            req.pipeline_id = "pilz_industrial_motion_planner"
             req.planner_id = "LIN"
             req.max_velocity_scaling_factor = vel
             req.max_acceleration_scaling_factor = acc
@@ -209,27 +231,29 @@ class PilzMotionController(Node):
 
             seq_req.items.append(item)
 
-        # --- Call the Pilz sequence service ---------------------------------
-        client = self.create_client(GetMotionSequence, "/plan_sequence_path")
-        if not client.wait_for_service(timeout_sec=timeout):
-            self.get_logger().error("/plan_sequence_path service not available.")
+        # --- Send goal via the MoveGroupSequence action ----------------------
+        goal = MoveGroupSequence.Goal()
+        goal.request = seq_req
+
+        send_goal_future = self.sequence_client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, send_goal_future)
+        goal_handle = send_goal_future.result()
+
+        if goal_handle is None or not goal_handle.accepted:
+            self.get_logger().error("Sequence goal rejected by action server.")
             return None
 
-        future = client.call_async(GetMotionSequence.Request(request=seq_req))
-        rclpy.spin_until_future_complete(self, future)
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future)
+        result = result_future.result().result
 
-        resp = future.result()
-        if resp is None:
-            self.get_logger().error("No response from /plan_sequence_path.")
-            return None
-
-        if resp.response.error_code.val != resp.response.error_code.SUCCESS:
+        if result.error_code.val != result.error_code.SUCCESS:
             self.get_logger().error(
-                f"Sequence planning failed (code={resp.response.error_code.val})."
+                f"Sequence planning failed (code={result.error_code.val})."
             )
             return None
 
-        return resp.response.planned_trajectory
+        return result.planned_trajectory
 
     # === Execution helpers ===
 
@@ -242,7 +266,7 @@ class PilzMotionController(Node):
         if not result:
             return False
         traj = result.trajectory
-        self._apply_time_parameterization(traj)
+        # self._apply_time_parameterization(traj)
         self.robot.execute(traj, controllers=[])
         return True
     
@@ -250,7 +274,7 @@ class PilzMotionController(Node):
         """Execute a planned RobotTrajectory (sequence)."""
         if traj is None:
             return False
-        self._apply_time_parameterization(traj)
+        # self._apply_time_parameterization(traj)
         self.robot.execute(traj, controllers=[])
         return True
 
