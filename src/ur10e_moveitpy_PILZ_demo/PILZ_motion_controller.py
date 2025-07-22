@@ -442,9 +442,7 @@ class PilzDemo(Node):
             "draw_square": self.draw_square,
             "draw_square_seq": self.draw_square_seq,
             "draw_line": self.draw_line,
-            "draw_sine": self.draw_sine,
             "quit": self._quit,
-            "q": self._quit,  # backwards compatibility
         }
         func = dispatch.get(cmd)
         if func is None:
@@ -543,42 +541,6 @@ class PilzDemo(Node):
         self.home()
         self.ctrl.go_to_target(start, motion_type="PTP")
         self.ctrl.go_to_target(end, motion_type="LIN")
-        self.home()
-
-    def draw_sine(
-        self,
-        *,
-        length: float = 0.4,
-        amplitude: float = 0.025,
-        cycles: int = 2,
-        points: int = 100,
-    ):
-        from math import sin, pi
-        from copy import deepcopy as _dc
-
-        self.home()
-
-        origin_ps = self.ctrl.compute_fk(self.ctrl.home_state)
-        origin = _dc(origin_ps.pose)
-        origin.position.x -= 0.2        # offset forward
-        origin.position.z = 0.4          # working height
-
-        waypoints = []
-        for i in range(points):
-            t = i / (points - 1)
-            ps = PoseStamped()
-            ps.header.frame_id = self.ctrl.root_link
-            ps.pose = _dc(origin)
-            ps.pose.position.x += t * length
-            ps.pose.position.y += amplitude * sin(2.0 * pi * cycles * t)
-            waypoints.append(ps)
-
-        self.ctrl.go_to_trajectory(
-            waypoints,
-            motion_type="LIN",
-            blend_radius=amplitude,
-        )
-
         self.home()
 
     # ------------------------------------------------------------------
