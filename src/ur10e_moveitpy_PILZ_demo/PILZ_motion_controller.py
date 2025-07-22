@@ -447,7 +447,7 @@ class PilzDemo(Node):
         
         center = PoseStamped()
         center.pose.position.x = 0.0
-        center.pose.position.y = 0.4
+        center.pose.position.y = 0.6
         center.pose.position.z = z_fixed
         center.pose.orientation = home_orientation
 
@@ -477,7 +477,7 @@ class PilzDemo(Node):
         self.home()
 
         center = PoseStamped()
-        center.pose.position.y = 0.3
+        center.pose.position.y = 0.4
         
         base = _dc(center.pose)
         base.position.z = z_fixed
@@ -507,15 +507,15 @@ class PilzDemo(Node):
         home_orientation = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
 
         start = PoseStamped()
-        start.pose.position.x = -0.4
+        start.pose.position.x = -0.2
         start.pose.position.y = 0.2
-        start.pose.position.x = 0.2
+        start.pose.position.x = 0.4
         start.pose.orientation = home_orientation
 
         end = PoseStamped()
-        end.pose.position.x = 0.4
-        end.pose.position.y = 0.2
         end.pose.position.x = 0.2
+        end.pose.position.y = 0.6
+        end.pose.position.x = 0.8
         end.pose.orientation = home_orientation
 
         self.home()
