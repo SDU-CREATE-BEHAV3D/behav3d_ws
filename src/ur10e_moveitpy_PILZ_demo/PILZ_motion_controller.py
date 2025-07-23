@@ -294,6 +294,27 @@ class PilzMotionController(Node):
         # Return a regular Python list of segments
         return list(response.planned_trajectories)
 
+    def _execute_sequence(
+        self,
+        trajs: List[RobotTrajectory],
+        *,
+        apply_totg: bool = True,
+    ) -> bool:
+        if not trajs:
+            return False
+
+        for traj in trajs:
+            if apply_totg:
+                traj.apply_totg_time_parameterization(
+                    velocity_scaling_factor=1.0,
+                    acceleration_scaling_factor=1.0,
+                    path_tolerance=0.01,
+                    resample_dt=0.01,
+                )
+            # Empty list → default controller
+            self.robot.execute(traj, controllers=[])
+        return True
+
     # === IK/FK helpers ===
 
     def compute_ik(self, pose: PoseStamped) -> Optional[RobotState]:
@@ -395,32 +416,45 @@ class PilzMotionController(Node):
         targets: List[PoseStamped],
         *,
         motion_type: str = "LIN",
-        blend_radius: float = 0.001,    #default: 1 mm
+        blend_radius: float = 0.001,
         vel: Optional[float] = None,
         acc: Optional[float] = None,
-    ) -> RobotTrajectory | List[RobotTrajectory] | None:
-        
-        assert(len(targets) >= 2)
+    ) -> bool:
+        """
+        Plan a blended LIN motion through the given way‑points,
+        apply Time‑Optimal Trajectory Generation, and execute it.
+
+        Returns
+        -------
+        bool
+            ``True`` on successful execution, otherwise ``False``.
+        """
+        assert len(targets) >= 2
 
         motion_type = motion_type.upper()
         if motion_type != "LIN":
             raise ValueError("motion_type must be 'LIN'")
+
         if vel is None:
             vel = self.default_lin_scaling
         if acc is None:
             acc = self.default_acc_scaling
 
-        planner_id = motion_type  # “LIN” or “PTP”
         msr = self._build_motion_sequence_request(
             pose_goals=targets,
             vel=vel,
             acc=acc,
-            planner_id=planner_id,
+            planner_id="LIN",
             blend_radius=blend_radius,
         )
-        trajs = self._plan_sequence(msr, and_execute=True)
-        
-        return True
+
+        # 1) Plan only – do not execute yet
+        trajs = self._plan_sequence(msr, and_execute=False)
+        if trajs is None:
+            return False
+
+        # 2) TOTG + 3) Execute
+        return self._execute_sequence(trajs, apply_totg=True)
 
 
     def RobotState_from_joints(self, joints: List[float], radians = False) -> RobotState:
