@@ -5,14 +5,16 @@ import random
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionClient
 
 from moveit.planning import MoveItPy, PlanRequestParameters
-from moveit.core.kinematic_constraints import construct_link_constraint
 from moveit.core.robot_state import RobotState
 from moveit.core.robot_trajectory import RobotTrajectory
+
+from shape_msgs.msg import SolidPrimitive
+from std_msgs.msg import Header, String
+
 
 from geometry_msgs.msg import (
     Point,
@@ -31,9 +33,12 @@ from moveit_msgs.msg import (
     OrientationConstraint,
     PositionConstraint
 )
-from moveit_msgs.msg import MoveItErrorCodes
+from moveit_msgs.msg import MoveItErrorCodes, PlanningOptions
+
 
 from typing import List, Optional
+
+from trajectory_msgs.msg import JointTrajectoryPoint
 
 
 def degrees_to_radians(degrees : List[float]):
@@ -45,8 +50,7 @@ def radians_to_degrees(radians : List[float]):
     return [math.degrees(radian) for radian in radians]
 
 class PilzMotionController(Node):
-    """High‑level wrapper around MoveItPy and PILZ industrial planners.
-    """
+    """High‑level wrapper around MoveItPy and PILZ industrial planners."""
     def __init__(
         self,
         *,
@@ -99,9 +103,10 @@ class PilzMotionController(Node):
         while not self.sequence_client.wait_for_server(timeout_sec=1.0):
             self.get_logger().info("Waiting for /sequence_move_group action server...")
 
+
         # === Home Pose ===
         if home_pose is None:
-            joint_deg = [45., -120., 120., -90., -90., 0.]
+            joint_deg = [90., -120., 120., -90., -90., 0.]
             self.home_state = self.RobotState_from_joints(joint_deg)
         elif isinstance(home_pose, RobotState):
             self.home_state = home_pose
@@ -143,118 +148,100 @@ class PilzMotionController(Node):
 
         return self.planning_component.plan(single_plan_parameters=params)
 
-    def _plan_sequence(
+    def _build_constraints(self,
+                           pose_goal: PoseStamped,
+                           frame_id: str,
+                           link: str,
+                           pos_tolerance: float = 0.001,
+                           ori_tolerance: float = 0.01
+                           ) -> Constraints:
+        pc = PositionConstraint()
+        pc.header = Header(frame_id=frame_id)
+        pc.link_name = link
+        # A tiny spherical region around the goal
+        sphere = SolidPrimitive(type=SolidPrimitive.SPHERE,
+                                dimensions=[pos_tolerance])
+        vol = BoundingVolume(primitives=[sphere],
+                            primitive_poses=[Pose(position=pose_goal.pose.position)])
+        pc.constraint_region = vol
+        pc.weight = 1.0
+
+        oc = OrientationConstraint()
+        oc.header = Header(frame_id=frame_id)
+        oc.link_name = link
+        oc.orientation = pose_goal.pose.orientation
+        oc.absolute_x_axis_tolerance = ori_tolerance
+        oc.absolute_y_axis_tolerance = ori_tolerance
+        oc.absolute_z_axis_tolerance = ori_tolerance
+        oc.weight = 1.0
+
+        return Constraints(
+            position_constraints=[pc],
+            orientation_constraints=[oc],
+        )
+
+
+    def _build_motion_plan_request(
+        self,
+        pose_goal: PoseStamped,
+        vel: float,
+        acc: float,
+        planner_id: str = "LIN",
+        blend_radius: float = 0.001,
+        ori_tolerance: float = 0.01,
+    ) -> MotionPlanRequest:
+
+        req = MotionPlanRequest()
+        req.pipeline_id = "pilz_industrial_motion_planner"
+        req.planner_id = planner_id            # “LIN”, “PTP”, or “CIRC”
+        req.allowed_planning_time = 10.0
+        req.group_name = self.group
+        req.max_acceleration_scaling_factor = acc
+        req.max_velocity_scaling_factor = vel
+        req.goal_constraints.append(
+            self._build_constraints(
+                pose_goal,
+                frame_id=self.root_link,
+                link=self.eef_link,
+                pos_tolerance=blend_radius,
+                ori_tolerance=ori_tolerance,
+            )
+        )
+        return req
+
+    def _build_motion_sequence_request(
         self,
         pose_goals: List[PoseStamped],
         vel: float,
         acc: float,
-        blend_radius: float | List[float] = 0.0,
-        timeout: float = 5.0,
-    ) -> Optional[RobotTrajectory]:
-        """Plan a Pilz LIN MotionSequence.
+        planner_id: str = "LIN",
+        blend_radius: float = 0.001,
+        ori_tolerance: float = 0.01,
+    ) -> MotionSequenceRequest | None:
 
-        Parameters
-        ----------
-        pose_goals : list[PoseStamped]
-            Way‑points the TCP should visit (≥ 2, same frame_id).
-        vel / acc : float
-            Cartesian velocity/acceleration scaling factors (0…1).
-        blend_radius : float | list[float]
-            • If a single float, the same radius is used between every
-              consecutive pair of segments.
-            • If a list, it must contain ``len(pose_goals)‑1`` values.
-              ``0.0`` forces a complete stop between segments.
-        timeout : float
-            Seconds to wait for ``/plan_sequence_path`` to appear.
-
-        Returns
-        -------
-        moveit.core.robot_trajectory.RobotTrajectory | None
-            A ready‑to‑execute trajectory on success, otherwise *None*.
-        """
-        # --- Validate input -------------------------------------------------
         if len(pose_goals) < 2:
             self.get_logger().error("Need at least two way‑points for a sequence.")
             return None
 
-        if isinstance(blend_radius, list):
-            radii = blend_radius
-        else:
-            radii = [float(blend_radius)] * (len(pose_goals) - 1)
-
-        if len(radii) != len(pose_goals) - 1:
-            self.get_logger().error(
-                "blend_radius list must have len(pose_goals)‑1 entries."
-            )
-            return None
-
-        # --- Build MotionSequenceRequest -----------------------------------
-        seq_req = MotionSequenceRequest()
+        msr = MotionSequenceRequest()
 
         for idx, pose in enumerate(pose_goals):
-            item = MotionSequenceItem()
-
-            # Apply blending except for the very last segment
-            if idx < len(radii):
-                item.blend_radius = radii[idx]
-
-            req = item.req
-            req.group_name = self.group
-            req.pipeline_id = "pilz_industrial_motion_planner"
-            req.planner_id = "LIN"
-            req.max_velocity_scaling_factor = vel
-            req.max_acceleration_scaling_factor = acc
-            req.allowed_planning_time = 5.0
-
-            # Build separate Cartesian‑position and orientation arrays for the helper
-            cart_pos = [
-                pose.pose.position.x,
-                pose.pose.position.y,
-                pose.pose.position.z,
-            ]
-            quat = [
-                pose.pose.orientation.x,
-                pose.pose.orientation.y,
-                pose.pose.orientation.z,
-                pose.pose.orientation.w,
-            ]
-            req.goal_constraints.append(
-                construct_link_constraint(
-                    link_name=self.eef_link,
-                    source_frame=pose.header.frame_id,
-                    cartesian_position=cart_pos,
-                    cartesian_position_tolerance=0.001,   # 1 mm
-                    orientation=quat,
-                    orientation_tolerance=0.01,           # ≈ 0.6°
-                )
+            item = MotionSequenceItem(
+                blend_radius=blend_radius,
+                req=self._build_motion_plan_request(
+                    pose_goal=pose,
+                    planner_id=planner_id,
+                    vel=vel,
+                    acc=acc,
+                    blend_radius=blend_radius,
+                    ori_tolerance=ori_tolerance,
+                ),
             )
+            msr.items.append(item)
+        msr.items[-1].blend_radius = 0.0    #Last waypoint should have blend_radius = 0.0
 
-            seq_req.items.append(item)
-
-        # --- Send goal via the MoveGroupSequence action ----------------------
-        goal = MoveGroupSequence.Goal()
-        goal.request = seq_req
-
-        send_goal_future = self.sequence_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, send_goal_future)
-        goal_handle = send_goal_future.result()
-
-        if goal_handle is None or not goal_handle.accepted:
-            self.get_logger().error("Sequence goal rejected by action server.")
-            return None
-
-        result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
-        result = result_future.result().result
-
-        if result.response.error_code.val != MoveItErrorCodes.SUCCESS:
-            self.get_logger().error(
-                f"Sequence planning failed (code={result.response.error_code.val})."
-            )
-            return None
-
-        return result.response.planned_trajectories
-
+        return msr
+    
     # === Execution helpers ===
 
     def _apply_time_parameterization(self, traj: RobotTrajectory) -> None:
@@ -270,13 +257,42 @@ class PilzMotionController(Node):
         self.robot.execute(traj, controllers=[])
         return True
     
-    def _execute_sequence(self, traj: RobotTrajectory) -> bool:
-        """Execute a planned RobotTrajectory (sequence)."""
-        if traj is None:
-            return False
-        # self._apply_time_parameterization(traj)
-        # self.robot.execute(traj, controllers=[])
-        return True
+    def _plan_sequence(
+        self,
+        msr: MotionSequenceRequest,
+        and_execute: bool = False,
+    ) -> Optional[List[RobotTrajectory]]:
+        
+        if msr is None:
+            return None
+
+        goal = MoveGroupSequence.Goal()
+        goal.request = msr
+
+        goal.planning_options = PlanningOptions()
+        goal.planning_options.plan_only = not and_execute
+
+        send_goal_future = self.sequence_client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, send_goal_future)
+        goal_handle = send_goal_future.result()
+
+        if goal_handle is None or not goal_handle.accepted:
+            self.get_logger().error("Sequence goal rejected by action server.")
+            return None
+
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future)
+        result_msg = result_future.result().result  # MoveGroupSequence.Result
+        response = result_msg.response
+
+        if response.error_code.val != MoveItErrorCodes.SUCCESS:
+            self.get_logger().error(
+                f"Sequence planning failed (code={response.error_code.val})."
+            )
+            return None
+
+        # Return a regular Python list of segments
+        return list(response.planned_trajectories)
 
     # === IK/FK helpers ===
 
@@ -374,18 +390,17 @@ class PilzMotionController(Node):
     # -------------------------------------------------------
     # Multi‑waypoint Cartesian (LIN) trajectory
     # -------------------------------------------------------
-    def go_to_trajectory(
+    def run_sequence(
         self,
         targets: List[PoseStamped],
         *,
         motion_type: str = "LIN",
-        blend_radius: float = 0.1,
+        blend_radius: float = 0.001,    #default: 1 mm
         vel: Optional[float] = None,
         acc: Optional[float] = None,
-    ) -> bool:
-        """Execute a list of waypoints as a multi-waypoint (LIN) trajectory."""
+    ) -> RobotTrajectory | List[RobotTrajectory] | None:
         
-        assert(len(targets) > 1)
+        assert(len(targets) >= 2)
 
         motion_type = motion_type.upper()
         if motion_type != "LIN":
@@ -394,9 +409,18 @@ class PilzMotionController(Node):
             vel = self.default_lin_scaling
         if acc is None:
             acc = self.default_acc_scaling
-        # Plan and execute a multi-waypoint (LIN) trajectory
-        traj = self._plan_sequence(targets, vel, acc, blend_radius)
-        return self._execute_sequence(traj)
+
+        planner_id = motion_type  # “LIN” or “PTP”
+        msr = self._build_motion_sequence_request(
+            pose_goals=targets,
+            vel=vel,
+            acc=acc,
+            planner_id=planner_id,
+            blend_radius=blend_radius,
+        )
+        trajs = self._plan_sequence(msr, and_execute=True)
+        
+        return True
 
 
     def RobotState_from_joints(self, joints: List[float], radians = False) -> RobotState:
@@ -451,7 +475,7 @@ class PilzDemo(Node):
         )
         self.get_logger().info(
             "PilzDemo ready. Commands: "
-            "'home', 'draw_line', 'draw_square', 'draw_square_seq', 'quit'"
+            "'home', 'draw_line', 'draw_square', 'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'quit'"
         )
 
     # ------------------------------------------------------------------
@@ -464,6 +488,8 @@ class PilzDemo(Node):
             "home": self.home,
             "draw_square": self.draw_square,
             "draw_square_seq": self.draw_square_seq,
+            "draw_circle": self.draw_circle,
+            "draw_circle_seq": self.draw_circle_seq,
             "draw_line": self.draw_line,
             "quit": self._quit,
         }
@@ -531,7 +557,7 @@ class PilzDemo(Node):
         half = side / 2.0
 
         waypoints = []
-        offsets = [(-half, -half), (-half, half), (half, half), (half, -half)]#, (-half, -half)]
+        offsets = [(-half, -half), (-half, half), (half, half), (half, -half), (-half, -half)]
 
         for dx, dy in offsets:
             ps = PoseStamped()
@@ -541,7 +567,100 @@ class PilzDemo(Node):
             ps.pose.position.y += dy
             waypoints.append(ps)
 
-        self.ctrl.go_to_trajectory(
+        self.ctrl.run_sequence(
+            waypoints,
+            motion_type="LIN",
+            blend_radius=blend_radius,
+        )
+
+        self.home()
+
+    def draw_circle(
+        self,
+        *,
+        radius: float = 0.3,
+        z_fixed: float = 0.4,
+        divisions: int = 36,
+    ):
+        """Draw a discretised circle using successive single‑segment LIN motions."""
+        from copy import deepcopy as _dc
+        import math
+
+        # Start from the home pose
+        self.home()
+
+        # Use the end‑effector orientation of the home pose
+        home_orientation = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
+
+        # Define the circle’s centre relative to the base_link
+        center = PoseStamped()
+        center.pose.position.x = 0.0
+        center.pose.position.y = 0.7
+        center.pose.position.z = z_fixed
+        center.pose.orientation = home_orientation
+
+        base = _dc(center.pose)
+
+        # Step around the circle
+        for i in range(divisions+1):
+            angle = 2.0 * math.pi * i / divisions
+            dx = radius * math.cos(angle)
+            dy = radius * math.sin(angle)
+
+            ps = PoseStamped()
+            ps.header.frame_id = self.ctrl.root_link
+            ps.pose = _dc(base)
+            ps.pose.position.x += dx
+            ps.pose.position.y += dy
+
+            # Execute a linear move to the waypoint
+            self.ctrl.go_to_target(ps, motion_type="LIN")
+
+        # Return to home after completing the circle
+        self.home()
+
+    def draw_circle_seq(
+        self,
+        *,
+        radius: float = 0.3,
+        z_fixed: float = 0.5,
+        divisions: int = 36,
+        blend_radius: float = 0.001,
+    ):
+        """Draw a discretised circle using a single blended LIN trajectory."""
+        from copy import deepcopy as _dc
+        import math
+
+        self.home()
+
+        home_orientation = self.ctrl.compute_fk(self.ctrl.home_state).pose.orientation
+
+        # Circle centre
+        center = PoseStamped()
+        center.pose.position.x = 0.0
+        center.pose.position.y = 0.7
+        center.pose.position.z = z_fixed
+        center.pose.orientation = home_orientation
+
+        base = _dc(center.pose)
+
+        waypoints = []
+        # Include divisions+1 waypoints so that the last one coincides with the first,
+        # producing a closed curve when blending.
+        for i in range(divisions+1):
+            angle = 2.0 * math.pi * i / divisions
+            dx = radius * math.cos(angle)
+            dy = radius * math.sin(angle)
+
+            ps = PoseStamped()
+            ps.header.frame_id = self.ctrl.root_link
+            ps.pose = _dc(base)
+            ps.pose.position.x += dx
+            ps.pose.position.y += dy
+            waypoints.append(ps)
+
+        # Execute the whole circle as one blended trajectory
+        self.ctrl.run_sequence(
             waypoints,
             motion_type="LIN",
             blend_radius=blend_radius,
