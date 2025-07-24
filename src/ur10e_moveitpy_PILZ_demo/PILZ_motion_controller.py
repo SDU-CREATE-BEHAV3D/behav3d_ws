@@ -244,10 +244,6 @@ class PilzMotionController(Node):
         return msr
     
     # === Execution helpers ===
-
-    def _apply_time_parameterization(self, traj: RobotTrajectory) -> None:
-        """Apply time parameterization (TOTG) to the trajectory."""
-        traj.apply_totg_time_parameterization(1.0, 1.0, path_tolerance=0.01, resample_dt=0.01)
     
     def _execute_target(self, result) -> bool:
         """Time‑parameterize and execute a single‑segment trajectory."""
@@ -293,9 +289,9 @@ class PilzMotionController(Node):
             return None
         else:
             self.get_logger().info(f"MotionSequence was planned successfully in {response.planning_time} seconds.")
-            self.get_logger().debug(response)
-            self.get_logger().debug("------------------")
-            self.get_logger().debug(response.planned_trajectories)
+            self.get_logger().info(response)
+            self.get_logger().info("------------------")
+            self.get_logger().info(response.planned_trajectories)
         return list(response.planned_trajectories)
 
     def _execute_sequence(
