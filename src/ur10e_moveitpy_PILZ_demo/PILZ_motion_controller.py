@@ -198,6 +198,7 @@ class PilzMotionController(Node):
         req.group_name = self.group
         req.max_acceleration_scaling_factor = acc
         req.max_velocity_scaling_factor = vel
+        req.max_cartesian_speed = 0.1   #m/s
         req.goal_constraints.append(
             self._build_constraints(
                 pose_goal,
@@ -290,8 +291,11 @@ class PilzMotionController(Node):
                 f"Sequence planning failed (code={response.error_code.val})."
             )
             return None
-
-        # Return a regular Python list of segments
+        else:
+            self.get_logger().info(f"MotionSequence was planned successfully in {response.planning_time} seconds.")
+            self.get_logger().debug(response)
+            self.get_logger().debug("------------------")
+            self.get_logger().debug(response.planned_trajectories)
         return list(response.planned_trajectories)
 
     def _execute_sequence(
@@ -305,12 +309,17 @@ class PilzMotionController(Node):
 
         for traj in trajs:
             if apply_totg:
-                traj.apply_totg_time_parameterization(
+                ret = traj.apply_totg_time_parameterization(
                     velocity_scaling_factor=1.0,
                     acceleration_scaling_factor=1.0,
                     path_tolerance=0.01,
                     resample_dt=0.01,
                 )
+                if ret:
+                    self.get_logger().info("TOTG parameterization is SUCCESSFUL!")
+                else:
+                    self.get_logger().error("TOTG parameterization FAILED!")
+
             # Empty list → default controller
             self.robot.execute(traj, controllers=[])
         return True
