@@ -311,9 +311,10 @@ class PilzMotionController(Node):
                 if hasattr(traj_core, "from_msg"):
                     traj_core.from_msg(traj)
                 else:
-                    traj_core.set_robot_trajectory_msg(
-                        self.robot.get_robot_model(), traj
-                    )
+                    # Newer MoveItPy builds expect a RobotState here (not a RobotModel).
+                    # Use the current start state for the trajectory’s robot model context.
+                    start_state = self.planning_component.get_start_state()
+                    traj_core.set_robot_trajectory_msg(start_state, traj)
             else:
                 traj_core = traj
 
