@@ -304,8 +304,16 @@ class PilzMotionController(Node):
             return False
 
         for traj in trajs:
+            # Convert moveit_msgs/msg/RobotTrajectory messages into MoveItPy
+            # RobotTrajectory objects so we can call TOTG on them.
+            if not hasattr(traj, "apply_totg_time_parameterization"):
+                traj_core = RobotTrajectory(self.robot.get_robot_model())
+                traj_core.from_msg(traj)
+            else:
+                traj_core = traj
+
             if apply_totg:
-                ret = traj.apply_totg_time_parameterization(
+                ret = traj_core.apply_totg_time_parameterization(
                     velocity_scaling_factor=1.0,
                     acceleration_scaling_factor=1.0,
                     path_tolerance=0.01,
@@ -317,7 +325,7 @@ class PilzMotionController(Node):
                     self.get_logger().error("TOTG parameterization FAILED!")
 
             # Empty list → default controller
-            self.robot.execute(traj, controllers=[])
+            self.robot.execute(traj_core, controllers=[])
         return True
 
     # === IK/FK helpers ===
