@@ -301,22 +301,10 @@ class PilzMotionController(Node):
             return False
 
         for traj in trajs:
-            # Wrap raw moveit_msgs/RobotTrajectory so we always have the core
-            # object that exposes apply_totg_time_parameterization().
-            if not hasattr(traj, "apply_totg_time_parameterization"):
-                traj_core = RobotTrajectory(self.robot.get_robot_model())
-                # API quirk: some MoveItPy versions (e.g. Jazzy binary) ship
-                # only set_robot_trajectory_msg(), while newer nightlies added
-                # from_msg()/to_msg().
-                if hasattr(traj_core, "from_msg"):
-                    traj_core.from_msg(traj)
-                else:
-                    # Newer MoveItPy builds expect a RobotState here (not a RobotModel).
-                    # Use the current start state for the trajectory’s robot model context.
-                    start_state = self.planning_component.get_start_state()
-                    traj_core.set_robot_trajectory_msg(start_state, traj)
-            else:
-                traj_core = traj
+            traj_core = RobotTrajectory(self.robot.get_robot_model())
+            start_state = self.planning_component.get_start_state()
+            traj_core.set_robot_trajectory_msg(start_state, traj)
+            traj_core.joint_model_group_name = self.group
 
             if apply_totg:
                 ret = traj_core.apply_totg_time_parameterization(
@@ -591,7 +579,7 @@ class PilzDemo(Node):
         self,
         *,
         side: float = 0.4,
-        z_fixed: float = 0.5,
+        z_fixed: float = 0.4,
         blend_radius: float = 0.001,
     ):
         from copy import deepcopy as _dc
@@ -676,7 +664,7 @@ class PilzDemo(Node):
         self,
         *,
         radius: float = 0.3,
-        z_fixed: float = 0.5,
+        z_fixed: float = 0.4,
         divisions: int = 36,
         blend_radius: float = 0.001,
     ):
