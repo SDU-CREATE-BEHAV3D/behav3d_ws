@@ -198,6 +198,7 @@ class PilzMotionController(Node):
         req.group_name = self.group
         req.max_acceleration_scaling_factor = acc
         req.max_velocity_scaling_factor = vel
+        req.max_cartesian_speed = 0.1   #m/s
         req.goal_constraints.append(
             self._build_constraints(
                 pose_goal,
@@ -243,10 +244,6 @@ class PilzMotionController(Node):
         return msr
     
     # === Execution helpers ===
-
-    def _apply_time_parameterization(self, traj: RobotTrajectory) -> None:
-        """Apply time parameterization (TOTG) to the trajectory."""
-        traj.apply_totg_time_parameterization(1.0, 1.0, path_tolerance=0.01, resample_dt=0.01)
     
     def _execute_target(self, result) -> bool:
         """Time‑parameterize and execute a single‑segment trajectory."""
@@ -290,9 +287,40 @@ class PilzMotionController(Node):
                 f"Sequence planning failed (code={response.error_code.val})."
             )
             return None
-
-        # Return a regular Python list of segments
+        else:
+            self.get_logger().info(f"MotionSequence was planned successfully in {response.planning_time} seconds.")
         return list(response.planned_trajectories)
+
+    def _execute_sequence(
+        self,
+        trajs: List[RobotTrajectory],
+        *,
+        apply_totg: bool = True,
+    ) -> bool:
+        if not trajs:
+            return False
+
+        for traj in trajs:
+            traj_core = RobotTrajectory(self.robot.get_robot_model())
+            start_state = self.planning_component.get_start_state()
+            traj_core.set_robot_trajectory_msg(start_state, traj)
+            traj_core.joint_model_group_name = self.group
+
+            if apply_totg:
+                ret = traj_core.apply_totg_time_parameterization(
+                    velocity_scaling_factor=1.0,
+                    acceleration_scaling_factor=1.0,
+                    path_tolerance=0.01,
+                    resample_dt=0.01,
+                )
+                if ret:
+                    self.get_logger().info("TOTG parameterization is SUCCESSFUL!")
+                else:
+                    self.get_logger().error("TOTG parameterization FAILED!")
+
+            # Empty list → default controller
+            self.robot.execute(traj_core, controllers=[])
+        return True
 
     # === IK/FK helpers ===
 
@@ -395,32 +423,45 @@ class PilzMotionController(Node):
         targets: List[PoseStamped],
         *,
         motion_type: str = "LIN",
-        blend_radius: float = 0.001,    #default: 1 mm
+        blend_radius: float = 0.001,
         vel: Optional[float] = None,
         acc: Optional[float] = None,
-    ) -> RobotTrajectory | List[RobotTrajectory] | None:
-        
-        assert(len(targets) >= 2)
+    ) -> bool:
+        """
+        Plan a blended LIN motion through the given way‑points,
+        apply Time‑Optimal Trajectory Generation, and execute it.
+
+        Returns
+        -------
+        bool
+            ``True`` on successful execution, otherwise ``False``.
+        """
+        assert len(targets) >= 2
 
         motion_type = motion_type.upper()
         if motion_type != "LIN":
             raise ValueError("motion_type must be 'LIN'")
+
         if vel is None:
             vel = self.default_lin_scaling
         if acc is None:
             acc = self.default_acc_scaling
 
-        planner_id = motion_type  # “LIN” or “PTP”
         msr = self._build_motion_sequence_request(
             pose_goals=targets,
             vel=vel,
             acc=acc,
-            planner_id=planner_id,
+            planner_id="LIN",
             blend_radius=blend_radius,
         )
-        trajs = self._plan_sequence(msr, and_execute=True)
-        
-        return True
+
+        # 1) Plan only – do not execute yet
+        trajs = self._plan_sequence(msr, and_execute=False)
+        if trajs is None:
+            return False
+
+        # 2) TOTG + 3) Execute
+        return self._execute_sequence(trajs, apply_totg=True)
 
 
     def RobotState_from_joints(self, joints: List[float], radians = False) -> RobotState:
@@ -538,7 +579,7 @@ class PilzDemo(Node):
         self,
         *,
         side: float = 0.4,
-        z_fixed: float = 0.5,
+        z_fixed: float = 0.4,
         blend_radius: float = 0.001,
     ):
         from copy import deepcopy as _dc
@@ -623,7 +664,7 @@ class PilzDemo(Node):
         self,
         *,
         radius: float = 0.3,
-        z_fixed: float = 0.5,
+        z_fixed: float = 0.4,
         divisions: int = 36,
         blend_radius: float = 0.001,
     ):
