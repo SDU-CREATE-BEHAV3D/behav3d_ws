@@ -289,9 +289,6 @@ class PilzMotionController(Node):
             return None
         else:
             self.get_logger().info(f"MotionSequence was planned successfully in {response.planning_time} seconds.")
-            self.get_logger().info(response)
-            self.get_logger().info("------------------")
-            self.get_logger().info(response.planned_trajectories)
         return list(response.planned_trajectories)
 
     def _execute_sequence(
@@ -304,11 +301,19 @@ class PilzMotionController(Node):
             return False
 
         for traj in trajs:
-            # Convert moveit_msgs/msg/RobotTrajectory messages into MoveItPy
-            # RobotTrajectory objects so we can call TOTG on them.
+            # Wrap raw moveit_msgs/RobotTrajectory so we always have the core
+            # object that exposes apply_totg_time_parameterization().
             if not hasattr(traj, "apply_totg_time_parameterization"):
                 traj_core = RobotTrajectory(self.robot.get_robot_model())
-                traj_core.from_msg(traj)
+                # API quirk: some MoveItPy versions (e.g. Jazzy binary) ship
+                # only set_robot_trajectory_msg(), while newer nightlies added
+                # from_msg()/to_msg().
+                if hasattr(traj_core, "from_msg"):
+                    traj_core.from_msg(traj)
+                else:
+                    traj_core.set_robot_trajectory_msg(
+                        self.robot.get_robot_model(), traj
+                    )
             else:
                 traj_core = traj
 
