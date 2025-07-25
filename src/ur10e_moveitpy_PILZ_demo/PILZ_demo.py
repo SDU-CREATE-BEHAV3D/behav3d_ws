@@ -8,17 +8,21 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from std_msgs.msg import String
 
+from motion_visualizer import MotionVisualizer
+
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
 
 from PILZ_motion_controller import PilzMotionController
 class PilzDemo(Node):
     """Remote‑control demo node that maps textual commands on ``/user_input`` to
-    high‑level motions executed by a :class:`PilzMotionController` instance."""
+    high‑level motions executed by a :class:`PilzMotionController` instance.
+    It also publishes RViz markers via a :class:`MotionVisualizer`."""
 
-    def __init__(self, controller: PilzMotionController):
+    def __init__(self, controller: PilzMotionController, visualizer: MotionVisualizer):
         super().__init__("pilz_remote")
         self.ctrl = controller
+        self.viz  = visualizer
         self.create_subscription(
             String,
             "user_input",
@@ -32,6 +36,33 @@ class PilzDemo(Node):
         # === Home Pose Initialization ===
         joint_deg = [90.0, -120.0, 120.0, -90.0, -90.0, 0.0]
         self.home_state = self.RobotState_from_joints(joint_deg)
+
+    # --------------------------------------------------------------
+    # Helper: plan → visualise → execute in one shot
+    # --------------------------------------------------------------
+    def _move_with_visual(self, target, *, motion_type="PTP", **plan_kwargs):
+        """Plan *motion_type* to *target*, publish ghost + trail + target frame, then execute."""
+        if motion_type == "PTP":
+            traj = self.ctrl.plan_ptp(target, **plan_kwargs)
+        elif motion_type == "LIN":
+            traj = self.ctrl.plan_lin(target, **plan_kwargs)
+        else:
+            raise ValueError("motion_type must be 'PTP' or 'LIN'")
+
+        if traj is None:
+            self.get_logger().error("Failed to plan trajectory")
+            return False
+
+        # --- Visuals ---
+        self.viz.publish_ghost(traj)
+        self.viz.publish_trail(traj)
+        if isinstance(target, PoseStamped):
+            pose_marker = target
+        else:
+            pose_marker = self.ctrl.compute_fk(target)
+        self.viz.publish_target_pose(pose_marker)
+
+        return self.ctrl.execute_trajectory(traj)
 
     # ------------------------------------------------------------------
     # Command dispatcher
@@ -58,7 +89,7 @@ class PilzDemo(Node):
     # Command implementations
     # ------------------------------------------------------------------
     def home(self):
-        self.ctrl.go_to_target(self.home_state, motion_type="PTP")
+        self._move_with_visual(self.home_state, motion_type="PTP")
 
     def draw_square(self, *, side: float = 0.4, z_fixed: float = 0.4):
         from copy import deepcopy as _dc
@@ -240,8 +271,8 @@ class PilzDemo(Node):
         end.pose.orientation = home_orientation
 
         self.home()
-        self.ctrl.go_to_target(start, motion_type="PTP")
-        self.ctrl.go_to_target(end, motion_type="LIN")
+        self._move_with_visual(start, motion_type="PTP")
+        self._move_with_visual(end,   motion_type="LIN")
         self.home()
 
     # ------------------------------------------------------------------
@@ -280,10 +311,12 @@ class PilzDemo(Node):
 def main():
     rclpy.init()
     controller = PilzMotionController()
-    remote     = PilzDemo(controller)
+    visualizer = MotionVisualizer()
+    demo       = PilzDemo(controller, visualizer)
     executor   = MultiThreadedExecutor()
     executor.add_node(controller)
-    executor.add_node(remote)
+    executor.add_node(visualizer)
+    executor.add_node(demo)
 
     try:
         executor.spin()
@@ -292,7 +325,8 @@ def main():
     finally:
         executor.shutdown()
         controller.destroy_node()
-        remote.destroy_node()
+        visualizer.destroy_node()
+        demo  .destroy_node()
         rclpy.shutdown()
 
 if __name__ == "__main__":
