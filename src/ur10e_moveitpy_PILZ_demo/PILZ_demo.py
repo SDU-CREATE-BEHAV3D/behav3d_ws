@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+          
+# =============================================================================
+#   ____  _____ _   _    ___     _______ ____  
+#  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
+#  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
+#  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
+#  |____/|_____|_| |_/_/   \_\_/  |____/|____/ 
+#                                               
+#                                               
+# Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
+# Maintainers:
+#   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
+#   - Lucas José Helle <luh@iti.sdu.dk>
+# Institute: University of Southern Denmark (Syddansk Universitet)
+# Date: 2025-07
+# =============================================================================
 
 import math
 from typing import List

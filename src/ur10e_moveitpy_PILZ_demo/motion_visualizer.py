@@ -1,19 +1,20 @@
-
-
 #!/usr/bin/env python3
-"""Minimal MoveIt‑Py visualizer helper.
-
-Usage::
-
-    ros2 run <pkg> ghost_viz.py   # or launch via a normal ROS 2 launch file.
-
-The node shows three basic visual aids you can call from your controller:
-    1. `publish_ghost(traj)` – animates the planned robot trajectory in RViz.
-    2. `publish_trail(traj, dt=0.05)` – draws a TCP line‑strip through space.
-    3. `publish_target_pose(pose, ns="target")` – draws an XYZ axis frame.
-
-All APIs accept the native *moveit_py* types so callers don’t touch ROS messages.
-"""
+          
+# =============================================================================
+#   ____  _____ _   _    ___     _______ ____  
+#  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
+#  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
+#  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
+#  |____/|_____|_| |_/_/   \_\_/  |____/|____/ 
+#                                               
+#                                               
+# Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
+# Maintainers:
+#   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
+#   - Lucas José Helle <luh@iti.sdu.dk>
+# Institute: University of Southern Denmark (Syddansk Universitet)
+# Date: 2025-07
+# =============================================================================
 
 from __future__ import annotations
 
