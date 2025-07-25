@@ -86,6 +86,10 @@ class PilzMotionController(Node):
             ori_tolerance: float = 0.01
         ) -> Constraints:
         """Return a tight position/orientation constraint around *pose_goal*."""
+        self.get_logger().debug(
+            f"_build_constraints: frame={frame_id}, link={link}, "
+            f"pos_tol={pos_tolerance}, ori_tol={ori_tolerance}"
+        )
         pc = PositionConstraint()
         pc.header = Header(frame_id=frame_id)
         pc.link_name = link
@@ -139,6 +143,11 @@ class PilzMotionController(Node):
                 ori_tolerance=ori_tolerance,
             )
         )
+        self.get_logger().debug(
+            f"_build_motion_plan_request: pipeline={req.pipeline_id}, "
+            f"planner_id={req.planner_id}, time={req.allowed_planning_time}s, "
+            f"vel_scale={req.max_velocity_scaling_factor}, acc_scale={req.max_acceleration_scaling_factor}"
+        )
         return req
 
     def _build_motion_sequence_request(
@@ -151,6 +160,11 @@ class PilzMotionController(Node):
             ori_tolerance: float = 0.01,
         ) -> MotionSequenceRequest | None:
         """Build a :class:`MotionSequenceRequest` from a list of way‑points."""
+        self.get_logger().debug(
+            f"_build_motion_sequence_request: {len(pose_goals)} way-points, "
+            f"vel={vel}, acc={acc}, planner_id={planner_id}, "
+            f"blend_radius={blend_radius}"
+        )
         if len(pose_goals) < 2:
             self.get_logger().error("Need at least two way‑points for a sequence.")
             return None
@@ -176,6 +190,10 @@ class PilzMotionController(Node):
     
     def _to_core_trajectory(self, traj_msg):
         """Convert a ROS-level RobotTrajectory message into a MoveItPy RobotTrajectory object."""
+        self.get_logger().debug(
+            f"_to_core_trajectory: Converting ROS msg with "
+            f"{len(traj_msg.joint_trajectory.points)} points."
+        )
         core_traj = RobotTrajectory(self.robot.get_robot_model())
         start_state = self.planning_component.get_start_state()
         core_traj.set_robot_trajectory_msg(start_state, traj_msg)
@@ -185,6 +203,9 @@ class PilzMotionController(Node):
     def _concat_traj_msgs(self, traj_msgs: List) -> RobotTrajectory:
         """Concatenate multiple moveit_msgs/RobotTrajectory segments into one core RobotTrajectory. (Emulates the missing C++ `append()` function.)
         """
+        self.get_logger().debug(
+            f"_concat_traj_msgs: Concatenating {len(traj_msgs)} segments."
+        )
         from copy import deepcopy
         from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
         from builtin_interfaces.msg import Duration
@@ -227,6 +248,10 @@ class PilzMotionController(Node):
             )
             t_offset += last_pt_time
 
+        self.get_logger().debug(
+            f"_concat_traj_msgs: Combined trajectory has "
+            f"{len(combined_msg.joint_trajectory.points)} points."
+        )
         return self._to_core_trajectory(combined_msg)
 
     def _build_sequence_trajectory(
@@ -257,6 +282,10 @@ class PilzMotionController(Node):
             timeout: Optional[float] = None,
         ) -> Optional[RobotTrajectory]:
         """Plan a joint‑space (PTP) move and return a trajectory or ``None``."""
+        self.get_logger().debug(
+            f"plan_ptp: target_type={type(target).__name__}, "
+            f"vel={vel}, acc={acc}, timeout={timeout}"
+        )
         vel        = vel        or self.defaults.ptp_scaling
         acc        = acc        or self.defaults.acceleration_scaling
         timeout    = timeout    or self.defaults.planning_timeout
@@ -279,7 +308,14 @@ class PilzMotionController(Node):
         params.allowed_planning_time = timeout
 
         result = self.planning_component.plan(single_plan_parameters=params)
-        return self._to_core_trajectory(result.trajectory) if result else None
+        if result:
+            self.get_logger().debug(
+                f"plan_ptp: planned "
+                f"{len(result.trajectory.joint_trajectory.points)} points "
+                f"in {result.planning_time:.3f}s."
+            )
+            return self._to_core_trajectory(result.trajectory)
+        return None
 
     def plan_lin(
             self,
@@ -290,6 +326,10 @@ class PilzMotionController(Node):
             timeout: Optional[float] = None,
         ) -> Optional[RobotTrajectory]:
         """Plan a Cartesian (LIN) move and return a trajectory or ``None``."""
+        self.get_logger().debug(
+            f"plan_lin: target_type={type(target).__name__}, "
+            f"vel={vel}, acc={acc}, timeout={timeout}"
+        )
         vel        = vel        or self.defaults.linear_scaling
         acc        = acc        or self.defaults.acceleration_scaling
         timeout    = timeout    or self.defaults.planning_timeout
@@ -309,7 +349,14 @@ class PilzMotionController(Node):
         params.allowed_planning_time = timeout
 
         result = self.planning_component.plan(single_plan_parameters=params)
-        return self._to_core_trajectory(result.trajectory) if result else None
+        if result:
+            self.get_logger().debug(
+                f"plan_lin: planned "
+                f"{len(result.trajectory.joint_trajectory.points)} points "
+                f"in {result.planning_time:.3f}s."
+            )
+            return self._to_core_trajectory(result.trajectory)
+        return None
     
     def plan_sequence(
         self,
@@ -328,6 +375,11 @@ class PilzMotionController(Node):
         blend_radius = blend_radius or self.defaults.blend_radius_default
         ori_tolerance = ori_tolerance or self.defaults.constraint_orientation_tolerance
 
+        self.get_logger().debug(
+            f"plan_sequence: {len(targets)} way-points, "
+            f"vel={vel}, acc={acc}, blend_radius={blend_radius}"
+        )
+
         msr = self._build_motion_sequence_request(
             pose_goals=targets,
             vel=vel,
@@ -344,12 +396,15 @@ class PilzMotionController(Node):
         goal.planning_options = PlanningOptions()
         goal.planning_options.plan_only = True
 
+        self.get_logger().debug("plan_sequence: sending goal to action server…")
         send_goal_future = self.sequence_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, send_goal_future)
         goal_handle = send_goal_future.result()
-        if goal_handle is None or not goal_handle.accepted:
+        if not goal_handle.accepted:
             self.get_logger().error("Sequence goal rejected by action server.")
             return None
+        
+        self.get_logger().debug("plan_sequence: goal accepted by action server.")
 
         result_future = goal_handle.get_result_async()
         rclpy.spin_until_future_complete(self, result_future)
@@ -381,6 +436,10 @@ class PilzMotionController(Node):
             publish_markers: bool = False,
         ) -> bool:
         """Execute a trajectory, applying TOTG when requested."""
+        self.get_logger().debug(
+            "execute_trajectory: received "
+            f"{'list of ' if isinstance(traj, list) else ''}trajectory."
+        )
         if traj is None:
             return False
 
@@ -393,6 +452,7 @@ class PilzMotionController(Node):
                     publish_markers=publish_markers,
                 ):
                     return False
+                self.get_logger().debug("execute_trajectory: executed segment successfully.")
             return True
 
         # Single RobotTrajectory branch
@@ -404,8 +464,16 @@ class PilzMotionController(Node):
                 resample_dt=self.defaults.totg_resample_dt,
             )
 
-        # TODO: publish ghost arm to RViz if publish_markers
-        self.robot.execute(traj, controllers=[])
+        self.get_logger().debug(
+            f"execute_trajectory: apply_totg={apply_totg}, "
+            f"points={len(traj.joint_trajectory.points)}"
+        )
+        try:
+            self.robot.execute(traj, controllers=[])
+        except Exception as e:
+            self.get_logger().error(f"Execution failed: {e}")
+            return False
+        self.get_logger().debug("execute_trajectory: execution completed.")
         return True
 
     # --- IK/FK helpers ---
@@ -417,6 +485,7 @@ class PilzMotionController(Node):
             timeout: float = 0.1
         ) -> Optional[RobotState]:
         """Return a :class:`RobotState` that reaches *pose* or ``None`` on failure."""
+        self.get_logger().debug("compute_ik: solving IK…")
         current_rs = self.planning_component.get_start_state()
         rs = RobotState(self.robot.get_robot_model())
         rs.set_joint_group_positions(
@@ -432,11 +501,15 @@ class PilzMotionController(Node):
             timeout=timeout
         )
         if not success:
+            self.get_logger().error("IK solution failed.")
             return None
+        else:
+            self.get_logger().debug("compute_ik: IK solution found.")
         rs.update()
         return rs
 
     def compute_fk(self, state: RobotState) -> PoseStamped:
+        self.get_logger().debug("compute_fk: computing FK.")
         """Return the end‑effector pose for *state*."""
         pose = state.get_pose(self.eef_link)
         ps = PoseStamped()
@@ -449,7 +522,7 @@ class PilzMotionController(Node):
     def is_reachable(
             self,
             pose: PoseStamped
-            ) -> bool:
+        ) -> bool:
         """Quick reachability test (IK + optional collision check)."""
         rs = self.compute_ik(pose)
         if rs is None:
@@ -457,9 +530,11 @@ class PilzMotionController(Node):
 
         # Collision check via PlanningComponent if available
         try:
-            return bool(self.planning_component.is_state_valid(robot_state=rs))
+            valid = bool(self.planning_component.is_state_valid(robot_state=rs))
+            self.get_logger().debug(f"is_reachable: collision check returned {valid}")
+            return valid
         except AttributeError:
-            # Fallback: assume reachable if IK worked
+            self.get_logger().warning("is_reachable: no collision‑check interface, assuming reachable")
             return True
 
     # -------------------------------------------------------
@@ -478,6 +553,10 @@ class PilzMotionController(Node):
         """Plan **and** execute one LIN or PTP move."""
         motion_type = motion_type.upper()
         planner_id = planner_id or motion_type
+        self.get_logger().debug(
+            f"go_to: starting {motion_type} move to {target} "
+            f"with vel={vel}, acc={acc}, timeout={timeout}"
+        )
 
         if motion_type == "PTP":
             traj = self.plan_ptp(
@@ -514,6 +593,7 @@ class PilzMotionController(Node):
     ) -> bool:
         """Plan and execute a blended LIN trajectory through *targets*."""
         assert len(targets) >= 2
+        self.get_logger().debug(f"run_sequence: planning blended LIN through {len(targets)} points")
 
         motion_type = motion_type.upper()
         if motion_type != "LIN":
