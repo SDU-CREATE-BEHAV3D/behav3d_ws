@@ -16,8 +16,6 @@
 # Date: 2025-07
 # =============================================================================
 
-from __future__ import annotations
-
 import rclpy
 from rclpy.node import Node
 
