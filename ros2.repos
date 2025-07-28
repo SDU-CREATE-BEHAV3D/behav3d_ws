@@ -4,10 +4,23 @@ repositories:
     type: git
     url: https://github.com/ros-planning/moveit2.git
     version: 2.14.0
+
+  # Keep moveit_* repos here because they are released with moveit got from https://github.com/moveit/moveit2/blob/jazzy/moveit2.repos
+  moveit_msgs:
+    type: git
+    url: https://github.com/moveit/moveit_msgs.git
+    version: ros2
+  moveit_resources:
+    type: git
+    url: https://github.com/moveit/moveit_resources.git
+    version: ros2
+
   orbbec_sdk_ros2:
     type: git
     url: https://github.com/orbbec/OrbbecSDK_ROS2.git
     version: v2.4.5
+
+  *TODO: Confirm workability with ur driver own repos file: IE:https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/blob/main/Universal_Robots_ROS2_Driver.jazzy.repos   
   ur_robot_driver:
     type: git
     url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver.git
@@ -19,4 +32,4 @@ repositories:
   trac_ik:
     type: git
     url: https://bitbucket.org/traclabs/trac_ik.git
-    version: jazzy
+    version: 2.0.2
