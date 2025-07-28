@@ -16,3 +16,7 @@ repositories:
     type: git
     url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git
     version: 3.1.1
+  trac_ik:
+    type: git
+    url: https://bitbucket.org/traclabs/trac_ik.git
+    version: jazzy
