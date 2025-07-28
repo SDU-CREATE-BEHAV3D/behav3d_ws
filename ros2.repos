@@ -1,0 +1,22 @@
+# ros2.repos – pin external ROS 2 packages at known, tested versions
+repositories:
+  moveit2:
+    type: git
+    url: https://github.com/ros-planning/moveit2.git
+    version: 2.14.0
+  orbbec_sdk_ros2:
+    type: git
+    url: https://github.com/orbbec/OrbbecSDK_ROS2.git
+    version: v2.4.5
+  ur_robot_driver:
+    type: git
+    url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver.git
+    version: 3.3.3
+  ur_robot_description:
+    type: git
+    url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git
+    version: 3.1.1
+  trac_ik:
+    type: git
+    url: https://bitbucket.org/traclabs/trac_ik.git
+    version: jazzy

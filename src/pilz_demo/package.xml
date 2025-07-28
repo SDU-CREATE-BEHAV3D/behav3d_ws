@@ -1,0 +1,33 @@
+<?xml version="0.0.1"?>
+<package format="3">
+  <name>pilz_demo</name>
+  <version>0.1.0</version>
+  <description>
+    Interactive text‑command demo that drives PilzMotionController and
+    visualises trajectories in RViz via MotionVisualizer.
+  </description>
+
+  <maintainer email="ozca@iti.sdu.dk">Özgüç Bertuğ Çapunaman</maintainer>
+  <maintainer email="jomi@iti.sdu.dk">Joseph Milad Wadie Naguib</maintainer>
+  <maintainer email="luh@iti.sdu.dk">Lucas José Helle</maintainer>
+
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Runtime dependencies -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>pilz_motion_controller</exec_depend>
+  <exec_depend>motion_visualizer</exec_depend>
+
+  <!-- Test / lint -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

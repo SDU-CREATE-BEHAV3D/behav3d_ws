@@ -47,5 +47,11 @@ qtcreator-*
 # Emacs
 .#*
 
-# Catkin custom files
-CATKIN_IGNORE
+# Colcon custom files
+COLCON_IGNORE
+
+# MacOS
+.DS_Store
+
+# External Packages
+/src/external/*
