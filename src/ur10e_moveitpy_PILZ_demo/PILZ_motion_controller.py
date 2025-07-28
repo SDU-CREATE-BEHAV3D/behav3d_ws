@@ -561,7 +561,7 @@ class PilzMotionController(Node):
     ) -> bool:
         """Plan **and** execute one LIN or PTP move."""
         motion_type = motion_type.upper()
-        planner_id = motion_type
+        planner_id = planner_id or motion_type
         self.get_logger().debug(
             f"go_to: starting {motion_type} move to {target} "
             f"with vel={vel}, acc={acc}, timeout={timeout}"
@@ -570,6 +570,7 @@ class PilzMotionController(Node):
         if motion_type == "PTP":
             traj = self.plan_ptp(
                 target,
+                planner_id=planner_id,
                 vel=vel,
                 acc=acc,
                 timeout=timeout,
@@ -577,6 +578,7 @@ class PilzMotionController(Node):
         elif motion_type == "LIN":
             traj = self.plan_lin(
                 target,
+                planner_id=planner_id,
                 vel=vel,
                 acc=acc,
                 timeout=timeout,
@@ -593,6 +595,7 @@ class PilzMotionController(Node):
         self,
         targets: List[PoseStamped],
         *,
+        motion_type: str = "LIN",
         blend_radius: float = 0.001,
         vel: Optional[float] = None,
         acc: Optional[float] = None,
@@ -600,6 +603,10 @@ class PilzMotionController(Node):
         """Plan and execute a blended LIN trajectory through *targets*."""
         assert len(targets) >= 2
         self.get_logger().debug(f"run_sequence: planning blended LIN through {len(targets)} points")
+
+        motion_type = motion_type.upper()
+        if motion_type != "LIN":
+            raise ValueError("motion_type must be 'LIN'")
 
         vel = vel or self.defaults.linear_scaling
         acc = acc or self.defaults.acceleration_scaling

@@ -24,13 +24,12 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from std_msgs.msg import String
 
-# from motion_visualizer.visualizer import MotionVisualizer
-from pilz_motion_controller.controller import PilzMotionController
 
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
 
-
+# from motion_visualizer import MotionVisualizer
+from PILZ_motion_controller import PilzMotionController
 class PilzDemo(Node):
     """Remote‑control demo node that maps textual commands on ``/user_input`` to
     high‑level motions executed by a :class:`PilzMotionController` instance.
