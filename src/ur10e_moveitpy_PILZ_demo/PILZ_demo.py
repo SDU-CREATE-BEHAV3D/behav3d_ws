@@ -24,21 +24,21 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from std_msgs.msg import String
 
-from motion_visualizer import MotionVisualizer
 
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
 
+# from motion_visualizer import MotionVisualizer
 from PILZ_motion_controller import PilzMotionController
 class PilzDemo(Node):
     """Remote‑control demo node that maps textual commands on ``/user_input`` to
     high‑level motions executed by a :class:`PilzMotionController` instance.
     It also publishes RViz markers via a :class:`MotionVisualizer`."""
 
-    def __init__(self, controller: PilzMotionController, visualizer: MotionVisualizer):
+    def __init__(self, controller: PilzMotionController):#, visualizer: MotionVisualizer):
         super().__init__("pilz_remote")
         self.ctrl = controller
-        self.viz  = visualizer
+        # self.viz  = visualizer
         self.create_subscription(
             String,
             "user_input",
@@ -70,13 +70,13 @@ class PilzDemo(Node):
             return False
 
         # --- Visuals ---
-        self.viz.publish_ghost(traj)
-        self.viz.publish_trail(traj)
+        # self.viz.publish_ghost(traj)
+        # self.viz.publish_trail(traj)
         if isinstance(target, PoseStamped):
             pose_marker = target
         else:
             pose_marker = self.ctrl.compute_fk(target)
-        self.viz.publish_target_pose(pose_marker)
+        # self.viz.publish_target_pose(pose_marker)
 
         return self.ctrl.execute_trajectory(traj)
 
@@ -132,7 +132,7 @@ class PilzDemo(Node):
             ps.pose = _dc(base)
             ps.pose.position.x += dx
             ps.pose.position.y += dy
-            self.ctrl.go_to_target(ps, motion_type="LIN")
+            self.ctrl.go_to(ps, motion_type="LIN")
 
         self.home()
 
@@ -171,7 +171,6 @@ class PilzDemo(Node):
 
         self.ctrl.run_sequence(
             waypoints,
-            motion_type="LIN",
             blend_radius=blend_radius,
         )
 
@@ -216,7 +215,7 @@ class PilzDemo(Node):
             ps.pose.position.y += dy
 
             # Execute a linear move to the waypoint
-            self.ctrl.go_to_target(ps, motion_type="LIN")
+            self.ctrl.go_to(ps, motion_type="LIN")
 
         # Return to home after completing the circle
         self.home()
@@ -263,8 +262,7 @@ class PilzDemo(Node):
 
         # Execute the whole circle as one blended trajectory
         self.ctrl.run_sequence(
-            waypoints,
-            motion_type="LIN",
+            targets=waypoints,
             blend_radius=blend_radius,
         )
 
@@ -327,11 +325,11 @@ class PilzDemo(Node):
 def main():
     rclpy.init()
     controller = PilzMotionController()
-    visualizer = MotionVisualizer()
-    demo       = PilzDemo(controller, visualizer)
+    # visualizer = MotionVisualizer()
+    demo       = PilzDemo(controller)#, visualizer)
     executor   = MultiThreadedExecutor()
     executor.add_node(controller)
-    executor.add_node(visualizer)
+    # executor.add_node(visualizer)
     executor.add_node(demo)
 
     try:
@@ -341,7 +339,7 @@ def main():
     finally:
         executor.shutdown()
         controller.destroy_node()
-        visualizer.destroy_node()
+        # visualizer.destroy_node()
         demo  .destroy_node()
         rclpy.shutdown()
 

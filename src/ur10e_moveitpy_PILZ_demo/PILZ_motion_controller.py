@@ -206,9 +206,7 @@ class PilzMotionController(Node):
     def _to_core_trajectory(self, traj_msg):
         """Convert a ROS-level RobotTrajectory message into a MoveItPy RobotTrajectory object."""
         self.get_logger().debug(
-            f"_to_core_trajectory: Converting ROS msg with "
-            f"{len(traj_msg.joint_trajectory.points)} points."
-        )
+            f"_to_core_trajectory: Converting ROS msg to RobotTrajectory"        )
         core_traj = RobotTrajectory(self.robot.get_robot_model())
         start_state = self.planning_component.get_start_state()
         core_traj.set_robot_trajectory_msg(start_state, traj_msg)
@@ -298,8 +296,7 @@ class PilzMotionController(Node):
         ) -> Optional[RobotTrajectory]:
         """Plan a joint‑space (PTP) move and return a trajectory or ``None``."""
         self.get_logger().debug(
-            f"plan_ptp: target_type={type(target).__name__}, "
-            f"vel={vel}, acc={acc}, timeout={timeout}"
+            f"plan_ptp: target_type={type(target).__name__}, vel={vel}, acc={acc}, timeout={timeout}"
         )
         vel        = vel        or self.defaults.ptp_scaling
         acc        = acc        or self.defaults.acceleration_scaling
@@ -320,16 +317,14 @@ class PilzMotionController(Node):
         params.planner_id = "PTP"
         params.max_velocity_scaling_factor = vel
         params.max_acceleration_scaling_factor = acc
-        params.allowed_planning_time = timeout
+        params.planning_time = timeout
 
         result = self.planning_component.plan(single_plan_parameters=params)
         if result:
             self.get_logger().debug(
-                f"plan_ptp: planned "
-                f"{len(result.trajectory.joint_trajectory.points)} points "
-                f"in {result.planning_time:.3f}s."
+                f"plan_ptp: planned in {result.planning_time:.3f}s."
             )
-            return self._to_core_trajectory(result.trajectory)
+            return result.trajectory
         return None
 
     def plan_lin(
@@ -361,7 +356,7 @@ class PilzMotionController(Node):
         params.planner_id = "LIN"
         params.max_velocity_scaling_factor = vel
         params.max_acceleration_scaling_factor = acc
-        params.allowed_planning_time = timeout
+        params.planning_time = timeout
 
         result = self.planning_component.plan(single_plan_parameters=params)
         if result:
@@ -370,7 +365,7 @@ class PilzMotionController(Node):
                 f"{len(result.trajectory.joint_trajectory.points)} points "
                 f"in {result.planning_time:.3f}s."
             )
-            return self._to_core_trajectory(result.trajectory)
+            return result.trajectory
         return None
     
     def plan_sequence(
@@ -379,14 +374,13 @@ class PilzMotionController(Node):
         *,
         vel: Optional[float] = None,
         acc: Optional[float] = None,
-        planner_id: Optional[str] = None,
         blend_radius: float = None,
         ori_tolerance: float = None,
     ) -> Optional[RobotTrajectory]:
         """Plan a multi-waypoint motion sequence through *targets* and return a RobotTrajectory or None."""
         vel = vel or self.defaults.linear_scaling
         acc = acc or self.defaults.acceleration_scaling
-        planner_id = planner_id or "LIN"
+        planner_id = "LIN"
         blend_radius = blend_radius or self.defaults.blend_radius_default
         ori_tolerance = ori_tolerance or self.defaults.constraint_orientation_tolerance
 
@@ -481,7 +475,7 @@ class PilzMotionController(Node):
 
         self.get_logger().debug(
             f"execute_trajectory: apply_totg={apply_totg}, "
-            f"points={len(traj.joint_trajectory.points)}"
+            # f"points={len(traj.joint_trajectory.points)}"
         )
         try:
             self.robot.execute(traj, controllers=[])
@@ -617,15 +611,12 @@ class PilzMotionController(Node):
         vel = vel or self.defaults.linear_scaling
         acc = acc or self.defaults.acceleration_scaling
 
-        msr = self._build_motion_sequence_request(
-            pose_goals=targets,
+        traj_list = self.plan_sequence(
+            targets=targets,
             vel=vel,
             acc=acc,
-            planner_id="LIN",
-            blend_radius=blend_radius,
+            blend_radius=blend_radius
         )
-
-        traj_list = self.plan_sequence(msr)
         if traj_list is None:
             return False
 
