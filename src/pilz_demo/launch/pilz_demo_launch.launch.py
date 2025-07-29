@@ -120,7 +120,7 @@ def generate_launch_description():
     # Helper node that runs any MoveIt‑Py script (default: tutorial)
     moveit_py_node = Node(
         package="pilz_demo",  #  👉 replace with your own package if needed
-        executable="demo.py",
+        executable="run_demo",
         name="pilz_demo_moveit_py",
         output="both",
         parameters=[moveit_config.to_dict()],
