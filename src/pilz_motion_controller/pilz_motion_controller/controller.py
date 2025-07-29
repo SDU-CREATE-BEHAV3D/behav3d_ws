@@ -374,7 +374,7 @@ class PilzMotionController(Node):
         if result:
             self.get_logger().debug(
                 f"plan_lin: planned "
-                f"{len(result.trajectory.joint_trajectory.points)} points "
+                # f"{len(result.trajectory.joint_trajectory.points)} points "
                 f"in {result.planning_time:.3f}s."
             )
             return result.trajectory
