@@ -1,11 +1,11 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 package_name = 'pilz_demo'
 
 setup(
     name=package_name,
     version="0.0.1",
-    packages=[package_name],
+    packages=find_packages(include=[package_name, package_name + ".*"]),
     data_files=[("share/" + package_name, ["package.xml"])],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -16,7 +16,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "pilz_demo = pilz_demo.demo:main",
+            "run_demo = pilz_demo.demo:main",
         ],
     },
 )
