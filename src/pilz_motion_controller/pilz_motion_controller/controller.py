@@ -502,6 +502,18 @@ class PilzMotionController(Node):
 
     # --- IK/FK helpers ---
 
+    def get_pose(
+            self,
+    ) -> PoseStamped:
+        # TODO: Implement a function that returns the curent pose of the move group
+        return
+    
+    def get_tcp_vel(
+            self,
+    ):
+        # TODO: Implement a function that returns the current velocity and direction vector
+        return
+
     def compute_ik(
             self,
             pose: PoseStamped,
