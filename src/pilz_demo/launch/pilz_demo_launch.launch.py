@@ -87,10 +87,10 @@ def generate_launch_description():
     # -------------------------------------------------------------------------
     # 4) Small pause so driver is fully up
     # -------------------------------------------------------------------------
-    pause_1s = TimerAction(
-        period=3.0,
-        actions=[LogInfo(msg="⌛  Driver ready; launching MoveIt …")],
-    )
+    # pause_1s = TimerAction(
+    #     period=3.0,
+    #     actions=[LogInfo(msg="⌛  Driver ready; launching MoveIt …")],
+    # )
 
     # -------------------------------------------------------------------------
     # 5) MoveIt stack (standard UR10e launch)
@@ -126,10 +126,10 @@ def generate_launch_description():
         parameters=[moveit_config.to_dict()],
     )
 
-    start_moveit_py = TimerAction(
-        period=8.0,  # give /move_group a moment to spin up
-        actions=[LogInfo(msg="⌛  Waiting for /move_group …"), moveit_py_node],
-    )
+    # start_moveit_py = TimerAction(
+    #    period=0.1,  # give /move_group a moment to spin up
+    #     actions=[LogInfo(msg="⌛  Waiting for /move_group …"), moveit_py_node],
+    # )
 
     # # -------------------------------------------------------------------------
     # # 7) RViz (optional visualisation)
@@ -153,9 +153,10 @@ def generate_launch_description():
             robot_ip_arg,
             mock_arg,
             ur_driver,
-            pause_1s,
+          #  pause_1s,
             moveit_stack,
-            start_moveit_py,  #  🌟  new helper node
+            moveit_py_node,
+            # start_moveit_py,  #  🌟  new helper node
             #rviz,
         ]
     )
