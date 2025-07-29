@@ -51,7 +51,7 @@ class PilzDemo(Node):
             "'home', 'draw_line', 'draw_square', 'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'quit'"
         )
         # === Home Pose Initialization ===
-        joint_deg = [90.0, -120.0, 120.0, -180.0, -90.0, 0.0]
+        joint_deg = [90.0, -120.0, 120.0, -90.0, 90.0, -180.0]
         self.home_state = self.RobotState_from_joints(joint_deg)
 
     # --------------------------------------------------------------
@@ -113,7 +113,7 @@ class PilzDemo(Node):
 
         self.home()
 
-        center = PoseStamped_WorldXY(0.0, 0.6, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
+        center = PoseStamped_WorldXY(0.0, 0.7, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
 
         base = _dc(center.pose)
         half = side / 2.0
@@ -142,7 +142,7 @@ class PilzDemo(Node):
 
         self.home()
 
-        center = PoseStamped_WorldXY(0.0, 0.6, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
+        center = PoseStamped_WorldXY(0.0, 0.7, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
         
         base = _dc(center.pose)
         half = side / 2.0
@@ -180,7 +180,7 @@ class PilzDemo(Node):
         self.home()
 
         # Define the circle’s centre relative to the base_link
-        center = PoseStamped_WorldXY(0.0, 0.7, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
+        center = PoseStamped_WorldXY(0.0, 0.8, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
 
         base = _dc(center.pose)
 
@@ -217,7 +217,7 @@ class PilzDemo(Node):
         self.home()
 
         # Circle centre
-        center = PoseStamped_WorldXY(0.0, 0.7, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
+        center = PoseStamped_WorldXY(0.0, 0.8, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
 
         base = _dc(center.pose)
 
@@ -246,9 +246,9 @@ class PilzDemo(Node):
 
     def draw_line(self):
         
-        start = PoseStamped_WorldXY(-0.2, 0.2, 0.4, frame_id=self.ctrl.root_link, flipped=True)
+        start = PoseStamped_WorldXY(-0.2, 0.4, 0.4, frame_id=self.ctrl.root_link, flipped=True)
 
-        end = PoseStamped_WorldXY(0.2, 0.6, 0.8, frame_id=self.ctrl.root_link, flipped=True)
+        end = PoseStamped_WorldXY(0.2, 0.8, 0.8, frame_id=self.ctrl.root_link, flipped=True)
 
         self.home()
         self._move_with_visual(start, motion_type="PTP")
