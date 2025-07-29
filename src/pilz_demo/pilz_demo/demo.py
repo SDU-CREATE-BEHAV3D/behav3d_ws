@@ -51,7 +51,7 @@ class PilzDemo(Node):
             "'home', 'draw_line', 'draw_square', 'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'quit'"
         )
         # === Home Pose Initialization ===
-        joint_deg = [90.0, -120.0, 120.0, -90.0, -90.0, 0.0]
+        joint_deg = [90.0, -120.0, 120.0, -180.0, -90.0, 0.0]
         self.home_state = self.RobotState_from_joints(joint_deg)
 
     # --------------------------------------------------------------
@@ -113,13 +113,7 @@ class PilzDemo(Node):
 
         self.home()
 
-        home_orientation = self.ctrl.compute_fk(self.home_state).pose.orientation
-        
-        center = PoseStamped()
-        center.pose.position.x = 0.0
-        center.pose.position.y = 0.6
-        center.pose.position.z = z_fixed
-        center.pose.orientation = home_orientation
+        center = PoseStamped_WorldXY(0.0, 0.6, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
 
         base = _dc(center.pose)
         half = side / 2.0
@@ -148,13 +142,7 @@ class PilzDemo(Node):
 
         self.home()
 
-        home_orientation = self.ctrl.compute_fk(self.home_state).pose.orientation
-        
-        center = PoseStamped()
-        center.pose.position.x = 0.0
-        center.pose.position.y = 0.6
-        center.pose.position.z = z_fixed
-        center.pose.orientation = home_orientation
+        center = PoseStamped_WorldXY(0.0, 0.6, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
         
         base = _dc(center.pose)
         half = side / 2.0
@@ -191,15 +179,8 @@ class PilzDemo(Node):
         # Start from the home pose
         self.home()
 
-        # Use the end‑effector orientation of the home pose
-        home_orientation = self.ctrl.compute_fk(self.home_state).pose.orientation
-
         # Define the circle’s centre relative to the base_link
-        center = PoseStamped()
-        center.pose.position.x = 0.0
-        center.pose.position.y = 0.7
-        center.pose.position.z = z_fixed
-        center.pose.orientation = home_orientation
+        center = PoseStamped_WorldXY(0.0, 0.7, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
 
         base = _dc(center.pose)
 
@@ -235,14 +216,8 @@ class PilzDemo(Node):
 
         self.home()
 
-        home_orientation = self.ctrl.compute_fk(self.home_state).pose.orientation
-
         # Circle centre
-        center = PoseStamped()
-        center.pose.position.x = 0.0
-        center.pose.position.y = 0.7
-        center.pose.position.z = z_fixed
-        center.pose.orientation = home_orientation
+        center = PoseStamped_WorldXY(0.0, 0.7, z_fixed, frame_id=self.ctrl.root_link, flipped=True)
 
         base = _dc(center.pose)
 
@@ -271,19 +246,9 @@ class PilzDemo(Node):
 
     def draw_line(self):
         
-        home_orientation = self.ctrl.compute_fk(self.home_state).pose.orientation
+        start = PoseStamped_WorldXY(-0.2, 0.2, 0.4, frame_id=self.ctrl.root_link, flipped=True)
 
-        start = PoseStamped()
-        start.pose.position.x = -0.2
-        start.pose.position.y = 0.2
-        start.pose.position.z = 0.4
-        start.pose.orientation = home_orientation
-
-        end = PoseStamped()
-        end.pose.position.x = 0.2
-        end.pose.position.y = 0.6
-        end.pose.position.z = 0.8
-        end.pose.orientation = home_orientation
+        end = PoseStamped_WorldXY(0.2, 0.6, 0.8, frame_id=self.ctrl.root_link, flipped=True)
 
         self.home()
         self._move_with_visual(start, motion_type="PTP")
@@ -322,6 +287,36 @@ class PilzDemo(Node):
         pose.pose.orientation.z = qz
         pose.pose.orientation.w = qw
         return pose
+
+def PoseStamped_WorldXY(
+    x: float,
+    y: float,
+    z: float,
+    *,
+    frame_id: str = "tmp_frame",
+    flipped: bool = True,
+) -> PoseStamped:
+
+    pose = PoseStamped()
+    pose.header.frame_id = frame_id
+    pose.pose.position.x = x
+    pose.pose.position.y = y
+    pose.pose.position.z = z
+
+    if flipped:
+        # 180° rotation about X gives quaternion (x=1, y=0, z=0, w=0)
+        pose.pose.orientation.x = 1.0
+        pose.pose.orientation.y = 0.0
+        pose.pose.orientation.z = 0.0
+        pose.pose.orientation.w = 0.0
+    else:
+        # Identity orientation (no rotation)
+        pose.pose.orientation.x = 0.0
+        pose.pose.orientation.y = 0.0
+        pose.pose.orientation.z = 0.0
+        pose.pose.orientation.w = 1.0
+
+    return pose
 
 def main():
     rclpy.init()
