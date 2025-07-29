@@ -70,9 +70,9 @@ class PilzMotionController(Node):
             self,
             *,
             node_name: str = "pilz_motion",
-            group: str = "ur_manipulator",
-            root_link: str = "base_link",
-            eef_link: str = "tool0",
+            group: str = "ur_arm",
+            root_link: str = "ur10e_base_link",
+            eef_link: str = "ur10e_tool0",
         ):
         
         super().__init__(node_name)

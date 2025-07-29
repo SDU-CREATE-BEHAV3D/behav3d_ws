@@ -325,7 +325,7 @@ class PilzDemo(Node):
 
 def main():
     rclpy.init()
-    controller = PilzMotionController()
+    controller = PilzMotionController(eef_link="femto__depth_optical_frame")
     # visualizer = MotionVisualizer()
     demo       = PilzDemo(controller)#, visualizer)
     executor   = MultiThreadedExecutor()

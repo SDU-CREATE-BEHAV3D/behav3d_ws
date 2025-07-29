@@ -79,7 +79,7 @@ def generate_launch_description():
             "ur_type": "ur10e",
             "robot_ip": LaunchConfiguration("robot_ip"),
             "use_mock_hardware": LaunchConfiguration("use_mock_hardware"),
-            "launch_rviz": "false",
+            "launch_rviz": "true",
             "initial_joint_controller": "scaled_joint_trajectory_controller",
         }.items(),
     )
@@ -107,7 +107,7 @@ def generate_launch_description():
 
     moveit_config = (
         MoveItConfigsBuilder(robot_name="ur", package_name="i40_workcell_moveit_config")
-        .robot_description_semantic(Path("srdf") / "ur.srdf.xacro", {"name": "ur10e"})
+        .robot_description_semantic(Path("config") / "ur.srdf", {"name": "ur10e"})
         .moveit_cpp(
             file_path=os.path.join(
                 get_package_share_directory("pilz_demo"),
