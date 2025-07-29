@@ -475,12 +475,15 @@ class PilzMotionController(Node):
                     return False
                 self.get_logger().debug("execute_trajectory: executed segment successfully.")
             return True
+        
+        vel = self.defaults.linear_scaling
+        acc = self.defaults.acceleration_scaling
 
         # Single RobotTrajectory branch
         if apply_totg:
             traj.apply_totg_time_parameterization(
-                velocity_scaling_factor=1.0,
-                acceleration_scaling_factor=1.0,
+                velocity_scaling_factor=vel,
+                acceleration_scaling_factor=acc,
                 path_tolerance=self.defaults.totg_path_tolerance,
                 resample_dt=self.defaults.totg_resample_dt,
             )
