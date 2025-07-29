@@ -21,6 +21,7 @@ import math
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
+from rclpy.logging import LoggingSeverity
 
 from moveit.planning import MoveItPy, PlanRequestParameters
 from moveit.core.robot_state import RobotState
@@ -73,14 +74,26 @@ class PilzMotionController(Node):
             group: str = "ur_arm",
             root_link: str = "ur10e_base_link",
             eef_link: str = "ur10e_tool0",
+            debug: bool = False,
         ):
         
         super().__init__(node_name)
+        # Configure logger level based on debug flag
+        if debug:
+            self.get_logger().set_level(LoggingSeverity.DEBUG)
+        else:
+            self.get_logger().set_level(LoggingSeverity.INFO)
         self.defaults = MotionDefaults()
 
         self.group = group
         self.root_link = root_link
         self.eef_link = eef_link
+        # Log initial parameters
+        self.get_logger().debug(
+            f"PilzMotionController initialised with "
+            f"node_name={node_name}, group={group}, root_link={root_link}, "
+            f"eef_link={eef_link}, debug={debug}"
+        )
 
         self.robot = MoveItPy(node_name=f"{node_name}_moveit")
         self.planning_component = self.robot.get_planning_component(self.group)
@@ -89,7 +102,6 @@ class PilzMotionController(Node):
         while not self.sequence_client.wait_for_server(timeout_sec=1.0):
             self.get_logger().info("Waiting for /sequence_move_group action server...")
 
-        self.get_logger().info("PilzMotionController initialised.")
 
     # --- Planning helpers ---
     def _build_constraints(
