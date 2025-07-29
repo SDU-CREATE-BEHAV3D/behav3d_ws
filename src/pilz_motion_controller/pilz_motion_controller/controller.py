@@ -55,8 +55,8 @@ class MotionDefaults:
     linear_scaling: float = 0.5
     acceleration_scaling: float = 0.5
     max_cartesian_speed: float = 0.1
-    constraint_position_tolerance: float = 0.001
-    constraint_orientation_tolerance: float = 0.01
+    constraint_position_tolerance: float = 0.0001       # 0.1 mm
+    constraint_orientation_tolerance: float = 0.001     # ~0.06 deg
     blend_radius_default: float = 0.001
     totg_path_tolerance: float = 0.01
     totg_resample_dt: float = 0.01
