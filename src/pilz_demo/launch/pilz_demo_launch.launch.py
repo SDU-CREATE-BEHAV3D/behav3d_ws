@@ -23,8 +23,6 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
-    LogInfo,
-    TimerAction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -65,13 +63,9 @@ def generate_launch_description():
     moveit_launch_dir = os.path.join(
         get_package_share_directory("i40_workcell_moveit_config"), "launch"
     )
-
-    joint_limits_yaml = os.path.join(
-        get_package_share_directory("i40_workcell_moveit_config"), "config", "joint_limits.yaml"
-    )
     
     # -------------------------------------------------------------------------
-    # 3) UR driver (real robot or mock)
+    # 3) UR driver (real robot or mock) Calling I40_workcell start_robot launch
     # -------------------------------------------------------------------------
     ur_driver = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(ur_launch_dir, "start_robot.launch.py")),
@@ -85,15 +79,7 @@ def generate_launch_description():
     )
 
     # -------------------------------------------------------------------------
-    # 4) Small pause so driver is fully up
-    # -------------------------------------------------------------------------
-    # pause_1s = TimerAction(
-    #     period=3.0,
-    #     actions=[LogInfo(msg="⌛  Driver ready; launching MoveIt …")],
-    # )
-
-    # -------------------------------------------------------------------------
-    # 5) MoveIt stack (standard UR10e launch)
+    # 4) MoveIt stack (Initialize I40_workspace_moveit_config movegroup)
     # -------------------------------------------------------------------------
 
     
@@ -102,12 +88,12 @@ def generate_launch_description():
     )
 
     # -------------------------------------------------------------------------
-    # 6) Re‑build the *same* MoveIt config so we can share it with a helper node
+    # 5) Re‑build the *same* MoveIt config so we can share it with a helper node
     # -------------------------------------------------------------------------
 
     moveit_config = (
         MoveItConfigsBuilder(robot_name="ur", package_name="i40_workcell_moveit_config")
-        .robot_description_semantic(Path("config") / "ur.srdf", {"name": "ur10e"})
+        .robot_description_semantic(Path("config") / "ur.srdf")
         .moveit_cpp(
             file_path=os.path.join(
                 get_package_share_directory("pilz_demo"),
@@ -126,13 +112,22 @@ def generate_launch_description():
         parameters=[moveit_config.to_dict()],
     )
 
-    # start_moveit_py = TimerAction(
-    #    period=0.1,  # give /move_group a moment to spin up
-    #     actions=[LogInfo(msg="⌛  Waiting for /move_group …"), moveit_py_node],
-    # )
+    # -------------------------------------------------------------------------
+    # 6) Assemble LaunchDescription
+    # -------------------------------------------------------------------------
+    return LaunchDescription(
+        [
+            robot_ip_arg,
+            mock_arg,
+            ur_driver,
+            moveit_stack,
+            moveit_py_node,
+
+        ]
+    )
 
     # # -------------------------------------------------------------------------
-    # # 7) RViz (optional visualisation)
+    # # Old) RViz (optional visualisation)
     # # -------------------------------------------------------------------------
     # rviz_cfg = os.path.join(
     #     get_package_share_directory("ur_description"), "rviz", "view_robot.rviz"
@@ -144,19 +139,3 @@ def generate_launch_description():
     #     output="screen",
     #     parameters=[{"use_sim_time": False}],
     # )
-
-    # -------------------------------------------------------------------------
-    # 8) Assemble LaunchDescription
-    # -------------------------------------------------------------------------
-    return LaunchDescription(
-        [
-            robot_ip_arg,
-            mock_arg,
-            ur_driver,
-          #  pause_1s,
-            moveit_stack,
-            moveit_py_node,
-            # start_moveit_py,  #  🌟  new helper node
-            #rviz,
-        ]
-    )
