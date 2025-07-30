@@ -16,8 +16,6 @@
 # Date: 2025-07
 # =============================================================================
 
-import math
-
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -173,7 +171,6 @@ class PilzMotionController(Node):
             position_constraints=[pc],
             orientation_constraints=[oc],
         )
-
 
     def _build_motion_plan_request(
             self,
