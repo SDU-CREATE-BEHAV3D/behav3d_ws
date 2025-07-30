@@ -40,7 +40,8 @@ from moveit_msgs.msg import (
     MotionSequenceItem,
     MotionSequenceRequest,
     OrientationConstraint,
-    PositionConstraint
+    PositionConstraint,
+    WorkspaceParameters
 )
 from moveit_msgs.msg import MoveItErrorCodes, PlanningOptions
 
@@ -48,6 +49,17 @@ from moveit_msgs.msg import MoveItErrorCodes, PlanningOptions
 from typing import List, Optional, Union
 
 from dataclasses import dataclass
+
+@dataclass
+class WorkspaceDefaults:
+    frame_id = "base_link"
+    min_corner_x = -2.0
+    min_corner_y = -0.25
+    min_corner_z =  0.0
+    max_corner_x =  2.0
+    max_corner_y =  2.0
+    max_corner_z =  2.0
+
 
 @dataclass
 class MotionDefaults:
@@ -83,7 +95,18 @@ class PilzMotionController(Node):
             self.get_logger().set_level(LoggingSeverity.DEBUG)
         else:
             self.get_logger().set_level(LoggingSeverity.INFO)
-        self.defaults = MotionDefaults()
+        
+        self.motion_defaults = MotionDefaults()
+        self.workspace_defaults = WorkspaceDefaults()
+
+        self.workspace_parameters = WorkspaceParameters()
+        self.workspace_parameters.header.frame_id   = self.workspace_defaults.frame_id
+        self.workspace_parameters.min_corner.x      = self.workspace_defaults.min_corner_x
+        self.workspace_parameters.min_corner.y      = self.workspace_defaults.min_corner_y
+        self.workspace_parameters.min_corner.z      = self.workspace_defaults.min_corner_z
+        self.workspace_parameters.max_corner.x      = self.workspace_defaults.max_corner_x
+        self.workspace_parameters.max_corner.y      = self.workspace_defaults.max_corner_y
+        self.workspace_parameters.max_corner.z      = self.workspace_defaults.max_corner_z
 
         self.group = group
         self.root_link = root_link
@@ -97,6 +120,15 @@ class PilzMotionController(Node):
 
         self.robot = MoveItPy(node_name=f"{node_name}_moveit")
         self.planning_component = self.robot.get_planning_component(self.group)
+        self.planning_component.set_workspace(
+            self.workspace_defaults.min_corner_x,
+            self.workspace_defaults.min_corner_y,
+            self.workspace_defaults.min_corner_z,
+            self.workspace_defaults.max_corner_x,
+            self.workspace_defaults.max_corner_y,
+            self.workspace_defaults.max_corner_z,
+        )
+
 
         self.sequence_client = ActionClient(self, MoveGroupSequence, "/sequence_move_group")
         while not self.sequence_client.wait_for_server(timeout_sec=1.0):
@@ -154,13 +186,14 @@ class PilzMotionController(Node):
         ) -> MotionPlanRequest:
         """Create a :class:`MotionPlanRequest` for the PILZ planner."""
         req = MotionPlanRequest()
-        req.pipeline_id = self.defaults.planning_pipeline
+        req.workspace_parameters = self.workspace_parameters
+        req.pipeline_id = self.motion_defaults.planning_pipeline
         req.planner_id = planner_id
-        req.allowed_planning_time = self.defaults.planning_timeout
+        req.allowed_planning_time = self.motion_defaults.planning_timeout
         req.group_name = self.group
         req.max_acceleration_scaling_factor = acc
         req.max_velocity_scaling_factor = vel
-        req.max_cartesian_speed = self.defaults.max_cartesian_speed
+        req.max_cartesian_speed = self.motion_defaults.max_cartesian_speed
         req.goal_constraints.append(
             self._build_constraints(
                 pose_goal,
@@ -310,9 +343,9 @@ class PilzMotionController(Node):
         self.get_logger().debug(
             f"plan_ptp: target_type={type(target).__name__}, vel={vel}, acc={acc}, timeout={timeout}"
         )
-        vel        = vel        or self.defaults.ptp_scaling
-        acc        = acc        or self.defaults.acceleration_scaling
-        timeout    = timeout    or self.defaults.planning_timeout
+        vel        = vel        or self.motion_defaults.ptp_scaling
+        acc        = acc        or self.motion_defaults.acceleration_scaling
+        timeout    = timeout    or self.motion_defaults.planning_timeout
 
         if isinstance(target, PoseStamped):
             robot_state_goal = self.compute_ik(target, timeout=timeout)
@@ -352,9 +385,9 @@ class PilzMotionController(Node):
             f"plan_lin: target_type={type(target).__name__}, "
             f"vel={vel}, acc={acc}, timeout={timeout}"
         )
-        vel        = vel        or self.defaults.linear_scaling
-        acc        = acc        or self.defaults.acceleration_scaling
-        timeout    = timeout    or self.defaults.planning_timeout
+        vel        = vel        or self.motion_defaults.linear_scaling
+        acc        = acc        or self.motion_defaults.acceleration_scaling
+        timeout    = timeout    or self.motion_defaults.planning_timeout
 
         if isinstance(target, RobotState):
             pose_goal = self.compute_fk(target)
@@ -390,11 +423,11 @@ class PilzMotionController(Node):
         ori_tolerance: float = None,
     ) -> Optional[RobotTrajectory]:
         """Plan a multi-waypoint motion sequence through *targets* and return a RobotTrajectory or None."""
-        vel = vel or self.defaults.linear_scaling
-        acc = acc or self.defaults.acceleration_scaling
+        vel = vel or self.motion_defaults.linear_scaling
+        acc = acc or self.motion_defaults.acceleration_scaling
         planner_id = "LIN"
-        blend_radius = blend_radius or self.defaults.blend_radius_default
-        ori_tolerance = ori_tolerance or self.defaults.constraint_orientation_tolerance
+        blend_radius = blend_radius or self.motion_defaults.blend_radius_default
+        ori_tolerance = ori_tolerance or self.motion_defaults.constraint_orientation_tolerance
 
         self.get_logger().debug(
             f"plan_sequence: {len(targets)} way-points, "
@@ -476,16 +509,16 @@ class PilzMotionController(Node):
                 self.get_logger().debug("execute_trajectory: executed segment successfully.")
             return True
         
-        vel = self.defaults.linear_scaling
-        acc = self.defaults.acceleration_scaling
+        vel = self.motion_defaults.linear_scaling
+        acc = self.motion_defaults.acceleration_scaling
 
         # Single RobotTrajectory branch
         if apply_totg:
             traj.apply_totg_time_parameterization(
                 velocity_scaling_factor=vel,
                 acceleration_scaling_factor=acc,
-                path_tolerance=self.defaults.totg_path_tolerance,
-                resample_dt=self.defaults.totg_resample_dt,
+                path_tolerance=self.motion_defaults.totg_path_tolerance,
+                resample_dt=self.motion_defaults.totg_resample_dt,
             )
 
         self.get_logger().debug(
@@ -581,14 +614,12 @@ class PilzMotionController(Node):
         target: PoseStamped | RobotState,
         *,
         motion_type: str = "PTP",
-        planner_id: Optional[str] = None,
         vel: Optional[float] = None,
         acc: Optional[float] = None,
         timeout: float = 10.0,
     ) -> bool:
         """Plan **and** execute one LIN or PTP move."""
         motion_type = motion_type.upper()
-        planner_id = motion_type
         self.get_logger().debug(
             f"go_to: starting {motion_type} move to {target} "
             f"with vel={vel}, acc={acc}, timeout={timeout}"
@@ -628,8 +659,8 @@ class PilzMotionController(Node):
         assert len(targets) >= 2
         self.get_logger().debug(f"run_sequence: planning blended LIN through {len(targets)} points")
 
-        vel = vel or self.defaults.linear_scaling
-        acc = acc or self.defaults.acceleration_scaling
+        vel = vel or self.motion_defaults.linear_scaling
+        acc = acc or self.motion_defaults.acceleration_scaling
 
         traj_list = self.plan_sequence(
             targets=targets,
