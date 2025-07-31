@@ -7,15 +7,13 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(behav3d_cpp REQUIRED)
 
-add_executable(${PROJECT_NAME}_node
-  kinematics_demo_cpp/demo.cpp
-)
+add_executable(demo kinematics_demo_cpp/demo.cpp)
 
-target_link_libraries(${PROJECT_NAME}_node
+target_link_libraries(demo
   rclcpp::rclcpp
 )
 
-ament_target_dependencies(${PROJECT_NAME}_node
+ament_target_dependencies(demo
   rclcpp
   std_msgs
   geometry_msgs
@@ -23,7 +21,7 @@ ament_target_dependencies(${PROJECT_NAME}_node
 )
 
 
-install(TARGETS ${PROJECT_NAME}_node
+install(TARGETS demo
   DESTINATION lib/${PROJECT_NAME}
 )
 
