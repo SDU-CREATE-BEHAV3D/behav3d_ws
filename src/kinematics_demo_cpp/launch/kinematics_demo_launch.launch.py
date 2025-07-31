@@ -116,11 +116,11 @@ def generate_launch_description():
         package="kinematics_demo_cpp",
         executable="demo",
         output="screen",
-        # parameters=[
-        #     moveit_config.robot_description,
-        #     moveit_config.robot_description_semantic,
-        #     moveit_config.robot_description_kinematics,
-        # ],
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+        ],
     )
 
     return LaunchDescription(
