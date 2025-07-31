@@ -56,7 +56,7 @@
     <joint name="base_to_robot_mount" type="fixed">
       <parent link="table"/>
       <child link="robot_mount"/>
-      <origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0.785" />
     </joint>
 
     <link name="femto_mount">

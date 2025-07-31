@@ -27,13 +27,13 @@ from moveit.planning import MoveItPy
 from geometry_msgs.msg import PoseStamped, Point
 from visualization_msgs.msg import Marker, MarkerArray
 from moveit_msgs.msg import DisplayTrajectory
-
+from builtin_interfaces.msg import Time as TimeMsg
 from builtin_interfaces.msg import Duration
 
 class MotionVisualizer(Node):
     """ROS 2 node that converts *moveit_py* objects into RViz markers."""
 
-    def __init__(self):
+    def __init__(self, *, group_name: str = "ur_arm"):
         super().__init__("pilz_motion_visualizer")
 
         # Standard DisplayTrajectory topic that RViz’s MotionPlanning panel listens to.
@@ -47,21 +47,25 @@ class MotionVisualizer(Node):
         self._moveit = MoveItPy(node_name="viz_moveit")
         self._tf_buffer = None  # could inject tf2 buffer for frame conversions
 
+        self.group_name = group_name
     # ---------------------------------------------------------------------
     # Public helpers
     # ---------------------------------------------------------------------
     def publish_ghost(self, traj: RobotTrajectory, ns: str = "ghost") -> None:
-        """Publish a DisplayTrajectory so RViz shows the animated ghost robot."""
         if traj is None:
             self.get_logger().warning("publish_ghost: trajectory is None")
             return
 
         msg = DisplayTrajectory()
-        msg.model_id = self._moveit.get_robot_model().get_name()
-        msg.trajectory.append(traj.to_msg())
-        # Use current state for start if available
-        start_state = self._moveit.get_planning_scene().get_current_state()
-        msg.trajectory_start = start_state.to_robot_state_msg()
+        msg.model_id = self._moveit.get_robot_model().name
+        traj_msg = traj.get_robot_trajectory_msg()
+        msg.trajectory.append(traj_msg)
+
+        # ——> Here’s the fix:
+        pc = self._moveit.get_planning_component(self.group_name)
+        start_state = pc.get_start_state()
+        msg.trajectory_start = start_state.get_robot_state_msg()
+
         self.ghost_pub.publish(msg)
         self.get_logger().debug("Ghost trajectory published.")
 
@@ -72,7 +76,8 @@ class MotionVisualizer(Node):
             return
         marker = Marker()
         marker.header.frame_id = traj.get_robot_state_at(0).get_root_link_name()
-        marker.header.stamp = self.get_clock().now().to_msg()
+        sec, nanosec = self.get_clock().now().seconds_nanoseconds()
+        marker.header.stamp = TimeMsg(sec=sec, nanosec=nanosec)
         marker.ns = ns
         marker.id = 0
         marker.type = Marker.LINE_STRIP
