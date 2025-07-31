@@ -28,7 +28,7 @@ from std_msgs.msg import String
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
 
-# from motion_visualizer import MotionVisualizer
+# from behav3d.motion_visualizer import MotionVisualizer
 from behav3d.motion_controller import PilzMotionController
 
 class PilzDemo(Node):
@@ -51,7 +51,7 @@ class PilzDemo(Node):
             "'home', 'draw_line', 'draw_square', 'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'quit'"
         )
         # === Home Pose Initialization ===
-        joint_deg = [90.0, -120.0, 120.0, -90.0, 90.0, -180.0]
+        joint_deg = [45.0, -120.0, 120.0, -90.0, 90.0, -180.0]
         self.home_state = self.RobotState_from_joints(joint_deg)
 
     # --------------------------------------------------------------

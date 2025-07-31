@@ -10,6 +10,3 @@ response_adapters:
   - default_planning_response_adapters/AddTimeOptimalParameterization
   - default_planning_response_adapters/ValidateSolution
   - default_planning_response_adapters/DisplayMotionPath
-planning_volume:
-  min_corner: [-2.0, -0.25, 0.0]
-  max_corner: [ 2.0,  2.0, 2.0]

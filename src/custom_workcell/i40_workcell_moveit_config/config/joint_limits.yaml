@@ -26,3 +26,4 @@ joint_limits:
   ur10e_wrist_3_joint:
     has_acceleration_limits: true
     max_acceleration: 5.00
+
