@@ -30,6 +30,7 @@
 #include <moveit_msgs/msg/move_it_error_codes.hpp>
 #include <moveit/robot_trajectory/robot_trajectory.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <moveit/kinematic_constraints/utils.hpp>
 
 namespace rt = robot_trajectory;
 using RobotTrajectory       = rt::RobotTrajectory;
@@ -53,16 +54,20 @@ public:
   RobotTrajectoryPtr planTarget(const geometry_msgs::msg::PoseStamped & target,
                                 const std::string & motion_type = "PTP",
                                 double vel_scale = 0.5,
-                                double acc_scale = 0.5,
-                                double tcp_speed = -1.0);
+                                double acc_scale = 0.5);
+
+  /// Plan a joint‑space PTP move
+  RobotTrajectoryPtr planJoints(const std::vector<double> & joint_positions,
+                                double vel_scale = 0.5,
+                                double acc_scale = 0.5);
 
   /// Plan a blended LIN sequence through waypoints
   RobotTrajectoryPtr planSequence(const std::vector<geometry_msgs::msg::PoseStamped> & waypoints,
-                                  double blend_radius = 0.001,
-                                  double vel_scale    = 0.5,
-                                  double acc_scale    = 0.5,
-                                  double tcp_speed    = -1.0);
-
+                                  double blend_radius   = 0.001,
+                                  double vel_scale      = 0.5,
+                                  double acc_scale      = 0.5,
+                                  double pos_tolerance  = 0.001,
+                                  double ori_telerance  = 0.001);
   /// Get current end-effector pose in planning frame
   geometry_msgs::msg::PoseStamped getCurrentPose() const;
 
@@ -70,7 +75,7 @@ public:
   sensor_msgs::msg::JointState getCurrentJointState() const;
 
   bool executeTrajectory(const RobotTrajectoryPtr & traj,
-                         bool apply_totg = true);
+                         bool apply_totg = false);
 
   moveit::core::RobotStatePtr computeIK(const geometry_msgs::msg::PoseStamped & pose,
                                         double timeout = 0.1) const;

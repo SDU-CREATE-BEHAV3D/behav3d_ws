@@ -23,7 +23,12 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <Eigen/Geometry>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <future>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
+#include <moveit/kinematic_constraints/utils.hpp>
+#include <moveit/robot_trajectory/robot_trajectory.hpp>
+#include <moveit_msgs/msg/joint_limits.hpp>
+#include <vector>
 
 #define PMC_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
 #define PMC_INFO(node,  fmt, ...) RCLCPP_INFO ((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
@@ -83,9 +88,13 @@ RobotTrajectoryPtr
 PilzMotionController::planTarget(const geometry_msgs::msg::PoseStamped &target,
                                  const std::string &motion_type,
                                  double vel_scale,
-                                 double acc_scale,
-                                 double tcp_speed)
+                                 double acc_scale)
 {
+
+  move_group_.clearPoseTargets();
+  move_group_.clearPathConstraints();
+  move_group_.setJointValueTarget(std::vector<double>());
+
   // Validate motion_type
   if (motion_type != "PTP" && motion_type != "LIN")
   {
@@ -125,7 +134,49 @@ PilzMotionController::planTarget(const geometry_msgs::msg::PoseStamped &target,
   }
   return traj;
 }
-// goTo
+
+// planJoints
+RobotTrajectoryPtr
+PilzMotionController::planJoints(const std::vector<double>& joint_positions,
+                                 double vel_scale,
+                                 double acc_scale)
+{
+
+  move_group_.clearPoseTargets();
+  move_group_.clearPathConstraints();
+
+  const auto* jmg = move_group_.getRobotModel()->getJointModelGroup(move_group_.getName());
+  if (joint_positions.size() != jmg->getVariableCount())
+  {
+    RCLCPP_ERROR(this->get_logger(),
+                 "planJoints: incorrect number of joint angles given.");
+    return nullptr;
+  }
+
+  move_group_.setPlannerId("PTP");
+  move_group_.setMaxVelocityScalingFactor(vel_scale);
+  move_group_.setMaxAccelerationScalingFactor(acc_scale);
+
+  move_group_.setJointValueTarget(joint_positions);
+
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  auto code = move_group_.plan(plan);
+
+  RCLCPP_DEBUG(this->get_logger(),
+               "planJoints: plan returned code=%d", code.val);
+
+  if (code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
+  {
+    RCLCPP_ERROR(this->get_logger(),
+                 "planJoints: planning failed (code=%d)", code.val);
+    return nullptr;
+  }
+
+  auto traj = std::make_shared<RobotTrajectory>(
+      move_group_.getRobotModel(), move_group_.getName());
+  traj->setRobotTrajectoryMsg(*move_group_.getCurrentState(), plan.trajectory);
+  return traj;
+}
 
 
 // planSequence
@@ -134,8 +185,14 @@ PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseSta
                                    double blend_radius,
                                    double vel_scale,
                                    double acc_scale,
-                                   double tcp_speed)
+                                   double pos_tolerance,
+                                   double ori_telerance)
 {
+
+  move_group_.clearPoseTargets();
+  move_group_.clearPathConstraints();
+  move_group_.setJointValueTarget(std::vector<double>());
+
   RCLCPP_DEBUG(this->get_logger(),
                "planSequence called: %zu waypoints, vel_scale=%.3f, acc_scale=%.3f, blend_radius=%.3f",
                waypoints.size(), vel_scale, acc_scale, blend_radius);
@@ -151,68 +208,71 @@ PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseSta
   for (const auto &ps : waypoints)
   {
     moveit_msgs::msg::MotionPlanRequest req;
-    req.pipeline_id = "pilz_industrial_motion_planner";
-    req.planner_id = "LIN";
-    req.group_name = move_group_.getName();
-    req.allowed_planning_time = 10.0;
-    req.max_velocity_scaling_factor = vel_scale;
-    req.max_acceleration_scaling_factor = acc_scale;
+    req.pipeline_id  = "pilz_industrial_motion_planner";
+    req.planner_id   = "LIN";
+    req.group_name   = move_group_.getName();
+    req.allowed_planning_time            = 10.0;
+    req.max_velocity_scaling_factor      = vel_scale;
+    req.max_acceleration_scaling_factor  = acc_scale;
 
-    moveit_msgs::msg::Constraints c;
-    moveit_msgs::msg::PositionConstraint pc;
-    pc.header.frame_id = root_link_;
-    pc.link_name = eef_link_;
-    pc.target_point_offset.x = ps.pose.position.x;
-    pc.target_point_offset.y = ps.pose.position.y;
-    pc.target_point_offset.z = ps.pose.position.z;
-    c.position_constraints.push_back(pc);
+    // Build a fully‑specified pose constraint (position + orientation)
+    moveit_msgs::msg::Constraints c =
+        kinematic_constraints::constructGoalConstraints(eef_link_, ps, pos_tolerance, ori_telerance);
     req.goal_constraints.push_back(c);
 
     moveit_msgs::msg::MotionSequenceItem item;
     item.blend_radius = blend_radius;
-    item.req = req;
+    item.req          = req;
     goal.request.items.push_back(item);
   }
   goal.request.items.back().blend_radius = 0.0;
-  goal.planning_options.plan_only = true;
 
   RCLCPP_DEBUG(this->get_logger(),
                "planSequence: dispatching sequence goal with %zu items", goal.request.items.size());
-  auto send_future = sequence_client_->async_send_goal(goal);
-  if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), send_future) != rclcpp::FutureReturnCode::SUCCESS)
-  {
-    RCLCPP_ERROR(this->get_logger(), "planSequence: goal dispatch failed");
-    return nullptr;
-  }
-  auto handle = send_future.get();
-  RCLCPP_DEBUG(this->get_logger(), "planSequence: action goal accepted");
-  if (!handle)
-  {
-    RCLCPP_ERROR(this->get_logger(), "planSequence: goal rejected");
+
+  // Configure planning options for sequence (blending and plan-only)
+  goal.planning_options.planning_scene_diff.is_diff = true;
+  goal.planning_options.planning_scene_diff.robot_state.is_diff = true;
+  goal.planning_options.plan_only = true;
+
+  // Send the sequence goal asynchronously
+  auto send_goal_future = sequence_client_->async_send_goal(goal);
+  std::future_status status;
+  // Wait for goal acceptance
+  do {
+    status = send_goal_future.wait_for(std::chrono::seconds(1));
+    if (status == std::future_status::timeout) {
+      RCLCPP_INFO(this->get_logger(), "[PMC] Waiting for sequence goal acceptance...");
+    }
+  } while (status != std::future_status::ready);
+
+  auto goal_handle = send_goal_future.get();
+  if (!goal_handle) {
+    RCLCPP_ERROR(this->get_logger(), "[PMC] planSequence: goal rejected");
     return nullptr;
   }
 
-  auto result_future = sequence_client_->async_get_result(handle);
-  if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), result_future) != rclcpp::FutureReturnCode::SUCCESS)
-  {
-    RCLCPP_ERROR(this->get_logger(), "planSequence: result wait failed");
+  // Wait for the result asynchronously
+  auto result_future = sequence_client_->async_get_result(goal_handle);
+  do {
+    status = result_future.wait_for(std::chrono::seconds(1));
+    if (status == std::future_status::timeout) {
+      RCLCPP_INFO(this->get_logger(), "[PMC] Waiting for sequence result...");
+    }
+  } while (status != std::future_status::ready);
+
+  auto wrapped_result = result_future.get();
+  if (!wrapped_result.result) {
+    RCLCPP_ERROR(this->get_logger(), "[PMC] planSequence: empty result pointer");
     return nullptr;
   }
-  const auto wrapped_result = result_future.get();
-  if (!wrapped_result.result)
-  {
-    RCLCPP_ERROR(this->get_logger(), "planSequence: empty result pointer");
-    return nullptr;
-  }
-  const auto &result = *(wrapped_result.result);
-  const auto &response = result.response;
+  const auto &response = wrapped_result.result->response;
 
   RCLCPP_DEBUG(this->get_logger(),
                "planSequence: received %zu trajectory segments",
                response.planned_trajectories.size());
 
-  if (response.error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
-  {
+  if (response.error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
     RCLCPP_ERROR(this->get_logger(), "planSequence: planning failed (code=%d)",
                  response.error_code.val);
     return nullptr;
@@ -220,14 +280,22 @@ PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseSta
 
   auto traj = std::make_shared<RobotTrajectory>(
       move_group_.getRobotModel(), move_group_.getName());
-  const auto &segments = response.planned_trajectories;
-  traj->setRobotTrajectoryMsg(*move_group_.getCurrentState(), segments.front());
-  for (size_t i = 1; i < segments.size(); ++i)
+  // Build a single blended trajectory by chaining segments
+  auto current_state = move_group_.getCurrentState();
+  // Reference state for the first segment
+  auto ref_state = std::make_shared<moveit::core::RobotState>(*current_state);
+  traj->setRobotTrajectoryMsg(*ref_state, response.planned_trajectories.front());
+  // Update reference state to end of the first segment
+  ref_state = traj->getLastWayPointPtr();
+  for (size_t i = 1; i < response.planned_trajectories.size(); ++i)
   {
     robot_trajectory::RobotTrajectory seg_traj(
         move_group_.getRobotModel(), move_group_.getName());
-    seg_traj.setRobotTrajectoryMsg(*move_group_.getCurrentState(), segments[i]);
+    seg_traj.setRobotTrajectoryMsg(*ref_state, response.planned_trajectories[i]);
+    // Append without pause to maintain blending
     traj->append(seg_traj, /*dt=*/0.0);
+    // Update reference state for the next segment
+    ref_state = seg_traj.getLastWayPointPtr();
   }
   return traj;
 }
@@ -244,8 +312,36 @@ bool PilzMotionController::executeTrajectory(const RobotTrajectoryPtr &traj,
   RobotTrajectory processed(*traj);
   if (apply_totg)
   {
+    // Time-optimal parameterization using MoveIt joint limits message
     trajectory_processing::TimeOptimalTrajectoryGeneration totg;
-    bool success = totg.computeTimeStamps(processed, 0.5, 0.5);
+    // Gather per-joint limits into a JointLimits vector
+    std::vector<moveit_msgs::msg::JointLimits> joint_limits;
+    // Retrieve the joint names from the trajectory's group
+    const auto *joint_model_group = processed.getGroup();
+    const auto joint_names = joint_model_group->getVariableNames();
+    const auto &robot_model = move_group_.getRobotModel();
+    for (const auto &jn : joint_names)
+    {
+      moveit_msgs::msg::JointLimits limits_msg;
+      limits_msg.joint_name = jn;
+      const auto *jm = robot_model->getJointModel(jn);
+      const auto &bounds = jm->getVariableBounds(jn);
+      if (bounds.velocity_bounded_)
+      {
+        limits_msg.has_velocity_limits = true;
+        limits_msg.max_velocity = bounds.max_velocity_;
+      }
+      if (bounds.acceleration_bounded_)
+      {
+        limits_msg.has_acceleration_limits = true;
+        limits_msg.max_acceleration = bounds.max_acceleration_;
+      }
+      joint_limits.push_back(limits_msg);
+    }
+    // Use current scaling factors
+    double max_vel_scale = move_group_.getMaxVelocityScalingFactor();
+    double max_acc_scale = move_group_.getMaxAccelerationScalingFactor();
+    bool success = totg.computeTimeStamps(processed, joint_limits, max_vel_scale, max_acc_scale);
     RCLCPP_DEBUG(this->get_logger(),
                  "executeTrajectory: time-optimal parameterization %s",
                  success ? "succeeded" : "failed");

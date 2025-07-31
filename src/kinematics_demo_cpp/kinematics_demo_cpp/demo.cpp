@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 
 
 #include <rclcpp/rclcpp.hpp>
@@ -98,13 +99,24 @@ private:
   // ------------------------------------------------------------------------
   void home()
   {
-    // TODO: Replace with a proper joint‑space “go home” once the joint values
-    //       for your robot are known.  For now just log the request.
-    RCLCPP_INFO(this->get_logger(), "[demo] home()");
+    // Joint‑space “home” configuration (given in degrees)
+    const std::vector<double> home_joints_deg = { 90.0, -120.0, 120.0, -90.0, 90.0, -180.0 };
+
+    // Convert degrees to radians for MoveIt
+    std::vector<double> home_joints_rad;
+    home_joints_rad.reserve(home_joints_deg.size());
+    std::transform(home_joints_deg.begin(), home_joints_deg.end(),
+                   std::back_inserter(home_joints_rad),
+                   [](double deg) { return deg * M_PI / 180.0; });
+
+    // Plan a PTP joint motion and execute it
+    auto traj = ctrl_->planJoints(home_joints_rad);
+    ctrl_->executeTrajectory(traj);
   }
 
   void draw_square(double side = 0.4, double z_fixed = 0.4)
   {
+    home();
     const double half   = side / 2.0;
     {
       const double half   = side / 2.0;
@@ -129,12 +141,14 @@ private:
 
       ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"));
     }
+    home();
   }
 
   void draw_square_seq(double side = 0.4,
                        double z_fixed = 0.4,
                        double blend_radius = 0.001)
   {
+    home();
     const double half   = side / 2.0;
     {
       const double half   = side / 2.0;
@@ -156,14 +170,16 @@ private:
       }
 
       auto traj = ctrl_->planSequence(waypoints, blend_radius);
-      ctrl_->executeTrajectory(traj);
+      ctrl_->executeTrajectory(traj, true);
     }
+    home();
   }
 
   void draw_circle(double radius = 0.3,
                    double z_fixed = 0.4,
                    int    divisions = 36)
   {
+    home();
     {
       const auto center = PoseStamped_WorldXY(0.0, 0.8, z_fixed,
                                               ctrl_->getRootLink(), true);
@@ -185,6 +201,7 @@ private:
 
       ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"));
     }
+    home();
   }
 
   void draw_circle_seq(double radius = 0.3,
@@ -192,6 +209,7 @@ private:
                        int    divisions = 36,
                        double blend_radius = 0.001)
   {
+    home();
     {
       const auto center = PoseStamped_WorldXY(0.0, 0.8, z_fixed,
                                               ctrl_->getRootLink(), true);
@@ -210,20 +228,24 @@ private:
       }
 
       auto traj = ctrl_->planSequence(waypoints, blend_radius);
-      ctrl_->executeTrajectory(traj);
+      ctrl_->executeTrajectory(traj, true);
     }
+    home();
   }
 
   void draw_line()
   {
-    {
-      auto start = PoseStamped_WorldXY(-0.2, 0.4, 0.4, ctrl_->getRootLink(), true);
-      auto end   = PoseStamped_WorldXY( 0.2, 0.8, 0.8, ctrl_->getRootLink(), true);
+    home();
 
-      ctrl_->executeTrajectory(ctrl_->planTarget(start, "PTP"));
-      ctrl_->executeTrajectory(ctrl_->planTarget(end,   "LIN"));
-      ctrl_->executeTrajectory(ctrl_->planTarget(start, "PTP"));
-    }
+    auto start = PoseStamped_WorldXY(-0.2, 0.4, 0.4,
+                                     ctrl_->getRootLink(), true);
+    auto end   = PoseStamped_WorldXY( 0.2, 0.8, 0.8,
+                                     ctrl_->getRootLink(), true);
+
+    ctrl_->executeTrajectory(ctrl_->planTarget(start, "PTP"));
+    ctrl_->executeTrajectory(ctrl_->planTarget(end,   "LIN"));
+
+    home();
   }
 
   // ------------------------------------------------------------------------
@@ -240,7 +262,14 @@ int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
 
-  auto controller = std::make_shared<PilzMotionController>();
+  // Instantiate the motion controller: replace "manipulator" and "world" 
+  // with your MoveIt group name and root link frame as needed.
+  auto controller = std::make_shared<PilzMotionController>(
+      "ur_arm",                       // MoveIt planning group name
+      "ur10e_base_link",              // Root link frame
+      "femto__depth_optical_frame",   // End-effector link frame
+      true                            // Debug mode off
+  );
   auto demo       = std::make_shared<PilzDemo>(controller);
 
   rclcpp::executors::MultiThreadedExecutor exec;

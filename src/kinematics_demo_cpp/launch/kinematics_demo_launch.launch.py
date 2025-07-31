@@ -112,9 +112,9 @@ def generate_launch_description():
 
     # MoveGroupInterface demo executable
     move_group_demo = Node(
-        name="kinematics_demo_cpp",
+        name="kinematics_demo_cpp_node",
         package="kinematics_demo_cpp",
-        executable="kinematics_demo_cpp",
+        executable="kinematics_demo_cpp_node",
         output="screen",
         # parameters=[
         #     moveit_config.robot_description,
