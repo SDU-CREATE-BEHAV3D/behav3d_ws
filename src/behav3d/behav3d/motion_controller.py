@@ -72,7 +72,7 @@ class PilzMotionController(Node):
             *,
             node_name: str = "pilz_motion",
             group: str = "ur_arm",
-            root_link: str = "ur10e_base_link",
+            root_link: str = "world",
             eef_link: str = "ur10e_tool0",
             debug: bool = False,
         ):
