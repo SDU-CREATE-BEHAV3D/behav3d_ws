@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>behav3d</name>
+  <name>behav3d_py</name>
   <version>0.0.1</version>
   <description>Core Python library for behav3d: motion controller, visualizer, scan trajectories, and target helpers.</description>
 

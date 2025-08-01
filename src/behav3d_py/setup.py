@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'behav3d'
+package_name = 'behav3d_py'
 
 setup(
     name=package_name,
