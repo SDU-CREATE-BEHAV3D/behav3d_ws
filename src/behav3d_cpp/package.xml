@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>behav3d_cpp</name>
+  <version>0.1.0</version>
+  <description>Minimal C++ wrapper around the MoveIt 2 Pilz planner.</description>
+
+  <maintainer email="ozca@iti.sdu.dk">Özgüç Bertuğ Çapunaman</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <!-- build system -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- single shorthand for build / exec / export -->
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2_eigen</depend>
+  <depend>moveit_core</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>moveit_msgs</depend>
+  <depend>eigen3_cmake_module</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
