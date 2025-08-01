@@ -1,11 +1,10 @@
 // =============================================================================
-//   ____  _____ _   _    ___     _______ ____  
+//   ____  _____ _   _    ___     _______ ____
 //  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
 //  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
-//  |____/|_____|_| |_/_/   \_\_/  |____/|____/ 
-                                              
-                                              
+//  |____/|_____|_| |_/_/   \_\_/  |____/|____/
+//
 // Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
 // Maintainers:
 //   - Lucas José Helle <luh@iti.sdu.dk>
@@ -32,14 +31,14 @@
 #include "behav3d_cpp/motion_controller.hpp"
 
 #define PMC_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
-#define PMC_INFO(node,  fmt, ...) RCLCPP_INFO ((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
-#define PMC_WARN(node,  fmt, ...) RCLCPP_WARN ((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
+#define PMC_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
+#define PMC_WARN(node, fmt, ...) RCLCPP_WARN((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
 #define PMC_ERROR(node, fmt, ...) RCLCPP_ERROR((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
 
 #define TO_STR(x) #x
 
-const std::string & PilzMotionController::getRootLink() const { return root_link_; }
-const std::string & PilzMotionController::getEefLink()  const { return eef_link_; }
+const std::string &PilzMotionController::getRootLink() const { return root_link_; }
+const std::string &PilzMotionController::getEefLink() const { return eef_link_; }
 
 // Constructor
 PilzMotionController::PilzMotionController(const std::string &group,
@@ -84,7 +83,6 @@ PilzMotionController::PilzMotionController(const std::string &group,
 
 // --- simple accessors ----------------------------------------------------
 
-
 RobotTrajectoryPtr
 PilzMotionController::planTarget(const geometry_msgs::msg::PoseStamped &target,
                                  const std::string &motion_type,
@@ -115,7 +113,6 @@ PilzMotionController::planTarget(const geometry_msgs::msg::PoseStamped &target,
   move_group_.setMaxVelocityScalingFactor(vel_scale);
   move_group_.setMaxAccelerationScalingFactor(acc_scale);
 
-
   move_group_.setPoseTarget(target);
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   auto code = move_group_.plan(plan);
@@ -138,7 +135,7 @@ PilzMotionController::planTarget(const geometry_msgs::msg::PoseStamped &target,
 
 // planJoints
 RobotTrajectoryPtr
-PilzMotionController::planJoints(const std::vector<double>& joint_positions,
+PilzMotionController::planJoints(const std::vector<double> &joint_positions,
                                  double vel_scale,
                                  double acc_scale)
 {
@@ -146,7 +143,7 @@ PilzMotionController::planJoints(const std::vector<double>& joint_positions,
   move_group_.clearPoseTargets();
   move_group_.clearPathConstraints();
 
-  const auto* jmg = move_group_.getRobotModel()->getJointModelGroup(move_group_.getName());
+  const auto *jmg = move_group_.getRobotModel()->getJointModelGroup(move_group_.getName());
   if (joint_positions.size() != jmg->getVariableCount())
   {
     RCLCPP_ERROR(this->get_logger(),
@@ -179,7 +176,6 @@ PilzMotionController::planJoints(const std::vector<double>& joint_positions,
   return traj;
 }
 
-
 // planSequence
 RobotTrajectoryPtr
 PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseStamped> &waypoints,
@@ -209,12 +205,12 @@ PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseSta
   for (const auto &ps : waypoints)
   {
     moveit_msgs::msg::MotionPlanRequest req;
-    req.pipeline_id  = "pilz_industrial_motion_planner";
-    req.planner_id   = "LIN";
-    req.group_name   = move_group_.getName();
-    req.allowed_planning_time            = 10.0;
-    req.max_velocity_scaling_factor      = vel_scale;
-    req.max_acceleration_scaling_factor  = acc_scale;
+    req.pipeline_id = "pilz_industrial_motion_planner";
+    req.planner_id = "LIN";
+    req.group_name = move_group_.getName();
+    req.allowed_planning_time = 10.0;
+    req.max_velocity_scaling_factor = vel_scale;
+    req.max_acceleration_scaling_factor = acc_scale;
 
     // Build a fully‑specified pose constraint (position + orientation)
     moveit_msgs::msg::Constraints c =
@@ -223,7 +219,7 @@ PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseSta
 
     moveit_msgs::msg::MotionSequenceItem item;
     item.blend_radius = blend_radius;
-    item.req          = req;
+    item.req = req;
     goal.request.items.push_back(item);
   }
   goal.request.items.back().blend_radius = 0.0;
@@ -240,30 +236,36 @@ PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseSta
   auto send_goal_future = sequence_client_->async_send_goal(goal);
   std::future_status status;
   // Wait for goal acceptance
-  do {
+  do
+  {
     status = send_goal_future.wait_for(std::chrono::seconds(1));
-    if (status == std::future_status::timeout) {
+    if (status == std::future_status::timeout)
+    {
       RCLCPP_INFO(this->get_logger(), "[PMC] Waiting for sequence goal acceptance...");
     }
   } while (status != std::future_status::ready);
 
   auto goal_handle = send_goal_future.get();
-  if (!goal_handle) {
+  if (!goal_handle)
+  {
     RCLCPP_ERROR(this->get_logger(), "[PMC] planSequence: goal rejected");
     return nullptr;
   }
 
   // Wait for the result asynchronously
   auto result_future = sequence_client_->async_get_result(goal_handle);
-  do {
+  do
+  {
     status = result_future.wait_for(std::chrono::seconds(1));
-    if (status == std::future_status::timeout) {
+    if (status == std::future_status::timeout)
+    {
       RCLCPP_INFO(this->get_logger(), "[PMC] Waiting for sequence result...");
     }
   } while (status != std::future_status::ready);
 
   auto wrapped_result = result_future.get();
-  if (!wrapped_result.result) {
+  if (!wrapped_result.result)
+  {
     RCLCPP_ERROR(this->get_logger(), "[PMC] planSequence: empty result pointer");
     return nullptr;
   }
@@ -273,7 +275,8 @@ PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseSta
                "planSequence: received %zu trajectory segments",
                response.planned_trajectories.size());
 
-  if (response.error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
+  if (response.error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
+  {
     RCLCPP_ERROR(this->get_logger(), "planSequence: planning failed (code=%d)",
                  response.error_code.val);
     return nullptr;
@@ -406,7 +409,7 @@ PilzMotionController::computeIK(
             pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
 
   const auto *jmg = move_group_.getRobotModel()->getJointModelGroup(move_group_.getName());
-  auto state      = std::make_shared<moveit::core::RobotState>(move_group_.getRobotModel());
+  auto state = std::make_shared<moveit::core::RobotState>(move_group_.getRobotModel());
   state->setToDefaultValues();
 
   // Try to solve IK for the desired pose
@@ -427,7 +430,7 @@ PilzMotionController::computeFK(const moveit::core::RobotState &state) const
 
   geometry_msgs::msg::PoseStamped ps;
   ps.header.frame_id = root_link_;
-  ps.header.stamp    = this->now();
+  ps.header.stamp = this->now();
 
   const Eigen::Isometry3d &tf = state.getGlobalLinkTransform(eef_link_);
   ps.pose = tf2::toMsg(tf);
