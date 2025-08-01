@@ -2,7 +2,9 @@
   <name>viz_demo</name>
   <version>0.0.1</version>
   <description>Demo package for MoveIt visualization</description>
-  <maintainer email="lucas@example.com">Lucas</maintainer>
+  <maintainer email="ozca@iti.sdu.dk">Özgüç Bertuğ Çapunaman</maintainer>
+  <maintainer email="jomi@iti.sdu.dk">Joseph Milad Wadie Naguib</maintainer>
+  <maintainer email="luh@iti.sdu.dk">Lucas José Helle</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

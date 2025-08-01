@@ -51,12 +51,16 @@ int main(int argc, char **argv)
   // Raw pointers are frequently used to refer to the planning group for improved performance.
   const moveit::core::JointModelGroup* joint_model_group =
       move_group.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
+  const moveit::core::LinkModel* ee_link =
+    move_group.getRobotModel()->getLinkModel("femto__ir_optical_frame");   // ← your tip link name
 
-  // Visualization WE NEED TO CHECK FROM HERE
+  // Visualization (MoveItBisualTools use (node,"reference base","topic name(to subscribe in rviz marker array)")) 
   // ^^^^^^^^^^^^^
   namespace rvt = rviz_visual_tools;
-  moveit_visual_tools::MoveItVisualTools visual_tools(demo_node, "panda_link0", "move_group_tutorial",
+  moveit_visual_tools::MoveItVisualTools visual_tools(demo_node, "world", "rviz_visual_tools",
                                                       move_group.getRobotModel());
+
+                                                      
 
   visual_tools.deleteAllMarkers();
 
@@ -66,8 +70,8 @@ int main(int argc, char **argv)
 
   // RViz provides many types of markers, in this demo we will use text, cylinders, and spheres
   Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
-  text_pose.translation().z() = 1.0;
-  visual_tools.publishText(text_pose, "MoveGroupInterface_Demo", rvt::WHITE, rvt::XLARGE);
+  text_pose.translation().z() = 1.8;
+  visual_tools.publishText(text_pose, "Behav3D_Viz_Demo", rvt::WHITE, rvt::XLARGE);
 
   // Batch publishing is used to reduce the number of messages being sent to RViz for large visualizations
   visual_tools.trigger();
@@ -82,11 +86,57 @@ int main(int argc, char **argv)
   RCLCPP_INFO(LOGGER, "End effector link: %s", move_group.getEndEffectorLink().c_str());
 
   // We can get a list of all the groups in the robot:
-  RCLCPP_INFO(LOGGER, "Available Planning Groups:");
-  std::copy(move_group.getJointModelGroupNames().begin(), move_group.getJointModelGroupNames().end(),
-            std::ostream_iterator<std::string>(std::cout, ", "));
+  for (const auto& group_name : move_group.getJointModelGroupNames())
+  {
+    RCLCPP_INFO(LOGGER, " - %s", group_name.c_str());
+  }
 
-  //rclcpp::spin(demo_node);
+
+  // Start the demo
+  // ^^^^^^^^^^^^^^^^^^^^^^^^^
+  visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to start the demo");
+
+  // .. _move_group_interface-planning-to-pose-goal:
+  //
+  // Planning to a Pose goal
+  // ^^^^^^^^^^^^^^^^^^^^^^^
+  // We can plan a motion for this group to a desired pose for the
+  // end-effector.
+  geometry_msgs::msg::Pose target_pose1;
+  target_pose1.orientation.w = 1.0;
+  target_pose1.position.x = 0.28;
+  target_pose1.position.y = -0.2;
+  target_pose1.position.z = 0.5;
+  move_group.setPoseTarget(target_pose1,"femto__ir_optical_frame");
+  
+  RCLCPP_INFO(LOGGER, "JointModelGroup pointer is %s", joint_model_group ? "valid" : "NULL");
+  RCLCPP_INFO(LOGGER, "Joint count: %ld", joint_model_group->getJointModelNames().size());
+
+  // Now, we call the planner to compute the plan and visualize it.
+  // Note that we are just planning, not asking move_group
+  // to actually move the robot.
+  moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+
+  bool success = (move_group.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
+
+  RCLCPP_INFO(LOGGER, "Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
+  // Visualizing plans
+  // ^^^^^^^^^^^^^^^^^
+  // We can also visualize the plan as a line with markers in RViz.
+  RCLCPP_INFO(LOGGER, "Visualizing plan 1 as trajectory line");
+  visual_tools.publishAxisLabeled(target_pose1, "pose1");
+  visual_tools.publishText(text_pose, "Pose_Goal", rvt::WHITE, rvt::XLARGE);
+  visual_tools.publishTrajectoryLine(my_plan.trajectory, ee_link, joint_model_group);
+  visual_tools.trigger();
+  visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
+
+//  rclcpp::spin(demo_node);
+  visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to start the movement");
+
+  move_group.execute(my_plan);        // ← executes *that* plan verbatim
+
+  visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to shutdown");
+
   rclcpp::shutdown();
   return 0;
 }
