@@ -16,10 +16,12 @@ find_package(Eigen3 REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_msgs REQUIRED)
+find_package(moveit_visual_tools REQUIRED)
 
 # ─── Library target ──────────────────────────────────────────────
 add_library(${PROJECT_NAME} SHARED
   src/motion_controller.cpp
+  src/motion_visualizer.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -37,6 +39,7 @@ ament_target_dependencies(${PROJECT_NAME}
   moveit_core
   moveit_ros_planning_interface
   moveit_msgs
+  moveit_visual_tools 
 )
 
 target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
@@ -68,6 +71,7 @@ ament_export_dependencies(
   moveit_ros_planning_interface
   moveit_msgs
   eigen3_cmake_module
+  moveit_visual_tools
 )
 
 ament_package()
