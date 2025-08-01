@@ -91,7 +91,6 @@ int main(int argc, char **argv)
     RCLCPP_INFO(LOGGER, " - %s", group_name.c_str());
   }
 
-
   // Start the demo
   // ^^^^^^^^^^^^^^^^^^^^^^^^^
   visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to start the demo");
@@ -128,12 +127,10 @@ int main(int argc, char **argv)
   visual_tools.publishText(text_pose, "Pose_Goal", rvt::WHITE, rvt::XLARGE);
   visual_tools.publishTrajectoryLine(my_plan.trajectory, ee_link, joint_model_group);
   visual_tools.trigger();
-  visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
 
-//  rclcpp::spin(demo_node);
   visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to start the movement");
 
-  move_group.execute(my_plan);        // ← executes *that* plan verbatim
+  move_group.execute(my_plan);        // ← executes *that* plan
 
   visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to shutdown");
 
