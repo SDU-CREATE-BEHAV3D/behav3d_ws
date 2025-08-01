@@ -20,6 +20,9 @@ find_package(moveit_msgs REQUIRED)
 # ─── Library target ──────────────────────────────────────────────
 add_library(${PROJECT_NAME} SHARED
   src/motion_controller.cpp
+  src/target_builder.cpp
+  src/trajectory_builder.cpp
+  src/util.cpp
 )
 
 target_include_directories(${PROJECT_NAME}

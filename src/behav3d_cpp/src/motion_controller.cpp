@@ -14,21 +14,22 @@
 // Date: 2025-07
 // =============================================================================
 
-#include "behav3d_cpp/motion_controller.hpp"
+#include <future>
+#include <vector>
+#include <Eigen/Geometry>
+#include <tf2_eigen/tf2_eigen.hpp>
 #include <moveit_msgs/msg/motion_plan_request.hpp>
 #include <moveit_msgs/msg/motion_sequence_item.hpp>
 #include <moveit_msgs/msg/constraints.hpp>
 #include <moveit_msgs/msg/position_constraint.hpp>
 #include <moveit_msgs/msg/robot_trajectory.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
-#include <Eigen/Geometry>
-#include <tf2_eigen/tf2_eigen.hpp>
-#include <future>
-#include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
+#include <moveit_msgs/msg/joint_limits.hpp>
 #include <moveit/kinematic_constraints/utils.hpp>
 #include <moveit/robot_trajectory/robot_trajectory.hpp>
-#include <moveit_msgs/msg/joint_limits.hpp>
-#include <vector>
+#include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
+
+#include "behav3d_cpp/motion_controller.hpp"
 
 #define PMC_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
 #define PMC_INFO(node,  fmt, ...) RCLCPP_INFO ((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)

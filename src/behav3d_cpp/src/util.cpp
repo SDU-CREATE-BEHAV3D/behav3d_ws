@@ -15,8 +15,8 @@
 // =============================================================================
 
 #include <cmath>
-#include <Eigen/Dense>
 #include <random>
+#include <Eigen/Dense>
 
 namespace behav3d {
 namespace util {

@@ -3,9 +3,9 @@
 //  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
 //  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
-//  |____/|_____|_| |_/_/   \_\_/  |____/|____/                                               
-//            
-//                                  
+//  |____/|_____|_| |_/_/   \_\_/  |____/|____/ 
+                                              
+                                              
 // Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
 // Maintainers:
 //   - Lucas José Helle <luh@iti.sdu.dk>
@@ -14,14 +14,14 @@
 // Date: 2025-07
 // =============================================================================
 
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <rclcpp/rclcpp.hpp>
 #include <Eigen/Dense>
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 
-#include "behav3d/math_util.hpp"
+#include "behav3d_cpp/util.hpp"
 
 namespace behav3d {
 namespace target_builder {

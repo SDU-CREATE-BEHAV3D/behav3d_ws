@@ -14,17 +14,16 @@
 // Date: 2025-07
 // =============================================================================
 
-#include <vector>
-#include <algorithm>
-#include <random>
 #include <cmath>
-
-#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <vector>
+#include <random>
+#include <algorithm>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 
-#include "behav3d/target_builder.hpp"
-#include "behav3d/util.hpp"
+#include "behav3d_cpp/target_builder.hpp"
+#include "behav3d_cpp/util.hpp"
 
 namespace behav3d {
 namespace trajectory_builder {
