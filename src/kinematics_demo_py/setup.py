@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 import os
 from glob import glob
 
-package_name = 'pilz_demo'
+package_name = 'kinematics_demo_py'
 
 setup(
     name=package_name,
@@ -24,7 +24,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'run_demo = pilz_demo.demo:main',
+            'run_demo = kinematics_demo_py.demo:main',
         ],
     },
 )

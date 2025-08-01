@@ -1,6 +1,6 @@
 <?xml version="0.0.1"?>
 <package format="3">
-  <name>pilz_demo</name>
+  <name>kinematics_demo_py</name>
   <version>0.1.0</version>
   <description>
     Interactive text‑command demo that drives PilzMotionController and

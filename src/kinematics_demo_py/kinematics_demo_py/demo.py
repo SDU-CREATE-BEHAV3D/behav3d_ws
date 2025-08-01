@@ -28,8 +28,8 @@ from std_msgs.msg import String
 from moveit.core.robot_state import RobotState
 from geometry_msgs.msg import PoseStamped
 
-# from motion_visualizer import MotionVisualizer
-from behav3d.motion_controller import PilzMotionController
+# from behav3d_py.motion_visualizer import MotionVisualizer
+from behav3d_py.motion_controller import PilzMotionController
 
 class PilzDemo(Node):
     """Remote‑control demo node that maps textual commands on ``/user_input`` to

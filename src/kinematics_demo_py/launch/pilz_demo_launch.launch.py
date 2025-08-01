@@ -96,7 +96,7 @@ def generate_launch_description():
         .robot_description_semantic(Path("config") / "ur.srdf")
         .moveit_cpp(
             file_path=os.path.join(
-                get_package_share_directory("pilz_demo"),
+                get_package_share_directory("kinematics_demo_py"),
                 "config/pilz_demo.yaml",
             )
         )
@@ -105,7 +105,7 @@ def generate_launch_description():
 
     # Helper node that runs any MoveIt‑Py script (default: tutorial)
     moveit_py_node = Node(
-        package="pilz_demo",  #  👉 replace with your own package if needed
+        package="kinematics_demo_py",  #  👉 replace with your own package if needed
         executable="run_demo",
         name="pilz_demo_moveit_py",
         output="both",
