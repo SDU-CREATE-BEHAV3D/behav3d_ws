@@ -18,8 +18,8 @@ class ImageProcessorCapture(Node):
         # Parameters
         default_dir = os.path.expanduser('~/captures')
         self.declare_parameter('output_dir', default_dir)
-        self.declare_parameter('base_frame', 'base_link')
-        self.declare_parameter('ee_frame', 'tool0')  # capturing wrist_3_link as EE frame
+        self.declare_parameter('base_frame', 'ur10e_base_link')
+        self.declare_parameter('ee_frame', 'femto__depth_optical_frame')  # capturing wrist_3_link as EE frame
 
         self.output_dir = self.get_parameter('output_dir').get_parameter_value().string_value
         os.makedirs(self.output_dir, exist_ok=True)
