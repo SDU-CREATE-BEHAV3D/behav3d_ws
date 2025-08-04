@@ -51,7 +51,7 @@ class PilzDemo(Node):
             "'home', 'draw_line', 'draw_square', 'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'quit'"
         )
         # === Home Pose Initialization ===
-        joint_deg = [90.0, -120.0, 120.0, -90.0, 90.0, -180.0]
+        joint_deg = [45.0, -120.0, 120.0, -90.0, 90.0, -180.0]
         self.home_state = self.RobotState_from_joints(joint_deg)
 
     # --------------------------------------------------------------

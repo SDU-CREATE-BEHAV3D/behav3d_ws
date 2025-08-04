@@ -19,13 +19,12 @@
 #include <cmath>
 #include <algorithm>
 
+
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
-
+#include "behav3d_cpp/motion_visualizer.hpp"
 #include "behav3d_cpp/motion_controller.hpp"
-
-using behav3d::motion_controller::PilzMotionController;
 
 using std::placeholders::_1;
 
