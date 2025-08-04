@@ -25,6 +25,8 @@
 
 #include "behav3d_cpp/motion_controller.hpp"
 
+using behav3d::motion_controller::PilzMotionController;
+
 using std::placeholders::_1;
 
 // ---------------------------------------------------------------------------
