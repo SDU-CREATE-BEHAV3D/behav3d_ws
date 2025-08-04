@@ -18,11 +18,19 @@ class ImageProcessorCapture(Node):
         # Parameters
         default_dir = os.path.expanduser('~/captures')
         self.declare_parameter('output_dir', default_dir)
-        self.declare_parameter('base_frame', 'ur10e_base_link')
-        self.declare_parameter('ee_frame', 'femto__depth_optical_frame')  # capturing wrist_3_link as EE frame
+        self.declare_parameter('base_frame', 'ur10e_wrist_3_link')
+        self.declare_parameter('ee_frame', 'femto__depth_optical_frame')
 
+        # Root output directory
         self.output_dir = self.get_parameter('output_dir').get_parameter_value().string_value
         os.makedirs(self.output_dir, exist_ok=True)
+
+        # Sub‐directories
+        self.rgb_dir   = os.path.join(self.output_dir, 'rgb')
+        self.depth_dir = os.path.join(self.output_dir, 'depth')
+        self.pose_dir  = os.path.join(self.output_dir, 'poses')
+        for d in (self.rgb_dir, self.depth_dir, self.pose_dir):
+            os.makedirs(d, exist_ok=True)
 
         # Set up CvBridge
         self.bridge = CvBridge()
@@ -55,47 +63,48 @@ class ImageProcessorCapture(Node):
 
     def depth_cb(self, msg: Image):
         frame = self.bridge.imgmsg_to_cv2(msg, 'passthrough')
-        # convert float32->uint16 if needed
         if frame.dtype == np.float32:
             frame = (frame * 1000).astype(np.uint16)
         self.latest_depth = frame
         self.latest_depth_ns = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
 
     def capture_frame(self):
-        # 1) Make sure we have frames
+        # 1) ensure frames exist
         if self.latest_color is None or self.latest_depth is None:
             self.get_logger().warning('No RGB-D frames available to capture!')
             return
 
-        # 2) Timestamp + file paths
+        # 2) timestamp + filenames
         ts = time.strftime('%Y%m%d-%H%M%S')
-        color_fn = f'color_{ts}.png'
-        depth_fn = f'depth_{ts}.png'
-        color_path = os.path.join(self.output_dir, color_fn)
-        depth_path = os.path.join(self.output_dir, depth_fn)
+        rgb_fn   = f'{ts}_rgb.png'
+        depth_fn = f'{ts}_depth.png'
+        pose_fn  = f'{ts}_pose.json'
 
-        # 3) Save images
-        cv2.imwrite(color_path, self.latest_color)
+        rgb_path   = os.path.join(self.rgb_dir,   rgb_fn)
+        depth_path = os.path.join(self.depth_dir, depth_fn)
+        pose_path  = os.path.join(self.pose_dir,  pose_fn)
+
+        # 3) save images
+        cv2.imwrite(rgb_path,   self.latest_color)
         cv2.imwrite(depth_path, self.latest_depth)
 
-        # 4) TF lookup
+        # 4) lookup transform
         base = self.get_parameter('base_frame').get_parameter_value().string_value
         ee   = self.get_parameter('ee_frame').get_parameter_value().string_value
         try:
-            # wait up to 1s for the transform to appear
             if not self.tf_buffer.can_transform(base, ee, rclpy.time.Time(),
                                                 timeout=rclpy.duration.Duration(seconds=1.0)):
-                self.get_logger().error(f'Transform {base}→{ee} not available after timeout')
+                self.get_logger().error(f'Transform {base}→{ee} not available')
                 return
             trans = self.tf_buffer.lookup_transform(base, ee, rclpy.time.Time())
         except Exception as e:
             self.get_logger().error(f'TF lookup failed for {ee}: {e}')
             return
 
-        # 5) Build the pose record
+        # 5) build pose record
         pose = {
             'timestamp': ts,
-            'color_file': color_fn,
+            'rgb_file': rgb_fn,
             'depth_file': depth_fn,
             'translation': {
                 'x': trans.transform.translation.x,
@@ -110,7 +119,11 @@ class ImageProcessorCapture(Node):
             },
         }
 
-        # 6) Append to the master JSON
+        # 6) save individual pose JSON
+        with open(pose_path, 'w') as f:
+            json.dump(pose, f, indent=2)
+
+        # 7) append to master all_poses.json
         master_path = os.path.join(self.output_dir, 'all_poses.json')
         try:
             with open(master_path, 'r') as mf:
@@ -119,69 +132,19 @@ class ImageProcessorCapture(Node):
             all_poses = []
 
         all_poses.append(pose)
-
-        # atomic write
         tmp = master_path + '.tmp'
         with open(tmp, 'w') as mf:
             json.dump(all_poses, mf, indent=2)
         os.replace(tmp, master_path)
 
-        # 7) Log success
+        # 8) log success
         self.get_logger().info(
-            f"Captured and saved:\n"
-            f"  Color → {color_path}\n"
-            f"  Depth → {depth_path}\n"
-            f"  Pose  → appended to {master_path}"
+            f"Saved:\n"
+            f"  RGB  → {rgb_path}\n"
+            f"  Depth→ {depth_path}\n"
+            f"  Pose → {pose_path}\n"
+            f"  Appended to {master_path}"
         )
-
-
-        if self.latest_color is None or self.latest_depth is None:
-            self.get_logger().warning('No RGB-D frames available to capture!')
-            return
-        ts = time.strftime('%Y%m%d-%H%M%S')
-        color_path = os.path.join(self.output_dir, f'color_{ts}.png')
-        depth_path = os.path.join(self.output_dir, f'depth_{ts}.png')
-        pose_path = os.path.join(self.output_dir, f'pose_{ts}.json')
-
-        # Save images
-        cv2.imwrite(color_path, self.latest_color)
-        cv2.imwrite(depth_path, self.latest_depth)
-
-        # Lookup EE pose for wrist_3_link
-        base = self.get_parameter('base_frame').get_parameter_value().string_value
-        ee = self.get_parameter('ee_frame').get_parameter_value().string_value
-        try:
-            # optionally wait for availability
-            if not self.tf_buffer.can_transform(base, ee, rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=1.0)):
-                self.get_logger().error(f'Transform {base}→{ee} not available after timeout')
-                return
-            trans = self.tf_buffer.lookup_transform(base, ee, rclpy.time.Time())
-        except Exception as e:
-            self.get_logger().error(f'TF lookup failed for {ee}: {e}')
-            return
-
-        pose = {
-            'translation': {
-                'x': trans.transform.translation.x,
-                'y': trans.transform.translation.y,
-                'z': trans.transform.translation.z
-            },
-            'quad': {
-                'x': trans.transform.rotation.x,
-                'y': trans.transform.rotation.y,
-                'z': trans.transform.rotation.z,
-                'w': trans.transform.rotation.w
-            }
-        }
-        with open(pose_path, 'w') as f:
-            json.dump(pose, f, indent=2)
-
-        success_msg = (
-            f"Captured RGB-D and {ee} pose at {ts}.\n"
-            f"Color: {color_path}\nDepth: {depth_path}\nPose: {pose_path}\nPose data: {pose}"
-        )
-        self.get_logger().info(success_msg)
-        print(success_msg)
 
     def timestamp_sync_test(self):
         if self.latest_color_ns is None or self.latest_depth_ns is None:
@@ -199,7 +162,6 @@ class ImageProcessorCapture(Node):
     def spin_loop(self):
         while rclpy.ok():
             rclpy.spin_once(self, timeout_sec=0.01)
-
             if self.latest_color is not None:
                 cv2.imshow(self.window_name, self.latest_color)
             key = cv2.waitKey(1) & 0xFF
@@ -213,7 +175,6 @@ class ImageProcessorCapture(Node):
         cv2.destroyAllWindows()
         self.destroy_node()
         rclpy.shutdown()
-
 
 def main(args=None):
     rclpy.init(args=args)
