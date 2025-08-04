@@ -14,48 +14,40 @@
 // Date: 2025-07
 // =============================================================================
 
+// motion_visualizer.hpp
 #pragma once
-
-#include <memory>
-#include <string>
-
 #include <rclcpp/rclcpp.hpp>
 #include <moveit/move_group_interface/move_group_interface.hpp>
-#include <moveit/planning_scene_interface/planning_scene_interface.hpp>
-
-#include <moveit_msgs/msg/display_robot_state.hpp>
-#include <moveit_msgs/msg/display_trajectory.hpp>
-
-#include <moveit_msgs/msg/attached_collision_object.hpp>
-#include <moveit_msgs/msg/collision_object.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-
 #include <moveit_visual_tools/moveit_visual_tools.h>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <moveit_msgs/msg/robot_trajectory.hpp>
 
-namespace behav3d
-{
+namespace behav3d::motion_visualizer {
 
-/**
- * \brief Light wrapper around MoveItVisualTools that offers three
- *        helpers. Everything is
- *        forwarded to the supplied MoveItVisualTools instance.
- */
-class MotionVisualizer
+class MotionVisualizer : public rclcpp::Node
 {
 public:
-  MotionVisualizer(moveit_visual_tools::MoveItVisualToolsPtr vt,
-                   const moveit::core::JointModelGroup*       jmg,
-                   const moveit::core::LinkModel*             tip_link);
+  MotionVisualizer(const std::string& planning_group,
+                   const std::string& root_link,
+                   const std::string& eef_link,
+                   bool debug = false);
 
-  // --- API you requested ----------------------------------------------------
-  void publishGhost   (const moveit_msgs::msg::RobotTrajectory& traj);
-  void publishTrail   (const moveit_msgs::msg::RobotTrajectory& traj);
-  void publishTargetPose(const geometry_msgs::msg::PoseStamped& pose);
+  // Helpers ------------------------------------------------------------------
+  void publishTargetPose(const geometry_msgs::msg::PoseStamped& pose,
+                         const std::string& label = "target");
+  void deleteAllMarkers();
+  void publishGhost(const moveit_msgs::msg::RobotTrajectory& traj);
+  void publishTrail(const moveit_msgs::msg::RobotTrajectory& traj,
+                    const std::string& label = "trail");
 
 private:
-  moveit_visual_tools::MoveItVisualToolsPtr vt_;
-  const moveit::core::JointModelGroup*      jmg_;
-  const moveit::core::LinkModel*            tip_;
+  // Fixed configuration ------------------------------------------------------
+  std::string root_link_;
+  std::string eef_link_;
+
+  // MoveIt handles -----------------------------------------------------------
+  moveit::planning_interface::MoveGroupInterface move_group_;
+  moveit_visual_tools::MoveItVisualToolsPtr      vt_;
 };
 
-}  // namespace behav3d
+} // namespace behav3d::motion_visualizer
