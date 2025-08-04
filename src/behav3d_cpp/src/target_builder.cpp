@@ -101,13 +101,6 @@ namespace behav3d
         // -----------------------------------------------------------------------------
         // roll 180° around camera X axis (optical frame flip)
         // -----------------------------------------------------------------------------
-        PoseStamped flipTarget(const PoseStamped &in)
-        {
-            Eigen::Isometry3d iso = toIso(in);
-            iso.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitX()));
-            return fromIso(iso, in.header.frame_id);
-        }
-
         Eigen::Isometry3d toIso(const PoseStamped &p)
         {
             Eigen::Isometry3d iso = Eigen::Isometry3d::Identity();
@@ -126,6 +119,13 @@ namespace behav3d
                             const std::string &frame)
         {
             return makePose(iso, frame);
+        }
+
+        PoseStamped flipTarget(const PoseStamped &in)
+        {
+            Eigen::Isometry3d iso = toIso(in);
+            iso.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitX()));
+            return fromIso(iso, in.header.frame_id);
         }
 
         PoseStamped translate(const PoseStamped &in,
