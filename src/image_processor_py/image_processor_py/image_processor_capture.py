@@ -62,6 +62,79 @@ class ImageProcessorCapture(Node):
         self.latest_depth_ns = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
 
     def capture_frame(self):
+        # 1) Make sure we have frames
+        if self.latest_color is None or self.latest_depth is None:
+            self.get_logger().warning('No RGB-D frames available to capture!')
+            return
+
+        # 2) Timestamp + file paths
+        ts = time.strftime('%Y%m%d-%H%M%S')
+        color_fn = f'color_{ts}.png'
+        depth_fn = f'depth_{ts}.png'
+        color_path = os.path.join(self.output_dir, color_fn)
+        depth_path = os.path.join(self.output_dir, depth_fn)
+
+        # 3) Save images
+        cv2.imwrite(color_path, self.latest_color)
+        cv2.imwrite(depth_path, self.latest_depth)
+
+        # 4) TF lookup
+        base = self.get_parameter('base_frame').get_parameter_value().string_value
+        ee   = self.get_parameter('ee_frame').get_parameter_value().string_value
+        try:
+            # wait up to 1s for the transform to appear
+            if not self.tf_buffer.can_transform(base, ee, rclpy.time.Time(),
+                                                timeout=rclpy.duration.Duration(seconds=1.0)):
+                self.get_logger().error(f'Transform {base}→{ee} not available after timeout')
+                return
+            trans = self.tf_buffer.lookup_transform(base, ee, rclpy.time.Time())
+        except Exception as e:
+            self.get_logger().error(f'TF lookup failed for {ee}: {e}')
+            return
+
+        # 5) Build the pose record
+        pose = {
+            'timestamp': ts,
+            'color_file': color_fn,
+            'depth_file': depth_fn,
+            'translation': {
+                'x': trans.transform.translation.x,
+                'y': trans.transform.translation.y,
+                'z': trans.transform.translation.z,
+            },
+            'quad': {
+                'x': trans.transform.rotation.x,
+                'y': trans.transform.rotation.y,
+                'z': trans.transform.rotation.z,
+                'w': trans.transform.rotation.w,
+            },
+        }
+
+        # 6) Append to the master JSON
+        master_path = os.path.join(self.output_dir, 'all_poses.json')
+        try:
+            with open(master_path, 'r') as mf:
+                all_poses = json.load(mf)
+        except (FileNotFoundError, json.JSONDecodeError):
+            all_poses = []
+
+        all_poses.append(pose)
+
+        # atomic write
+        tmp = master_path + '.tmp'
+        with open(tmp, 'w') as mf:
+            json.dump(all_poses, mf, indent=2)
+        os.replace(tmp, master_path)
+
+        # 7) Log success
+        self.get_logger().info(
+            f"Captured and saved:\n"
+            f"  Color → {color_path}\n"
+            f"  Depth → {depth_path}\n"
+            f"  Pose  → appended to {master_path}"
+        )
+
+
         if self.latest_color is None or self.latest_depth is None:
             self.get_logger().warning('No RGB-D frames available to capture!')
             return
@@ -93,7 +166,7 @@ class ImageProcessorCapture(Node):
                 'y': trans.transform.translation.y,
                 'z': trans.transform.translation.z
             },
-            'rotation': {
+            'quad': {
                 'x': trans.transform.rotation.x,
                 'y': trans.transform.rotation.y,
                 'z': trans.transform.rotation.z,
