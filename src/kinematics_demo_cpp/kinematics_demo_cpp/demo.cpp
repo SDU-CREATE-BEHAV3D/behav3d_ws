@@ -294,7 +294,7 @@ private:
 
   void grid_sweep(double width = 0.6, double height = 0.6,
                   double centre_x = 0.0, double centre_y = 0.7,
-                  double centre_z = 0.4, z_off = 0.5,
+                  double centre_z = 0.4, double z_off = 0.5,
                   int nx = 6, int ny = 6,
                   bool row_major = false)
   {
