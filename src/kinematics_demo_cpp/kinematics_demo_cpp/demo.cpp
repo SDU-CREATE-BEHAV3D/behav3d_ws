@@ -244,10 +244,6 @@ private:
     viz_->deleteAllMarkers();
   }
 
-  void grid_xy(double x_min = -0.2, double x_max = 0.2,
-               double y_min = 0.4,  double y_max = 0.8,
-               double z_fixed = 0.4, double spacing = 0.1);
-
   // ------------------------------------------------------------------------
   //  Members
   // ------------------------------------------------------------------------
@@ -263,13 +259,15 @@ private:
                           z_fixed, spacing,
                           ctrl_->getRootLink(), /*flipped=*/true);
 
-    if (targets.empty()) {
+    if (targets.empty())
+    {
       RCLCPP_WARN(this->get_logger(), "grid_xy: no targets generated!");
       return;
     }
 
     // 3. Visualize all targets
-    for (size_t i = 0; i < targets.size(); ++i) {
+    for (size_t i = 0; i < targets.size(); ++i)
+    {
       viz_->publishTargetPose(targets[i], "t" + std::to_string(i));
     }
 
@@ -279,7 +277,8 @@ private:
     // 5. Move to the first target with a PTP, then traverse the rest with LIN
     ctrl_->executeTrajectory(ctrl_->planTarget(targets.front(), "PTP"));
 
-    for (size_t i = 1; i < targets.size(); ++i) {
+    for (size_t i = 1; i < targets.size(); ++i)
+    {
       viz_->prompt("Press 'next' to continue to target " + std::to_string(i));
       auto traj = ctrl_->planTarget(targets[i], "LIN");
       ctrl_->executeTrajectory(traj);
