@@ -5,6 +5,7 @@
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
 //
+//
 // Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
 // Maintainers:
 //   - Lucas José Helle <luh@iti.sdu.dk>
@@ -31,26 +32,6 @@ namespace behav3d
         using behav3d::util::fromRPY;
         using geometry_msgs::msg::PoseStamped;
 
-        // -----------------------------------------------------------------------------
-        // helpers
-        // -----------------------------------------------------------------------------
-        static PoseStamped makePose(const Eigen::Isometry3d &iso,
-                                    const std::string &frame)
-        {
-            PoseStamped ps;
-            ps.header.frame_id = frame;
-            ps.header.stamp = rclcpp::Clock().now();
-            ps.pose.position.x = iso.translation().x();
-            ps.pose.position.y = iso.translation().y();
-            ps.pose.position.z = iso.translation().z();
-
-            Eigen::Quaterniond q(iso.rotation());
-            ps.pose.orientation.x = q.x();
-            ps.pose.orientation.y = q.y();
-            ps.pose.orientation.z = q.z();
-            ps.pose.orientation.w = q.w();
-            return ps;
-        }
 
         // -----------------------------------------------------------------------------
         // public API
@@ -78,7 +59,6 @@ namespace behav3d
         PoseStamped worldXY(double x, double y, double z,
                             const std::string &frame)
         {
-            // Identity rotation: camera +Z == world +Z
             tf2::Quaternion q(0, 0, 0, 1);
             return poseStamped(x, y, z, q.x(), q.y(), q.z(), q.w(), frame);
         }
@@ -86,15 +66,14 @@ namespace behav3d
         PoseStamped worldXZ(double x, double z, double y,
                             const std::string &frame)
         {
-            // Identity rotation.  User can re‑orient later if needed.
-            tf2::Quaternion q(0, 0, 0, 1);
+            tf2::Quaternion q(0.7071067811865475, 0, 0, 0.7071067811865475);
             return poseStamped(x, y, z, q.x(), q.y(), q.z(), q.w(), frame);
         }
 
         PoseStamped worldYZ(double y, double z, double x,
                             const std::string &frame)
         {
-            tf2::Quaternion q(0, 0, 0, 1);
+            tf2::Quaternion q(0.5, 0.5, 0.5, 0.5);
             return poseStamped(x, y, z, q.x(), q.y(), q.z(), q.w(), frame);
         }
 
@@ -118,7 +97,19 @@ namespace behav3d
         PoseStamped fromIso(const Eigen::Isometry3d &iso,
                             const std::string &frame)
         {
-            return makePose(iso, frame);
+            PoseStamped ps;
+            ps.header.frame_id = frame;
+            ps.header.stamp = rclcpp::Clock().now();
+            ps.pose.position.x = iso.translation().x();
+            ps.pose.position.y = iso.translation().y();
+            ps.pose.position.z = iso.translation().z();
+
+            Eigen::Quaterniond q(iso.rotation());
+            ps.pose.orientation.x = q.x();
+            ps.pose.orientation.y = q.y();
+            ps.pose.orientation.z = q.z();
+            ps.pose.orientation.w = q.w();
+            return ps;
         }
 
         PoseStamped flipTarget(const PoseStamped &in)
@@ -220,8 +211,8 @@ namespace behav3d
             if (x_proj.squaredNorm() < 1e-10)
             {
                 Eigen::Vector3d fallback = std::abs(z.dot(Eigen::Vector3d::UnitX())) < 0.8
-                                             ? Eigen::Vector3d::UnitX()
-                                             : Eigen::Vector3d::UnitY();
+                                               ? Eigen::Vector3d::UnitX()
+                                               : Eigen::Vector3d::UnitY();
                 x_proj = fallback - fallback.dot(z) * z;
             }
 
@@ -241,14 +232,14 @@ namespace behav3d
             Eigen::Isometry3d iso = toIso(in);
 
             const Eigen::Vector3d z = new_normal.normalized();
-            Eigen::Vector3d       x = iso.linear().col(0);
+            Eigen::Vector3d x = iso.linear().col(0);
 
             // If old X is almost parallel to new Z, pick a safe world axis
             if (std::abs(x.dot(z)) > 0.95)
             {
                 x = std::abs(z.dot(Eigen::Vector3d::UnitX())) < 0.8
-                      ? Eigen::Vector3d::UnitX()
-                      : Eigen::Vector3d::UnitY();
+                        ? Eigen::Vector3d::UnitX()
+                        : Eigen::Vector3d::UnitY();
             }
 
             Eigen::Vector3d y = z.cross(x).normalized();

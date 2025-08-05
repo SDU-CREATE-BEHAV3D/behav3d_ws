@@ -251,7 +251,7 @@ private:
   }
 
   void fibonacci_cap(double radius = 0.5,
-                     double centre_x = 0.0, double centre_y = 1.0, double centre_z = 0.0,
+                     double center_x = 0.0, double center_y = 1.0, double center_z = 0.0,
                      double cap_deg = 30.0, int n_points = 32)
   {
     // 1. Start from home
@@ -261,10 +261,12 @@ private:
     const double cap_rad = deg2rad(cap_deg);
 
     // 3. Generate way‑points on a spherical cap using Fibonacci sampling
-    const auto centre = worldXY(centre_x, centre_y, centre_z,
-                                           ctrl_->getRootLink());
+    const auto center = worldXY(center_x, center_y, center_z,
+                                ctrl_->getRootLink());
 
-    auto targets = fibonacciSphericalCap(centre, radius, cap_rad, n_points);
+    viz_->publishTargetPose(center);
+
+    auto targets = fibonacciSphericalCap(center, radius, cap_rad, n_points);
 
     if (targets.empty())
     {
@@ -292,27 +294,28 @@ private:
     home();
   }
 
-  void grid_sweep(double width = 0.4, double height = 0.4,
-                  double centre_x = 0.0, double centre_y = 1.0,
-                  double centre_z = 0.4,
-                  int nx = 3, int ny = 3,
+  void grid_sweep(double width = 0.6, double height = 0.6,
+                  double center_x = 0.0, double center_y = 0.7,
+                  double center_z = 0.0, double z_off = 0.5,
+                  int nx = 6, int ny = 6,
                   bool row_major = false)
   {
     // 1. Return to a known joint configuration
     home();
 
-    // 2. Build centre pose and generate a zig‑zag raster pattern that
+    // 2. Build center pose and generate a zig‑zag raster pattern that
     //    matches the sweepZigzag parameter space.
-    const auto centre = flipTarget(worldXY(centre_x, centre_y, centre_z,
-                                           ctrl_->getRootLink()));
+    const auto center = worldXY(center_x, center_y, center_z,
+                                ctrl_->getRootLink());
+
+    viz_->publishTargetPose(center);
 
     // Enforce a minimum of two waypoints per axis, per sweepZigzag’s contract.
     nx = std::max(2, nx);
     ny = std::max(2, ny);
 
-    // z_off is fixed to 0 here because we keep the optical frame’s +Z aligned
-    // with world +Z.  Feel free to expose it later if needed.
-    auto targets = sweepZigzag(centre, width, height, /*z_off=*/0.0,
+    // z_off is fixed to 0 here because sweepZigzag now flips the targets internally.
+    auto targets = sweepZigzag(center, width, height, z_off,
                                nx, ny, row_major);
 
     if (targets.empty())
@@ -355,14 +358,16 @@ int main(int argc, char **argv)
   // Instantiate the motion controller: replace "manipulator" and "world"
   // with your MoveIt group name and root link frame as needed.
   auto controller = std::make_shared<PilzMotionController>(
-      "ur_arm",                     // MoveIt planning group name
-      "ur10e_base_link",            // Root link frame
+      "ur_arm", // MoveIt planning group name
+      // "ur10e_base_link",            // Root link frame
+      "world",
       "femto__depth_optical_frame", // End-effector link frame
       true                          // Debug mode off
   );
   auto visualizer = std::make_shared<MotionVisualizer>(
       "ur_arm",
-      "ur10e_base_link",
+      // "ur10e_base_link",
+      "world",
       "femto__depth_optical_frame");
   auto demo = std::make_shared<PilzDemo>(controller, visualizer);
 
