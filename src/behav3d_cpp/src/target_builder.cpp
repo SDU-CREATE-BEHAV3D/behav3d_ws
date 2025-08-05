@@ -206,18 +206,31 @@ namespace behav3d
         Eigen::Vector3d zAxis(const PoseStamped &p) { return axis(p, 2); }
 
         PoseStamped alignTarget(const PoseStamped &in,
-                                const Eigen::Vector3d &new_x)
+                                const Eigen::Vector3d &desired_x)
         {
+            // Keep current +Z so the operation is a *pure roll*
             Eigen::Isometry3d iso = toIso(in);
 
-            Eigen::Vector3d x = new_x.normalized();
-            Eigen::Vector3d z = iso.linear().col(2);
-            Eigen::Vector3d y = z.cross(x).normalized();
-            z = x.cross(y);
+            const Eigen::Vector3d z = iso.linear().col(2).normalized();
+
+            // Project desired X into the plane orthogonal to Z
+            Eigen::Vector3d x_proj = desired_x - desired_x.dot(z) * z;
+
+            // If projection is too small (desired_x ‖ Z) choose a fallback axis
+            if (x_proj.squaredNorm() < 1e-10)
+            {
+                Eigen::Vector3d fallback = std::abs(z.dot(Eigen::Vector3d::UnitX())) < 0.8
+                                             ? Eigen::Vector3d::UnitX()
+                                             : Eigen::Vector3d::UnitY();
+                x_proj = fallback - fallback.dot(z) * z;
+            }
+
+            const Eigen::Vector3d x = x_proj.normalized();
+            const Eigen::Vector3d y = z.cross(x).normalized(); // completes right‑handed basis
 
             iso.linear().col(0) = x;
             iso.linear().col(1) = y;
-            iso.linear().col(2) = z;
+            iso.linear().col(2) = z; // unchanged
 
             return fromIso(iso, in.header.frame_id);
         }
@@ -227,10 +240,19 @@ namespace behav3d
         {
             Eigen::Isometry3d iso = toIso(in);
 
-            Eigen::Vector3d z = new_normal.normalized();
-            Eigen::Vector3d x = iso.linear().col(0);
+            const Eigen::Vector3d z = new_normal.normalized();
+            Eigen::Vector3d       x = iso.linear().col(0);
+
+            // If old X is almost parallel to new Z, pick a safe world axis
+            if (std::abs(x.dot(z)) > 0.95)
+            {
+                x = std::abs(z.dot(Eigen::Vector3d::UnitX())) < 0.8
+                      ? Eigen::Vector3d::UnitX()
+                      : Eigen::Vector3d::UnitY();
+            }
+
             Eigen::Vector3d y = z.cross(x).normalized();
-            x = y.cross(z);
+            x = y.cross(z); // ensure orthonormality
 
             iso.linear().col(0) = x;
             iso.linear().col(1) = y;
