@@ -26,12 +26,14 @@
 #include "behav3d_cpp/motion_controller.hpp"
 #include "behav3d_cpp/motion_visualizer.hpp"
 #include "behav3d_cpp/target_builder.hpp"
+#include "behav3d_cpp/trajectory_builder.hpp"
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
 
 using behav3d::target_builder::flipTarget;
 using behav3d::target_builder::worldXY;
+using behav3d::trajectory_builder::gridXY;
 
 using std::placeholders::_1;
 
@@ -51,7 +53,7 @@ public:
 
     RCLCPP_INFO(this->get_logger(),
                 "PilzDemo ready. Commands: 'home', 'draw_line', 'draw_square', "
-                "'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'quit'");
+                "'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'draw_line', 'grid_xy', 'quit'");
   }
 
 private:
@@ -74,6 +76,8 @@ private:
       draw_circle_seq();
     else if (cmd == "draw_line")
       draw_line();
+    else if (cmd == "grid_xy")
+      grid_xy();
     else if (cmd == "quit")
       rclcpp::shutdown();
     else
@@ -86,7 +90,7 @@ private:
   void home()
   {
     // Joint‑space “home” configuration (given in degrees)
-    const std::vector<double> home_joints_deg = {90.0, -120.0, 120.0, -90.0, 90.0, -180.0};
+    const std::vector<double> home_joints_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
 
     // Convert degrees to radians for MoveIt
     std::vector<double> home_joints_rad;
@@ -240,9 +244,51 @@ private:
     viz_->deleteAllMarkers();
   }
 
+  void grid_xy(double x_min = -0.2, double x_max = 0.2,
+               double y_min = 0.4,  double y_max = 0.8,
+               double z_fixed = 0.4, double spacing = 0.1);
+
   // ------------------------------------------------------------------------
   //  Members
   // ------------------------------------------------------------------------
+  void grid_xy(double x_min, double x_max,
+               double y_min, double y_max,
+               double z_fixed, double spacing)
+  {
+    // 1. Return to a known joint configuration
+    home();
+
+    // 2. Generate a flipped XY grid in the controller's root frame
+    auto targets = gridXY({x_min, x_max}, {y_min, y_max},
+                          z_fixed, spacing,
+                          ctrl_->getRootLink(), /*flipped=*/true);
+
+    if (targets.empty()) {
+      RCLCPP_WARN(this->get_logger(), "grid_xy: no targets generated!");
+      return;
+    }
+
+    // 3. Visualize all targets
+    for (size_t i = 0; i < targets.size(); ++i) {
+      viz_->publishTargetPose(targets[i], "t" + std::to_string(i));
+    }
+
+    // 4. Prompt the user before starting motion
+    viz_->prompt("Press 'next' in the RVizVisualToolsGui window to start grid scan");
+
+    // 5. Move to the first target with a PTP, then traverse the rest with LIN
+    ctrl_->executeTrajectory(ctrl_->planTarget(targets.front(), "PTP"));
+
+    for (size_t i = 1; i < targets.size(); ++i) {
+      viz_->prompt("Press 'next' to continue to target " + std::to_string(i));
+      auto traj = ctrl_->planTarget(targets[i], "LIN");
+      ctrl_->executeTrajectory(traj);
+    }
+
+    // 6. Clean up markers and return home
+    viz_->deleteAllMarkers();
+    home();
+  }
   std::shared_ptr<PilzMotionController> ctrl_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
 };
