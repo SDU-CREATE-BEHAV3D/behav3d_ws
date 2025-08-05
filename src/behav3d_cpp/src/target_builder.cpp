@@ -220,8 +220,8 @@ namespace behav3d
             if (x_proj.squaredNorm() < 1e-10)
             {
                 Eigen::Vector3d fallback = std::abs(z.dot(Eigen::Vector3d::UnitX())) < 0.8
-                                             ? Eigen::Vector3d::UnitX()
-                                             : Eigen::Vector3d::UnitY();
+                                               ? Eigen::Vector3d::UnitX()
+                                               : Eigen::Vector3d::UnitY();
                 x_proj = fallback - fallback.dot(z) * z;
             }
 
@@ -241,14 +241,14 @@ namespace behav3d
             Eigen::Isometry3d iso = toIso(in);
 
             const Eigen::Vector3d z = new_normal.normalized();
-            Eigen::Vector3d       x = iso.linear().col(0);
+            Eigen::Vector3d x = iso.linear().col(0);
 
             // If old X is almost parallel to new Z, pick a safe world axis
             if (std::abs(x.dot(z)) > 0.95)
             {
                 x = std::abs(z.dot(Eigen::Vector3d::UnitX())) < 0.8
-                      ? Eigen::Vector3d::UnitX()
-                      : Eigen::Vector3d::UnitY();
+                        ? Eigen::Vector3d::UnitX()
+                        : Eigen::Vector3d::UnitY();
             }
 
             Eigen::Vector3d y = z.cross(x).normalized();
