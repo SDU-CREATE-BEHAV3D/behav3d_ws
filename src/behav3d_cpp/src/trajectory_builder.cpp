@@ -176,10 +176,10 @@ namespace behav3d
                     const double y = -0.5 * height + j * dy;
                     Eigen::Vector3d off = x * xAxis(tgt) +
                                           y * yAxis(tgt) +
-                                          z_off * zAxis(tgt); // Offset along +Z of centre target
+                                          z_off * zAxis(tgt); // Offset along +Z of center target
 
                     auto p = translate(tgt, off);
-                    p = flipTarget(p); // Flip so +Z points toward –Z of centre
+                    p = flipTarget(p); // Flip so +Z points toward –Z of center
                     row.emplace_back(p);
                 }
                 if (!row_major && (j % 2 == 1))
