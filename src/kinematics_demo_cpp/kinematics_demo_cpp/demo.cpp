@@ -27,6 +27,7 @@
 #include "behav3d_cpp/motion_visualizer.hpp"
 #include "behav3d_cpp/target_builder.hpp"
 #include "behav3d_cpp/trajectory_builder.hpp"
+#include "behav3d_cpp/util.hpp"
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
@@ -35,6 +36,7 @@ using behav3d::target_builder::flipTarget;
 using behav3d::target_builder::worldXY;
 using behav3d::trajectory_builder::fibonacciSphericalCap;
 using behav3d::trajectory_builder::sweepZigzag;
+using behav3d::util::deg2rad;
 
 using std::placeholders::_1;
 
@@ -247,17 +249,20 @@ private:
     viz_->deleteAllMarkers();
   }
 
-  void fibonacci_cap(double radius, double z_fixed,
-                     double cap_rad, int n_points)
+  void fibonacci_cap(double radius = 0.5,
+                     double centre_x = 0.0, double centre_y = 1.0, double centre_z = 0.0,
+                     double cap_deg = 30.0, int n_points = 32)
   {
     // 1. Start from home
     home();
 
-    // 2. Build target pose at the centre of the cap
-    const auto centre = flipTarget(worldXY(0.0, 0.8, z_fixed,
-                                           ctrl_->getRootLink()));
+    // Convert half‑angle from degrees to radians for the builder
+    const double cap_rad = deg2rad(cap_deg);
 
     // 3. Generate way‑points on a spherical cap using Fibonacci sampling
+    const auto centre = flipTarget(worldXY(centre_x, centre_y, centre_z,
+                                           ctrl_->getRootLink()));
+
     auto targets = fibonacciSphericalCap(centre, radius, cap_rad, n_points);
 
     if (targets.empty())
@@ -289,7 +294,7 @@ private:
 
   void grid_sweep(double width = 0.4, double height = 0.4,
                   double centre_x = 0.0, double centre_y = 1.0,
-                  double z_fixed = 0.4,
+                  double centre_z = 0.4,
                   int nx = 3, int ny = 3,
                   bool row_major = false)
   {
@@ -298,7 +303,7 @@ private:
 
     // 2. Build centre pose and generate a zig‑zag raster pattern that
     //    matches the sweepZigzag parameter space.
-    const auto centre = flipTarget(worldXY(centre_x, centre_y, z_fixed,
+    const auto centre = flipTarget(worldXY(centre_x, centre_y, centre_z,
                                            ctrl_->getRootLink()));
 
     // Enforce a minimum of two waypoints per axis, per sweepZigzag’s contract.
