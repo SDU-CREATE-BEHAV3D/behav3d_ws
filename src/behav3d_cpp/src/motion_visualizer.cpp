@@ -46,9 +46,26 @@ void MotionVisualizer::publishTargetPose(const geometry_msgs::msg::PoseStamped& 
   vt_->trigger();
 }
 
+void MotionVisualizer::publishTargetPose(
+    const std::vector<geometry_msgs::msg::PoseStamped>& poses)
+{
+  PMV_DEBUG(this, "publishTargetPose batch: %zu poses", poses.size());
+
+  for (size_t i = 0; i < poses.size(); ++i)
+  {
+    // give each pose a unique label
+    const auto& ps = poses[i];
+    vt_->publishAxisLabeled(ps.pose, "t" + std::to_string(i));
+  }
+  vt_->trigger();
+}
 void MotionVisualizer::deleteAllMarkers()
 {
   vt_->deleteAllMarkers();
+  vt_->trigger();  
+}
+void MotionVisualizer::trigger()
+{
   vt_->trigger();  
 }
 

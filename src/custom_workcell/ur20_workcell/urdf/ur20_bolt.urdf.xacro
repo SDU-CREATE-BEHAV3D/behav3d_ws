@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="ur">
+
+   <!-- robot name parameter -->
+   <xacro:arg name="name" default="ur"/>
+   <!-- import main macro -->
+   <xacro:include filename="$(find ur20_workcell)/urdf/workcell_macro.xacro"/>
+
+   <!-- possible 'ur_type' values: ur3, ur3e, ur5, ur5e, ur7e, ur10, ur10e, ur12e, ur16e, ur15, ur20, ur30 -->
+   <!-- the default value should raise an error in case this was called without defining the type -->
+   <xacro:arg name="ur_type" default="ur20"/>
+
+   <!-- parameters -->
+   <xacro:arg name="joint_limits_parameters_file" default="$(find ur_description)/config/$(arg ur_type)/joint_limits.yaml"/>
+   <xacro:arg name="kinematics_parameters_file" default="$(find ur_description)/config/$(arg ur_type)/default_kinematics.yaml"/>
+   <xacro:arg name="physical_parameters_file" default="$(find ur_description)/config/$(arg ur_type)/physical_parameters.yaml"/>
+   <xacro:arg name="visual_parameters_file" default="$(find ur_description)/config/$(arg ur_type)/visual_parameters.yaml"/>
+   <!--When using gazebo simulations absolute paths are necessary.-->
+   <xacro:arg name="force_abs_paths" default="false" />
+
+   <!-- create link fixed to the "world" -->
+   <link name="world" />
+
+   <!-- name inside the macro file -->
+   <xacro:ur20_workcell
+     parent="world"
+     ur_type="$(arg ur_type)"
+     joint_limits_parameters_file="$(arg joint_limits_parameters_file)"
+     kinematics_parameters_file="$(arg kinematics_parameters_file)"
+     physical_parameters_file="$(arg physical_parameters_file)"
+     visual_parameters_file="$(arg visual_parameters_file)"
+     >
+     <origin xyz="0 0 0" rpy="0 0 0" />          <!-- position in the world -->
+   </xacro:ur20_workcell>
+</robot>
