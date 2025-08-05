@@ -251,7 +251,7 @@ private:
   }
 
   void fibonacci_cap(double radius = 0.5,
-                     double centre_x = 0.0, double centre_y = 1.0, double centre_z = 0.0,
+                     double center_x = 0.0, double center_y = 1.0, double center_z = 0.0,
                      double cap_deg = 30.0, int n_points = 32)
   {
     // 1. Start from home
@@ -261,10 +261,12 @@ private:
     const double cap_rad = deg2rad(cap_deg);
 
     // 3. Generate way‑points on a spherical cap using Fibonacci sampling
-    const auto centre = worldXY(centre_x, centre_y, centre_z,
+    const auto center = worldXY(center_x, center_y, center_z,
                                 ctrl_->getRootLink());
 
-    auto targets = fibonacciSphericalCap(centre, radius, cap_rad, n_points);
+    viz_->publishTargetPose(center);
+
+    auto targets = fibonacciSphericalCap(center, radius, cap_rad, n_points);
 
     if (targets.empty())
     {
@@ -293,25 +295,27 @@ private:
   }
 
   void grid_sweep(double width = 0.6, double height = 0.6,
-                  double centre_x = 0.0, double centre_y = 0.7,
-                  double centre_z = 0.4, double z_off = 0.5,
+                  double center_x = 0.0, double center_y = 0.7,
+                  double center_z = 0.4, double z_off = 0.5,
                   int nx = 6, int ny = 6,
                   bool row_major = false)
   {
     // 1. Return to a known joint configuration
     home();
 
-    // 2. Build centre pose and generate a zig‑zag raster pattern that
+    // 2. Build center pose and generate a zig‑zag raster pattern that
     //    matches the sweepZigzag parameter space.
-    const auto centre = worldXY(centre_x, centre_y, centre_z,
+    const auto center = worldXY(center_x, center_y, center_z,
                                 ctrl_->getRootLink());
+
+    viz_->publishTargetPose(center);
 
     // Enforce a minimum of two waypoints per axis, per sweepZigzag’s contract.
     nx = std::max(2, nx);
     ny = std::max(2, ny);
 
     // z_off is fixed to 0 here because sweepZigzag now flips the targets internally.
-    auto targets = sweepZigzag(centre, width, height, z_off,
+    auto targets = sweepZigzag(center, width, height, z_off,
                                nx, ny, row_major);
 
     if (targets.empty())
