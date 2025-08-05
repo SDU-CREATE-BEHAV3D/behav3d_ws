@@ -260,8 +260,8 @@ private:
     const double cap_rad = deg2rad(cap_deg);
 
     // 3. Generate way‑points on a spherical cap using Fibonacci sampling
-    const auto centre = flipTarget(worldXY(centre_x, centre_y, centre_z,
-                                           ctrl_->getRootLink()));
+    const auto centre = worldXY(centre_x, centre_y, centre_z,
+                                           ctrl_->getRootLink());
 
     auto targets = fibonacciSphericalCap(centre, radius, cap_rad, n_points);
 
