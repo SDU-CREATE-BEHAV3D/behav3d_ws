@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>behav3d_cpp</name>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <description>Minimal C++ wrapper around the MoveIt 2 Pilz planner.</description>
 
   <maintainer email="ozca@iti.sdu.dk">Özgüç Bertuğ Çapunaman</maintainer>
@@ -20,7 +20,8 @@
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_msgs</depend>
   <depend>eigen3_cmake_module</depend>
-
+  <depend>moveit_visual_tools</depend>
+  
   <export>
     <build_type>ament_cmake</build_type>
   </export>

@@ -20,7 +20,24 @@ repositories:
     url: https://github.com/orbbec/OrbbecSDK_ROS2.git
     version: v2.4.5
 
-  *TODO: Confirm workability with ur driver own repos file: IE:https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/blob/main/Universal_Robots_ROS2_Driver.jazzy.repos   
+  #MoveitVisualTools Repos:
+
+  moveit_visual_tools:
+    type: git
+    url: https://github.com/moveit/moveit_visual_tools
+    version: ros2
+
+  rviz_visual_tools:
+    type: git
+    url: https://github.com/PickNikRobotics/rviz_visual_tools
+    version: ros2
+
+  graph_msgs:
+    type: git
+    url: https://github.com/PickNikRobotics/graph_msgs
+    version: ros2
+
+  #UR REPOS: TODO: Confirm workability with ur driver own repos file: IE:https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/blob/main/Universal_Robots_ROS2_Driver.jazzy.repos   
   ur_robot_driver:
     type: git
     url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver.git

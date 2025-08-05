@@ -28,17 +28,9 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
-
 from moveit_configs_utils import MoveItConfigsBuilder
 
-
 def generate_launch_description():
-    """Launch UR driver + MoveIt stack for a UR10e *and* a MoveIt‑Py helper node.
-
-    - Keeps original behaviour (simulation by default, real robot via overrides).
-    - Re‑creates the same MoveItConfigsBuilder used inside *ur_moveit.launch.py*
-      so that the Python helper receives an *identical* parameter set.
-    """
 
     # -------------------------------------------------------------------------
     # 1) User‑overridable CLI arguments
@@ -63,7 +55,7 @@ def generate_launch_description():
     moveit_launch_dir = os.path.join(
         get_package_share_directory("i40_workcell_moveit_config"), "launch"
     )
-    
+
     # -------------------------------------------------------------------------
     # 3) UR driver (real robot or mock) Calling I40_workcell start_robot launch
     # -------------------------------------------------------------------------
@@ -73,11 +65,10 @@ def generate_launch_description():
             "ur_type": "ur10e",
             "robot_ip": LaunchConfiguration("robot_ip"),
             "use_mock_hardware": LaunchConfiguration("use_mock_hardware"),
-            "launch_rviz": "true",
+            "launch_rviz": "false",
             "initial_joint_controller": "scaled_joint_trajectory_controller",
         }.items(),
     )
-
     # -------------------------------------------------------------------------
     # 4) MoveIt stack (Initialize I40_workspace_moveit_config movegroup)
     # -------------------------------------------------------------------------
@@ -86,7 +77,6 @@ def generate_launch_description():
     moveit_stack = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(moveit_launch_dir, "move_group.launch.py")),
     )
-
     # -------------------------------------------------------------------------
     # 5) Re‑build the *same* MoveIt config so we can share it with a helper node
     # -------------------------------------------------------------------------
@@ -94,51 +84,38 @@ def generate_launch_description():
     moveit_config = (
         MoveItConfigsBuilder(robot_name="ur", package_name="i40_workcell_moveit_config")
         .robot_description_semantic(Path("config") / "ur.srdf")
-        .moveit_cpp(
-            file_path=os.path.join(
-                get_package_share_directory("kinematics_demo_py"),
-                "config/pilz_demo.yaml",
-            )
-        )
+        # .moveit_cpp(
+        #     file_path=os.path.join(
+        #         get_package_share_directory("pilz_demo"),
+        #         "config/pilz_demo.yaml",
+        #     )
+        # )
         .to_moveit_configs()
     )
-
-    # -------------------------------------------------------------------------
-    # 6) # Helper node that runs any MoveIt‑Py script (default: tutorial)
-    # -------------------------------------------------------------------------
-
-    moveit_py_node = Node(
-        package="kinematics_demo_py",  #  👉 replace with your own package if needed
-        executable="run_demo",
-        name="pilz_demo_moveit_py",
-        output="both",
-        parameters=[moveit_config.to_dict()],
+    # RViz
+    rviz_config_file = (
+        get_package_share_directory("viz_demo") + "/launch/move_group.rviz"
+    )
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        output="log",
+        arguments=["-d", rviz_config_file],
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+        ],
     )
 
-    # -------------------------------------------------------------------------
-    # 6) Assemble LaunchDescription
-    # -------------------------------------------------------------------------
     return LaunchDescription(
         [
             robot_ip_arg,
             mock_arg,
             ur_driver,
             moveit_stack,
-            moveit_py_node,
-
+            rviz_node,
         ]
     )
-
-    # # -------------------------------------------------------------------------
-    # # Old) RViz (optional visualisation)
-    # # -------------------------------------------------------------------------
-    # rviz_cfg = os.path.join(
-    #     get_package_share_directory("ur_description"), "rviz", "view_robot.rviz"
-    # )
-    # rviz = Node(
-    #     package="rviz2",
-    #     executable="rviz2",
-    #     arguments=["-d", rviz_cfg],
-    #     output="screen",
-    #     parameters=[{"use_sim_time": False}],
-    # )

@@ -4,8 +4,7 @@
 //  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/ 
-                                              
-                                              
+//
 // Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
 // Maintainers:
 //   - Lucas José Helle <luh@iti.sdu.dk>
@@ -20,12 +19,14 @@
 #include <cmath>
 #include <algorithm>
 
-
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
-
+#include "behav3d_cpp/motion_visualizer.hpp"
 #include "behav3d_cpp/motion_controller.hpp"
+
+using behav3d::motion_controller::PilzMotionController;
+using behav3d::motion_visualizer::MotionVisualizer;
 
 using std::placeholders::_1;
 
@@ -63,9 +64,9 @@ PoseStamped_WorldXY(double x,
 class PilzDemo : public rclcpp::Node
 {
 public:
-  explicit PilzDemo(const std::shared_ptr<PilzMotionController> & ctrl)
-  : Node("pilz_demo_cpp"),
-    ctrl_(ctrl)
+  explicit   PilzDemo(const std::shared_ptr<PilzMotionController>& ctrl,
+           const std::shared_ptr<MotionVisualizer>& viz)
+    : Node("pilz_demo_cpp"), ctrl_(ctrl), viz_(viz)
   {
     sub_ = this->create_subscription<std_msgs::msg::String>(
         "user_input", 10,
@@ -77,6 +78,7 @@ public:
   }
 
 private:
+  std::shared_ptr<MotionVisualizer>       viz_;   
   // ------------------------------------------------------------------------
   //  Command dispatcher
   // ------------------------------------------------------------------------
@@ -238,14 +240,23 @@ private:
     home();
 
     auto start = PoseStamped_WorldXY(-0.2, 0.4, 0.4,
-                                     ctrl_->getRootLink(), true);
-    auto end   = PoseStamped_WorldXY( 0.2, 0.8, 0.8,
-                                     ctrl_->getRootLink(), true);
+                                     ctrl_->getRootLink(), true); 
+
+    viz_->publishTargetPose(start, "start");        
+
+    auto end = PoseStamped_WorldXY(0.2, 0.8, 0.8,
+                                   ctrl_->getRootLink(), true);
+
+    viz_->publishTargetPose(end, "end");
+
+    viz_->prompt("Press 'next' in the RvizVisualToolsGui window to continue");
 
     ctrl_->executeTrajectory(ctrl_->planTarget(start, "PTP"));
+    
     ctrl_->executeTrajectory(ctrl_->planTarget(end,   "LIN"));
 
     home();
+    viz_->deleteAllMarkers();
   }
 
   // ------------------------------------------------------------------------
@@ -270,10 +281,16 @@ int main(int argc, char ** argv)
       "femto__depth_optical_frame",   // End-effector link frame
       true                            // Debug mode off
   );
-  auto demo       = std::make_shared<PilzDemo>(controller);
+  auto visualizer = std::make_shared<MotionVisualizer>(
+      "ur_arm",
+      "ur10e_base_link",
+      "femto__depth_optical_frame"
+  );
+  auto demo = std::make_shared<PilzDemo>(controller, visualizer);
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(controller);
+  exec.add_node(visualizer);  
   exec.add_node(demo);
   exec.spin();
 
