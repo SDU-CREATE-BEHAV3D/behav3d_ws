@@ -34,6 +34,7 @@ using behav3d::motion_visualizer::MotionVisualizer;
 using behav3d::target_builder::flipTarget;
 using behav3d::target_builder::worldXY;
 using behav3d::trajectory_builder::gridXY;
+using behav3d::trajectory_builder::sweepZigzag;
 
 using std::placeholders::_1;
 
@@ -247,21 +248,32 @@ private:
   // ------------------------------------------------------------------------
   //  Members
   // ------------------------------------------------------------------------
-  void grid_xy(double x_min, double x_max,
-               double y_min, double y_max,
-               double z_fixed, double spacing)
+  void grid_xy(double width  = 0.4, double height = 0.4,
+               double centre_x = 0.0, double centre_y = 0.7,
+               double z_fixed = 0.4,
+               int nx = 5, int ny = 5,
+               bool row_major = false)
   {
     // 1. Return to a known joint configuration
     home();
 
-    // 2. Generate a flipped XY grid in the controller's root frame
-    auto targets = gridXY({x_min, x_max}, {y_min, y_max},
-                          z_fixed, spacing,
-                          ctrl_->getRootLink(), /*flipped=*/true);
+    // 2. Build centre pose and generate a zig‑zag raster pattern that
+    //    matches the sweepZigzag parameter space.
+    const auto centre = flipTarget(worldXY(centre_x, centre_y, z_fixed,
+                                           ctrl_->getRootLink()));
+
+    // Enforce a minimum of two waypoints per axis, per sweepZigzag’s contract.
+    nx = std::max(2, nx);
+    ny = std::max(2, ny);
+
+    // z_off is fixed to 0 here because we keep the optical frame’s +Z aligned
+    // with world +Z.  Feel free to expose it later if needed.
+    auto targets = sweepZigzag(centre, width, height, /*z_off=*/0.0,
+                               nx, ny, row_major);
 
     if (targets.empty())
     {
-      RCLCPP_WARN(this->get_logger(), "grid_xy: no targets generated!");
+      RCLCPP_WARN(this->get_logger(), "grid_xy/sweepZigzag: no targets generated!");
       return;
     }
 
