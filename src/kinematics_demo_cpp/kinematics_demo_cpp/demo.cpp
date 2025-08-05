@@ -247,14 +247,6 @@ private:
     viz_->deleteAllMarkers();
   }
 
-  void fibonacci_cap(double radius = 0.4,
-                     double z_fixed = 0.4,
-                     double cap_rad = M_PI / 6.0, // 30 deg half‑angle
-                     int n_points = 60);
-  // ------------------------------------------------------------------------
-  //  Members
-  // ------------------------------------------------------------------------
-
   void fibonacci_cap(double radius, double z_fixed,
                      double cap_rad, int n_points)
   {
