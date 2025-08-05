@@ -29,16 +29,6 @@ namespace behav3d
         using geometry_msgs::msg::PoseStamped;
 
         // ---------------------------------------------------------------------------
-        // Regular XY grid (world frame)
-        // ---------------------------------------------------------------------------
-        std::vector<PoseStamped> gridXY(const std::pair<double, double> &x_range,
-                                        const std::pair<double, double> &y_range,
-                                        double z,
-                                        double spacing,
-                                        const std::string &frame = "world",
-                                        bool flipped = false);
-
-        // ---------------------------------------------------------------------------
         // Fibonacci distribution on spherical cap (camera +Z looks at tgt)
         //   @param tgt  Target pose (center + orientation)
         //   @param r    Radius of sphere shell

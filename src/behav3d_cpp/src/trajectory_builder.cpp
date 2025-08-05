@@ -47,28 +47,6 @@ namespace behav3d
         using geometry_msgs::msg::PoseStamped;
 
         // -----------------------------------------------------------------------------
-        // Grid in XY plane
-        // -----------------------------------------------------------------------------
-        std::vector<PoseStamped> gridXY(const std::pair<double, double> &x_range,
-                                        const std::pair<double, double> &y_range,
-                                        double z,
-                                        double spacing,
-                                        const std::string &frame,
-                                        bool flipped)
-        {
-            std::vector<PoseStamped> out;
-            for (double x = x_range.first; x <= x_range.second + 1e-9; x += spacing)
-                for (double y = y_range.first; y <= y_range.second + 1e-9; y += spacing)
-                {
-                    PoseStamped p = worldXY(x, y, z, frame);
-                    if (flipped)
-                        p = flipTarget(p);
-                    out.emplace_back(p);
-                }
-            return out;
-        }
-
-        // -----------------------------------------------------------------------------
         // Fibonacci sphere
         // -----------------------------------------------------------------------------
         namespace
