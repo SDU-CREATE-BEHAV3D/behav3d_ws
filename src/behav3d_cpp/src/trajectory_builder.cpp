@@ -100,7 +100,7 @@ namespace behav3d
         {
             // ---------------------------------------------------------------------
             // Generate camera poses on a spherical cap around the target such that
-            //   • the camera position lies on a sphere of radius r centred at tgt,
+            //   • the camera position lies on a sphere of radius r centerd at tgt,
             //   • the camera +Z axis looks directly at tgt,
             //   • the camera is rolled minimally so that its +X axis matches the
             //     +X axis of the target frame (up to the ambiguity when the two
@@ -108,7 +108,7 @@ namespace behav3d
             //
             // This follows the same logic as the original Grasshopper/Python script
             // but fully in *world* coordinates to avoid the frame‑mixing bug that
-            // caused +Z not to point to the centre when the target frame was
+            // caused +Z not to point to the center when the target frame was
             // rotated relative to the world frame.
             // ---------------------------------------------------------------------
 
@@ -119,7 +119,7 @@ namespace behav3d
 
             // Target → world transform (constant for all samples)
             const Eigen::Isometry3d iso_tgt = toIso(tgt);
-            const Eigen::Vector3d centre_world = iso_tgt.translation();
+            const Eigen::Vector3d center_world = iso_tgt.translation();
             const Eigen::Matrix3d R_tgt_world = iso_tgt.rotation();
 
             const double cos_cap = std::cos(cap);
@@ -144,7 +144,7 @@ namespace behav3d
                 // 2. Camera position in *world* coordinates.
                 // -----------------------------------------------------------------
                 const Eigen::Vector3d d_world = R_tgt_world * d_local;
-                const Eigen::Vector3d cam_pos_world = centre_world + r * d_world;
+                const Eigen::Vector3d cam_pos_world = center_world + r * d_world;
 
                 // -----------------------------------------------------------------
                 // 3. Begin pose with identity orientation in world frame.
@@ -155,9 +155,9 @@ namespace behav3d
                                         tgt.header.frame_id);
 
                 // -----------------------------------------------------------------
-                // 4. Adjust +Z so it looks at the target centre.
+                // 4. Adjust +Z so it looks at the target center.
                 // -----------------------------------------------------------------
-                const Eigen::Vector3d z_world = (centre_world - cam_pos_world).normalized();
+                const Eigen::Vector3d z_world = (center_world - cam_pos_world).normalized();
                 p = adjustTarget(p, z_world);
 
                 // -----------------------------------------------------------------
