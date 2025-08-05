@@ -33,8 +33,8 @@ using behav3d::motion_visualizer::MotionVisualizer;
 
 using behav3d::target_builder::flipTarget;
 using behav3d::target_builder::worldXY;
-using behav3d::trajectory_builder::gridXY;
 using behav3d::trajectory_builder::sweepZigzag;
+using behav3d::trajectory_builder::fibonacciSphericalCap;
 
 using std::placeholders::_1;
 
@@ -54,7 +54,7 @@ public:
 
     RCLCPP_INFO(this->get_logger(),
                 "PilzDemo ready. Commands: 'home', 'draw_line', 'draw_square', "
-                "'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'draw_line', 'grid_xy', 'quit'");
+                "'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'draw_line', 'grid_sweep', 'fibonacci_cap', 'quit'");
   }
 
 private:
@@ -77,8 +77,10 @@ private:
       draw_circle_seq();
     else if (cmd == "draw_line")
       draw_line();
-    else if (cmd == "grid_xy")
-      grid_xy();
+    else if (cmd == "grid_sweep")
+      grid_sweep();
+    else if (cmd == "fibonacci_cap")
+      fibonacci_cap();
     else if (cmd == "quit")
       rclcpp::shutdown();
     else
@@ -245,13 +247,17 @@ private:
     viz_->deleteAllMarkers();
   }
 
+    void fibonacci_cap(double radius   = 0.4,
+                       double z_fixed  = 0.4,
+                       double cap_rad  = M_PI / 6.0,   // 30 deg half‑angle
+                       int    n_points = 60);
   // ------------------------------------------------------------------------
   //  Members
   // ------------------------------------------------------------------------
-  void grid_xy(double width  = 0.4, double height = 0.4,
-               double centre_x = 0.0, double centre_y = 0.7,
+  void grid_sweep(double width  = 0.4, double height = 0.4,
+               double centre_x = 0.0, double centre_y = 1.0,
                double z_fixed = 0.4,
-               int nx = 5, int ny = 5,
+               int nx = 3, int ny = 3,
                bool row_major = false)
   {
     // 1. Return to a known joint configuration
@@ -273,7 +279,7 @@ private:
 
     if (targets.empty())
     {
-      RCLCPP_WARN(this->get_logger(), "grid_xy/sweepZigzag: no targets generated!");
+      RCLCPP_WARN(this->get_logger(), "grid_sweep/sweepZigzag: no targets generated!");
       return;
     }
 
@@ -333,4 +339,44 @@ int main(int argc, char **argv)
 
   rclcpp::shutdown();
   return 0;
-}
+  }
+  // ------------------------------------------------------------------------
+  //  Fibonacci spherical‑cap raster
+  // ------------------------------------------------------------------------
+  void fibonacci_cap(double radius, double z_fixed,
+                     double cap_rad, int n_points)
+  {
+    // 1. Start from home
+    home();
+
+    // 2. Build target pose at the centre of the cap
+    const auto centre = flipTarget(worldXY(0.0, 0.8, z_fixed,
+                                           ctrl_->getRootLink()));
+
+    // 3. Generate way‑points on a spherical cap using Fibonacci sampling
+    auto targets = fibonacciSphericalCap(centre, radius, cap_rad, n_points);
+
+    if (targets.empty()) {
+      RCLCPP_WARN(this->get_logger(), "fibonacci_cap: no targets generated!");
+      return;
+    }
+
+    // 4. Visualise every target
+    for (size_t i = 0; i < targets.size(); ++i)
+      viz_->publishTargetPose(targets[i], "fc" + std::to_string(i));
+
+    // 5. Prompt the user before motion
+    viz_->prompt("Press 'next' in the RVizVisualToolsGui window to start the cap scan");
+
+    // 6. PTP to first point, then LIN through the rest
+    ctrl_->executeTrajectory(ctrl_->planTarget(targets.front(), "PTP"));
+    for (size_t i = 1; i < targets.size(); ++i) {
+      viz_->prompt("Press 'next' to continue to target " + std::to_string(i));
+      auto traj = ctrl_->planTarget(targets[i], "LIN");
+      ctrl_->executeTrajectory(traj);
+    }
+
+    // 7. Clean up
+    viz_->deleteAllMarkers();
+    home();
+  }
