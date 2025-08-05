@@ -98,59 +98,78 @@ namespace behav3d
                                                        double cap,
                                                        int n)
         {
-            // cos(cap) is the Z‑threshold for the cap
-            const double cos_cap = std::cos(cap);
+            // ---------------------------------------------------------------------
+            // Generate camera poses on a spherical cap around the target such that
+            //   • the camera position lies on a sphere of radius r centred at tgt,
+            //   • the camera +Z axis looks directly at tgt,
+            //   • the camera is rolled minimally so that its +X axis matches the
+            //     +X axis of the target frame (up to the ambiguity when the two
+            //     axes are parallel to +Z).
+            //
+            // This follows the same logic as the original Grasshopper/Python script
+            // but fully in *world* coordinates to avoid the frame‑mixing bug that
+            // caused +Z not to point to the centre when the target frame was
+            // rotated relative to the world frame.
+            // ---------------------------------------------------------------------
 
-            // ---------------------------------------------------------------------
-            // 1. Generate exactly n unit directions on the spherical cap
-            //    using a Fibonacci spiral restricted to z ∈ [cos_cap, 1].
-            // ---------------------------------------------------------------------
-            constexpr double golden = (1.0 + std::sqrt(5.0)) * 0.5; // φ
-            std::vector<Eigen::Vector3d> dirs;
-            dirs.reserve(n);
-
-            for (int i = 0; i < n; ++i)
-            {
-                // Uniform area sampling on the cap:
-                //   Choose z uniformly in [cos_cap, 1] and longitude by golden‑angle.
-                double z = cos_cap + (1.0 - cos_cap) * ((i + 0.5) / static_cast<double>(n));
-                double lon = 2.0 * M_PI * (i + 0.5) / golden;
-                double r_xy = std::sqrt(std::max(0.0, 1.0 - z * z));
-                double x = r_xy * std::cos(lon);
-                double y = r_xy * std::sin(lon);
-                dirs.emplace_back(x, y, z);
-            }
-
-            // ---------------------------------------------------------------------
-            // 2. Convert directions into camera poses.
-            // ---------------------------------------------------------------------
             std::vector<PoseStamped> out;
+            if (n <= 0)
+                return out;
             out.reserve(n);
+
+            // Target → world transform (constant for all samples)
+            const Eigen::Isometry3d iso_tgt = toIso(tgt);
+            const Eigen::Vector3d centre_world = iso_tgt.translation();
+            const Eigen::Matrix3d R_tgt_world = iso_tgt.rotation();
+
+            const double cos_cap = std::cos(cap);
+            constexpr double golden = (1.0 + std::sqrt(5.0)) * 0.5; // φ
 
             for (int i = n - 1; i >= 0; --i)
             {
-                const Eigen::Vector3d &d = dirs[i];
+                // -----------------------------------------------------------------
+                // 1. Direction (in *local target* coordinates) on the spherical cap
+                //    using a Fibonacci spiral.
+                // -----------------------------------------------------------------
+                const double z_local = cos_cap + (1.0 - cos_cap) *
+                                                     ((i + 0.5) / static_cast<double>(n));
+                const double lon = 2.0 * M_PI * (i + 0.5) / golden;
+                const double r_xy = std::sqrt(std::max(0.0, 1.0 - z_local * z_local));
 
-                //------------------------------------------------------------------
-                // 1) Build pose in the target's *local* XY frame
-                //------------------------------------------------------------------
-                Eigen::Vector3d pos_local = r * d; // on unit shell
-                PoseStamped p_local = worldXY(pos_local.x(),
-                                              pos_local.y(),
-                                              pos_local.z(),
-                                              tgt.header.frame_id);
+                const Eigen::Vector3d d_local(r_xy * std::cos(lon),
+                                              r_xy * std::sin(lon),
+                                              z_local); // outward
 
-                // Orient camera so +Z looks at the center and roll so +X ≈ world X
-                p_local = adjustTarget(p_local, -d); // new Z
-                p_local = alignTarget(p_local, Eigen::Vector3d::UnitX());
+                // -----------------------------------------------------------------
+                // 2. Camera position in *world* coordinates.
+                // -----------------------------------------------------------------
+                const Eigen::Vector3d d_world = R_tgt_world * d_local;
+                const Eigen::Vector3d cam_pos_world = centre_world + r * d_world;
 
-                //------------------------------------------------------------------
-                // 2) Change basis: transform local pose into the target frame
-                //------------------------------------------------------------------
-                PoseStamped p = changeBasis(tgt, p_local);
+                // -----------------------------------------------------------------
+                // 3. Begin pose with identity orientation in world frame.
+                // -----------------------------------------------------------------
+                PoseStamped p = worldXY(cam_pos_world.x(),
+                                        cam_pos_world.y(),
+                                        cam_pos_world.z(),
+                                        tgt.header.frame_id);
+
+                // -----------------------------------------------------------------
+                // 4. Adjust +Z so it looks at the target centre.
+                // -----------------------------------------------------------------
+                const Eigen::Vector3d z_world = (centre_world - cam_pos_world).normalized();
+                p = adjustTarget(p, z_world);
+
+                // -----------------------------------------------------------------
+                // 5. Roll about +Z so +X aligns (minimally) with the target’s +X.
+                // -----------------------------------------------------------------
+                const Eigen::Vector3d x_tgt_world = R_tgt_world.col(0); // target +X in world
+                const Eigen::Vector3d x_proj = x_tgt_world - x_tgt_world.dot(z_world) * z_world;
+                p = alignTarget(p, x_proj);
 
                 out.emplace_back(p);
             }
+
             return out;
         }
 
