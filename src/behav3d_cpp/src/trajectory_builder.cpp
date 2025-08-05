@@ -175,9 +175,12 @@ namespace behav3d
                     const double x = -0.5 * width + i * dx;
                     const double y = -0.5 * height + j * dy;
                     Eigen::Vector3d off = x * xAxis(tgt) +
-                                          y * yAxis(tgt) -
-                                          z_off * zAxis(tgt);
-                    row.emplace_back(translate(tgt, off));
+                                          y * yAxis(tgt) +
+                                          z_off * zAxis(tgt);  // Offset along +Z of centre target
+
+                    auto p = translate(tgt, off);
+                    p = flipTarget(p);                       // Flip so +Z points toward –Z of centre
+                    row.emplace_back(p);
                 }
                 if (!row_major && (j % 2 == 1))
                     std::reverse(row.begin(), row.end());
