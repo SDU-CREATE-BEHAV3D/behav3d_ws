@@ -36,13 +36,15 @@ public:
   // Helpers ------------------------------------------------------------------
   void publishTargetPose(const geometry_msgs::msg::PoseStamped& pose,
                          const std::string& label = "target");
+  void publishTargetPose(const std::vector<geometry_msgs::msg::PoseStamped>& poses);
+  
   void deleteAllMarkers();
   void publishGhost(const moveit_msgs::msg::RobotTrajectory& traj);
   void publishTrail(const moveit_msgs::msg::RobotTrajectory& traj,
                     const std::string& label = "trail");
   //Pause until press next in Rviz:
   void prompt(const std::string& text);
-
+  void trigger();
 private:
   // Fixed configuration ------------------------------------------------------
   std::string root_link_;

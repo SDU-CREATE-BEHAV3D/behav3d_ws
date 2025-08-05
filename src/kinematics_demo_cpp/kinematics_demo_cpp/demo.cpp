@@ -20,6 +20,7 @@
 #include <algorithm>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/rate.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 
@@ -272,8 +273,7 @@ private:
     }
 
     // 4. Visualise every target
-    for (size_t i = 0; i < targets.size(); ++i)
-      viz_->publishTargetPose(targets[i], "fc" + std::to_string(i));
+    viz_->publishTargetPose(targets);
 
     // 5. Prompt the user before motion
     viz_->prompt("Press 'next' in the RVizVisualToolsGui window to start the cap scan");
@@ -322,10 +322,7 @@ private:
     }
 
     // 3. Visualize all targets
-    for (size_t i = 0; i < targets.size(); ++i)
-    {
-      viz_->publishTargetPose(targets[i], "t" + std::to_string(i));
-    }
+    viz_->publishTargetPose(targets);
 
     // 4. Prompt the user before starting motion
     viz_->prompt("Press 'next' in the RVizVisualToolsGui window to start grid scan");
