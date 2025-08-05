@@ -249,6 +249,8 @@ private:
 
     viz_->publishTargetPose(end, "end");
 
+    viz_->prompt("Press 'next' in the RvizVisualToolsGui window to continue");
+
     ctrl_->executeTrajectory(ctrl_->planTarget(start, "PTP"));
     
     ctrl_->executeTrajectory(ctrl_->planTarget(end,   "LIN"));

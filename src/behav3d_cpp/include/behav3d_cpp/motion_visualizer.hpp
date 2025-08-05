@@ -31,6 +31,7 @@ public:
                    const std::string& root_link,
                    const std::string& eef_link,
                    bool debug = false);
+                   
 
   // Helpers ------------------------------------------------------------------
   void publishTargetPose(const geometry_msgs::msg::PoseStamped& pose,
@@ -39,6 +40,8 @@ public:
   void publishGhost(const moveit_msgs::msg::RobotTrajectory& traj);
   void publishTrail(const moveit_msgs::msg::RobotTrajectory& traj,
                     const std::string& label = "trail");
+  //Pause until press next in Rviz:
+  void prompt(const std::string& text);
 
 private:
   // Fixed configuration ------------------------------------------------------
@@ -48,6 +51,7 @@ private:
   // MoveIt handles -----------------------------------------------------------
   moveit::planning_interface::MoveGroupInterface move_group_;
   moveit_visual_tools::MoveItVisualToolsPtr      vt_;
+  
 };
 
 } // namespace behav3d::motion_visualizer

@@ -52,4 +52,16 @@ void MotionVisualizer::deleteAllMarkers()
   vt_->trigger();  
 }
 
+void MotionVisualizer::prompt(const std::string& text)
+{
+  // Loguea antes de bloquear
+  PMV_INFO(this, "Prompt RViz: '%s'", text.c_str());
+
+  // Llamada original a MoveItVisualTools
+  vt_->prompt(text);
+
+  // Opcional: loguear tras desbloquear
+  PMV_INFO(this, "Continuando tras prompt");
+}
+
 } // namespace behav3d::motion_visualizer
