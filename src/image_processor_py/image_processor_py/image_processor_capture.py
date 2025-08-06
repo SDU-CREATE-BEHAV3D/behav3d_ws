@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import os
+import sys
 import time
 import json
 
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import String
+from std_srvs.srv import Trigger
 from cv_bridge import CvBridge
 import cv2
 import tf2_ros
@@ -21,7 +22,6 @@ class ImageProcessorCapture(Node):
         self.declare_parameter('output_dir', default_dir)
         self.declare_parameter('base_frame', 'ur10e_wrist_3_link')
         self.declare_parameter('ee_frame', 'femto__depth_optical_frame')
-        self.declare_parameter('trigger_topic', '/capture')
 
         # Root output directory
         self.output_dir = self.get_parameter('output_dir').get_parameter_value().string_value
@@ -45,9 +45,10 @@ class ImageProcessorCapture(Node):
         self.create_subscription(Image, '/camera/color/image_raw', self.color_cb, 10)
         self.create_subscription(Image, '/camera/depth/image_raw', self.depth_cb, 10)
 
-        # Subscriber to external trigger (String message)
-        trigger_topic = self.get_parameter('trigger_topic').get_parameter_value().string_value
-        self.create_subscription(String, trigger_topic, self.trigger_cb, 10)
+        # Service to trigger capture
+        self.srv = self.create_service(
+            Trigger, 'capture', self.handle_capture_service
+        )
 
         # TF listener for robot pose
         self.tf_buffer = tf2_ros.Buffer()
@@ -61,8 +62,8 @@ class ImageProcessorCapture(Node):
 
         self.get_logger().info(f'Captures will be saved to: {self.output_dir}')
         self.get_logger().info(
-            "Press 'c' to capture RGB-D and pose, 't' for timestamp sync test, "
-            "publish a String 'capture' to trigger topic, click window or 'q' to quit."
+            "Press 'c' to capture via GUI, 't' for timestamp sync test, 'q' to quit,"
+            " or call the /capture service."
         )
 
     def color_cb(self, msg: Image):
@@ -77,18 +78,28 @@ class ImageProcessorCapture(Node):
         self.latest_depth = frame
         self.latest_depth_ns = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
 
-    def trigger_cb(self, msg: String):
-        if msg.data.strip().lower() == 'capture':
-            self.get_logger().info("'capture' message received; capturing frame.")
-            self.capture_frame()
-        else:
-            self.get_logger().info(f"Ignoring trigger message: '{msg.data}'")
+    def handle_capture_service(self, request, response):
+        """
+        ROS2 Trigger service callback. Captures a frame when service is called.
+        Responds with success status and message including file paths.
+        """
+        if self.latest_color is None or self.latest_depth is None:
+            response.success = False
+            response.message = 'No RGB-D frames available to capture.'
+            return response
+
+        self.get_logger().info('Service call received; capturing frame.')
+        success, msg = self.capture_frame()
+        response.success = success
+        response.message = msg
+        return response
 
     def capture_frame(self):
         # Ensure frames exist
         if self.latest_color is None or self.latest_depth is None:
-            self.get_logger().warning('No RGB-D frames available to capture!')
-            return
+            warning = 'No RGB-D frames available to capture!'
+            self.get_logger().warning(warning)
+            return False, warning
 
         # Timestamp and filenames
         ts = time.strftime('%Y%m%d-%H%M%S')
@@ -107,17 +118,20 @@ class ImageProcessorCapture(Node):
         # Lookup transform
         base = self.get_parameter('base_frame').get_parameter_value().string_value
         ee   = self.get_parameter('ee_frame').get_parameter_value().string_value
+        from rclpy.duration import Duration
         try:
             if not self.tf_buffer.can_transform(
                 base, ee, rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=1.0)
+                timeout=Duration(seconds=1.0)
             ):
-                self.get_logger().error(f'Transform {base}→{ee} not available')
-                return
+                err = f'Transform {base}→{ee} not available'
+                self.get_logger().error(err)
+                return False, err
             trans = self.tf_buffer.lookup_transform(base, ee, rclpy.time.Time())
         except Exception as e:
-            self.get_logger().error(f'TF lookup failed for {ee}: {e}')
-            return
+            err = f'TF lookup failed for {ee}: {e}'
+            self.get_logger().error(err)
+            return False, err
 
         # Build pose record
         pose = {
@@ -155,14 +169,12 @@ class ImageProcessorCapture(Node):
             json.dump(all_poses, mf, indent=2)
         os.replace(tmp, master_path)
 
-        # Log success
-        self.get_logger().info(
-            f"Saved:\n"
-            f"  RGB  → {rgb_path}\n"
-            f"  Depth→ {depth_path}\n"
-            f"  Pose → {pose_path}\n"
-            f"  Appended to {master_path}"
+        # Success message
+        success_msg = (
+            f"Captured frame: RGB={rgb_path}, Depth={depth_path}, Pose={pose_path}"
         )
+        self.get_logger().info(success_msg)
+        return True, success_msg
 
     def timestamp_sync_test(self):
         if self.latest_color_ns is None or self.latest_depth_ns is None:
