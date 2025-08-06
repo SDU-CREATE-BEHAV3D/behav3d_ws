@@ -32,10 +32,7 @@ namespace behav3d
         using behav3d::util::fromRPY;
         using geometry_msgs::msg::PoseStamped;
 
-
-        // -----------------------------------------------------------------------------
-        // public API
-        // -----------------------------------------------------------------------------
+        // Build a timestamped PoseStamped with explicit position & quaternion
         PoseStamped poseStamped(double x, double y, double z,
                                 double qx, double qy, double qz, double qw,
                                 const std::string &frame)
@@ -53,9 +50,7 @@ namespace behav3d
             return ps;
         }
 
-        // -----------------------------------------------------------------------------
-        // canonical world‑frame poses
-        // -----------------------------------------------------------------------------
+        // World-aligned pose with identity orientation at (x, y, z)
         PoseStamped worldXY(double x, double y, double z,
                             const std::string &frame)
         {
@@ -63,6 +58,7 @@ namespace behav3d
             return poseStamped(x, y, z, q.x(), q.y(), q.z(), q.w(), frame);
         }
 
+        // Pose rotated so +X maps to world +X and optical +Z maps to world +Y
         PoseStamped worldXZ(double x, double z, double y,
                             const std::string &frame)
         {
@@ -70,6 +66,7 @@ namespace behav3d
             return poseStamped(x, y, z, q.x(), q.y(), q.z(), q.w(), frame);
         }
 
+        // Pose rotated so +X maps to world +Y and optical +Z maps to world +Z
         PoseStamped worldYZ(double y, double z, double x,
                             const std::string &frame)
         {
@@ -77,9 +74,7 @@ namespace behav3d
             return poseStamped(x, y, z, q.x(), q.y(), q.z(), q.w(), frame);
         }
 
-        // -----------------------------------------------------------------------------
-        // roll 180° around camera X axis (optical frame flip)
-        // -----------------------------------------------------------------------------
+        // Convert PoseStamped → Eigen::Isometry3d  (pose → matrix)
         Eigen::Isometry3d toIso(const PoseStamped &p)
         {
             Eigen::Isometry3d iso = Eigen::Isometry3d::Identity();
@@ -94,6 +89,7 @@ namespace behav3d
             return iso;
         }
 
+        // Convert Eigen::Isometry3d → PoseStamped  (matrix → pose)
         PoseStamped fromIso(const Eigen::Isometry3d &iso,
                             const std::string &frame)
         {
@@ -112,6 +108,7 @@ namespace behav3d
             return ps;
         }
 
+        // Flip pose 180° about local X to match optical frame
         PoseStamped flipTarget(const PoseStamped &in)
         {
             Eigen::Isometry3d iso = toIso(in);
@@ -119,6 +116,7 @@ namespace behav3d
             return fromIso(iso, in.header.frame_id);
         }
 
+        // Translate pose by vector d in its own frame
         PoseStamped translate(const PoseStamped &in,
                               const Eigen::Vector3d &d)
         {
@@ -127,6 +125,7 @@ namespace behav3d
             return fromIso(iso, in.header.frame_id);
         }
 
+        // Rotate pose by RPY (degrees if `degrees==true`)
         PoseStamped rotateEuler(const PoseStamped &in,
                                 const Eigen::Vector3d &rpy,
                                 bool degrees)
@@ -136,6 +135,7 @@ namespace behav3d
             return fromIso(iso, in.header.frame_id);
         }
 
+        // Apply relative translation & rotation to pose
         PoseStamped transformRel(const PoseStamped &in,
                                  const Eigen::Vector3d &t,
                                  const Eigen::Quaterniond &q)
@@ -146,9 +146,7 @@ namespace behav3d
             return fromIso(iso, in.header.frame_id);
         }
 
-        // -----------------------------------------------------------------------------
-        // change‑basis: embed a pose defined in a local frame into another pose's frame
-        // -----------------------------------------------------------------------------
+        // change-basis: embed a pose defined in a local frame into another pose's frame
         PoseStamped changeBasis(const PoseStamped &basis,
                                 const PoseStamped &local)
         {
@@ -158,9 +156,7 @@ namespace behav3d
             return fromIso(iso_world, basis.header.frame_id);
         }
 
-        // -----------------------------------------------------------------------------
         // rebase: transform a pose from one frame to another
-        // -----------------------------------------------------------------------------
         PoseStamped rebase(const PoseStamped &pose,
                            const PoseStamped &src,
                            const PoseStamped &dst)
@@ -178,9 +174,7 @@ namespace behav3d
             return fromIso(iso_new, dst.header.frame_id);
         }
 
-        // -----------------------------------------------------------------------------
         // axis helpers
-        // -----------------------------------------------------------------------------
         static Eigen::Vector3d axis(const PoseStamped &p, int idx)
         {
             tf2::Quaternion q(p.pose.orientation.x,
@@ -196,6 +190,7 @@ namespace behav3d
         Eigen::Vector3d yAxis(const PoseStamped &p) { return axis(p, 1); }
         Eigen::Vector3d zAxis(const PoseStamped &p) { return axis(p, 2); }
 
+        // Pure roll: align +X with desired axis, keep +Z fixed
         PoseStamped alignTarget(const PoseStamped &in,
                                 const Eigen::Vector3d &desired_x)
         {
@@ -210,9 +205,7 @@ namespace behav3d
             // If projection is too small (desired_x ‖ Z) choose a fallback axis
             if (x_proj.squaredNorm() < 1e-10)
             {
-                Eigen::Vector3d fallback = std::abs(z.dot(Eigen::Vector3d::UnitX())) < 0.8
-                                               ? Eigen::Vector3d::UnitX()
-                                               : Eigen::Vector3d::UnitY();
+                Eigen::Vector3d fallback = iso.linear().col(1); // camera +Y
                 x_proj = fallback - fallback.dot(z) * z;
             }
 
@@ -226,6 +219,7 @@ namespace behav3d
             return fromIso(iso, in.header.frame_id);
         }
 
+        // Re-orient pose so +Z = new_normal, keep basis orthonormal
         PoseStamped adjustTarget(const PoseStamped &in,
                                  const Eigen::Vector3d &new_normal)
         {
@@ -252,6 +246,7 @@ namespace behav3d
             return fromIso(iso, in.header.frame_id);
         }
 
+        // Return orientation as (axis, angle)
         std::pair<Eigen::Vector3d, double> axisAngle(const PoseStamped &p)
         {
             Eigen::Quaterniond q(p.pose.orientation.w,
@@ -262,6 +257,7 @@ namespace behav3d
             return {aa.axis(), aa.angle()};
         }
 
+        // Linear/SLERP blend between poses A and B (t∈[0,1])
         PoseStamped poseBetween(const PoseStamped &A,
                                 const PoseStamped &B,
                                 double t)
@@ -280,6 +276,7 @@ namespace behav3d
             return fromIso(iso, A.header.frame_id);
         }
 
+        // Mirror pose across plane defined by point p0 and normal n
         PoseStamped mirrorAcrossPlane(const PoseStamped &pose,
                                       const Eigen::Vector3d &n,
                                       const Eigen::Vector3d &p0)
@@ -305,6 +302,7 @@ namespace behav3d
                                pose.header.frame_id);
         }
 
+        // Average a vector of poses (mean position, hemiconstrained mean quaternion)
         PoseStamped average(const std::vector<PoseStamped> &poses)
         {
             if (poses.empty())

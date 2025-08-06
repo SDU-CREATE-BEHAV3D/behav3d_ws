@@ -35,6 +35,7 @@ using behav3d::motion_visualizer::MotionVisualizer;
 
 using behav3d::target_builder::flipTarget;
 using behav3d::target_builder::worldXY;
+using behav3d::target_builder::worldXZ;
 using behav3d::trajectory_builder::fibonacciSphericalCap;
 using behav3d::trajectory_builder::sweepZigzag;
 using behav3d::util::deg2rad;
@@ -250,8 +251,8 @@ private:
     viz_->deleteAllMarkers();
   }
 
-  void fibonacci_cap(double radius = 0.5,
-                     double center_x = 0.0, double center_y = 1.0, double center_z = 0.0,
+  void fibonacci_cap(double radius = 0.75,
+                     double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
                      double cap_deg = 30.0, int n_points = 32)
   {
     // 1. Start from home
@@ -294,10 +295,10 @@ private:
     home();
   }
 
-  void grid_sweep(double width = 0.6, double height = 0.6,
-                  double center_x = 0.0, double center_y = 0.7,
-                  double center_z = 0.0, double z_off = 0.5,
-                  int nx = 6, int ny = 6,
+  void grid_sweep(double width = 1.0, double height = 0.5,
+                  double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
+                  double z_off = 0.75,
+                  int nx = 10, int ny = 5,
                   bool row_major = false)
   {
     // 1. Return to a known joint configuration

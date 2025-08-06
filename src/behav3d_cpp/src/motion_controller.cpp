@@ -87,8 +87,9 @@ namespace behav3d
       }
     }
 
-    // --- simple accessors ----------------------------------------------------
+    // Simple accessors
 
+    // Plan a PTP or LIN motion to a single target pose
     RobotTrajectoryPtr
     PilzMotionController::planTarget(const geometry_msgs::msg::PoseStamped &target,
                                      const std::string &motion_type,
@@ -139,7 +140,7 @@ namespace behav3d
       return traj;
     }
 
-    // planJoints
+    // Plan a joint-space PTP motion to given joint vector
     RobotTrajectoryPtr
     PilzMotionController::planJoints(const std::vector<double> &joint_positions,
                                      double vel_scale,
@@ -182,7 +183,7 @@ namespace behav3d
       return traj;
     }
 
-    // planSequence
+    // Plan a blended linear sequence through way-points (PILZ MotionSequence API)
     RobotTrajectoryPtr
     PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseStamped> &waypoints,
                                        double blend_radius,
@@ -310,7 +311,7 @@ namespace behav3d
       return traj;
     }
 
-    // executeTrajectory
+    // Execute a prepared trajectory, optionally applying TOTG timing
     bool PilzMotionController::executeTrajectory(const RobotTrajectoryPtr &traj,
                                                  bool apply_totg)
     {
@@ -372,7 +373,7 @@ namespace behav3d
       return true;
     }
 
-    // getCurrentPose
+    // Current end-effector pose
     geometry_msgs::msg::PoseStamped PilzMotionController::getCurrentPose() const
     {
       auto ps = move_group_.getCurrentPose(eef_link_);
@@ -382,7 +383,7 @@ namespace behav3d
       return ps;
     }
 
-    // getCurrentJointState
+    // Current joint state vector
     sensor_msgs::msg::JointState PilzMotionController::getCurrentJointState() const
     {
       sensor_msgs::msg::JointState js;
@@ -397,7 +398,7 @@ namespace behav3d
       return js;
     }
 
-    // cancelAllGoals
+    // Cancel all active sequence goals
     void PilzMotionController::cancelAllGoals()
     {
       auto f = sequence_client_->async_cancel_all_goals();
@@ -405,7 +406,7 @@ namespace behav3d
                    "cancelAllGoals: cancellation request sent");
     }
 
-    // computeIK (stub)
+    // Compute IK solution for pose (blocking, timeout in seconds)
     moveit::core::RobotStatePtr
     PilzMotionController::computeIK(
         const geometry_msgs::msg::PoseStamped &pose,
@@ -428,7 +429,7 @@ namespace behav3d
       return state;
     }
 
-    // computeFK (stub)
+    // Forward-kinematics for current state (stub)
     geometry_msgs::msg::PoseStamped
     PilzMotionController::computeFK(const moveit::core::RobotState &state) const
     {
@@ -443,7 +444,7 @@ namespace behav3d
       return ps;
     }
 
-    // isReachable
+    // Quick reachability check via short IK
     bool PilzMotionController::isReachable(
         const geometry_msgs::msg::PoseStamped &pose) const
     {
