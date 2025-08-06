@@ -77,17 +77,13 @@ private:
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr capture_client_;
 
   // Helper to call the capture service
-    // Helper to call the capture service without adding the node to multiple executors
   bool callCapture()
   {
     auto req = std::make_shared<std_srvs::srv::Trigger::Request>();
     RCLCPP_INFO(get_logger(), "Triggering capture service...");
     auto future = capture_client_->async_send_request(req);
-    
-    // Wait for up to 5 seconds for the service response
     using namespace std::chrono_literals;
-    auto status = future.wait_for(5s);
-    if (status != std::future_status::ready) {
+    if (future.wait_for(5s) != std::future_status::ready) {
       RCLCPP_ERROR(get_logger(), "Capture service call timed out");
       return false;
     }
@@ -95,10 +91,11 @@ private:
     if (res->success) {
       RCLCPP_INFO(get_logger(), "Capture succeeded: %s", res->message.c_str());
     } else {
-      RCLCPP_WARN(get_logger(), "Capture reported failure: %s", res->message.c_str());
+      RCLCPP_WARN(get_logger(), "Capture failed: %s", res->message.c_str());
     }
     return res->success;
   }
+
   // Command dispatcher
   void callback(const std_msgs::msg::String &msg)
   {
@@ -115,62 +112,74 @@ private:
     else RCLCPP_WARN(get_logger(), "Unknown command '%s'", cmd.c_str());
   }
 
-  // Move to home and capture
+  // Move to home without capturing
   void home()
   {
     const std::vector<double> home_deg = {45,-120,120,-90,90,-180};
     std::vector<double> home_rad;
+    home_rad.reserve(home_deg.size());
     std::transform(home_deg.begin(), home_deg.end(), std::back_inserter(home_rad),
-                   [](double d){return d*M_PI/180;});
+                   [](double d){ return d * M_PI / 180.0; });
     auto traj = ctrl_->planJoints(home_rad);
     ctrl_->executeTrajectory(traj);
-    callCapture();
   }
 
-  // Draw square with capture at each corner
+  // Draw square with capture at each corner (blocking exec)
   void draw_square(double side = 0.4, double z_fixed = 0.4)
   {
     home();
-    const auto center = flipTarget(worldXY(0.0,0.7,z_fixed,ctrl_->getRootLink()));
-    ctrl_->executeTrajectory(ctrl_->planTarget(center,"PTP"));
+    const auto center = flipTarget(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()));
+    // Block until PTP motion completes
+    ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"), true);
     callCapture();
-    double half=side/2;
-    std::vector<std::pair<double,double>> off={{-half,-half},{-half,half},{half,half},{half,-half},{-half,-half}};
-    for(auto [dx,dy]:off){
-      auto p=center; p.pose.position.x+=dx; p.pose.position.y+=dy;
-      auto t=ctrl_->planTarget(p,"LIN"); ctrl_->executeTrajectory(t);
+    double half = side/2.0;
+    std::vector<std::pair<double,double>> off = {{-half,-half},{-half,half},{half,half},{half,-half},{-half,-half}};
+    for (auto [dx,dy] : off) {
+      auto p = center;
+      p.pose.position.x += dx;
+      p.pose.position.y += dy;
+      auto t = ctrl_->planTarget(p, "LIN");
+      // Block until LIN motion completes
+      ctrl_->executeTrajectory(t, true);
       callCapture();
     }
     home();
   }
 
-  // Draw square sequence then capture
+  // Draw square sequence then capture (already blocking)
   void draw_square_seq(double side=0.4,double z_fixed=0.4,double blend=0.001)
   {
     home();
-    const auto center=flipTarget(worldXY(0.0,0.7,z_fixed,ctrl_->getRootLink()));
+    const auto center = flipTarget(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()));
     std::vector<geometry_msgs::msg::PoseStamped> wp;
-    double half=side/2;
-    for(auto d:std::vector<std::pair<double,double>>{{-half,-half},{-half,half},{half,half},{half,-half},{-half,-half}}){
-      auto p=center; p.pose.position.x+=d.first; p.pose.position.y+=d.second; wp.push_back(p);
+    double half = side/2.0;
+    for (auto d : std::vector<std::pair<double,double>>{{-half,-half},{-half,half},{half,half},{half,-half},{-half,-half}}) {
+      auto p = center;
+      p.pose.position.x += d.first;
+      p.pose.position.y += d.second;
+      wp.push_back(p);
     }
-    auto traj=ctrl_->planSequence(wp,blend);
-    ctrl_->executeTrajectory(traj,true);
+    auto traj = ctrl_->planSequence(wp, blend);
+    // True to block until done
+    ctrl_->executeTrajectory(traj, true);
     callCapture();
     home();
   }
 
-  // Draw circle with capture at each step
+  // Draw circle with capture at each step (blocking)
   void draw_circle(double radius=0.3,double z_fixed=0.4,int div=36)
   {
     home();
-    const auto center=flipTarget(worldXY(0.0,0.8,z_fixed,ctrl_->getRootLink()));
-    ctrl_->executeTrajectory(ctrl_->planTarget(center,"PTP"));
+    const auto center = flipTarget(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()));
+    ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"), true);
     callCapture();
-    for(int i=0;i<=div;++i){
-      double a=2*M_PI*i/div;
-      auto p=center; p.pose.position.x+=radius*cos(a); p.pose.position.y+=radius*sin(a);
-      auto t=ctrl_->planTarget(p,"LIN"); ctrl_->executeTrajectory(t);
+    for (int i = 0; i <= div; ++i) {
+      double a = 2.0 * M_PI * i / div;
+      auto p = center;
+      p.pose.position.x += radius * std::cos(a);
+      p.pose.position.y += radius * std::sin(a);
+      auto t = ctrl_->planTarget(p, "LIN");
+      ctrl_->executeTrajectory(t, true);
       callCapture();
     }
     home();
@@ -181,58 +190,68 @@ private:
   {
     home();
     std::vector<geometry_msgs::msg::PoseStamped> wp;
-    for(int i=0;i<=div;++i){
-      double a=2*M_PI*i/div;
-      auto p=flipTarget(worldXY(0.0,0.8,z_fixed,ctrl_->getRootLink()));
-      p.pose.position.x+=radius*cos(a); p.pose.position.y+=radius*sin(a);
+    for (int i = 0; i <= div; ++i) {
+      double a = 2.0 * M_PI * i / div;
+      auto p = flipTarget(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()));
+      p.pose.position.x += radius * std::cos(a);
+      p.pose.position.y += radius * std::sin(a);
       wp.push_back(p);
     }
-    auto traj=ctrl_->planSequence(wp,blend);
-    ctrl_->executeTrajectory(traj,true);
+    auto traj = ctrl_->planSequence(wp, blend);
+    ctrl_->executeTrajectory(traj, true);
     callCapture();
     home();
   }
 
-  // Draw a line with two captures
+  // Draw a line with two captures (blocking)
   void draw_line()
   {
     home();
-    auto start=flipTarget(worldXY(-0.2,0.4,0.4,ctrl_->getRootLink()));
-    viz_->publishTargetPose(start,"start");
-    auto end=flipTarget(worldXY(0.2,0.8,0.8,ctrl_->getRootLink()));
-    viz_->publishTargetPose(end,"end"); viz_->prompt("Press 'next'...");
-    ctrl_->executeTrajectory(ctrl_->planTarget(start,"PTP")); callCapture();
-    ctrl_->executeTrajectory(ctrl_->planTarget(end  ,"LIN")); callCapture();
+    auto start = flipTarget(worldXY(-0.2, 0.4, 0.4, ctrl_->getRootLink()));
+    viz_->publishTargetPose(start, "start");
+    auto end = flipTarget(worldXY(0.2, 0.8, 0.8, ctrl_->getRootLink()));
+    viz_->publishTargetPose(end, "end"); viz_->prompt("Press 'next'...");
+    ctrl_->executeTrajectory(ctrl_->planTarget(start, "PTP"), true);
+    callCapture();
+    ctrl_->executeTrajectory(ctrl_->planTarget(end, "LIN"), true);
+    callCapture();
     home(); viz_->deleteAllMarkers();
   }
 
-  // Spherical cap scan with captures
+  // Spherical cap scan with captures (blocking)
   void fibonacci_cap(double radius=0.5,double cx=0.0,double cy=1.0,double cz=0.0,double cap=30.0,int n=10)
   {
     home();
-    double cap_rad=deg2rad(cap);
-    auto center=worldXY(cx,cy,cz,ctrl_->getRootLink());
-    auto targets=fibonacciSphericalCap(center,radius,cap_rad,n);
-    if(targets.empty()){RCLCPP_WARN(get_logger(),"no targets");return;}
+    double cap_rad = deg2rad(cap);
+    auto center = worldXY(cx, cy, cz, ctrl_->getRootLink());
+    auto targets = fibonacciSphericalCap(center, radius, cap_rad, n);
+    if (targets.empty()) { RCLCPP_WARN(get_logger(), "no targets"); return; }
     viz_->publishTargetPose(targets);
-    ctrl_->executeTrajectory(ctrl_->planTarget(targets.front(),"PTP")); callCapture();
-    for(size_t i=1;i<targets.size();++i){
-      auto t=ctrl_->planTarget(targets[i],"LIN"); ctrl_->executeTrajectory(t); callCapture();
+    // Block PTP then capture
+    ctrl_->executeTrajectory(ctrl_->planTarget(targets.front(), "PTP"), true);
+    callCapture();
+    for (size_t i = 1; i < targets.size(); ++i) {
+      auto t = ctrl_->planTarget(targets[i], "LIN");
+      ctrl_->executeTrajectory(t, true);
+      callCapture();
     }
     viz_->deleteAllMarkers(); home();
   }
 
-  // Grid sweep with captures
+  // Grid sweep with captures (blocking)
   void grid_sweep(double width=0.6,double height=0.6,double cx=0.0,double cy=0.7,double cz=0.0,double zoff=0.5,int nx=6,int ny=6,bool row=false)
   {
     home();
-    auto center=worldXY(cx,cy,cz,ctrl_->getRootLink());
-    auto targets=sweepZigzag(center,width,height,zoff,std::max(2,nx),std::max(2,ny),row);
-    if(targets.empty()){RCLCPP_WARN(get_logger(),"no targets");return;}
+    auto center = worldXY(cx, cy, cz, ctrl_->getRootLink());
+    auto targets = sweepZigzag(center, width, height, zoff, std::max(2,nx), std::max(2,ny), row);
+    if (targets.empty()) { RCLCPP_WARN(get_logger(), "no targets"); return; }
     viz_->publishTargetPose(targets);
-    ctrl_->executeTrajectory(ctrl_->planTarget(targets.front(),"PTP")); callCapture();
-    for(size_t i=1;i<targets.size();++i){
-      auto t=ctrl_->planTarget(targets[i],"LIN"); ctrl_->executeTrajectory(t); callCapture();
+    ctrl_->executeTrajectory(ctrl_->planTarget(targets.front(), "PTP"), true);
+    callCapture();
+    for (size_t i = 1; i < targets.size(); ++i) {
+      auto t = ctrl_->planTarget(targets[i], "LIN");
+      ctrl_->executeTrajectory(t, true);
+      callCapture();
     }
     viz_->deleteAllMarkers(); home();
   }
