@@ -33,7 +33,7 @@
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
 
-using behav3d::target_builder::flipTarget;
+using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
 using behav3d::target_builder::worldXZ;
 using behav3d::trajectory_builder::fibonacciSphericalCap;
@@ -118,8 +118,7 @@ private:
     const double half = side / 2.0;
     {
       const double half = side / 2.0;
-      const auto center = flipTarget(worldXY(0.0, 0.7, z_fixed,
-                                             ctrl_->getRootLink()));
+      const auto center = flipTargetAxes(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()), false, true);
 
       std::vector<std::pair<double, double>> offsets = {
           {-half, -half}, {-half, half}, {half, half}, {half, -half}, {-half, -half}};
@@ -148,8 +147,7 @@ private:
     const double half = side / 2.0;
     {
       const double half = side / 2.0;
-      const auto center = flipTarget(worldXY(0.0, 0.7, z_fixed,
-                                             ctrl_->getRootLink()));
+      const auto center = flipTargetAxes(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()), false, true);
 
       std::vector<std::pair<double, double>> offsets = {
           {-half, -half}, {-half, half}, {half, half}, {half, -half}, {-half, -half}};
@@ -175,8 +173,7 @@ private:
   {
     home();
     {
-      const auto center = flipTarget(worldXY(0.0, 0.8, z_fixed,
-                                             ctrl_->getRootLink()));
+      const auto center = flipTargetAxes(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()), false, true);
 
       ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"));
 
@@ -205,8 +202,7 @@ private:
   {
     home();
     {
-      const auto center = flipTarget(worldXY(0.0, 0.8, z_fixed,
-                                             ctrl_->getRootLink()));
+      const auto center = flipTargetAxes(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()), false, true);
 
       std::vector<geometry_msgs::msg::PoseStamped> waypoints;
       for (int i = 0; i <= divisions; ++i)
@@ -231,13 +227,11 @@ private:
   {
     home();
 
-    auto start = flipTarget(worldXY(-0.2, 0.4, 0.4,
-                                    ctrl_->getRootLink()));
+    auto start = flipTargetAxes(worldXY(-0.2, 0.4, 0.4, ctrl_->getRootLink()), false, true);
 
     viz_->publishTargetPose(start, "start");
 
-    auto end = flipTarget(worldXY(0.2, 0.8, 0.8,
-                                  ctrl_->getRootLink()));
+    auto end = flipTargetAxes(worldXY(0.2, 0.8, 0.8, ctrl_->getRootLink()), false, true);
 
     viz_->publishTargetPose(end, "end");
 

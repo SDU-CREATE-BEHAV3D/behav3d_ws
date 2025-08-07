@@ -46,7 +46,7 @@ namespace behav3d
     const std::string &PilzMotionController::getRootLink() const { return root_link_; }
     const std::string &PilzMotionController::getEefLink() const { return eef_link_; }
 
-    // Constructor
+    // High-level helper around MoveIt2 + PILZ planner
     PilzMotionController::PilzMotionController(const std::string &group,
                                                const std::string &root_link,
                                                const std::string &eef_link,
@@ -429,7 +429,7 @@ namespace behav3d
       return state;
     }
 
-    // Forward-kinematics for current state (stub)
+    // Forward-kinematics for current state
     geometry_msgs::msg::PoseStamped
     PilzMotionController::computeFK(const moveit::core::RobotState &state) const
     {

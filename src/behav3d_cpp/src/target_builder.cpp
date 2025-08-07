@@ -50,7 +50,6 @@ namespace behav3d
             return ps;
         }
 
-        // World-aligned pose with identity orientation at (x, y, z)
         PoseStamped worldXY(double x, double y, double z,
                             const std::string &frame)
         {
@@ -58,7 +57,6 @@ namespace behav3d
             return poseStamped(x, y, z, q.x(), q.y(), q.z(), q.w(), frame);
         }
 
-        // Pose rotated so +X maps to world +X and optical +Z maps to world +Y
         PoseStamped worldXZ(double x, double z, double y,
                             const std::string &frame)
         {
@@ -66,7 +64,6 @@ namespace behav3d
             return poseStamped(x, y, z, q.x(), q.y(), q.z(), q.w(), frame);
         }
 
-        // Pose rotated so +X maps to world +Y and optical +Z maps to world +Z
         PoseStamped worldYZ(double y, double z, double x,
                             const std::string &frame)
         {
@@ -106,14 +103,6 @@ namespace behav3d
             ps.pose.orientation.z = q.z();
             ps.pose.orientation.w = q.w();
             return ps;
-        }
-
-        // Flip pose 180° about local X to match optical frame
-        PoseStamped flipTarget(const PoseStamped &in)
-        {
-            Eigen::Isometry3d iso = toIso(in);
-            iso.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitX()));
-            return fromIso(iso, in.header.frame_id);
         }
 
         // Translate pose by vector d in its own frame
@@ -331,6 +320,80 @@ namespace behav3d
             return poseStamped(c.x(), c.y(), c.z(),
                                accum.x(), accum.y(), accum.z(), accum.w(),
                                poses.front().header.frame_id);
+        }
+
+        /// Move the pose along its *local* +Z axis by `offset_dist` metres.
+        PoseStamped offsetTarget(const PoseStamped &in,
+                                 double offset_dist)
+        {
+            // `translate` already interprets the vector in the pose’s own frame.
+            return translate(in, Eigen::Vector3d(0.0, 0.0, offset_dist));
+        }
+
+        /// Replace the position (x, y, z) while preserving orientation.
+        PoseStamped setTargetOrigin(const PoseStamped &in,
+                                    double x, double y, double z)
+        {
+            PoseStamped out = in; // copy orientation, header, etc.
+            out.pose.position.x = x;
+            out.pose.position.y = y;
+            out.pose.position.z = z;
+            out.header.stamp = rclcpp::Clock().now();
+            return out;
+        }
+
+        /// Optionally flip the local X and/or Y axes; recompute +Z to keep a
+        /// right‑handed, orthonormal basis.
+        PoseStamped flipTargetAxes(const PoseStamped &in,
+                                   bool flip_x,
+                                   bool flip_y)
+        {
+            Eigen::Isometry3d iso = toIso(in);
+            Eigen::Matrix3d R = iso.rotation();
+
+            if (flip_x)
+                R.col(0) *= -1.0;
+            if (flip_y)
+                R.col(1) *= -1.0;
+
+            Eigen::Vector3d x = R.col(0).normalized();
+            Eigen::Vector3d y = R.col(1).normalized();
+            Eigen::Vector3d z = x.cross(y).normalized();
+
+            // Ensure a right‑handed frame (determinant > 0)
+            if (x.cross(y).dot(z) < 0.0)
+                z *= -1.0;
+
+            R.col(0) = x;
+            R.col(1) = y;
+            R.col(2) = z;
+            iso.linear() = R;
+
+            return fromIso(iso, in.header.frame_id);
+        }
+
+        /// Swap the local X and Y axes; adjust Z to restore orthonormality.
+        PoseStamped swapTargetAxes(const PoseStamped &in)
+        {
+            Eigen::Isometry3d iso = toIso(in);
+            Eigen::Matrix3d R = iso.rotation();
+
+            R.col(0).swap(R.col(1)); // X ↔ Y
+
+            Eigen::Vector3d x = R.col(0).normalized();
+            Eigen::Vector3d y = R.col(1).normalized();
+            Eigen::Vector3d z = x.cross(y).normalized();
+
+            // Maintain right‑handed orientation.
+            if (x.cross(y).dot(z) < 0.0)
+                z *= -1.0;
+
+            R.col(0) = x;
+            R.col(1) = y;
+            R.col(2) = z;
+            iso.linear() = R;
+
+            return fromIso(iso, in.header.frame_id);
         }
 
     } // namespace target_builder

@@ -29,17 +29,11 @@ namespace behav3d
 
         using geometry_msgs::msg::PoseStamped;
 
-        // ---------------------------------------------------------------------------
-        // Pose primitives
-        // ---------------------------------------------------------------------------
-        /// Create a stamped pose from explicit components.
+        // Build a timestamped PoseStamped with explicit position & quaternion
         PoseStamped poseStamped(double x, double y, double z,
                                 double qx, double qy, double qz, double qw,
                                 const std::string &frame);
 
-        // ---------------------------------------------------------------------------
-        // Canonical world‑frame helper constructors
-        // ---------------------------------------------------------------------------
         PoseStamped worldXY(double x, double y, double z,
                             const std::string &frame = "world");
 
@@ -49,44 +43,32 @@ namespace behav3d
         PoseStamped worldYZ(double y, double z, double x,
                             const std::string &frame = "world");
 
-        /// 180° roll about camera X axis (i.e. flip optical frame).
-        PoseStamped flipTarget(const PoseStamped &in);
-
-        // ---------------------------------------------------------------------------
-        // Conversions
-        // ---------------------------------------------------------------------------
-        /// PoseStamped → Eigen::Isometry3d
+        // Convert PoseStamped → Eigen::Isometry3d  (pose → matrix)
         Eigen::Isometry3d toIso(const PoseStamped &p);
 
-        /// Eigen::Isometry3d → PoseStamped (uses @p frame for header.frame_id)
+        // Convert Eigen::Isometry3d → PoseStamped  (matrix → pose)
         PoseStamped fromIso(const Eigen::Isometry3d &iso,
                             const std::string &frame);
 
-        // ---------------------------------------------------------------------------
-        // Transformations in the same coordinate frame
-        // ---------------------------------------------------------------------------
+        // Translate pose by vector d in its own frame
         PoseStamped translate(const PoseStamped &in,
                               const Eigen::Vector3d &d);
 
-        /// Rotate by extrinsic XYZ Euler angles (roll‑pitch‑yaw).
-        /// If @p degrees == true, input is interpreted in degrees.
+        // Rotate pose by RPY (degrees if `degrees==true`)
         PoseStamped rotateEuler(const PoseStamped &in,
                                 const Eigen::Vector3d &rpy,
                                 bool degrees = false);
 
-        /// Concatenate a relative transform (translation + rotation) on the right.
+        // Apply relative translation & rotation to pose
         PoseStamped transformRel(const PoseStamped &in,
                                  const Eigen::Vector3d &t,
                                  const Eigen::Quaterniond &q);
 
-        // ---------------------------------------------------------------------------
-        // Coordinate‑frame utilities
-        // ---------------------------------------------------------------------------
-        /// Embed @p local (expressed in its own local frame) inside @p basis.
+        // change-basis: embed a pose defined in a local frame into another pose's frame
         PoseStamped changeBasis(const PoseStamped &basis,
                                 const PoseStamped &local);
 
-        /// Express @p pose originally in @p src.frame ← world → @p dst.frame
+        // rebase: transform a pose from one frame to another
         PoseStamped rebase(const PoseStamped &pose,
                            const PoseStamped &src_frame,
                            const PoseStamped &dst_frame);
@@ -96,29 +78,46 @@ namespace behav3d
         Eigen::Vector3d yAxis(const PoseStamped &p);
         Eigen::Vector3d zAxis(const PoseStamped &p);
 
-        /// Re‑orient pose so its +X axis aligns with @p new_x (keeps position).
+        // Pure roll: align +X with desired axis, keep +Z fixed
         PoseStamped alignTarget(const PoseStamped &in,
                                 const Eigen::Vector3d &new_x);
 
-        /// Adjust pose so its +Z axis aligns with @p new_normal (keeps position).
+        // Re-orient pose so +Z = new_normal, keep basis orthonormal
         PoseStamped adjustTarget(const PoseStamped &in,
                                  const Eigen::Vector3d &new_normal);
 
-        /// Axis‑angle decomposition of pose orientation
+        // Return orientation as (axis, angle)
         std::pair<Eigen::Vector3d, double> axisAngle(const PoseStamped &p);
 
-        /// Linear interpolation between two poses (t ∈ [0,1])
+        // Linear/SLERP blend between poses A and B (t∈[0,1])
         PoseStamped poseBetween(const PoseStamped &A,
                                 const PoseStamped &B,
                                 double t);
 
-        /// Mirror pose across the plane defined by normal @p n passing through @p p0.
+        // Mirror pose across plane defined by point p0 and normal n
         PoseStamped mirrorAcrossPlane(const PoseStamped &pose,
                                       const Eigen::Vector3d &n,
                                       const Eigen::Vector3d &p0);
 
-        /// Arithmetic mean (average) of a collection of poses.
+        // Average a vector of poses (mean position, hemiconstrained mean quaternion)
         PoseStamped average(const std::vector<PoseStamped> &poses);
+
+        /// Move the pose along its *local* +Z axis by `offset_dist` metres.
+        PoseStamped offsetTarget(const PoseStamped &in,
+                                 double offset_dist);
+
+        /// Replace the position (x, y, z) while preserving orientation.
+        PoseStamped setTargetOrigin(const PoseStamped &in,
+                                    double x, double y, double z);
+
+        /// Optionally flip the local X and/or Y axes; recompute +Z to keep a
+        /// right‑handed, orthonormal basis.
+        PoseStamped flipTargetAxes(const PoseStamped &in,
+                                   bool flip_x,
+                                   bool flip_y);
+
+        /// Swap the local X and Y axes; adjust Z to restore orthonormality.
+        PoseStamped swapTargetAxes(const PoseStamped &in);
 
     } // namespace target_builder
 } // namespace behav3d

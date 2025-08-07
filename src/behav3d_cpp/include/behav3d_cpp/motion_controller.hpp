@@ -40,10 +40,7 @@ namespace behav3d
   namespace motion_controller
   {
 
-    /**
-     * @class PilzMotionController
-     * @brief High-level helper around MoveIt2 + PILZ planner
-     */
+    // High-level helper around MoveIt2 + PILZ planner
     class PilzMotionController : public rclcpp::Node
     {
     public:
@@ -54,41 +51,46 @@ namespace behav3d
                                     const std::string &eef_link = "ur10e_tool0",
                                     bool debug = false);
 
-      /// Plan either a PTP or LIN move according to motion_type ("PTP"/"LIN")
+      // Plan a PTP or LIN motion to a single target pose
       RobotTrajectoryPtr planTarget(const geometry_msgs::msg::PoseStamped &target,
                                     const std::string &motion_type = "PTP",
                                     double vel_scale = 0.5,
                                     double acc_scale = 0.5);
 
-      /// Plan a joint‑space PTP move
+      // Plan a joint-space PTP motion to given joint vector
       RobotTrajectoryPtr planJoints(const std::vector<double> &joint_positions,
                                     double vel_scale = 0.5,
                                     double acc_scale = 0.5);
 
-      /// Plan a blended LIN sequence through waypoints
+      // Plan a blended linear sequence through way-points (PILZ MotionSequence API)
       RobotTrajectoryPtr planSequence(const std::vector<geometry_msgs::msg::PoseStamped> &waypoints,
                                       double blend_radius = 0.001,
                                       double vel_scale = 0.5,
                                       double acc_scale = 0.5,
                                       double pos_tolerance = 0.001,
                                       double ori_telerance = 0.001);
-      /// Get current end-effector pose in planning frame
-      geometry_msgs::msg::PoseStamped getCurrentPose() const;
 
-      /// Get current joint state for the planning group
-      sensor_msgs::msg::JointState getCurrentJointState() const;
-
+      // Execute a prepared trajectory, optionally applying TOTG timing
       bool executeTrajectory(const RobotTrajectoryPtr &traj,
                              bool apply_totg = false);
 
+      // Current end-effector pose
+      geometry_msgs::msg::PoseStamped getCurrentPose() const;
+
+      // Current joint state vector
+      sensor_msgs::msg::JointState getCurrentJointState() const;
+
+      // Compute IK solution for pose (blocking, timeout in seconds)
       moveit::core::RobotStatePtr computeIK(const geometry_msgs::msg::PoseStamped &pose,
                                             double timeout = 0.1) const;
 
+      // Forward-kinematics for current state
       geometry_msgs::msg::PoseStamped computeFK(const moveit::core::RobotState &state) const;
 
+      // Quick reachability check via short IK
       bool isReachable(const geometry_msgs::msg::PoseStamped &pose) const;
 
-      /// Cancel all active sequence goals
+      // Cancel all active sequence goals
       void cancelAllGoals();
 
       /// Accessors for planning‑frame links

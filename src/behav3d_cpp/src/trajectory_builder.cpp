@@ -33,7 +33,7 @@ namespace behav3d
         using behav3d::target_builder::adjustTarget;
         using behav3d::target_builder::alignTarget;
         using behav3d::target_builder::changeBasis;
-        using behav3d::target_builder::flipTarget;
+        using behav3d::target_builder::flipTargetAxes;
         using behav3d::target_builder::fromIso;
         using behav3d::target_builder::poseBetween;
         using behav3d::target_builder::rebase;
@@ -132,7 +132,7 @@ namespace behav3d
             out.reserve(nx * ny);
 
             // Pre-compute a canonical local pose
-            PoseStamped p_base_local = flipTarget(worldXY(0.0, 0.0, 0.0, tgt.header.frame_id));
+            PoseStamped p_base_local = flipTargetAxes(worldXY(0.0, 0.0, 0.0, tgt.header.frame_id), false, true);
 
             const double dx = width / (nx - 1);
             const double dy = height / (ny - 1);
