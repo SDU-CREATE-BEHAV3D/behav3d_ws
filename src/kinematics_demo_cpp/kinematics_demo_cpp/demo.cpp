@@ -329,24 +329,26 @@ private:
     // 4. Prompt the user before starting motion
     viz_->prompt("Press 'next' in the RVizVisualToolsGui window to start grid scan");
 
-    // 5. Plan the full raster trajectory before executing ------------------
+    // 5. Plan every segment first and keep them in order  ------------------
+    std::vector<robot_trajectory::RobotTrajectoryPtr> segments;
+
+    // First move: joint‑space PTP to the raster’s starting point
     auto first_ptp = ctrl_->planTarget(targets.front(), "PTP");
     if (!first_ptp)
     {
       RCLCPP_ERROR(this->get_logger(), "grid_sweep: failed to plan PTP to first target");
       return;
     }
+    segments.push_back(first_ptp);
 
-    // Use the first segment as the seed trajectory
-    auto full_traj = first_ptp;
-
+    // Subsequent linear sweeps
     for (size_t i = 1; i < targets.size(); ++i)
     {
       auto seg = ctrl_->planTarget(
-          targets[i],            // target
-          "LIN",                 // Cartesian move
-          0.5, 0.5,              // default scaling
-          targets[i - 1]);       // explicit start pose
+          targets[i],          // target pose
+          "LIN",               // Cartesian motion
+          0.5, 0.5,            // default scaling
+          targets[i - 1]);     // explicit start pose (previous waypoint)
 
       if (!seg)
       {
@@ -354,16 +356,26 @@ private:
                      "grid_sweep: planning failed for segment %zu", i);
         return;
       }
-      // Chain with zero pause to keep a continuous trail
-      full_traj->append(*seg, /*dt=*/0.0);
+      segments.push_back(seg);
     }
 
-    // 6. Visualise the entire path once, then let the user continue
+    // Build a composite trajectory solely for visualisation ---------------
+    auto full_traj = segments.front();
+    for (size_t i = 1; i < segments.size(); ++i)
+      full_traj->append(*segments[i], /*dt=*/0.0);
+
+    // 6. Visualise the entire path, then run segment‑by‑segment.
     viz_->publishTrail(full_traj, "grid_sweep");
     viz_->prompt("Press 'next' to execute the full grid sweep");
 
-    // 7. Execute in one go (with TOTG timing)
-    ctrl_->executeTrajectory(full_traj, true);
+    // 7. Execute each planned segment in sequence -------------------------
+    for (size_t i = 0; i < segments.size(); ++i)
+    {
+      RCLCPP_INFO(this->get_logger(),
+                  "grid_sweep: executing segment %zu / %zu",
+                  i + 1, segments.size());
+      ctrl_->executeTrajectory(segments[i], true);
+    }
 
     // 8. Clean up markers and return home
     viz_->deleteAllMarkers();
