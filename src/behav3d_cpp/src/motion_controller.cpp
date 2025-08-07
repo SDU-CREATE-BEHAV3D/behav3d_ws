@@ -28,6 +28,7 @@
 #include <moveit/kinematic_constraints/utils.hpp>
 #include <moveit/robot_trajectory/robot_trajectory.hpp>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
+#include <optional>
 
 #include "behav3d_cpp/motion_controller.hpp"
 
@@ -94,12 +95,30 @@ namespace behav3d
     PilzMotionController::planTarget(const geometry_msgs::msg::PoseStamped &target,
                                      const std::string &motion_type,
                                      double vel_scale,
-                                     double acc_scale)
+                                     double acc_scale,
+                                     const std::optional<geometry_msgs::msg::PoseStamped> &start)
     {
 
       move_group_.clearPoseTargets();
       move_group_.clearPathConstraints();
       move_group_.setJointValueTarget(std::vector<double>());
+
+      // Decide the start state: either user‑supplied pose or the robot’s current state
+      if (start)
+      {
+        auto start_state = computeIK(*start, 0.1);
+        if (!start_state)
+        {
+          RCLCPP_ERROR(this->get_logger(),
+                       "planTarget: failed to compute IK for supplied start pose");
+          return nullptr;
+        }
+        move_group_.setStartState(*start_state);
+      }
+      else
+      {
+        move_group_.setStartStateToCurrentState();
+      }
 
       // Validate motion_type
       if (motion_type != "PTP" && motion_type != "LIN")

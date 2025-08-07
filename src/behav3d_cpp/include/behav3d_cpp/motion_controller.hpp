@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -55,7 +56,8 @@ namespace behav3d
       RobotTrajectoryPtr planTarget(const geometry_msgs::msg::PoseStamped &target,
                                     const std::string &motion_type = "PTP",
                                     double vel_scale = 0.5,
-                                    double acc_scale = 0.5);
+                                    double acc_scale = 0.5,
+                                    const std::optional<geometry_msgs::msg::PoseStamped> &start = std::nullopt);
 
       // Plan a joint-space PTP motion to given joint vector
       RobotTrajectoryPtr planJoints(const std::vector<double> &joint_positions,

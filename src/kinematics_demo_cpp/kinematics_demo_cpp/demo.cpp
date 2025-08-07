@@ -29,6 +29,7 @@
 #include "behav3d_cpp/target_builder.hpp"
 #include "behav3d_cpp/trajectory_builder.hpp"
 #include "behav3d_cpp/util.hpp"
+#include <moveit/robot_trajectory/robot_trajectory.hpp>
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
@@ -328,17 +329,43 @@ private:
     // 4. Prompt the user before starting motion
     viz_->prompt("Press 'next' in the RVizVisualToolsGui window to start grid scan");
 
-    // 5. Move to the first target with a PTP, then traverse the rest with LIN
-    ctrl_->executeTrajectory(ctrl_->planTarget(targets.front(), "PTP"));
+    // 5. Plan the full raster trajectory before executing ------------------
+    auto first_ptp = ctrl_->planTarget(targets.front(), "PTP");
+    if (!first_ptp)
+    {
+      RCLCPP_ERROR(this->get_logger(), "grid_sweep: failed to plan PTP to first target");
+      return;
+    }
+
+    // Use the first segment as the seed trajectory
+    auto full_traj = first_ptp;
 
     for (size_t i = 1; i < targets.size(); ++i)
     {
-      viz_->prompt("Press 'next' to continue to target " + std::to_string(i));
-      auto traj = ctrl_->planTarget(targets[i], "LIN");
-      ctrl_->executeTrajectory(traj);
+      auto seg = ctrl_->planTarget(
+          targets[i],            // target
+          "LIN",                 // Cartesian move
+          0.5, 0.5,              // default scaling
+          targets[i - 1]);       // explicit start pose
+
+      if (!seg)
+      {
+        RCLCPP_ERROR(this->get_logger(),
+                     "grid_sweep: planning failed for segment %zu", i);
+        return;
+      }
+      // Chain with zero pause to keep a continuous trail
+      full_traj->append(*seg, /*dt=*/0.0);
     }
 
-    // 6. Clean up markers and return home
+    // 6. Visualise the entire path once, then let the user continue
+    viz_->publishTrail(full_traj, "grid_sweep");
+    viz_->prompt("Press 'next' to execute the full grid sweep");
+
+    // 7. Execute in one go (with TOTG timing)
+    ctrl_->executeTrajectory(full_traj, true);
+
+    // 8. Clean up markers and return home
     viz_->deleteAllMarkers();
     home();
   }
