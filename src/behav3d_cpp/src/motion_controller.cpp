@@ -202,6 +202,8 @@ namespace behav3d
       auto traj = std::make_shared<RobotTrajectory>(
           move_group_.getRobotModel(), move_group_.getName());
       traj->setRobotTrajectoryMsg(*move_group_.getCurrentState(), plan.trajectory);
+      // Update the cached end state so subsequent IK calls stay consistent
+      last_end_state_ = std::make_shared<moveit::core::RobotState>(*traj->getLastWayPointPtr());
       return traj;
     }
 
@@ -330,6 +332,8 @@ namespace behav3d
         // Update reference state for the next segment
         ref_state = seg_traj.getLastWayPointPtr();
       }
+      // Cache the final joint state of the blended sequence for continuity
+      last_end_state_ = std::make_shared<moveit::core::RobotState>(*traj->getLastWayPointPtr());
       return traj;
     }
 
