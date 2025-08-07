@@ -435,8 +435,7 @@ namespace behav3d
                 pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
 
       const auto *jmg = move_group_.getRobotModel()->getJointModelGroup(move_group_.getName());
-      auto state = std::make_shared<moveit::core::RobotState>(move_group_.getRobotModel());
-      state->setToDefaultValues();
+      auto state = std::make_shared<moveit::core::RobotState>(*move_group_.getCurrentState());
 
       // Try to solve IK for the desired pose
       bool found = state->setFromIK(jmg, pose.pose, eef_link_, timeout);
