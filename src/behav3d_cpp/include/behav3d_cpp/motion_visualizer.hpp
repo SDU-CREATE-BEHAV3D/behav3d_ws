@@ -21,6 +21,7 @@
 #include <moveit_visual_tools/moveit_visual_tools.h>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <moveit_msgs/msg/robot_trajectory.hpp>
+#include <moveit/robot_trajectory/robot_trajectory.hpp>
 
 namespace behav3d::motion_visualizer {
 
@@ -36,12 +37,17 @@ public:
   // Helpers ------------------------------------------------------------------
   void publishTargetPose(const geometry_msgs::msg::PoseStamped& pose,
                          const std::string& label = "target");
-  void publishTargetPose(const std::vector<geometry_msgs::msg::PoseStamped>& poses);
-  
+  void publishTargetPose(const std::vector<geometry_msgs::msg::PoseStamped>& poses); 
+
+  // /// Publish a single trajectory as a “trail”
+  // void publishTrail(const moveit_msgs::msg::RobotTrajectory& traj,
+  //                   const std::string& label = "trail");
+
+  ///Publish a sequence of trajectories as a combined “trail”
+  void publishTrail(const robot_trajectory::RobotTrajectoryPtr& traj_ptr,
+                    const std::string& label = "trail");
   void deleteAllMarkers();
   void publishGhost(const moveit_msgs::msg::RobotTrajectory& traj);
-  void publishTrail(const moveit_msgs::msg::RobotTrajectory& traj,
-                    const std::string& label = "trail");
   //Pause until press next in Rviz:
   void prompt(const std::string& text);
   void trigger();
