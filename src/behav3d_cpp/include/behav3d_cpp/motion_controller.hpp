@@ -31,6 +31,7 @@
 #include <moveit/robot_trajectory/robot_trajectory.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <moveit/kinematic_constraints/utils.hpp>
+#include <moveit/robot_state/robot_state.h>
 
 namespace rt = robot_trajectory;
 using RobotTrajectory = rt::RobotTrajectory;
@@ -104,6 +105,8 @@ namespace behav3d
       std::string eef_link_;
       moveit::planning_interface::MoveGroupInterface move_group_;
       rclcpp_action::Client<MoveGroupSequence>::SharedPtr sequence_client_;
+      // End joint state of the most recently *planned* trajectory, used as an IK seed
+      mutable moveit::core::RobotStatePtr last_end_state_;
     };
 
   } // namespace motion_controller

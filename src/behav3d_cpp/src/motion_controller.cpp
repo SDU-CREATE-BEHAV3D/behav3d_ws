@@ -55,7 +55,8 @@ namespace behav3d
         : Node("pilz_motion_controller_cpp"),
           root_link_(root_link),
           eef_link_(eef_link),
-          move_group_(std::shared_ptr<rclcpp::Node>(this, [](auto *) {}), group)
+          move_group_(std::shared_ptr<rclcpp::Node>(this, [](auto *) {}), group),
+          last_end_state_(nullptr)
     {
       if (debug)
       {
@@ -156,6 +157,8 @@ namespace behav3d
                      motion_type.c_str(), code.val);
         return nullptr;
       }
+      // Remember the end joint configuration for use as the next IK seed
+      last_end_state_ = std::make_shared<moveit::core::RobotState>(*traj->getLastWayPointPtr());
       return traj;
     }
 
@@ -435,7 +438,9 @@ namespace behav3d
                 pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
 
       const auto *jmg = move_group_.getRobotModel()->getJointModelGroup(move_group_.getName());
-      auto state = std::make_shared<moveit::core::RobotState>(*move_group_.getCurrentState());
+      // Prefer the end of the previous planned trajectory to stay on the same joint branch
+      auto seed_state = last_end_state_ ? last_end_state_ : move_group_.getCurrentState();
+      auto state = std::make_shared<moveit::core::RobotState>(*seed_state);
 
       // Try to solve IK for the desired pose
       bool found = state->setFromIK(jmg, pose.pose, eef_link_, timeout);
