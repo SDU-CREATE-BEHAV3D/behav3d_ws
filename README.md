@@ -3,7 +3,7 @@
 
 # Behav3D ROS 2 Workspace Installation
 This guide provides instructions for setting up the Behav3D ROS 2 workspace on Ubuntu 24.04 with ROS 2 Jazzy.
-For installing Ros and more details read the file manual_install.md
+For installing Ros and more details read the file [manual_install.md](manual_install.md)
 
 -----
 
