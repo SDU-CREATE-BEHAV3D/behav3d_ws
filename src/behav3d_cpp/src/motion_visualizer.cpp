@@ -1,3 +1,21 @@
+// =============================================================================
+//   ____  _____ _   _    ___     _______ ____
+//  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
+//  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
+//  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
+//  |____/|_____|_| |_/_/   \_\_/  |____/|____/
+//
+//
+// Author: Lucas José Helle <luh@iti.sdu.dk>
+// Maintainers:
+//   - Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
+//   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
+// Institute: University of Southern Denmark (Syddansk Universitet)
+// Date: 2025-07
+// =============================================================================
+// TODO: Marker Scale
+// TODO: Trail Color
+
 #include "behav3d_cpp/motion_visualizer.hpp"
 
 #define PMV_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[PMV] " fmt, ##__VA_ARGS__)
