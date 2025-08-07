@@ -221,7 +221,10 @@ private:
       }
 
       auto traj = ctrl_->planSequence(waypoints, blend_radius);
+      viz_->publishTrail(traj);
+      viz_->prompt("Press 'next' to start the blended sequence");
       ctrl_->executeTrajectory(traj, true);
+      viz_->deleteAllMarkers();
     }
     home();
   }
