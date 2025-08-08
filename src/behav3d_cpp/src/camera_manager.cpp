@@ -550,7 +550,7 @@ namespace behav3d::camera
 
     cv::Mat CameraManager::depthToUint16mm(const sensor_msgs::msg::Image &msg)
     {
-        using enc = sensor_msgs::image_encodings;
+        namespace enc = sensor_msgs::image_encodings;
         if (msg.encoding == enc::TYPE_16UC1 || msg.encoding == enc::MONO16)
         {
             // Many drivers publish depth in 16UC1 mm already

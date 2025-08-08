@@ -7,7 +7,7 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(behav3d_cpp REQUIRED)
 
-add_executable(demo kinematics_demo_cpp/demo.cpp)
+add_executable(demo behav3d_demo/demo.cpp)
 
 target_link_libraries(demo
   rclcpp::rclcpp
