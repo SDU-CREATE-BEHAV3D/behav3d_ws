@@ -71,7 +71,7 @@ namespace behav3d::camera
         {
             rclcpp::Time stamp;
             cv::Mat color_raw;    // BGR8
-            cv::Mat depth_raw_mm; // 16UC1, millimeters
+            cv::Mat depth_raw;    // expected 16UC1 (millimeters) or MONO16 from driver
             cv::Mat ir_raw;       // 16UC1
             cv::Mat d2c_depth;    // 16UC1 (optional)
             cv::Mat c2d_color;    // BGR8 (optional)
@@ -105,8 +105,8 @@ namespace behav3d::camera
 
         // ==== Helpers
         static cv::Mat toColorBgr(const sensor_msgs::msg::Image &msg);
-        static cv::Mat toMono16(const sensor_msgs::msg::Image &msg);
-        static cv::Mat depthToUint16mm(const sensor_msgs::msg::Image &msg);
+        static cv::Mat toMono(const sensor_msgs::msg::Image &msg);
+        static cv::Mat depthToUint16(const sensor_msgs::msg::Image &msg);
         static std::string expandUser(const std::string &path);
         static std::string timeStringFromStamp(const rclcpp::Time &t);
 

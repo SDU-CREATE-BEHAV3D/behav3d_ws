@@ -71,10 +71,10 @@ namespace behav3d::camera
             out_paths.color = (fs::path(dir_color_) / (ts + ".png")).string();
             saveMatPng(snap.color_raw, out_paths.color, png);
         }
-        if (snap.has_depth && !snap.depth_raw_mm.empty())
+        if (snap.has_depth && !snap.depth_raw.empty())
         {
             out_paths.depth = (fs::path(dir_depth_) / (ts + ".png")).string();
-            saveMatPng(snap.depth_raw_mm, out_paths.depth, png);
+            saveMatPng(snap.depth_raw, out_paths.depth, png);
         }
         if (snap.has_d2c && !snap.d2c_depth.empty())
         {
@@ -423,28 +423,38 @@ namespace behav3d::camera
             out.stamp = ir->header.stamp;
 
             // IR first (required)
-            out.ir_raw = toMono16(*ir);
+            out.ir_raw = toMono(*ir);
             out.has_ir = !out.ir_raw.empty();
+            if (out.ir_raw.empty())
+                out.has_ir = false;
 
             if (color)
             {
                 out.color_raw = toColorBgr(*color);
                 out.has_color = !out.color_raw.empty();
+                if (out.color_raw.empty())
+                    out.has_color = false;
             }
             if (depth)
             {
-                out.depth_raw_mm = depthToUint16mm(*depth);
-                out.has_depth = !out.depth_raw_mm.empty();
+                out.depth_raw = depthToUint16(*depth);
+                out.has_depth = !out.depth_raw.empty();
+                if (out.depth_raw.empty())
+                    out.has_depth = false;
             }
             if (d2c)
             {
-                out.d2c_depth = depthToUint16mm(*d2c);
+                out.d2c_depth = depthToUint16(*d2c);
                 out.has_d2c = !out.d2c_depth.empty();
+                if (out.d2c_depth.empty())
+                    out.has_d2c = false;
             }
             if (c2d)
             {
                 out.c2d_color = toColorBgr(*c2d);
                 out.has_c2d = !out.c2d_color.empty();
+                if (out.c2d_color.empty())
+                    out.has_c2d = false;
             }
 
             if (ci)
@@ -503,97 +513,46 @@ namespace behav3d::camera
     // ============== Conversions ==============
     cv::Mat CameraManager::toColorBgr(const sensor_msgs::msg::Image &msg)
     {
-        // Normalize to BGR8 for saving
-        if (msg.encoding == sensor_msgs::image_encodings::BGR8)
-        {
+        // Expect BGR8 or RGB8 from driver; anything else is skipped
+        if (msg.encoding == sensor_msgs::image_encodings::BGR8) {
             return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8)->image;
         }
-        if (msg.encoding == sensor_msgs::image_encodings::RGB8)
-        {
+        if (msg.encoding == sensor_msgs::image_encodings::RGB8) {
             auto cvimg = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGB8)->image;
             cv::Mat bgr;
             cv::cvtColor(cvimg, bgr, cv::COLOR_RGB2BGR);
             return bgr;
         }
-        // If it's any other 8UC3/mono, try a passthrough then convert if needed
-        auto cvimg = cv_bridge::toCvCopy(msg, "bgr8")->image;
-        return cvimg;
+        RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 5000, "color encoding '%s' not supported; skipping save", msg.encoding.c_str());
+        return cv::Mat();
     }
 
-    cv::Mat CameraManager::toMono16(const sensor_msgs::msg::Image &msg)
+    cv::Mat CameraManager::toMono(const sensor_msgs::msg::Image &msg)
     {
-        if (msg.encoding == sensor_msgs::image_encodings::MONO16)
-        {
+        // Expect MONO16 or MONO8 from driver; anything else is skipped
+        if (msg.encoding == sensor_msgs::image_encodings::MONO16) {
             return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO16)->image;
         }
-        if (msg.encoding == sensor_msgs::image_encodings::MONO8)
-        {
-            auto m8 = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO8)->image;
-            cv::Mat m16;
-            m8.convertTo(m16, CV_16U, 257.0); // 255 -> 65535
-            return m16;
+        if (msg.encoding == sensor_msgs::image_encodings::MONO8) {
+            return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO8)->image;
         }
-        // Fall back to passthrough then convert to mono
-        auto any = cv_bridge::toCvCopy(msg)->image;
-        cv::Mat gray, gray16;
-        if (any.channels() == 3)
-        {
-            cv::cvtColor(any, gray, cv::COLOR_BGR2GRAY);
-        }
-        else
-        {
-            gray = any;
-        }
-        gray.convertTo(gray16, CV_16U, 257.0);
-        return gray16;
+        RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 5000, "ir encoding '%s' not supported; skipping save", msg.encoding.c_str());
+        return cv::Mat();
     }
 
-    cv::Mat CameraManager::depthToUint16mm(const sensor_msgs::msg::Image &msg)
+    cv::Mat CameraManager::depthToUint16(const sensor_msgs::msg::Image &msg)
     {
         namespace enc = sensor_msgs::image_encodings;
-        if (msg.encoding == enc::TYPE_16UC1 || msg.encoding == enc::MONO16)
-        {
-            // Many drivers publish depth in 16UC1 mm already
+        // Expect 16-bit depth in mm from driver
+        if (msg.encoding == enc::TYPE_16UC1) {
             return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image;
         }
-        if (msg.encoding == enc::TYPE_32FC1)
-        {
-            auto d32 = cv_bridge::toCvCopy(msg, enc::TYPE_32FC1)->image; // meters most likely
-            cv::Mat d16(d32.rows, d32.cols, CV_16UC1);
-            for (int r = 0; r < d32.rows; ++r)
-            {
-                const float *src = d32.ptr<float>(r);
-                uint16_t *dst = d16.ptr<uint16_t>(r);
-                for (int c = 0; c < d32.cols; ++c)
-                {
-                    float m = src[c];
-                    if (std::isfinite(m) && m > 0.f)
-                    {
-                        int mm = static_cast<int>(m * 1000.0f + 0.5f);
-                        dst[c] = static_cast<uint16_t>(std::clamp(mm, 0, 65535));
-                    }
-                    else
-                    {
-                        dst[c] = 0;
-                    }
-                }
-            }
-            return d16;
+        // Some drivers might expose depth as MONO16; accept it as-is
+        if (msg.encoding == enc::MONO16) {
+            return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
         }
-        // Unknown encoding, try passthrough and convert if possible
-        auto any = cv_bridge::toCvCopy(msg)->image;
-        if (any.type() == CV_16UC1)
-            return any;
-        if (any.type() == CV_32FC1)
-        {
-            sensor_msgs::msg::Image fake;
-            fake.encoding = enc::TYPE_32FC1;
-            fake.height = msg.height;
-            fake.width = msg.width;
-            fake.step = msg.width * sizeof(float);
-            // Not populating data; this path shouldn't generally be used
-        }
-        throw std::runtime_error("Unsupported depth encoding: " + msg.encoding);
+        RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 5000, "depth encoding '%s' not supported; expected 16UC1 or MONO16; skipping save", msg.encoding.c_str());
+        return cv::Mat();
     }
 
     // ============== Misc helpers ==============
