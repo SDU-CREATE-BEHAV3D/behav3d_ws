@@ -370,9 +370,17 @@ namespace behav3d
         RCLCPP_ERROR(this->get_logger(), "executeTrajectory: execution failed (code=%d)", code.val);
         return false;
       }
+
+      // Log final EE position on success
+      const auto& last_state = processed.getLastWayPoint();
+      const Eigen::Isometry3d& eef_pose = last_state.getGlobalLinkTransform(eef_link_);
+      const Eigen::Vector3d& p = eef_pose.translation();
+      RCLCPP_INFO(this->get_logger(),
+                  "Movement successful at X: %.3f, Y: %.3f, Z: %.3f",
+                  p.x(), p.y(), p.z());
+
       return true;
     }
-
     // Current end-effector pose
     geometry_msgs::msg::PoseStamped PilzMotionController::getCurrentPose() const
     {
