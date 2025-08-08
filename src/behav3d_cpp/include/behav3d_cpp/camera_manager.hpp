@@ -67,11 +67,11 @@ namespace behav3d::camera
         struct Snapshot
         {
             rclcpp::Time stamp;
-            cv::Mat color_raw;    // BGR8
-            cv::Mat depth_raw;    // expected 16UC1 (millimeters) or MONO16 from driver
-            cv::Mat ir_raw;       // 16UC1
-            cv::Mat d2c_depth;    // 16UC1 (optional)
-            cv::Mat c2d_color;    // BGR8 (optional)
+            cv::Mat color_raw; // BGR8
+            cv::Mat depth_raw; // expected 16UC1 (millimeters) or MONO16 from driver
+            cv::Mat ir_raw;    // 16UC1
+            cv::Mat d2c_depth; // 16UC1 (optional)
+            cv::Mat c2d_color; // BGR8 (optional)
 
             sensor_msgs::msg::CameraInfo color_info;
             sensor_msgs::msg::CameraInfo depth_info;
@@ -156,7 +156,6 @@ namespace behav3d::camera
         sensor_msgs::msg::CameraInfo::ConstSharedPtr last_color_info_;
         sensor_msgs::msg::CameraInfo::ConstSharedPtr last_depth_info_;
         sensor_msgs::msg::CameraInfo::ConstSharedPtr last_ir_info_;
-
 
         // ==== Paths
         std::string session_dir_;

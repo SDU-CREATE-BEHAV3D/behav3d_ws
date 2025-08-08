@@ -120,8 +120,7 @@ private:
     for (size_t i = 0; i < targets.size(); ++i)
     {
       viz_->prompt("Press 'next' to move to target " + std::to_string(i) + "/" + std::to_string(targets.size() - 1));
-      std::string motion_type = (i == 0) ? "PTP" : "LIN";
-      auto traj = ctrl_->planTarget(targets[i], motion_type);
+      auto traj = ctrl_->planTarget(targets[i], "LIN");
       ctrl_->executeTrajectory(traj);
       rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::duration<double>(capture_delay_sec_)));
@@ -158,8 +157,7 @@ private:
     for (size_t i = 0; i < targets.size(); ++i)
     {
       viz_->prompt("Press 'next' to move to target " + std::to_string(i) + "/" + std::to_string(targets.size() - 1));
-      std::string motion_type = (i == 0) ? "PTP" : "LIN";
-      auto traj = ctrl_->planTarget(targets[i], motion_type);
+      auto traj = ctrl_->planTarget(targets[i], "LIN");
       ctrl_->executeTrajectory(traj);
       rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::duration<double>(capture_delay_sec_)));
