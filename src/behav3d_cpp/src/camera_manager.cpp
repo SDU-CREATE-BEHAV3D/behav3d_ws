@@ -33,7 +33,7 @@ namespace fs = std::filesystem;
 using std::placeholders::_1;
 using std::placeholders::_2;
 
-namespace behav3d::camera
+namespace behav3d::camera_manager
 {
 
     // --- Disk I/O helpers

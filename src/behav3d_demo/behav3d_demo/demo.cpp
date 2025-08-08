@@ -51,7 +51,7 @@ class Behav3dDemo : public rclcpp::Node
 public:
   explicit Behav3dDemo(const std::shared_ptr<PilzMotionController> &ctrl,
                        const std::shared_ptr<MotionVisualizer> &viz,
-                       const std::shared_ptr<behav3d::camera::CameraManager> &cam)
+                       const std::shared_ptr<behav3d::camera_manager::CameraManager> &cam)
       : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam)
   {
     sub_ = this->create_subscription<std_msgs::msg::String>(
@@ -68,7 +68,7 @@ public:
 private:
   std::shared_ptr<MotionVisualizer> viz_;
   std::shared_ptr<PilzMotionController> ctrl_;
-  std::shared_ptr<behav3d::camera::CameraManager> cam_;
+  std::shared_ptr<behav3d::camera_manager::CameraManager> cam_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
   double capture_delay_sec_;
 
@@ -191,7 +191,7 @@ int main(int argc, char **argv)
       "ur_arm",
       "world",
       "femto__depth_optical_frame");
-  auto camera = std::make_shared<behav3d::camera::CameraManager>(
+  auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(
       rclcpp::NodeOptions().use_intra_process_comms(true));
   auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera);
 

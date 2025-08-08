@@ -31,7 +31,7 @@
 
 #include <opencv2/core.hpp>
 
-namespace behav3d::camera
+namespace behav3d::camera_manager
 {
 
     class CameraManager : public rclcpp::Node
