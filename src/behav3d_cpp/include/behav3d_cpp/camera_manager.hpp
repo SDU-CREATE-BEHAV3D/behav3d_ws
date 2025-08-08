@@ -60,9 +60,9 @@ namespace behav3d::camera_manager
 
     private:
         // ==== ROS wiring
-        void setupParams();
-        void setupSubs();
-        void setupServices();
+        void initParams();
+        void initSubscriptions();
+        void initServices();
 
         void onColor(const sensor_msgs::msg::Image::ConstSharedPtr &);
         void onDepth(const sensor_msgs::msg::Image::ConstSharedPtr &);
@@ -73,10 +73,10 @@ namespace behav3d::camera_manager
         void onDepthAlignedToColor(const sensor_msgs::msg::Image::ConstSharedPtr &);
         void onColorAlignedToDepth(const sensor_msgs::msg::Image::ConstSharedPtr &);
 
-        void handleCapture(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-                           std::shared_ptr<std_srvs::srv::Trigger::Response>);
-        void handleSetPassiveIr(const std::shared_ptr<std_srvs::srv::SetBool::Request>,
-                                std::shared_ptr<std_srvs::srv::SetBool::Response>);
+        void onCapture(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+                       std::shared_ptr<std_srvs::srv::Trigger::Response>);
+        void onSetPassiveIr(const std::shared_ptr<std_srvs::srv::SetBool::Request>,
+                            std::shared_ptr<std_srvs::srv::SetBool::Response>);
 
         // ==== Snapshot queue & writer
         struct Snapshot
@@ -84,7 +84,7 @@ namespace behav3d::camera_manager
             rclcpp::Time stamp;
             cv::Mat color_raw; // BGR8
             cv::Mat depth_raw; // expected 16UC1 (millimeters) or MONO16 from driver
-            cv::Mat ir_raw;    // 16UC1
+            cv::Mat ir_raw;    // MONO16 or MONO8 from driver
             cv::Mat d2c_depth; // 16UC1 (optional)
             cv::Mat c2d_color; // BGR8 (optional)
 
@@ -106,27 +106,25 @@ namespace behav3d::camera_manager
         };
 
         // ---- Disk I/O helpers
-        static std::vector<int> defaultPngParams();
-        bool saveSnapshotToDisk(const Snapshot &snap, FilePaths &out_paths);
-        static bool saveMatPng(const cv::Mat &img, const std::string &path, const std::vector<int> &png_params);
-        void tryDumpCameraInfos(const Snapshot &snap);
+        bool writeSnapshot(const Snapshot &snap, FilePaths &out_paths);
+        void dumpCalibration(const Snapshot &snap);
         void appendManifest(const Snapshot &snap, const FilePaths &paths);
 
-        bool makeSnapshot(Snapshot &out);
+        bool buildSnapshot(Snapshot &out);
 
-        void writerThreadFn();
+        void writerThread();
 
         // ==== Helpers
-        static cv::Mat toColorBgr(const sensor_msgs::msg::Image &msg);
-        static cv::Mat toMono(const sensor_msgs::msg::Image &msg);
-        static cv::Mat depthToUint16(const sensor_msgs::msg::Image &msg);
+        static cv::Mat toBgr(const sensor_msgs::msg::Image &msg);
+        static cv::Mat toGray(const sensor_msgs::msg::Image &msg);
+        static cv::Mat toUint16(const sensor_msgs::msg::Image &msg);
         static std::string expandUser(const std::string &path);
         static std::string timeStringFromStamp(const rclcpp::Time &t);
         static std::string timeStringDateTime(const rclcpp::Time &t);
         static std::string indexString(uint64_t idx, int width = 3);
 
-        bool ensureSessionLayout();
-        static bool writeCameraInfoYaml(const sensor_msgs::msg::CameraInfo &info,
+        bool initSessionDirs();
+        static bool writeCalibrationYaml(const sensor_msgs::msg::CameraInfo &info,
                                         const std::string &path);
 
         // ==== Params
@@ -182,16 +180,16 @@ namespace behav3d::camera_manager
         std::deque<Snapshot> queue_;
 
         // ==== Paths
-        std::string session_dir_;
-        std::string dir_color_;
-        std::string dir_depth_;
-        std::string dir_ir_;
-        std::string dir_d2c_;
-        std::string dir_c2d_;
-        std::string dir_calib_;
-        std::string manifest_path_;
+        std::filesystem::path session_dir_;
+        std::filesystem::path dir_color_;
+        std::filesystem::path dir_depth_;
+        std::filesystem::path dir_ir_;
+        std::filesystem::path dir_d2c_;
+        std::filesystem::path dir_c2d_;
+        std::filesystem::path dir_calib_;
+        std::filesystem::path manifest_path_;
         bool calib_dumped_ = false;
         std::atomic<uint64_t> snap_seq_{0};
     };
 
-} // namespace behav3d::camera
+} // namespace behav3d::camera_manager
