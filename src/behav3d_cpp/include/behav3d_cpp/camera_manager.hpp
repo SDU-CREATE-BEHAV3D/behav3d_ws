@@ -43,6 +43,12 @@ namespace behav3d::camera
         // Synchronous capture: converts current frames and writes to disk before returning
         bool capture();
 
+        // Non-blocking: enqueue latest frames and return immediately
+        bool captureAsync();
+
+        // Block until the writer queue is empty
+        void waitForIdle();
+
         // Retrieve calibration; optionally write YAMLs into the current session's calib/ dir.
         // Returns true if all three camera infos were obtained within timeout.
         bool getCalibration(double timeout_sec = 2.0, bool write_yaml = true);
@@ -108,6 +114,8 @@ namespace behav3d::camera
 
         bool makeSnapshot(Snapshot &out);
 
+        void writerThreadFn();
+
         // ==== Helpers
         static cv::Mat toColorBgr(const sensor_msgs::msg::Image &msg);
         static cv::Mat toMono(const sensor_msgs::msg::Image &msg);
@@ -166,6 +174,12 @@ namespace behav3d::camera
         sensor_msgs::msg::CameraInfo::ConstSharedPtr last_color_info_;
         sensor_msgs::msg::CameraInfo::ConstSharedPtr last_depth_info_;
         sensor_msgs::msg::CameraInfo::ConstSharedPtr last_ir_info_;
+
+        // ==== Writer state
+        std::atomic<bool> running_{true};
+        std::thread writer_;
+        std::condition_variable cv_;
+        std::deque<Snapshot> queue_;
 
         // ==== Paths
         std::string session_dir_;

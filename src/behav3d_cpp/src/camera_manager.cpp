@@ -141,6 +141,9 @@ namespace behav3d::camera
         setupSubs();
         setupServices();
 
+        // Start writer thread
+        writer_ = std::thread(&CameraManager::writerThreadFn, this);
+
         if (passive_ir_on_start_)
         {
             // Call the camera driver to disable laser (passive IR)
@@ -163,6 +166,34 @@ namespace behav3d::camera
 
     CameraManager::~CameraManager()
     {
+        running_.store(false);
+        cv_.notify_all();
+        if (writer_.joinable())
+            writer_.join();
+    }
+    bool CameraManager::captureAsync()
+    {
+        Snapshot snap;
+        if (!makeSnapshot(snap))
+            return false;
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            if (queue_.size() >= max_queue_)
+            {
+                queue_.pop_front();
+                RCLCPP_WARN(get_logger(), "Capture queue full — dropping oldest snapshot");
+            }
+            queue_.push_back(std::move(snap));
+            RCLCPP_INFO(get_logger(), "Snapshot enqueued at %s", timeStringFromStamp(queue_.back().stamp).c_str());
+        }
+        cv_.notify_one();
+        return true;
+    }
+
+    void CameraManager::waitForIdle()
+    {
+        std::unique_lock<std::mutex> lk(mtx_);
+        cv_.wait(lk, [this]() { return queue_.empty(); });
     }
 
     void CameraManager::setupParams()
@@ -392,12 +423,12 @@ namespace behav3d::camera
     void CameraManager::handleCapture(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                                       std::shared_ptr<std_srvs::srv::Trigger::Response> res)
     {
-        bool ok = capture();
+        bool ok = captureAsync();
         res->success = ok;
-        res->message = ok ? "Snapshot captured" : "Not ready: missing IR frame";
+        res->message = ok ? "Snapshot enqueued" : "Not ready: missing IR frame";
         if (ok)
         {
-            RCLCPP_INFO(get_logger(), "Capture completed");
+            RCLCPP_INFO(get_logger(), "Capture enqueued");
         }
         else
         {
@@ -748,3 +779,38 @@ namespace behav3d::camera
     }
 
 } // namespace behav3d::camera
+    void CameraManager::writerThreadFn()
+    {
+        while (running_.load())
+        {
+            Snapshot snap;
+            {
+                std::unique_lock<std::mutex> lk(mtx_);
+                cv_.wait(lk, [this]() { return !queue_.empty() || !running_.load(); });
+                if (!running_.load() && queue_.empty())
+                    break;
+                snap = std::move(queue_.front());
+                queue_.pop_front();
+            }
+
+            RCLCPP_INFO(get_logger(), "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
+            FilePaths paths{};
+            try
+            {
+                saveSnapshotToDisk(snap, paths);
+            }
+            catch (const std::exception &e)
+            {
+                RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
+            }
+
+            tryDumpCameraInfos(snap);
+            appendManifest(snap, paths);
+
+            {
+                std::lock_guard<std::mutex> lk(mtx_);
+                if (queue_.empty())
+                    cv_.notify_all();
+            }
+        }
+    }
