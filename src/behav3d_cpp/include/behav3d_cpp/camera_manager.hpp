@@ -43,6 +43,15 @@ namespace behav3d::camera
         // Synchronous capture: converts current frames and writes to disk before returning
         bool capture();
 
+        // Retrieve calibration; optionally write YAMLs into the current session's calib/ dir.
+        // Returns true if all three camera infos were obtained within timeout.
+        bool getCalibration(double timeout_sec = 2.0, bool write_yaml = true);
+        bool getCalibration(sensor_msgs::msg::CameraInfo &color,
+                            sensor_msgs::msg::CameraInfo &depth,
+                            sensor_msgs::msg::CameraInfo &ir,
+                            double timeout_sec = 2.0,
+                            bool write_yaml = true);
+
     private:
         // ==== ROS wiring
         void setupParams();

@@ -303,18 +303,55 @@ namespace behav3d::camera
     {
         std::lock_guard<std::mutex> lk(mtx_);
         last_color_info_ = msg;
+        if (!calib_dumped_) {
+            sensor_msgs::msg::CameraInfo::ConstSharedPtr c, d, i;
+            {
+                // reuse the same lock scope
+                c = last_color_info_;
+                d = last_depth_info_;
+                i = last_ir_info_;
+            }
+            if (c && d && i) {
+                Snapshot s; s.color_info = *c; s.depth_info = *d; s.ir_info = *i;
+                tryDumpCameraInfos(s);
+            }
+        }
     }
 
     void CameraManager::onDepthInfo(const sensor_msgs::msg::CameraInfo::ConstSharedPtr &msg)
     {
         std::lock_guard<std::mutex> lk(mtx_);
         last_depth_info_ = msg;
+        if (!calib_dumped_) {
+            sensor_msgs::msg::CameraInfo::ConstSharedPtr c, d, i;
+            {
+                c = last_color_info_;
+                d = last_depth_info_;
+                i = last_ir_info_;
+            }
+            if (c && d && i) {
+                Snapshot s; s.color_info = *c; s.depth_info = *d; s.ir_info = *i;
+                tryDumpCameraInfos(s);
+            }
+        }
     }
 
     void CameraManager::onIrInfo(const sensor_msgs::msg::CameraInfo::ConstSharedPtr &msg)
     {
         std::lock_guard<std::mutex> lk(mtx_);
         last_ir_info_ = msg;
+        if (!calib_dumped_) {
+            sensor_msgs::msg::CameraInfo::ConstSharedPtr c, d, i;
+            {
+                c = last_color_info_;
+                d = last_depth_info_;
+                i = last_ir_info_;
+            }
+            if (c && d && i) {
+                Snapshot s; s.color_info = *c; s.depth_info = *d; s.ir_info = *i;
+                tryDumpCameraInfos(s);
+            }
+        }
     }
 
     void CameraManager::onDepthAlignedToColor(const sensor_msgs::msg::Image::ConstSharedPtr &msg)
@@ -337,9 +374,12 @@ namespace behav3d::camera
 
         FilePaths paths{};
         RCLCPP_INFO(get_logger(), "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
-        try {
+        try
+        {
             saveSnapshotToDisk(snap, paths);
-        } catch (const std::exception &e) {
+        }
+        catch (const std::exception &e)
+        {
             RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
             return false;
         }
@@ -347,8 +387,6 @@ namespace behav3d::camera
         appendManifest(snap, paths);
         return true;
     }
-
-
 
     void CameraManager::handleCapture(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                                       std::shared_ptr<std_srvs::srv::Trigger::Response> res)
@@ -396,6 +434,65 @@ namespace behav3d::camera
             res->success = false;
             res->message = std::string("service call failed: ") + e.what();
         }
+    }
+
+    // --- Calibration retrieval methods ---
+    bool CameraManager::getCalibration(double timeout_sec, bool write_yaml)
+    {
+        sensor_msgs::msg::CameraInfo c, d, i;
+        return getCalibration(c, d, i, timeout_sec, write_yaml);
+    }
+
+    bool CameraManager::getCalibration(sensor_msgs::msg::CameraInfo &color,
+                                       sensor_msgs::msg::CameraInfo &depth,
+                                       sensor_msgs::msg::CameraInfo &ir,
+                                       double timeout_sec,
+                                       bool write_yaml)
+    {
+        // Wait until all three CameraInfo messages are available, up to timeout
+        const auto deadline = this->now() + rclcpp::Duration::from_seconds(timeout_sec);
+        sensor_msgs::msg::CameraInfo::ConstSharedPtr csp, dsp, isp;
+        while (rclcpp::ok())
+        {
+            {
+                std::lock_guard<std::mutex> lk(mtx_);
+                csp = last_color_info_;
+                dsp = last_depth_info_;
+                isp = last_ir_info_;
+            }
+            if (csp && dsp && isp)
+                break;
+            if (this->now() >= deadline)
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
+        if (!(csp && dsp && isp))
+            return false;
+
+        color = *csp;
+        depth = *dsp;
+        ir = *isp;
+
+        if (write_yaml)
+        {
+            std::error_code ec;
+            fs::create_directories(dir_calib_, ec);
+            (void)ec;
+            try
+            {
+                writeCameraInfoYaml(color, (fs::path(dir_calib_) / "color_camera_info.yaml").string());
+                writeCameraInfoYaml(depth, (fs::path(dir_calib_) / "depth_camera_info.yaml").string());
+                writeCameraInfoYaml(ir,    (fs::path(dir_calib_) / "ir_camera_info.yaml").string());
+                calib_dumped_ = true;
+                RCLCPP_INFO(get_logger(), "Wrote camera info YAMLs to %s", dir_calib_.c_str());
+            }
+            catch (const std::exception &e)
+            {
+                RCLCPP_WARN(get_logger(), "Failed to write camera info yaml: %s", e.what());
+            }
+        }
+        return true;
     }
 
     bool CameraManager::makeSnapshot(Snapshot &out)
@@ -476,23 +573,28 @@ namespace behav3d::camera
         }
     }
 
-
-
     // ============== Conversions ==============
     cv::Mat CameraManager::toColorBgr(const sensor_msgs::msg::Image &msg)
     {
-        try {
+        try
+        {
             return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8)->image;
-        } catch (const cv_bridge::Exception &) {
+        }
+        catch (const cv_bridge::Exception &)
+        {
             // Best-effort fallback: if it's grayscale, expand to BGR
-            try {
+            try
+            {
                 auto any = cv_bridge::toCvCopy(msg)->image;
-                if (!any.empty() && any.channels() == 1) {
+                if (!any.empty() && any.channels() == 1)
+                {
                     cv::Mat bgr;
                     cv::cvtColor(any, bgr, cv::COLOR_GRAY2BGR);
                     return bgr;
                 }
-            } catch (...) {
+            }
+            catch (...)
+            {
                 // ignore and return empty
             }
             return cv::Mat();
@@ -501,14 +603,19 @@ namespace behav3d::camera
 
     cv::Mat CameraManager::toMono(const sensor_msgs::msg::Image &msg)
     {
-        // Expect MONO16 or MONO8 from driver; anything else is skipped
-        if (msg.encoding == sensor_msgs::image_encodings::MONO16)
-        {
-            return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO16)->image;
+        namespace enc = sensor_msgs::image_encodings;
+        // Accept common 1-channel grayscale encodings
+        if (msg.encoding == enc::MONO16) {
+            return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
         }
-        if (msg.encoding == sensor_msgs::image_encodings::MONO8)
-        {
-            return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO8)->image;
+        if (msg.encoding == enc::MONO8) {
+            return cv_bridge::toCvCopy(msg, enc::MONO8)->image;
+        }
+        if (msg.encoding == enc::TYPE_16UC1) {
+            return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image; // treat as 16U mono
+        }
+        if (msg.encoding == enc::TYPE_8UC1) {
+            return cv_bridge::toCvCopy(msg, enc::TYPE_8UC1)->image;  // treat as 8U mono
         }
         return cv::Mat();
     }
@@ -516,15 +623,25 @@ namespace behav3d::camera
     cv::Mat CameraManager::depthToUint16(const sensor_msgs::msg::Image &msg)
     {
         namespace enc = sensor_msgs::image_encodings;
-        // Expect 16-bit depth in mm from driver
-        if (msg.encoding == enc::TYPE_16UC1)
-        {
+        // 16-bit depth in millimeters
+        if (msg.encoding == enc::TYPE_16UC1) {
             return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image;
         }
-        // Some drivers might expose depth as MONO16; accept it as-is
-        if (msg.encoding == enc::MONO16)
-        {
+        // Some drivers expose depth as MONO16; accept it as-is
+        if (msg.encoding == enc::MONO16) {
             return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
+        }
+        // Depth in meters (float32) -> convert to uint16 millimeters
+        if (msg.encoding == enc::TYPE_32FC1) {
+            cv::Mat f = cv_bridge::toCvCopy(msg, enc::TYPE_32FC1)->image;
+            if (f.empty()) return cv::Mat();
+            cv::patchNaNs(f, 0.0f);
+            cv::Mat mm_f32 = f * 1000.0f;                 // meters -> millimeters
+            cv::threshold(mm_f32, mm_f32, 65535.0, 65535.0, cv::THRESH_TRUNC);
+            mm_f32.setTo(0.0f, mm_f32 < 0.0f);            // clamp negatives
+            cv::Mat mm_u16;
+            mm_f32.convertTo(mm_u16, CV_16UC1);
+            return mm_u16;
         }
         return cv::Mat();
     }
