@@ -513,18 +513,26 @@ namespace behav3d::camera
     // ============== Conversions ==============
     cv::Mat CameraManager::toColorBgr(const sensor_msgs::msg::Image &msg)
     {
-        // Expect BGR8 or RGB8 from driver; anything else is skipped
-        if (msg.encoding == sensor_msgs::image_encodings::BGR8) {
+        // Prefer a generic cv_bridge conversion to BGR8; handles many encodings (rgb8, bgra8, rgba8, yuv422, etc.)
+        try {
             return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8)->image;
+        } catch (const cv_bridge::Exception &e) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 5000,
+                                 "color encoding '%s' not directly supported; cv_bridge to BGR8 failed: %s",
+                                 msg.encoding.c_str(), e.what());
+            // Best-effort fallback: if it's grayscale, expand to BGR so downstream save logic works
+            try {
+                auto any = cv_bridge::toCvCopy(msg)->image;
+                if (!any.empty() && any.channels() == 1) {
+                    cv::Mat bgr;
+                    cv::cvtColor(any, bgr, cv::COLOR_GRAY2BGR);
+                    return bgr;
+                }
+            } catch (...) {
+                // ignore and fall through
+            }
+            return cv::Mat();
         }
-        if (msg.encoding == sensor_msgs::image_encodings::RGB8) {
-            auto cvimg = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGB8)->image;
-            cv::Mat bgr;
-            cv::cvtColor(cvimg, bgr, cv::COLOR_RGB2BGR);
-            return bgr;
-        }
-        RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 5000, "color encoding '%s' not supported; skipping save", msg.encoding.c_str());
-        return cv::Mat();
     }
 
     cv::Mat CameraManager::toMono(const sensor_msgs::msg::Image &msg)
