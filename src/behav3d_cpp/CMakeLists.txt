@@ -10,6 +10,9 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -25,6 +28,7 @@ add_library(${PROJECT_NAME} SHARED
   src/trajectory_builder.cpp
   src/util.cpp
   src/motion_visualizer.cpp
+  src/camera_manager.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -42,10 +46,12 @@ ament_target_dependencies(${PROJECT_NAME}
   moveit_core
   moveit_ros_planning_interface
   moveit_msgs
-  moveit_visual_tools 
+  moveit_visual_tools
+  std_srvs
+  cv_bridge
 )
 
-target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
+target_link_libraries(${PROJECT_NAME} Eigen3::Eigen ${OpenCV_LIBS} cv_bridge::cv_bridge)
 
 # ─── Install ─────────────────────────────────────────────────────
 install(
@@ -75,6 +81,8 @@ ament_export_dependencies(
   moveit_msgs
   eigen3_cmake_module
   moveit_visual_tools
+  std_srvs
+  cv_bridge
 )
 
 ament_package()
