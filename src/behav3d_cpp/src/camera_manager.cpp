@@ -58,32 +58,33 @@ namespace behav3d::camera
 
     bool CameraManager::saveSnapshotToDisk(const Snapshot &snap, FilePaths &out_paths)
     {
-        const std::string ts = timeStringFromStamp(snap.stamp);
         const auto png = defaultPngParams();
+        const uint64_t idx = snap_seq_.fetch_add(1, std::memory_order_relaxed);
+        const std::string stem = indexString(idx, 3);
 
         if (snap.has_ir && !snap.ir_raw.empty())
         {
-            out_paths.ir = (fs::path(dir_ir_) / (ts + ".png")).string();
+            out_paths.ir = (fs::path(dir_ir_) / (std::string("ir_") + stem + ".png")).string();
             saveMatPng(snap.ir_raw, out_paths.ir, png);
         }
         if (snap.has_color && !snap.color_raw.empty())
         {
-            out_paths.color = (fs::path(dir_color_) / (ts + ".png")).string();
+            out_paths.color = (fs::path(dir_color_) / (std::string("color_") + stem + ".png")).string();
             saveMatPng(snap.color_raw, out_paths.color, png);
         }
         if (snap.has_depth && !snap.depth_raw.empty())
         {
-            out_paths.depth = (fs::path(dir_depth_) / (ts + ".png")).string();
+            out_paths.depth = (fs::path(dir_depth_) / (std::string("depth_") + stem + ".png")).string();
             saveMatPng(snap.depth_raw, out_paths.depth, png);
         }
         if (snap.has_d2c && !snap.d2c_depth.empty())
         {
-            out_paths.d2c = (fs::path(dir_d2c_) / (ts + ".png")).string();
+            out_paths.d2c = (fs::path(dir_d2c_) / (std::string("d2c_") + stem + ".png")).string();
             saveMatPng(snap.d2c_depth, out_paths.d2c, png);
         }
         if (snap.has_c2d && !snap.c2d_color.empty())
         {
-            out_paths.c2d = (fs::path(dir_c2d_) / (ts + ".png")).string();
+            out_paths.c2d = (fs::path(dir_c2d_) / (std::string("c2d_") + stem + ".png")).string();
             saveMatPng(snap.c2d_color, out_paths.c2d, png);
         }
         return true;
@@ -691,6 +692,13 @@ namespace behav3d::camera
 #endif
         std::ostringstream oss;
         oss << std::put_time(&bt, "%Y%m%d-%H%M%S");
+        return oss.str();
+    }
+
+    std::string CameraManager::indexString(uint64_t idx, int width)
+    {
+        std::ostringstream oss;
+        oss << std::setw(width) << std::setfill('0') << idx;
         return oss.str();
     }
 

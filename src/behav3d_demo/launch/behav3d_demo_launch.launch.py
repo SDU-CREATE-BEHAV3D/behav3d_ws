@@ -24,6 +24,7 @@ from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
 )
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -45,6 +46,11 @@ def generate_launch_description():
         default_value="true",
         description="true = simulation/mock, false = real hardware",
     )
+    orbbec_enable_arg = DeclareLaunchArgument(
+        "orbbec_enable",
+        default_value="true",
+        description="Start Orbbec camera (orbbec_camera/femto_bolt.launch.py)",
+    )
 
     # -------------------------------------------------------------------------
     # 2) Common paths
@@ -54,6 +60,23 @@ def generate_launch_description():
     )
     moveit_launch_dir = os.path.join(
         get_package_share_directory("i40_workcell_moveit_config"), "launch"
+    )
+
+    orbbec_launch_dir = os.path.join(
+        get_package_share_directory("orbbec_camera"), "launch"
+    )
+
+    orbbec_camera = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(orbbec_launch_dir, "femto_bolt.launch.py")),
+        condition=IfCondition(LaunchConfiguration("orbbec_enable")),
+        launch_arguments={
+            # Add camera-specific arguments here if you want to override defaults.
+            # Example (only if supported by the Orbbec launch):
+            # "device_index": "0",
+            # "enable_color": "true",
+            # "enable_depth": "true",
+            # "enable_ir": "true",
+        }.items(),
     )
 
     # -------------------------------------------------------------------------
@@ -129,8 +152,10 @@ def generate_launch_description():
         [
             robot_ip_arg,
             mock_arg,
+            orbbec_enable_arg,
             ur_driver,
             moveit_stack,
+            orbbec_camera,
             rviz_node,
             move_group_demo
         ]

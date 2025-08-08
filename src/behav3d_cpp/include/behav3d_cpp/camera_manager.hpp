@@ -115,6 +115,7 @@ namespace behav3d::camera
         static std::string expandUser(const std::string &path);
         static std::string timeStringFromStamp(const rclcpp::Time &t);
         static std::string timeStringDateTime(const rclcpp::Time &t);
+        static std::string indexString(uint64_t idx, int width = 3);
 
         bool ensureSessionLayout();
         static bool writeCameraInfoYaml(const sensor_msgs::msg::CameraInfo &info,
@@ -176,6 +177,7 @@ namespace behav3d::camera
         std::string dir_calib_;
         std::string manifest_path_;
         bool calib_dumped_ = false;
+        std::atomic<uint64_t> snap_seq_{0};
     };
 
 } // namespace behav3d::camera
