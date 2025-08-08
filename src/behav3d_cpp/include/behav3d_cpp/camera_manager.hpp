@@ -109,6 +109,7 @@ namespace behav3d::camera
         static cv::Mat depthToUint16(const sensor_msgs::msg::Image &msg);
         static std::string expandUser(const std::string &path);
         static std::string timeStringFromStamp(const rclcpp::Time &t);
+        static std::string timeStringDateTime(const rclcpp::Time &t);
 
         bool ensureSessionLayout();
         static bool writeCameraInfoYaml(const sensor_msgs::msg::CameraInfo &info,

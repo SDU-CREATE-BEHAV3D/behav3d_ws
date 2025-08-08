@@ -615,6 +615,22 @@ namespace behav3d::camera
         return oss.str();
     }
 
+    std::string CameraManager::timeStringDateTime(const rclcpp::Time &t)
+    {
+        int64_t nsec_total = t.nanoseconds();
+        int64_t sec = nsec_total / 1000000000LL;
+        std::time_t tt = static_cast<std::time_t>(sec);
+        std::tm bt{};
+#ifdef _WIN32
+        localtime_s(&bt, &tt);
+#else
+        localtime_r(&tt, &bt);
+#endif
+        std::ostringstream oss;
+        oss << std::put_time(&bt, "%Y%m%d-%H%M%S");
+        return oss.str();
+    }
+
     bool CameraManager::writeCameraInfoYaml(const sensor_msgs::msg::CameraInfo &info,
                                             const std::string &path)
     {
