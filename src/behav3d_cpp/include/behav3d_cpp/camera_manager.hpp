@@ -40,11 +40,8 @@ namespace behav3d::camera
         explicit CameraManager(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
         ~CameraManager() override;
 
-        // Non-blocking: copies the latest frames into a queue and returns immediately
-        bool captureAsync();
-
-        // Optional utility if you want to block until disk queue is empty (e.g., before shutdown)
-        void waitForIdle();
+        // Synchronous capture: converts current frames and writes to disk before returning
+        bool capture();
 
     private:
         // ==== ROS wiring
@@ -101,7 +98,6 @@ namespace behav3d::camera
         void appendManifest(const Snapshot &snap, const FilePaths &paths);
 
         bool makeSnapshot(Snapshot &out);
-        void writerThreadFn();
 
         // ==== Helpers
         static cv::Mat toColorBgr(const sensor_msgs::msg::Image &msg);
@@ -161,11 +157,6 @@ namespace behav3d::camera
         sensor_msgs::msg::CameraInfo::ConstSharedPtr last_depth_info_;
         sensor_msgs::msg::CameraInfo::ConstSharedPtr last_ir_info_;
 
-        // ==== Writer state
-        std::atomic<bool> running_{true};
-        std::thread writer_;
-        std::condition_variable cv_;
-        std::deque<Snapshot> queue_;
 
         // ==== Paths
         std::string session_dir_;

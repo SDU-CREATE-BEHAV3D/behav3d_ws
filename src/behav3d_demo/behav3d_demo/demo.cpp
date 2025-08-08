@@ -50,8 +50,8 @@ class Behav3dDemo : public rclcpp::Node
 {
 public:
   explicit Behav3dDemo(const std::shared_ptr<PilzMotionController> &ctrl,
-                    const std::shared_ptr<MotionVisualizer> &viz,
-                    const std::shared_ptr<behav3d::camera::CameraManager> &cam)
+                       const std::shared_ptr<MotionVisualizer> &viz,
+                       const std::shared_ptr<behav3d::camera::CameraManager> &cam)
       : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam)
   {
     sub_ = this->create_subscription<std_msgs::msg::String>(
@@ -119,17 +119,16 @@ private:
     // Loop over all targets (including first)
     for (size_t i = 0; i < targets.size(); ++i)
     {
-      viz_->prompt("Press 'next' to move to target " + std::to_string(i) + "/" + std::to_string(targets.size()-1));
+      viz_->prompt("Press 'next' to move to target " + std::to_string(i) + "/" + std::to_string(targets.size() - 1));
       std::string motion_type = (i == 0) ? "PTP" : "LIN";
       auto traj = ctrl_->planTarget(targets[i], motion_type);
       ctrl_->executeTrajectory(traj);
       rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::duration<double>(capture_delay_sec_)));
-      if (cam_ && !cam_->captureAsync())
+      if (cam_ && !cam_->capture())
       {
         RCLCPP_WARN(this->get_logger(), "CameraManager: capture not ready after %s to target %zu.", motion_type.c_str(), i);
       }
-      if (cam_) cam_->waitForIdle();
     }
     viz_->deleteAllMarkers();
     home();
@@ -158,17 +157,18 @@ private:
     // Loop over all targets (including first)
     for (size_t i = 0; i < targets.size(); ++i)
     {
-      viz_->prompt("Press 'next' to move to target " + std::to_string(i) + "/" + std::to_string(targets.size()-1));
+      viz_->prompt("Press 'next' to move to target " + std::to_string(i) + "/" + std::to_string(targets.size() - 1));
       std::string motion_type = (i == 0) ? "PTP" : "LIN";
       auto traj = ctrl_->planTarget(targets[i], motion_type);
       ctrl_->executeTrajectory(traj);
       rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::duration<double>(capture_delay_sec_)));
-      if (cam_ && !cam_->captureAsync())
+      RCLCPP_INFO(this->get_logger(), "Waiting for %zu seconds.", i);
+
+      if (cam_ && !cam_->capture())
       {
         RCLCPP_WARN(this->get_logger(), "CameraManager: capture not ready after %s to target %zu.", motion_type.c_str(), i);
       }
-      if (cam_) cam_->waitForIdle();
     }
     viz_->deleteAllMarkers();
     home();
