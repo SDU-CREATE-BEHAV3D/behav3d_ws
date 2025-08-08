@@ -62,12 +62,12 @@
     <link name="femto_mount">
       <visual>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/femto_mount.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/ur20_bolt_mount_v2.dae"/>
         </geometry>
       </visual>
       <collision>
         <geometry>
-         <mesh filename="package://ur20_workcell/meshes/femto_mount.dae"/>
+         <mesh filename="package://ur20_workcell/meshes/ur20_bolt_mount_v2.dae"/>
         </geometry>
       </collision>
     </link>
