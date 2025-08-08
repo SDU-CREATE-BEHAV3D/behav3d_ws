@@ -210,8 +210,9 @@ namespace behav3d::camera
 
         // session dir
         auto now = this->now();
-        session_dir_ = (fs::path(out_root) / ("session_" + timeStringFromStamp(now))).string();
+        session_dir_ = (fs::path(out_root) / (std::string("session-") + timeStringDateTime(now))).string();
         fs::create_directories(session_dir_, ec);
+        RCLCPP_INFO(get_logger(), "Created session directory: %s", session_dir_.c_str());
         if (ec)
         {
             RCLCPP_ERROR(get_logger(), "Failed to create session_dir '%s': %s", session_dir_.c_str(), ec.message().c_str());
@@ -241,28 +242,36 @@ namespace behav3d::camera
 
         sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
             color_topic_, qos, std::bind(&CameraManager::onColor, this, _1));
+        RCLCPP_INFO(get_logger(), "Subscribed to color: %s", color_topic_.c_str());
         sub_depth_ = this->create_subscription<sensor_msgs::msg::Image>(
             depth_topic_, qos, std::bind(&CameraManager::onDepth, this, _1));
+        RCLCPP_INFO(get_logger(), "Subscribed to depth: %s", depth_topic_.c_str());
         sub_ir_ = this->create_subscription<sensor_msgs::msg::Image>(
             ir_topic_, qos, std::bind(&CameraManager::onIr, this, _1));
+        RCLCPP_INFO(get_logger(), "Subscribed to IR: %s", ir_topic_.c_str());
 
         sub_color_info_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
             color_info_topic_, qos, std::bind(&CameraManager::onColorInfo, this, _1));
+        RCLCPP_INFO(get_logger(), "Subscribed to color_info: %s", color_info_topic_.c_str());
         sub_depth_info_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
             depth_info_topic_, qos, std::bind(&CameraManager::onDepthInfo, this, _1));
+        RCLCPP_INFO(get_logger(), "Subscribed to depth_info: %s", depth_info_topic_.c_str());
         sub_ir_info_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
             ir_info_topic_, qos, std::bind(&CameraManager::onIrInfo, this, _1));
+        RCLCPP_INFO(get_logger(), "Subscribed to ir_info: %s", ir_info_topic_.c_str());
 
         // Optional aligned topics (subscribe even if empty; callbacks just won't fire if not published)
         if (!d2c_depth_topic_.empty())
         {
             sub_d2c_ = this->create_subscription<sensor_msgs::msg::Image>(
                 d2c_depth_topic_, qos, std::bind(&CameraManager::onDepthAlignedToColor, this, _1));
+            RCLCPP_INFO(get_logger(), "Subscribed to depth->color (aligned depth): %s", d2c_depth_topic_.c_str());
         }
         if (!c2d_color_topic_.empty())
         {
             sub_c2d_ = this->create_subscription<sensor_msgs::msg::Image>(
                 c2d_color_topic_, qos, std::bind(&CameraManager::onColorAlignedToDepth, this, _1));
+            RCLCPP_INFO(get_logger(), "Subscribed to color->depth (aligned color): %s", c2d_color_topic_.c_str());
         }
     }
 
@@ -338,11 +347,11 @@ namespace behav3d::camera
             std::lock_guard<std::mutex> lk(mtx_);
             if (queue_.size() >= max_queue_)
             {
-                // Drop oldest to make space (non-blocking behavior)
                 queue_.pop_front();
                 RCLCPP_WARN(get_logger(), "Capture queue full — dropping oldest snapshot");
             }
             queue_.push_back(std::move(snap));
+            RCLCPP_INFO(get_logger(), "Snapshot enqueued at %s", timeStringFromStamp(queue_.back().stamp).c_str());
         }
         cv_.notify_one();
         return true;
@@ -361,6 +370,14 @@ namespace behav3d::camera
         bool ok = captureAsync();
         res->success = ok;
         res->message = ok ? "Snapshot enqueued" : "Not ready: missing IR frame";
+        if (ok)
+        {
+            RCLCPP_INFO(get_logger(), "Capture enqueued");
+        }
+        else
+        {
+            RCLCPP_INFO(get_logger(), "Capture not ready: missing IR frame");
+        }
     }
 
     void CameraManager::handleSetPassiveIr(const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
@@ -488,7 +505,7 @@ namespace behav3d::camera
                 snap = std::move(queue_.front());
                 queue_.pop_front();
             }
-
+            RCLCPP_INFO(get_logger(), "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
             FilePaths paths{};
             try
             {
@@ -498,14 +515,19 @@ namespace behav3d::camera
             {
                 RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
             }
+            RCLCPP_DEBUG(get_logger(), "Saved snapshot images to disk");
 
             tryDumpCameraInfos(snap);
             appendManifest(snap, paths);
+            RCLCPP_DEBUG(get_logger(), "Appended snapshot to manifest");
 
             {
                 std::lock_guard<std::mutex> lk(mtx_);
                 if (queue_.empty())
+                {
+                    RCLCPP_INFO(get_logger(), "Writer idle");
                     cv_.notify_all();
+                }
             }
         }
     }
@@ -513,14 +535,10 @@ namespace behav3d::camera
     // ============== Conversions ==============
     cv::Mat CameraManager::toColorBgr(const sensor_msgs::msg::Image &msg)
     {
-        // Prefer a generic cv_bridge conversion to BGR8; handles many encodings (rgb8, bgra8, rgba8, yuv422, etc.)
         try {
             return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8)->image;
-        } catch (const cv_bridge::Exception &e) {
-            RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 5000,
-                                 "color encoding '%s' not directly supported; cv_bridge to BGR8 failed: %s",
-                                 msg.encoding.c_str(), e.what());
-            // Best-effort fallback: if it's grayscale, expand to BGR so downstream save logic works
+        } catch (const cv_bridge::Exception &) {
+            // Best-effort fallback: if it's grayscale, expand to BGR
             try {
                 auto any = cv_bridge::toCvCopy(msg)->image;
                 if (!any.empty() && any.channels() == 1) {
@@ -529,7 +547,7 @@ namespace behav3d::camera
                     return bgr;
                 }
             } catch (...) {
-                // ignore and fall through
+                // ignore and return empty
             }
             return cv::Mat();
         }
@@ -538,13 +556,14 @@ namespace behav3d::camera
     cv::Mat CameraManager::toMono(const sensor_msgs::msg::Image &msg)
     {
         // Expect MONO16 or MONO8 from driver; anything else is skipped
-        if (msg.encoding == sensor_msgs::image_encodings::MONO16) {
+        if (msg.encoding == sensor_msgs::image_encodings::MONO16)
+        {
             return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO16)->image;
         }
-        if (msg.encoding == sensor_msgs::image_encodings::MONO8) {
+        if (msg.encoding == sensor_msgs::image_encodings::MONO8)
+        {
             return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO8)->image;
         }
-        RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 5000, "ir encoding '%s' not supported; skipping save", msg.encoding.c_str());
         return cv::Mat();
     }
 
@@ -552,14 +571,15 @@ namespace behav3d::camera
     {
         namespace enc = sensor_msgs::image_encodings;
         // Expect 16-bit depth in mm from driver
-        if (msg.encoding == enc::TYPE_16UC1) {
+        if (msg.encoding == enc::TYPE_16UC1)
+        {
             return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image;
         }
         // Some drivers might expose depth as MONO16; accept it as-is
-        if (msg.encoding == enc::MONO16) {
+        if (msg.encoding == enc::MONO16)
+        {
             return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
         }
-        RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 5000, "depth encoding '%s' not supported; expected 16UC1 or MONO16; skipping save", msg.encoding.c_str());
         return cv::Mat();
     }
 
