@@ -15,6 +15,9 @@
   <depend>rclcpp_action</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>cv_bridge</depend>
+  <depend>opencv</depend>
   <depend>tf2_eigen</depend>
   <depend>moveit_core</depend>
   <depend>moveit_ros_planning_interface</depend>
