@@ -115,6 +115,7 @@ namespace behav3d::session_manager
 
     // Build session directory name
     auto now = this->now();
+    start_stamp_ = now;
     const std::string ts = timeStringDateTime(now);
     const std::string tag = opts_.session_tag.empty() ? std::string("untitled") : opts_.session_tag;
 
@@ -161,14 +162,8 @@ namespace behav3d::session_manager
     // Prime the CameraManager to write under this directory and to *not* write its own manifest
     cam_->beginSession(session_dir_.string(), tag);
 
-    // Open manifest JSONL (single source of truth)
-    manifest_path_ = session_dir_ / "captures.jsonl";
-    manifest_.open(manifest_path_, std::ios::out | std::ios::app);
-    if (!manifest_.is_open())
-    {
-      RCLCPP_ERROR(this->get_logger(), "[Session] Failed to open manifest: %s", manifest_path_.string().c_str());
-      return false;
-    }
+    // Manifest path (single JSON written at finish())
+    manifest_path_ = session_dir_ / "manifest.json";
 
     // Clear RViz markers, show that a new session is starting
     if (viz_)
@@ -257,9 +252,44 @@ namespace behav3d::session_manager
       cam_->waitForIdle();
     if (viz_)
       viz_->deleteAllMarkers();
+
+    // Compose and write manifest.json
+    rclcpp::Time end_stamp = this->now();
+    try
+    {
+      std::ofstream out(manifest_path_.string(), std::ios::out | std::ios::trunc);
+      if (!out.is_open())
+      {
+        RCLCPP_ERROR(this->get_logger(), "[Session] Failed to open manifest for write: %s", manifest_path_.string().c_str());
+      }
+      else
+      {
+        out.setf(std::ios::fixed);
+        out << "{";
+        out << "\"session_tag\":\"" << opts_.session_tag << "\",";
+        out << "\"motion_type\":\"" << opts_.motion_type << "\",";
+        out << "\"apply_totg\":" << (opts_.apply_totg ? "true" : "false") << ",";
+        out << "\"wait_time_sec\":" << std::setprecision(3) << opts_.wait_time_sec << ",";
+        out << "\"start_stamp_ns\":" << start_stamp_.nanoseconds() << ",";
+        out << "\"end_stamp_ns\":" << end_stamp.nanoseconds() << ",";
+        out << "\"root_dir\":\"" << session_dir_.string() << "\",";
+        out << "\"captures\":[";
+        for (size_t i = 0; i < manifest_entries_.size(); ++i)
+        {
+          if (i) out << ",";
+          out << "\n" << manifest_entries_[i];
+        }
+        out << "\n]}";
+        out.close();
+        RCLCPP_INFO(this->get_logger(), "[Session] Wrote manifest: %s", manifest_path_.string().c_str());
+      }
+    }
+    catch (const std::exception &e)
+    {
+      RCLCPP_ERROR(this->get_logger(), "[Session] Error writing manifest: %s", e.what());
+    }
+
     goHome();
-    if (manifest_.is_open())
-      manifest_.close();
   }
 
   void SessionManager::goHome()
@@ -296,18 +326,13 @@ namespace behav3d::session_manager
                                          const rclcpp::Time &stamp,
                                          const std::string &key)
   {
-    if (!manifest_.is_open())
-      return;
-
-    // Compose a single JSON line (no external deps)
+    // Compose a single JSON object string for this capture
     std::ostringstream oss;
     oss.setf(std::ios::fixed);
     oss << std::setprecision(6);
     oss << "{";
     oss << "\"i\":" << i << ",";
     oss << "\"stamp_ns\":" << stamp.nanoseconds() << ",";
-    oss << "\"session_tag\":\"" << opts_.session_tag << "\",";
-    oss << "\"motion_type\":\"" << opts_.motion_type << "\",";
     oss << "\"plan_ok\":" << (plan_ok ? "true" : "false") << ",";
     oss << "\"exec_ok\":" << (exec_ok ? "true" : "false") << ",";
     oss << "\"capture_ok\":" << (cap_ok ? "true" : "false") << ",";
@@ -325,8 +350,7 @@ namespace behav3d::session_manager
     oss << "\"joints\":" << toJsonJoints(js);
     oss << "}";
 
-    manifest_ << oss.str() << "\n";
-    manifest_.flush();
+    manifest_entries_.push_back(oss.str());
   }
 
 } // namespace behav3d::session_manager

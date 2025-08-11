@@ -71,8 +71,9 @@ namespace behav3d::session_manager
     std::filesystem::path dir_calib_;
     std::filesystem::path manifest_path_;
 
-    // files
-    std::ofstream manifest_;
+    // manifest aggregation (written once at finish())
+    rclcpp::Time start_stamp_;
+    std::vector<std::string> manifest_entries_;
   };
 
 } // namespace behav3d::session_manager
