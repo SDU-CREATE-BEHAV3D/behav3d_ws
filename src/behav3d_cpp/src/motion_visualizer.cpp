@@ -6,10 +6,10 @@
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
 //
 //
-// Author: Lucas José Helle <luh@iti.sdu.dk>
+// Author: Lucas Helle Pessot <luh@iti.sdu.dk>
 // Maintainers:
 //   - Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
-//   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
+//   - Joseph Naguib <jomi@iti.sdu.dk>
 // Institute: University of Southern Denmark (Syddansk Universitet)
 // Date: 2025-07
 // =============================================================================

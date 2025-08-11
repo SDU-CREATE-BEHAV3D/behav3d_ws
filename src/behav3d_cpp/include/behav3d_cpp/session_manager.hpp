@@ -13,17 +13,19 @@
 // Date: 2025-07
 // =============================================================================
 
-#include "behav3d_cpp/session_manager.hpp"
+#pragma once
+#include <rclcpp/rclcpp.hpp>
 
 namespace behav3d::session_manager {
 
-SessionManager::SessionManager(const rclcpp::NodeOptions& options)
-: rclcpp::Node("session_manager_cpp", options) {
-  RCLCPP_INFO(this->get_logger(), "[SessionManager] initialized");
-}
+class SessionManager : public rclcpp::Node {
+public:
+  // Basic constructor; expand later as needed
+  explicit SessionManager(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
-void SessionManager::sayHello(const std::string& who) {
-  RCLCPP_INFO(this->get_logger(), "[SessionManager] Hello, %s 👋", who.c_str());
-}
+  // Simple test method to verify wiring
+  void sayHello(const std::string& who = "world");
+
+};
 
 }  // namespace behav3d::session_manager
