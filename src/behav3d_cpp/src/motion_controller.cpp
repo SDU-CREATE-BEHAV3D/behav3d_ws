@@ -372,12 +372,64 @@ namespace behav3d::motion_controller
     return true;
   }
 
-  // Current end-effector pose
-  geometry_msgs::msg::PoseStamped PilzMotionController::getCurrentPose() const
+  // Pose of `link` (default: eef_link_) expressed in `root_frame` (default: planning frame, usually "world");
+  // falls back to eef_link_ for unknown link and to the planning frame for unknown root_frame.
+  geometry_msgs::msg::PoseStamped PilzMotionController::getCurrentPose(const std::string &link, const std::string &root_frame) const
   {
-    auto ps = move_group_.getCurrentPose(eef_link_);
+    const auto &model = move_group_.getRobotModel();
+
+    // Resolve target link (default to configured EEF)
+    std::string target_link = link.empty() ? eef_link_ : link;
+    if (!model->getLinkModel(target_link))
+    {
+      RCLCPP_ERROR(this->get_logger(),
+                   "getCurrentPose: link '%s' not found; using eef_link '%s'",
+                   target_link.c_str(), eef_link_.c_str());
+      target_link = eef_link_;
+    }
+
+    auto state = move_group_.getCurrentState();
+    const std::string planning_frame = move_group_.getPlanningFrame(); // often "world"
+    const Eigen::Isometry3d &world_T_link = state->getGlobalLinkTransform(target_link);
+
+    geometry_msgs::msg::PoseStamped ps;
+    ps.header.stamp = this->now();
+
+    // If no root_frame is requested or it's already the planning frame, return world/planning-frame pose
+    if (root_frame.empty() || root_frame == planning_frame)
+    {
+      ps.header.frame_id = planning_frame;
+      ps.pose = tf2::toMsg(world_T_link);
+      RCLCPP_DEBUG(this->get_logger(),
+                   "getCurrentPose[%s @ %s]: (%.3f,%.3f,%.3f)",
+                   target_link.c_str(), planning_frame.c_str(),
+                   ps.pose.position.x, ps.pose.position.y, ps.pose.position.z);
+      return ps;
+    }
+
+    // If requested root_frame is a known robot link, express pose in that link frame
+    if (model->getLinkModel(root_frame))
+    {
+      const Eigen::Isometry3d &world_T_root = state->getGlobalLinkTransform(root_frame);
+      Eigen::Isometry3d root_T_link = world_T_root.inverse() * world_T_link;
+      ps.header.frame_id = root_frame;
+      ps.pose = tf2::toMsg(root_T_link);
+      RCLCPP_DEBUG(this->get_logger(),
+                   "getCurrentPose[%s @ %s]: (%.3f,%.3f,%.3f)",
+                   target_link.c_str(), root_frame.c_str(),
+                   ps.pose.position.x, ps.pose.position.y, ps.pose.position.z);
+      return ps;
+    }
+
+    // Fallback: unknown root_frame -> return in planning frame
+    RCLCPP_WARN(this->get_logger(),
+                "getCurrentPose: root_frame '%s' not found; returning pose in planning frame '%s'",
+                root_frame.c_str(), planning_frame.c_str());
+    ps.header.frame_id = planning_frame;
+    ps.pose = tf2::toMsg(world_T_link);
     RCLCPP_DEBUG(this->get_logger(),
-                 "getCurrentPose: (%.3f,%.3f,%.3f)",
+                 "getCurrentPose[%s @ %s]: (%.3f,%.3f,%.3f)",
+                 target_link.c_str(), planning_frame.c_str(),
                  ps.pose.position.x, ps.pose.position.y, ps.pose.position.z);
     return ps;
   }
@@ -435,11 +487,12 @@ namespace behav3d::motion_controller
     PMC_DEBUG(this, "computeFK called");
 
     geometry_msgs::msg::PoseStamped ps;
-    ps.header.frame_id = root_link_;
+    const std::string planning_frame = move_group_.getPlanningFrame();
+    ps.header.frame_id = planning_frame;
     ps.header.stamp = this->now();
 
-    const Eigen::Isometry3d &tf = state.getGlobalLinkTransform(eef_link_);
-    ps.pose = tf2::toMsg(tf);
+    const Eigen::Isometry3d &world_T_eef = state.getGlobalLinkTransform(eef_link_);
+    ps.pose = tf2::toMsg(world_T_eef);
     return ps;
   }
 
