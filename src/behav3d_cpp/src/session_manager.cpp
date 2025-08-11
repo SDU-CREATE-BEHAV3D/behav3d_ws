@@ -23,6 +23,8 @@
 #include <sstream>
 #include <cmath>
 #include <cstdlib>
+#include <ctime>
+#include <cstdio>
 
 namespace fs = std::filesystem;
 
