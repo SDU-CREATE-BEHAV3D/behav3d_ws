@@ -59,6 +59,9 @@ COLCON_IGNORE
 # External Packages
 /src/external/*
 
+#Captures
+/captures
+
 # Misc.
 .vscode
 .open3d_venv
