@@ -14,12 +14,25 @@
 // =============================================================================
 
 #include "behav3d_cpp/session_manager.hpp"
+#include "behav3d_cpp/motion_controller.hpp"
+#include "behav3d_cpp/motion_visualizer.hpp"
+#include "behav3d_cpp/camera_manager.hpp"
 
 namespace behav3d::session_manager {
 
-SessionManager::SessionManager(const rclcpp::NodeOptions& options)
-: rclcpp::Node("session_manager_cpp", options) {
-  RCLCPP_INFO(this->get_logger(), "[SessionManager] initialized");
+SessionManager::SessionManager( const std::shared_ptr<motion_controller::PilzMotionController>& ctrl,
+                                const std::shared_ptr<motion_visualizer::MotionVisualizer>& viz,
+                                const std::shared_ptr<camera_manager::CameraManager>& cam,
+                                const rclcpp::NodeOptions& options): rclcpp::Node("session_manager_cpp", options),
+  ctrl_(ctrl),
+  viz_(viz),
+  cam_(cam)
+{
+  RCLCPP_INFO(this->get_logger(),
+              "[SessionManager] initialized (ctrl:%s viz:%s cam:%s)",
+              ctrl_ ? "yes" : "no",
+              viz_  ? "yes" : "no",
+              cam_  ? "yes" : "no");
 }
 
 void SessionManager::sayHello(const std::string& who) {

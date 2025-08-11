@@ -195,14 +195,14 @@ int main(int argc, char **argv)
   auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(
       rclcpp::NodeOptions().use_intra_process_comms(true));
   auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera);
-  auto sess = std::make_shared<behav3d::session_manager::SessionManager>();
+  auto sess = std::make_shared<behav3d::session_manager::SessionManager>(controller, visualizer, camera);
   sess->sayHello();  // quick sanity check
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(controller);
   exec.add_node(visualizer);
   exec.add_node(camera);
-  //exec.add_node(demo);
+  exec.add_node(demo);
   exec.add_node(sess);
 
   exec.spin();

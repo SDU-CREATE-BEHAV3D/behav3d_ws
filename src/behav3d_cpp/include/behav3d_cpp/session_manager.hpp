@@ -16,16 +16,27 @@
 #pragma once
 #include <rclcpp/rclcpp.hpp>
 
+namespace behav3d::motion_controller { class PilzMotionController; }
+namespace behav3d::motion_visualizer { class MotionVisualizer; }
+namespace behav3d::camera_manager   { class CameraManager; }
+
 namespace behav3d::session_manager {
 
 class SessionManager : public rclcpp::Node {
 public:
-  // Basic constructor; expand later as needed
-  explicit SessionManager(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
-
+  // Constructor;
+  explicit SessionManager(
+      const std::shared_ptr<motion_controller::PilzMotionController>& ctrl,
+      const std::shared_ptr<motion_visualizer::MotionVisualizer>& viz,
+      const std::shared_ptr<camera_manager::CameraManager>& cam,
+      const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
   // Simple test method to verify wiring
   void sayHello(const std::string& who = "world");
 
+private:
+  std::shared_ptr<motion_controller::PilzMotionController> ctrl_;
+  std::shared_ptr<motion_visualizer::MotionVisualizer>     viz_;
+  std::shared_ptr<camera_manager::CameraManager>           cam_;
 };
 
 }  // namespace behav3d::session_manager
