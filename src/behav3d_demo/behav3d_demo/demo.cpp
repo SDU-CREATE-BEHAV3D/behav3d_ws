@@ -101,9 +101,9 @@ private:
     ctrl_->executeTrajectory(traj);
   }
 
-  void fibonacci_cap(double radius = 0.5,
+  void fibonacci_cap(double radius = 0.6,
                      double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
-                     double cap_deg = 30.0, int n_points = 32)
+                     double cap_deg = 22.5, int n_points = 32)
   {
     const double cap_rad = deg2rad(cap_deg);
     const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
@@ -130,7 +130,7 @@ private:
 
   void grid_sweep(double width = 1.0, double height = 0.5,
                   double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
-                  double z_off = 0.75,
+                  double z_off = 0.6,
                   int nx = 10, int ny = 5,
                   bool row_major = false)
   {
