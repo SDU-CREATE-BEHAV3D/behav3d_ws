@@ -79,27 +79,6 @@ namespace behav3d::camera_manager
         return true;
     }
 
-    void CameraManager::dumpCalibration(const Snapshot &snap)
-    {
-        if (calib_dumped_)
-            return;
-        const bool have_all = (snap.color_info.k.size() == 9 &&
-                               snap.depth_info.k.size() == 9 &&
-                               snap.ir_info.k.size() == 9);
-        if (!have_all)
-            return;
-        try
-        {
-            writeCalibrationYaml(snap.color_info, (dir_calib_ / "color_camera_info.yaml").string());
-            writeCalibrationYaml(snap.depth_info, (dir_calib_ / "depth_camera_info.yaml").string());
-            writeCalibrationYaml(snap.ir_info, (dir_calib_ / "ir_camera_info.yaml").string());
-            calib_dumped_ = true;
-        }
-        catch (const std::exception &e)
-        {
-            RCLCPP_WARN(get_logger(), "Failed to write camera info yaml: %s", e.what());
-        }
-    }
 
     void CameraManager::appendManifest(const Snapshot &snap, const FilePaths &paths)
     {
@@ -195,7 +174,6 @@ namespace behav3d::camera_manager
             RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
             return false;
         }
-        dumpCalibration(snap);
         appendManifest(snap, paths);
 
         if (out_paths)
@@ -349,62 +327,20 @@ namespace behav3d::camera_manager
 
     void CameraManager::onColorInfo(const sensor_msgs::msg::CameraInfo::ConstSharedPtr &msg)
     {
-        sensor_msgs::msg::CameraInfo::ConstSharedPtr c, d, i;
-        {
-            std::lock_guard<std::mutex> lk(mtx_);
-            last_color_info_ = msg;
-            c = last_color_info_;
-            d = last_depth_info_;
-            i = last_ir_info_;
-        }
-        if (!calib_dumped_ && c && d && i)
-        {
-            Snapshot s;
-            s.color_info = *c;
-            s.depth_info = *d;
-            s.ir_info = *i;
-            dumpCalibration(s);
-        }
+        std::lock_guard<std::mutex> lk(mtx_);
+        last_color_info_ = msg;
     }
 
     void CameraManager::onDepthInfo(const sensor_msgs::msg::CameraInfo::ConstSharedPtr &msg)
     {
-        sensor_msgs::msg::CameraInfo::ConstSharedPtr c, d, i;
-        {
-            std::lock_guard<std::mutex> lk(mtx_);
-            last_depth_info_ = msg;
-            c = last_color_info_;
-            d = last_depth_info_;
-            i = last_ir_info_;
-        }
-        if (!calib_dumped_ && c && d && i)
-        {
-            Snapshot s;
-            s.color_info = *c;
-            s.depth_info = *d;
-            s.ir_info = *i;
-            dumpCalibration(s);
-        }
+        std::lock_guard<std::mutex> lk(mtx_);
+        last_depth_info_ = msg;
     }
 
     void CameraManager::onIrInfo(const sensor_msgs::msg::CameraInfo::ConstSharedPtr &msg)
     {
-        sensor_msgs::msg::CameraInfo::ConstSharedPtr c, d, i;
-        {
-            std::lock_guard<std::mutex> lk(mtx_);
-            last_ir_info_ = msg;
-            c = last_color_info_;
-            d = last_depth_info_;
-            i = last_ir_info_;
-        }
-        if (!calib_dumped_ && c && d && i)
-        {
-            Snapshot s;
-            s.color_info = *c;
-            s.depth_info = *d;
-            s.ir_info = *i;
-            dumpCalibration(s);
-        }
+        std::lock_guard<std::mutex> lk(mtx_);
+        last_ir_info_ = msg;
     }
 
     void CameraManager::onDepthAlignedToColor(const sensor_msgs::msg::Image::ConstSharedPtr &msg)
@@ -507,20 +443,27 @@ namespace behav3d::camera_manager
 
         if (write_yaml)
         {
-            std::error_code ec;
-            fs::create_directories(dir_calib_, ec);
-            (void)ec;
-            try
+            // Only write calibration YAMLs when an active session directory is set
+            if (session_dir_.empty())
             {
-                writeCalibrationYaml(color, (dir_calib_ / "color_camera_info.yaml").string());
-                writeCalibrationYaml(depth, (dir_calib_ / "depth_camera_info.yaml").string());
-                writeCalibrationYaml(ir, (dir_calib_ / "ir_camera_info.yaml").string());
-                calib_dumped_ = true;
-                RCLCPP_INFO(get_logger(), "Wrote camera info YAMLs to %s", dir_calib_.string().c_str());
+                RCLCPP_WARN(get_logger(), "getCalibration(write_yaml=true): no active session_dir — skipping YAML write");
             }
-            catch (const std::exception &e)
+            else
             {
-                RCLCPP_WARN(get_logger(), "Failed to write camera info yaml: %s", e.what());
+                std::error_code ec;
+                fs::create_directories(dir_calib_, ec);
+                (void)ec;
+                try
+                {
+                    writeCalibrationYaml(color, (dir_calib_ / "color_camera_info.yaml").string());
+                    writeCalibrationYaml(depth, (dir_calib_ / "depth_camera_info.yaml").string());
+                    writeCalibrationYaml(ir, (dir_calib_ / "ir_camera_info.yaml").string());
+                    RCLCPP_INFO(get_logger(), "Wrote camera info YAMLs to %s", dir_calib_.string().c_str());
+                }
+                catch (const std::exception &e)
+                {
+                    RCLCPP_WARN(get_logger(), "Failed to write camera info yaml: %s", e.what());
+                }
             }
         }
         return true;
@@ -811,7 +754,6 @@ namespace behav3d::camera_manager
                 RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
             }
 
-            dumpCalibration(snap);
             appendManifest(snap, paths);
 
             {
@@ -847,7 +789,6 @@ namespace behav3d::camera_manager
         fs::create_directories(dir_c2d_, ec);
         fs::create_directories(dir_calib_, ec);
 
-        calib_dumped_ = false;
         snap_seq_.store(0, std::memory_order_relaxed);
         write_json_manifest_ = false; // SessionManager writes
 

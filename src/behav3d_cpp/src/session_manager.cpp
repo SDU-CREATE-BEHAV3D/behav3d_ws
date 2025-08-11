@@ -162,6 +162,13 @@ namespace behav3d::session_manager
     // Prime the CameraManager to write under this directory and to *not* write its own manifest
     cam_->beginSession(session_dir_.string(), tag);
 
+    // Write calibration YAMLs once at session start (best-effort)
+    const double calib_timeout_sec = this->declare_parameter<double>("calib_timeout_sec", 2.0);
+    if (!cam_->getCalibration(calib_timeout_sec, /*write_yaml=*/true))
+    {
+      RCLCPP_WARN(this->get_logger(), "[Session] Calibration not available within %.3f s; YAMLs not written for this session.", calib_timeout_sec);
+    }
+
     // Manifest path (single JSON written at finish())
     manifest_path_ = session_dir_ / "manifest.json";
 
