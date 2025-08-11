@@ -148,6 +148,10 @@ private:
     sess_->home();
     const auto center = worldXY(center_x, center_y, center_z,
                                 ctrl_->getRootLink());
+    RCLCPP_INFO(this->get_logger(),
+                "[DEMO] ctrl root_link: %s",
+                ctrl_->getRootLink().c_str());
+
     viz_->publishTargetPose(center);
     nx = std::max(2, nx);
     ny = std::max(2, ny);
@@ -159,7 +163,7 @@ private:
       return;
     }
     //viz_->publishTargetPose(targets);
-    sess_->initScan("session.yaml", targets);
+    sess_->initScan("session", targets);
     // Loop over all targets (including first)
     for (size_t i = 0; i < targets.size(); ++i)
     {

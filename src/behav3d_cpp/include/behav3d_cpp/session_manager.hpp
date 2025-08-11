@@ -18,6 +18,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <vector>
 #include <string>
+#include <filesystem>
 
 namespace behav3d::motion_controller { class PilzMotionController; }
 namespace behav3d::motion_visualizer { class MotionVisualizer; }
@@ -52,7 +53,17 @@ bool initScan(const std::string& filename,
 bool initScan(const std::string& filename,
           const std::vector<geometry_msgs::msg::PoseStamped>& poses);
 
+const std::filesystem::path& getSessionDir() const { return session_dir_; }
+const std::filesystem::path& getCapturesRoot() const { return captures_root_; }
+
 private:
+
+  // helper to create captures/ and session dir
+  bool initScanDirs(const std::string& prefix);
+  // paths we keep around
+  std::filesystem::path captures_root_;
+  std::filesystem::path session_dir_;
+
   std::shared_ptr<motion_controller::PilzMotionController> ctrl_;
   std::shared_ptr<motion_visualizer::MotionVisualizer>     viz_;
   std::shared_ptr<camera_manager::CameraManager>           cam_;

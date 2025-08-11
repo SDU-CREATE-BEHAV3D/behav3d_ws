@@ -18,11 +18,29 @@
 #include "behav3d_cpp/motion_visualizer.hpp"
 #include "behav3d_cpp/camera_manager.hpp"
 
+#include <iomanip>
+#include <sstream>
+#include <chrono>
+#include <ctime>
 #include <algorithm>
 #include <cmath>  
+#include <filesystem>
 
 #define SESS_INFO(node, fmt, ...) \
   RCLCPP_INFO((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+
+namespace {
+// simple timestamp: YYYYmmdd_HHMMSS
+inline std::string makeTimestamp() {
+  using clock = std::chrono::system_clock;
+  auto t = clock::to_time_t(clock::now());
+  std::tm tm{};
+  localtime_r(&t, &tm);
+  std::ostringstream oss;
+  oss << std::put_time(&tm, "%Y%m%d_%H%M%S");
+  return oss.str();
+}
+} // anonymous
 
 namespace behav3d::session_manager {
 
@@ -75,10 +93,49 @@ void SessionManager::home(
   }
   ctrl_->executeTrajectory(traj, /*apply_totg=*/true);
 }
+
+
+bool SessionManager::initScanDirs(const std::string& prefix)
+{
+  namespace fs = std::filesystem;
+  std::error_code ec;
+
+  // captures/ under current working directory
+  captures_root_ = fs::current_path() / "captures";
+  fs::create_directories(captures_root_, ec);
+  if (ec) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[SessionManager] Failed to create captures root '%s': %s",
+                 captures_root_.string().c_str(), ec.message().c_str());
+    return false;
+  }
+
+  // session dir: <prefix>-<timestamp>
+  session_dir_ = captures_root_ / (prefix + "-" + makeTimestamp());
+  fs::create_directories(session_dir_, ec);
+  if (ec) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[SessionManager] Failed to create session dir '%s': %s",
+                 session_dir_.string().c_str(), ec.message().c_str());
+    return false;
+  }
+
+  RCLCPP_INFO(this->get_logger(),
+              "[SessionManager] Session initialized at: %s",
+              session_dir_.string().c_str());
+  return true;
+}
+
 //SinglePose Init Scan
 bool SessionManager::initScan(const std::string& filename,
                               const geometry_msgs::msg::PoseStamped& pose)
 {
+  // Create captures/ and the session dir: captures/<filename>-<timestamp>/
+  if (!initScanDirs(filename)) {
+    RCLCPP_ERROR(this->get_logger(), "[SessionManager] initScan(single): failed to init dirs");
+    return false;
+  }
+
   SESS_INFO(this, "initScan(single): file='%s', pose=(%.3f, %.3f, %.3f) in '%s'",
             filename.c_str(),
             pose.pose.position.x, pose.pose.position.y, pose.pose.position.z,
@@ -95,6 +152,12 @@ bool SessionManager::initScan(const std::string& filename,
 bool SessionManager::initScan(const std::string& filename,
                               const std::vector<geometry_msgs::msg::PoseStamped>& poses)
 {
+  // Create captures/ and the session dir: captures/<filename>-<timestamp>/
+  if (!initScanDirs(filename)) {
+    RCLCPP_ERROR(this->get_logger(), "[SessionManager] initScan(single): failed to init dirs");
+    return false;
+  }
+    
   SESS_INFO(this, "initScan(batch): file='%s', count=%zu", filename.c_str(), poses.size());
 
   // Optional: visualize all targets at once
