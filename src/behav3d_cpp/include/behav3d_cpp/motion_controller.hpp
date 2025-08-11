@@ -72,8 +72,8 @@ namespace behav3d::motion_controller
     bool executeTrajectory(const RobotTrajectoryPtr &traj,
                            bool apply_totg = false);
 
-    // Current end-effector pose
-    geometry_msgs::msg::PoseStamped getCurrentPose() const;
+    // Current link pose in requested root frame (if root_frame is empty, uses planning frame a.k.a. "world")
+    geometry_msgs::msg::PoseStamped getCurrentPose(const std::string &link = "", const std::string &root_frame = "") const;
 
     // Current joint state vector
     sensor_msgs::msg::JointState getCurrentJointState() const;
