@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
+#include <cstdlib>
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -35,13 +36,20 @@ using std::placeholders::_2;
 
 namespace behav3d::camera_manager
 {
-    
 
-    bool CameraManager::writeSnapshot(const Snapshot &snap, FilePaths &out_paths)
+    bool CameraManager::writeSnapshot(const Snapshot &snap, FilePaths &out_paths, const std::string &stem_override)
     {
         const std::vector<int> png = {cv::IMWRITE_PNG_COMPRESSION, 0}; // no compression
-        const uint64_t idx = snap_seq_.fetch_add(1, std::memory_order_relaxed);
-        const std::string stem = indexString(idx, 3);
+        std::string stem;
+        if (!stem_override.empty())
+        {
+            stem = stem_override;
+        }
+        else
+        {
+            const uint64_t idx = snap_seq_.fetch_add(1, std::memory_order_relaxed);
+            stem = indexString(idx, 3);
+        }
 
         if (snap.has_ir && !snap.ir_raw.empty())
         {
@@ -84,7 +92,7 @@ namespace behav3d::camera_manager
         {
             writeCalibrationYaml(snap.color_info, (dir_calib_ / "color_camera_info.yaml").string());
             writeCalibrationYaml(snap.depth_info, (dir_calib_ / "depth_camera_info.yaml").string());
-            writeCalibrationYaml(snap.ir_info,    (dir_calib_ / "ir_camera_info.yaml").string());
+            writeCalibrationYaml(snap.ir_info, (dir_calib_ / "ir_camera_info.yaml").string());
             calib_dumped_ = true;
         }
         catch (const std::exception &e)
@@ -151,6 +159,7 @@ namespace behav3d::camera_manager
         if (writer_.joinable())
             writer_.join();
     }
+
     bool CameraManager::captureAsync()
     {
         Snapshot snap;
@@ -170,10 +179,38 @@ namespace behav3d::camera_manager
         return true;
     }
 
+    bool CameraManager::capture(const std::string &stem_override, FilePaths *out_paths, rclcpp::Time *stamp_out)
+    {
+        Snapshot snap;
+        if (!buildSnapshot(snap))
+            return false;
+
+        FilePaths paths{};
+        RCLCPP_INFO(get_logger(), "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
+        try
+        {
+            writeSnapshot(snap, paths, stem_override);
+        }
+        catch (const std::exception &e)
+        {
+            RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
+            return false;
+        }
+        dumpCalibration(snap);
+        appendManifest(snap, paths);
+
+        if (out_paths)
+            *out_paths = paths;
+        if (stamp_out)
+            *stamp_out = snap.stamp;
+        return true;
+    }
+
     void CameraManager::waitForIdle()
     {
         std::unique_lock<std::mutex> lk(mtx_);
-        cv_.wait(lk, [this]() { return queue_.empty(); });
+        cv_.wait(lk, [this]()
+                 { return queue_.empty(); });
     }
 
     void CameraManager::initParams()
@@ -226,9 +263,9 @@ namespace behav3d::camera_manager
 
         dir_color_ = session_dir_ / "color_raw";
         dir_depth_ = session_dir_ / "depth_raw";
-        dir_ir_    = session_dir_ / "ir_raw";
-        dir_d2c_   = session_dir_ / "depth_to_color";
-        dir_c2d_   = session_dir_ / "color_to_depth";
+        dir_ir_ = session_dir_ / "ir_raw";
+        dir_d2c_ = session_dir_ / "depth_to_color";
+        dir_c2d_ = session_dir_ / "color_to_depth";
         dir_calib_ = session_dir_ / "calib";
         manifest_path_ = session_dir_ / "captures.jsonl";
 
@@ -323,7 +360,10 @@ namespace behav3d::camera_manager
         }
         if (!calib_dumped_ && c && d && i)
         {
-            Snapshot s; s.color_info = *c; s.depth_info = *d; s.ir_info = *i;
+            Snapshot s;
+            s.color_info = *c;
+            s.depth_info = *d;
+            s.ir_info = *i;
             dumpCalibration(s);
         }
     }
@@ -340,7 +380,10 @@ namespace behav3d::camera_manager
         }
         if (!calib_dumped_ && c && d && i)
         {
-            Snapshot s; s.color_info = *c; s.depth_info = *d; s.ir_info = *i;
+            Snapshot s;
+            s.color_info = *c;
+            s.depth_info = *d;
+            s.ir_info = *i;
             dumpCalibration(s);
         }
     }
@@ -357,7 +400,10 @@ namespace behav3d::camera_manager
         }
         if (!calib_dumped_ && c && d && i)
         {
-            Snapshot s; s.color_info = *c; s.depth_info = *d; s.ir_info = *i;
+            Snapshot s;
+            s.color_info = *c;
+            s.depth_info = *d;
+            s.ir_info = *i;
             dumpCalibration(s);
         }
     }
@@ -372,28 +418,6 @@ namespace behav3d::camera_manager
     {
         std::lock_guard<std::mutex> lk(mtx_);
         last_c2d_color_ = msg;
-    }
-
-    bool CameraManager::capture()
-    {
-        Snapshot snap;
-        if (!buildSnapshot(snap))
-            return false;
-
-        FilePaths paths{};
-        RCLCPP_INFO(get_logger(), "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
-        try
-        {
-            writeSnapshot(snap, paths);
-        }
-        catch (const std::exception &e)
-        {
-            RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
-            return false;
-        }
-        dumpCalibration(snap);
-        appendManifest(snap, paths);
-        return true;
     }
 
     void CameraManager::onCapture(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
@@ -491,7 +515,7 @@ namespace behav3d::camera_manager
             {
                 writeCalibrationYaml(color, (dir_calib_ / "color_camera_info.yaml").string());
                 writeCalibrationYaml(depth, (dir_calib_ / "depth_camera_info.yaml").string());
-                writeCalibrationYaml(ir,    (dir_calib_ / "ir_camera_info.yaml").string());
+                writeCalibrationYaml(ir, (dir_calib_ / "ir_camera_info.yaml").string());
                 calib_dumped_ = true;
                 RCLCPP_INFO(get_logger(), "Wrote camera info YAMLs to %s", dir_calib_.string().c_str());
             }
@@ -613,17 +637,21 @@ namespace behav3d::camera_manager
     {
         namespace enc = sensor_msgs::image_encodings;
         // Accept common 1-channel grayscale encodings
-        if (msg.encoding == enc::MONO16) {
+        if (msg.encoding == enc::MONO16)
+        {
             return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
         }
-        if (msg.encoding == enc::MONO8) {
+        if (msg.encoding == enc::MONO8)
+        {
             return cv_bridge::toCvCopy(msg, enc::MONO8)->image;
         }
-        if (msg.encoding == enc::TYPE_16UC1) {
+        if (msg.encoding == enc::TYPE_16UC1)
+        {
             return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image; // treat as 16U mono
         }
-        if (msg.encoding == enc::TYPE_8UC1) {
-            return cv_bridge::toCvCopy(msg, enc::TYPE_8UC1)->image;  // treat as 8U mono
+        if (msg.encoding == enc::TYPE_8UC1)
+        {
+            return cv_bridge::toCvCopy(msg, enc::TYPE_8UC1)->image; // treat as 8U mono
         }
         return cv::Mat();
     }
@@ -632,21 +660,25 @@ namespace behav3d::camera_manager
     {
         namespace enc = sensor_msgs::image_encodings;
         // 16-bit depth in millimeters
-        if (msg.encoding == enc::TYPE_16UC1) {
+        if (msg.encoding == enc::TYPE_16UC1)
+        {
             return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image;
         }
         // Some drivers expose depth as MONO16; accept it as-is
-        if (msg.encoding == enc::MONO16) {
+        if (msg.encoding == enc::MONO16)
+        {
             return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
         }
         // Depth in meters (float32) -> convert to uint16 millimeters
-        if (msg.encoding == enc::TYPE_32FC1) {
+        if (msg.encoding == enc::TYPE_32FC1)
+        {
             cv::Mat f = cv_bridge::toCvCopy(msg, enc::TYPE_32FC1)->image;
-            if (f.empty()) return cv::Mat();
+            if (f.empty())
+                return cv::Mat();
             cv::patchNaNs(f, 0.0f);
-            cv::Mat mm_f32 = f * 1000.0f;                 // meters -> millimeters
+            cv::Mat mm_f32 = f * 1000.0f; // meters -> millimeters
             cv::threshold(mm_f32, mm_f32, 65535.0, 65535.0, cv::THRESH_TRUNC);
-            mm_f32.setTo(0.0f, mm_f32 < 0.0f);            // clamp negatives
+            mm_f32.setTo(0.0f, mm_f32 < 0.0f); // clamp negatives
             cv::Mat mm_u16;
             mm_f32.convertTo(mm_u16, CV_16UC1);
             return mm_u16;
@@ -710,7 +742,7 @@ namespace behav3d::camera_manager
     }
 
     bool CameraManager::writeCalibrationYaml(const sensor_msgs::msg::CameraInfo &info,
-                                            const std::string &path)
+                                             const std::string &path)
     {
         std::ofstream f(path);
         if (!f.is_open())
@@ -761,13 +793,14 @@ namespace behav3d::camera_manager
             Snapshot snap;
             {
                 std::unique_lock<std::mutex> lk(mtx_);
-                cv_.wait(lk, [this]() { return !queue_.empty() || !running_.load(); });
+                cv_.wait(lk, [this]()
+                         { return !queue_.empty() || !running_.load(); });
                 if (!running_.load() && queue_.empty())
-                break;
+                    break;
                 snap = std::move(queue_.front());
                 queue_.pop_front();
             }
-            
+
             RCLCPP_INFO(get_logger(), "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
             FilePaths paths{};
             try
@@ -778,15 +811,49 @@ namespace behav3d::camera_manager
             {
                 RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
             }
-            
+
             dumpCalibration(snap);
             appendManifest(snap, paths);
-            
+
             {
                 std::lock_guard<std::mutex> lk(mtx_);
                 if (queue_.empty())
-                cv_.notify_all();
+                    cv_.notify_all();
             }
         }
     }
+    bool CameraManager::beginSession(const std::string &session_dir, const std::string &tag)
+    {
+        (void)tag; // reserved for logging/metadata
+        std::error_code ec;
+        session_dir_ = fs::path(session_dir);
+        fs::create_directories(session_dir_, ec);
+        if (ec)
+        {
+            RCLCPP_ERROR(get_logger(), "Failed to create session_dir '%s': %s", session_dir_.string().c_str(), ec.message().c_str());
+            return false;
+        }
+        dir_color_ = session_dir_ / "color_raw";
+        dir_depth_ = session_dir_ / "depth_raw";
+        dir_ir_ = session_dir_ / "ir_raw";
+        dir_d2c_ = session_dir_ / "depth_to_color";
+        dir_c2d_ = session_dir_ / "color_to_depth";
+        dir_calib_ = session_dir_ / "calib";
+        manifest_path_ = session_dir_ / "captures.jsonl"; // owned by SessionManager
+
+        fs::create_directories(dir_color_, ec);
+        fs::create_directories(dir_depth_, ec);
+        fs::create_directories(dir_ir_, ec);
+        fs::create_directories(dir_d2c_, ec);
+        fs::create_directories(dir_c2d_, ec);
+        fs::create_directories(dir_calib_, ec);
+
+        calib_dumped_ = false;
+        snap_seq_.store(0, std::memory_order_relaxed);
+        write_json_manifest_ = false; // SessionManager writes
+
+        RCLCPP_INFO(get_logger(), "CameraManager bound to external session: %s", session_dir_.string().c_str());
+        return true;
+    }
+
 } // namespace behav3d::camera_manager

@@ -40,8 +40,19 @@ namespace behav3d::camera_manager
         explicit CameraManager(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
         ~CameraManager() override;
 
-        // Synchronous capture: converts current frames and writes to disk before returning
-        bool capture();
+        // Paths written for a single snapshot (used by SessionManager manifest)
+        struct FilePaths
+        {
+            std::string ir, color, depth, d2c, c2d;
+        };
+
+        // Bind to an externally-created session directory and disable internal JSONL writes.
+        bool beginSession(const std::string &session_dir, const std::string &tag);
+
+        // Synchronous capture: converts current frames and writes to disk before returning.
+        // If stem_override (e.g., "t007") is non-empty, it is used as the filename stem.
+        // If out_paths/stamp_out are provided, they are filled with the results.
+        bool capture(const std::string &stem_override = "", FilePaths *out_paths = nullptr, rclcpp::Time *stamp_out = nullptr);
 
         // Non-blocking: enqueue latest frames and return immediately
         bool captureAsync();
@@ -99,14 +110,10 @@ namespace behav3d::camera_manager
             bool has_c2d = false;
         };
 
-        // Paths written for a single snapshot (used for manifest)
-        struct FilePaths
-        {
-            std::string ir, color, depth, d2c, c2d;
-        };
-
         // ---- Disk I/O helpers
-        bool writeSnapshot(const Snapshot &snap, FilePaths &out_paths);
+        // If stem_override is non-empty, it will be used as the filename stem (e.g., "t007");
+        // otherwise an auto-incrementing index like "003" is used.
+        bool writeSnapshot(const Snapshot &snap, FilePaths &out_paths, const std::string &stem_override = "");
         void dumpCalibration(const Snapshot &snap);
         void appendManifest(const Snapshot &snap, const FilePaths &paths);
 
@@ -125,7 +132,7 @@ namespace behav3d::camera_manager
 
         bool initSessionDirs();
         static bool writeCalibrationYaml(const sensor_msgs::msg::CameraInfo &info,
-                                        const std::string &path);
+                                         const std::string &path);
 
         // ==== Params
         std::string ns_;
