@@ -33,8 +33,9 @@
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
 
-using behav3d::target_builder::flipTarget;
+using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
+using behav3d::target_builder::worldXZ;
 using behav3d::trajectory_builder::fibonacciSphericalCap;
 using behav3d::trajectory_builder::sweepZigzag;
 using behav3d::util::deg2rad;
@@ -117,8 +118,7 @@ private:
     const double half = side / 2.0;
     {
       const double half = side / 2.0;
-      const auto center = flipTarget(worldXY(0.0, 0.7, z_fixed,
-                                             ctrl_->getRootLink()));
+      const auto center = flipTargetAxes(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()), false, true);
 
       std::vector<std::pair<double, double>> offsets = {
           {-half, -half}, {-half, half}, {half, half}, {half, -half}, {-half, -half}};
@@ -147,8 +147,7 @@ private:
     const double half = side / 2.0;
     {
       const double half = side / 2.0;
-      const auto center = flipTarget(worldXY(0.0, 0.7, z_fixed,
-                                             ctrl_->getRootLink()));
+      const auto center = flipTargetAxes(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()), false, true);
 
       std::vector<std::pair<double, double>> offsets = {
           {-half, -half}, {-half, half}, {half, half}, {half, -half}, {-half, -half}};
@@ -174,8 +173,7 @@ private:
   {
     home();
     {
-      const auto center = flipTarget(worldXY(0.0, 0.8, z_fixed,
-                                             ctrl_->getRootLink()));
+      const auto center = flipTargetAxes(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()), false, true);
 
       ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"));
 
@@ -204,8 +202,7 @@ private:
   {
     home();
     {
-      const auto center = flipTarget(worldXY(0.0, 0.8, z_fixed,
-                                             ctrl_->getRootLink()));
+      const auto center = flipTargetAxes(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()), false, true);
 
       std::vector<geometry_msgs::msg::PoseStamped> waypoints;
       for (int i = 0; i <= divisions; ++i)
@@ -221,7 +218,10 @@ private:
       }
 
       auto traj = ctrl_->planSequence(waypoints, blend_radius);
+      viz_->publishTrail(traj);
+      viz_->prompt("Press 'next' to start the blended sequence");
       ctrl_->executeTrajectory(traj, true);
+      viz_->deleteAllMarkers();
     }
     home();
   }
@@ -230,13 +230,11 @@ private:
   {
     home();
 
-    auto start = flipTarget(worldXY(-0.2, 0.4, 0.4,
-                                    ctrl_->getRootLink()));
+    auto start = flipTargetAxes(worldXY(-0.2, 0.4, 0.4, ctrl_->getRootLink()), false, true);
 
     viz_->publishTargetPose(start, "start");
 
-    auto end = flipTarget(worldXY(0.2, 0.8, 0.8,
-                                  ctrl_->getRootLink()));
+    auto end = flipTargetAxes(worldXY(0.2, 0.8, 0.8, ctrl_->getRootLink()), false, true);
 
     viz_->publishTargetPose(end, "end");
 
@@ -250,8 +248,8 @@ private:
     viz_->deleteAllMarkers();
   }
 
-  void fibonacci_cap(double radius = 0.5,
-                     double center_x = 0.0, double center_y = 1.0, double center_z = 0.0,
+  void fibonacci_cap(double radius = 0.75,
+                     double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
                      double cap_deg = 30.0, int n_points = 32)
   {
     // 1. Start from home
@@ -294,10 +292,10 @@ private:
     home();
   }
 
-  void grid_sweep(double width = 0.6, double height = 0.6,
-                  double center_x = 0.0, double center_y = 0.7,
-                  double center_z = 0.0, double z_off = 0.5,
-                  int nx = 6, int ny = 6,
+  void grid_sweep(double width = 1.0, double height = 0.5,
+                  double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
+                  double z_off = 0.75,
+                  int nx = 10, int ny = 5,
                   bool row_major = false)
   {
     // 1. Return to a known joint configuration

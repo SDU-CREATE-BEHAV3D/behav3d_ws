@@ -35,72 +35,70 @@ namespace rt = robot_trajectory;
 using RobotTrajectory = rt::RobotTrajectory;
 using RobotTrajectoryPtr = std::shared_ptr<RobotTrajectory>;
 
-namespace behav3d
+namespace behav3d::motion_controller
 {
-  namespace motion_controller
+
+  // High-level helper around MoveIt2 + PILZ planner
+  class PilzMotionController : public rclcpp::Node
   {
+  public:
+    using MoveGroupSequence = moveit_msgs::action::MoveGroupSequence;
 
-    /**
-     * @class PilzMotionController
-     * @brief High-level helper around MoveIt2 + PILZ planner
-     */
-    class PilzMotionController : public rclcpp::Node
-    {
-    public:
-      using MoveGroupSequence = moveit_msgs::action::MoveGroupSequence;
+    explicit PilzMotionController(const std::string &group = "ur_arm",
+                                  const std::string &root_link = "ur10e_base_link",
+                                  const std::string &eef_link = "ur10e_tool0",
+                                  bool debug = false);
 
-      explicit PilzMotionController(const std::string &group = "ur_arm",
-                                    const std::string &root_link = "ur10e_base_link",
-                                    const std::string &eef_link = "ur10e_tool0",
-                                    bool debug = false);
+    // Plan a PTP or LIN motion to a single target pose
+    RobotTrajectoryPtr planTarget(const geometry_msgs::msg::PoseStamped &target,
+                                  const std::string &motion_type = "PTP",
+                                  double vel_scale = 0.5,
+                                  double acc_scale = 0.5);
 
-      /// Plan either a PTP or LIN move according to motion_type ("PTP"/"LIN")
-      RobotTrajectoryPtr planTarget(const geometry_msgs::msg::PoseStamped &target,
-                                    const std::string &motion_type = "PTP",
+    // Plan a joint-space PTP motion to given joint vector
+    RobotTrajectoryPtr planJoints(const std::vector<double> &joint_positions,
+                                  double vel_scale = 0.5,
+                                  double acc_scale = 0.5);
+
+    // Plan a blended linear sequence through way-points (PILZ MotionSequence API)
+    RobotTrajectoryPtr planSequence(const std::vector<geometry_msgs::msg::PoseStamped> &waypoints,
+                                    double blend_radius = 0.001,
                                     double vel_scale = 0.5,
-                                    double acc_scale = 0.5);
+                                    double acc_scale = 0.5,
+                                    double pos_tolerance = 0.001,
+                                    double ori_telerance = 0.001);
 
-      /// Plan a joint‑space PTP move
-      RobotTrajectoryPtr planJoints(const std::vector<double> &joint_positions,
-                                    double vel_scale = 0.5,
-                                    double acc_scale = 0.5);
+    // Execute a prepared trajectory, optionally applying TOTG timing
+    bool executeTrajectory(const RobotTrajectoryPtr &traj,
+                           bool apply_totg = false);
 
-      /// Plan a blended LIN sequence through waypoints
-      RobotTrajectoryPtr planSequence(const std::vector<geometry_msgs::msg::PoseStamped> &waypoints,
-                                      double blend_radius = 0.001,
-                                      double vel_scale = 0.5,
-                                      double acc_scale = 0.5,
-                                      double pos_tolerance = 0.001,
-                                      double ori_telerance = 0.001);
-      /// Get current end-effector pose in planning frame
-      geometry_msgs::msg::PoseStamped getCurrentPose() const;
+    // Current end-effector pose
+    geometry_msgs::msg::PoseStamped getCurrentPose() const;
 
-      /// Get current joint state for the planning group
-      sensor_msgs::msg::JointState getCurrentJointState() const;
+    // Current joint state vector
+    sensor_msgs::msg::JointState getCurrentJointState() const;
 
-      bool executeTrajectory(const RobotTrajectoryPtr &traj,
-                             bool apply_totg = false);
+    // Compute IK solution for pose (blocking, timeout in seconds)
+    moveit::core::RobotStatePtr computeIK(const geometry_msgs::msg::PoseStamped &pose,
+                                          double timeout = 0.1) const;
 
-      moveit::core::RobotStatePtr computeIK(const geometry_msgs::msg::PoseStamped &pose,
-                                            double timeout = 0.1) const;
+    // Forward-kinematics for current state
+    geometry_msgs::msg::PoseStamped computeFK(const moveit::core::RobotState &state) const;
 
-      geometry_msgs::msg::PoseStamped computeFK(const moveit::core::RobotState &state) const;
+    // Quick reachability check via short IK
+    bool isReachable(const geometry_msgs::msg::PoseStamped &pose) const;
 
-      bool isReachable(const geometry_msgs::msg::PoseStamped &pose) const;
+    // Cancel all active sequence goals
+    void cancelAllGoals();
 
-      /// Cancel all active sequence goals
-      void cancelAllGoals();
+    /// Accessors for planning‑frame links
+    const std::string &getRootLink() const;
+    const std::string &getEefLink() const;
 
-      /// Accessors for planning‑frame links
-      const std::string &getRootLink() const;
-      const std::string &getEefLink() const;
-
-    private:
-      std::string root_link_;
-      std::string eef_link_;
-      moveit::planning_interface::MoveGroupInterface move_group_;
-      rclcpp_action::Client<MoveGroupSequence>::SharedPtr sequence_client_;
-    };
-
-  } // namespace motion_controller
-} // namespace behav3d
+  private:
+    std::string root_link_;
+    std::string eef_link_;
+    moveit::planning_interface::MoveGroupInterface move_group_;
+    rclcpp_action::Client<MoveGroupSequence>::SharedPtr sequence_client_;
+  };
+} // namespace behav3d::motion_controller

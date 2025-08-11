@@ -1,3 +1,21 @@
+// =============================================================================
+//   ____  _____ _   _    ___     _______ ____
+//  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
+//  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
+//  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
+//  |____/|_____|_| |_/_/   \_\_/  |____/|____/
+//
+//
+// Author: Lucas José Helle <luh@iti.sdu.dk>
+// Maintainers:
+//   - Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
+//   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
+// Institute: University of Southern Denmark (Syddansk Universitet)
+// Date: 2025-07
+// =============================================================================
+// TODO: Marker Scale
+// TODO: Trail Color
+
 #include "behav3d_cpp/motion_visualizer.hpp"
 
 #define PMV_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[PMV] " fmt, ##__VA_ARGS__)
@@ -64,15 +82,33 @@ namespace behav3d::motion_visualizer
     vt_->deleteAllMarkers();
     vt_->trigger();
   }
+
   void MotionVisualizer::trigger()
   {
     vt_->trigger();
   }
-
+  //Trail visualization for SEQUENCES:
+  void MotionVisualizer::publishTrail(
+      const robot_trajectory::RobotTrajectoryPtr& traj_ptr,
+      const std::string& label)
+  {
+    PMV_DEBUG(this, "publishTrail RTTPtr: label=%s, points=%zu",
+              label.c_str(), traj_ptr->getWayPointCount());
+    // get the tip link once
+    const auto* tip_link =
+      move_group_.getRobotModel()->getLinkModel(eef_link_);
+    // draw the line from the RobotTrajectoryPtr, no JMG needed
+    vt_->publishTrajectoryLine(traj_ptr, tip_link);
+    // optional: publish a text label
+    vt_->publishText(Eigen::Isometry3d::Identity(), label,
+                    rviz_visual_tools::WHITE, rviz_visual_tools::LARGE);
+    // flush all markers
+    vt_->trigger();
+  }
   void MotionVisualizer::prompt(const std::string &text)
   {
     PMV_INFO(this, "Prompt RViz: '%s'", text.c_str());
-    // Origianl call to MoveItVisualTools:
+    // Original call to MoveItVisualTools:
     vt_->prompt(text);
     PMV_INFO(this, "Continuando tras prompt");
   }
