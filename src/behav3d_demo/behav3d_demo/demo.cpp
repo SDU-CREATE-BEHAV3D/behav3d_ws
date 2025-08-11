@@ -34,6 +34,7 @@
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
+using behav3d::session_manager::SessionManager;
 
 using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
@@ -52,8 +53,9 @@ class Behav3dDemo : public rclcpp::Node
 public:
   explicit Behav3dDemo(const std::shared_ptr<PilzMotionController> &ctrl,
                        const std::shared_ptr<MotionVisualizer> &viz,
-                       const std::shared_ptr<behav3d::camera_manager::CameraManager> &cam)
-      : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam)
+                       const std::shared_ptr<behav3d::camera_manager::CameraManager> &cam,
+                       const std::shared_ptr<SessionManager> &sess)
+      : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam), sess_(sess)
   {
     sub_ = this->create_subscription<std_msgs::msg::String>(
         "user_input", 10,
@@ -69,6 +71,7 @@ public:
 private:
   std::shared_ptr<MotionVisualizer> viz_;
   std::shared_ptr<PilzMotionController> ctrl_;
+  std::shared_ptr<SessionManager> sess_;
   std::shared_ptr<behav3d::camera_manager::CameraManager> cam_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
   double capture_delay_sec_;
@@ -105,7 +108,7 @@ private:
                      double cap_deg = 30.0, int n_points = 32)
   {
     // 1. Start from home
-    home();
+    sess_->home();
     const double cap_rad = deg2rad(cap_deg);
     const auto center = worldXY(center_x, center_y, center_z,
                                 ctrl_->getRootLink());
@@ -132,7 +135,8 @@ private:
       }
     }
     viz_->deleteAllMarkers();
-    home();
+    sess_->home();
+
   }
 
   void grid_sweep(double width = 1.0, double height = 0.5,
@@ -141,7 +145,7 @@ private:
                   int nx = 10, int ny = 5,
                   bool row_major = false)
   {
-    home();
+    sess_->home();
     const auto center = worldXY(center_x, center_y, center_z,
                                 ctrl_->getRootLink());
     viz_->publishTargetPose(center);
@@ -154,7 +158,8 @@ private:
       RCLCPP_WARN(this->get_logger(), "grid_sweep/sweepZigzag: no targets generated!");
       return;
     }
-    viz_->publishTargetPose(targets);
+    //viz_->publishTargetPose(targets);
+    sess_->initScan("session.yaml", targets);
     // Loop over all targets (including first)
     for (size_t i = 0; i < targets.size(); ++i)
     {
@@ -172,7 +177,7 @@ private:
       }
     }
     viz_->deleteAllMarkers();
-    home();
+    sess_->home();
   }
 };
 
@@ -194,17 +199,17 @@ int main(int argc, char **argv)
       "femto__depth_optical_frame");
   auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(
       rclcpp::NodeOptions().use_intra_process_comms(true));
-  auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera);
   auto sess = std::make_shared<behav3d::session_manager::SessionManager>(controller, visualizer, camera);
+  auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera, sess);
+
   sess->sayHello();  // quick sanity check
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(controller);
   exec.add_node(visualizer);
   exec.add_node(camera);
-  exec.add_node(demo);
   exec.add_node(sess);
-
+  exec.add_node(demo);
   exec.spin();
 
   rclcpp::shutdown();

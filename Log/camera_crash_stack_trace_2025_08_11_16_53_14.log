@@ -1,0 +1,14 @@
+Received signal: 11
+Stack trace (most recent call last):
+#11   Object "[0xffffffffffffffff]", at 0xffffffffffffffff, in 
+#10   Object "/opt/ros/jazzy/lib/rclcpp_components/component_container", at 0x621ecbebf6e4, in _start
+#9    Object "/lib/x86_64-linux-gnu/libc.so.6", at 0x7d3d9b42a28a, in __libc_start_main
+#8    Object "/lib/x86_64-linux-gnu/libc.so.6", at 0x7d3d9b42a1c9, in 
+#7    Object "/opt/ros/jazzy/lib/rclcpp_components/component_container", at 0x621ecbebf531, in main
+#6    Object "/opt/ros/jazzy/lib/rclcpp_components/component_container", at 0x621ecbebf821, in 
+#5    Object "/opt/ros/jazzy/lib/libcomponent_manager.so", at 0x7d3d9bf555a6, in rclcpp_components::ComponentManager::~ComponentManager()
+#4    Object "/opt/ros/jazzy/lib/libcomponent_manager.so", at 0x7d3d9bf54845, in 
+#3    Object "/home/lab/behav3d_ws/install/orbbec_camera/lib/liborbbec_camera.so", at 0x7d3d903b5f75, in orbbec_camera::OBCameraNodeDriver::~OBCameraNodeDriver()
+#2    Object "/home/lab/behav3d_ws/install/orbbec_camera/lib/liborbbec_camera.so", at 0x7d3d903d74bd, in orbbec_camera::OBCameraNode::closeSocSyncPwmTrigger()
+#1    Object "/lib/x86_64-linux-gnu/libc.so.6", at 0x7d3d9b44532f, in 
+#0    Object "/home/lab/behav3d_ws/install/orbbec_camera/lib/liborbbec_camera.so", at 0x7d3d903bd803, in signalHandler(int)

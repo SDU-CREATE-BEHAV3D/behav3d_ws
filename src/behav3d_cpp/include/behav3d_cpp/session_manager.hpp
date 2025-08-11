@@ -15,6 +15,9 @@
 
 #pragma once
 #include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <vector>
+#include <string>
 
 namespace behav3d::motion_controller { class PilzMotionController; }
 namespace behav3d::motion_visualizer { class MotionVisualizer; }
@@ -28,10 +31,26 @@ public:
   explicit SessionManager(
       const std::shared_ptr<motion_controller::PilzMotionController>& ctrl,
       const std::shared_ptr<motion_visualizer::MotionVisualizer>& viz,
-      const std::shared_ptr<camera_manager::CameraManager>& cam,
-      const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+      const std::shared_ptr<camera_manager::CameraManager>& cam);
   // Simple test method to verify wiring
   void sayHello(const std::string& who = "world");
+
+  // Joint-space "home" using your default angles
+  void home();
+
+  // Go to a specific pose (LIN by default)
+  void home(const geometry_msgs::msg::PoseStamped& target,
+            const std::string& motion_type = "LIN",
+            double vel_scale = 0.5,
+            double acc_scale = 0.5);
+
+// Initialize a session from a file + a single target
+bool initScan(const std::string& filename,
+          const geometry_msgs::msg::PoseStamped& pose);
+
+// Initialize a session from a file + multiple targets
+bool initScan(const std::string& filename,
+          const std::vector<geometry_msgs::msg::PoseStamped>& poses);
 
 private:
   std::shared_ptr<motion_controller::PilzMotionController> ctrl_;
