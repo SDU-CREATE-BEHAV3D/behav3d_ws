@@ -27,7 +27,6 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <std_srvs/srv/trigger.hpp>
-#include <std_srvs/srv/set_bool.hpp>
 
 #include <opencv2/core.hpp>
 
@@ -52,7 +51,7 @@ namespace behav3d::camera_manager
         // Synchronous capture: converts current frames and writes to disk before returning.
         // If stem_override (e.g., "t007") is non-empty, it is used as the filename stem.
         // If out_paths/stamp_out are provided, they are filled with the results.
-        bool capture(const std::string &stem_override = "", FilePaths *out_paths = nullptr, rclcpp::Time *stamp_out = nullptr);
+        bool capture(const std::string &stem_override = "", FilePaths &out_paths, rclcpp::Time *stamp_out = nullptr);
 
         // Non-blocking: enqueue latest frames and return immediately
         bool captureAsync();
@@ -86,8 +85,6 @@ namespace behav3d::camera_manager
 
         void onCapture(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                        std::shared_ptr<std_srvs::srv::Trigger::Response>);
-        void onSetPassiveIr(const std::shared_ptr<std_srvs::srv::SetBool::Request>,
-                            std::shared_ptr<std_srvs::srv::SetBool::Response>);
 
         // ==== Snapshot queue & writer
         struct Snapshot
@@ -114,8 +111,6 @@ namespace behav3d::camera_manager
         // If stem_override is non-empty, it will be used as the filename stem (e.g., "t007");
         // otherwise an auto-incrementing index like "003" is used.
         bool writeSnapshot(const Snapshot &snap, FilePaths &out_paths, const std::string &stem_override = "");
-        void dumpCalibration(const Snapshot &snap);
-        void appendManifest(const Snapshot &snap, const FilePaths &paths);
 
         bool buildSnapshot(Snapshot &out);
 
@@ -125,23 +120,15 @@ namespace behav3d::camera_manager
         static cv::Mat toBgr(const sensor_msgs::msg::Image &msg);
         static cv::Mat toGray(const sensor_msgs::msg::Image &msg);
         static cv::Mat toUint16(const sensor_msgs::msg::Image &msg);
-        static std::string expandUser(const std::string &path);
         static std::string timeStringFromStamp(const rclcpp::Time &t);
-        static std::string timeStringDateTime(const rclcpp::Time &t);
         static std::string indexString(uint64_t idx, int width = 3);
-
-        bool initSessionDirs();
         static bool writeCalibrationYaml(const sensor_msgs::msg::CameraInfo &info,
                                          const std::string &path);
 
         // ==== Params
         std::string ns_;
         std::string output_dir_;
-        bool want_c2d_ = false;
-        double max_age_ms_ = 150.0;
         size_t max_queue_ = 8;
-        bool write_json_manifest_ = true;
-        bool passive_ir_on_start_ = false;
 
         // Topic params (derived from ns_, but overridable)
         std::string color_topic_;
@@ -152,7 +139,6 @@ namespace behav3d::camera_manager
         std::string ir_info_topic_;
         std::string d2c_depth_topic_;
         std::string c2d_color_topic_;
-        std::string set_laser_service_name_;
 
         // ==== Subscriptions
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr sub_color_;
@@ -166,8 +152,6 @@ namespace behav3d::camera_manager
 
         // ==== Services / clients
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_capture_;
-        rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr srv_passive_ir_;
-        rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr cli_set_laser_;
 
         // ==== Latest messages
         std::mutex mtx_;
@@ -194,8 +178,7 @@ namespace behav3d::camera_manager
         std::filesystem::path dir_d2c_;
         std::filesystem::path dir_c2d_;
         std::filesystem::path dir_calib_;
-        std::filesystem::path manifest_path_;
-        bool calib_dumped_ = false;
+        // (manifest_path_ removed)
         std::atomic<uint64_t> snap_seq_{0};
     };
 

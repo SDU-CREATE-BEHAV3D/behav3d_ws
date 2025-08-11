@@ -20,7 +20,6 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
-#include <cmath>
 #include <ctime>
 #include <cstdlib>
 
@@ -79,26 +78,6 @@ namespace behav3d::camera_manager
         return true;
     }
 
-    void CameraManager::appendManifest(const Snapshot &snap, const FilePaths &paths)
-    {
-        if (!write_json_manifest_)
-            return;
-        try
-        {
-            std::ofstream out(manifest_path_.string(), std::ios::app);
-            out << "{\"stamp_ns\":" << snap.stamp.nanoseconds()
-                << ",\"ir\":" << (paths.ir.empty() ? "null" : "\"" + paths.ir + "\"")
-                << ",\"color\":" << (paths.color.empty() ? "null" : "\"" + paths.color + "\"")
-                << ",\"depth\":" << (paths.depth.empty() ? "null" : "\"" + paths.depth + "\"")
-                << ",\"d2c\":" << (paths.d2c.empty() ? "null" : "\"" + paths.d2c + "\"")
-                << ",\"c2d\":" << (paths.c2d.empty() ? "null" : "\"" + paths.c2d + "\"")
-                << "}\n";
-        }
-        catch (const std::exception &e)
-        {
-            RCLCPP_WARN(get_logger(), "Failed to append manifest: %s", e.what());
-        }
-    }
 
     CameraManager::CameraManager(const rclcpp::NodeOptions &options)
         : rclcpp::Node("camera_manager", options)
@@ -110,23 +89,6 @@ namespace behav3d::camera_manager
         // Start writer thread
         writer_ = std::thread(&CameraManager::writerThread, this);
 
-        if (passive_ir_on_start_)
-        {
-            std::thread([this]()
-                        {
-      if (!cli_set_laser_) return;
-      if (!cli_set_laser_->wait_for_service(std::chrono::seconds(2))) {
-        RCLCPP_WARN(get_logger(), "Laser service not available at startup: %s",
-                    set_laser_service_name_.c_str());
-        return;
-      }
-      auto req = std::make_shared<std_srvs::srv::SetBool::Request>();
-
-      req->data = false;
-      auto fut = cli_set_laser_->async_send_request(req);
-      (void)fut; })
-                .detach();
-        }
     }
 
     CameraManager::~CameraManager()
@@ -156,27 +118,21 @@ namespace behav3d::camera_manager
         return true;
     }
 
-    bool CameraManager::capture(const std::string &stem_override, FilePaths *out_paths, rclcpp::Time *stamp_out)
+    bool CameraManager::capture(const std::string &stem_override, FilePaths &out_paths, rclcpp::Time *stamp_out)
     {
         Snapshot snap;
         if (!buildSnapshot(snap))
             return false;
-
-        FilePaths paths{};
         RCLCPP_INFO(get_logger(), "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
         try
         {
-            writeSnapshot(snap, paths, stem_override);
+            writeSnapshot(snap, out_paths, stem_override);
         }
         catch (const std::exception &e)
         {
             RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
             return false;
         }
-        appendManifest(snap, paths);
-
-        if (out_paths)
-            *out_paths = paths;
         if (stamp_out)
             *stamp_out = snap.stamp;
         return true;
@@ -193,11 +149,7 @@ namespace behav3d::camera_manager
     {
         ns_ = this->declare_parameter<std::string>("camera_ns", "/camera");
         output_dir_ = this->declare_parameter<std::string>("output_dir", "~/behav3d_captures");
-        want_c2d_ = this->declare_parameter<bool>("want_c2d", false);
-        max_age_ms_ = this->declare_parameter<double>("max_snapshot_age_ms", 150.0);
         max_queue_ = static_cast<size_t>(this->declare_parameter<int>("max_queue", 8));
-        write_json_manifest_ = this->declare_parameter<bool>("write_json_manifest", true);
-        passive_ir_on_start_ = this->declare_parameter<bool>("passive_ir_on_start", false);
 
         color_topic_ = this->declare_parameter<std::string>("color_topic", ns_ + "/color/image_raw");
         depth_topic_ = this->declare_parameter<std::string>("depth_topic", ns_ + "/depth/image_raw");
@@ -209,49 +161,9 @@ namespace behav3d::camera_manager
         d2c_depth_topic_ = this->declare_parameter<std::string>("d2c_depth_topic", ns_ + "/aligned_depth_to_color/image_raw");
         c2d_color_topic_ = this->declare_parameter<std::string>("c2d_color_topic", ns_ + "/aligned_color_to_depth/image_raw");
 
-        set_laser_service_name_ = this->declare_parameter<std::string>("laser_enable_service", ns_ + "/set_laser_enable");
 
         RCLCPP_INFO(get_logger(), "CameraManager configured with ns='%s' output='%s'",
                     ns_.c_str(), output_dir_.c_str());
-    }
-
-    bool CameraManager::initSessionDirs()
-    {
-        auto out_root = expandUser(output_dir_);
-        std::error_code ec;
-        fs::create_directories(out_root, ec);
-        if (ec)
-        {
-            RCLCPP_ERROR(get_logger(), "Failed to create output_dir '%s': %s", out_root.c_str(), ec.message().c_str());
-            return false;
-        }
-
-        // session dir
-        auto now = this->now();
-        session_dir_ = fs::path(out_root) / (std::string("session-") + timeStringDateTime(now));
-        fs::create_directories(session_dir_, ec);
-        RCLCPP_INFO(get_logger(), "Created session directory: %s", session_dir_.string().c_str());
-        if (ec)
-        {
-            RCLCPP_ERROR(get_logger(), "Failed to create session_dir '%s': %s", session_dir_.string().c_str(), ec.message().c_str());
-            return false;
-        }
-
-        dir_color_ = session_dir_ / "color_raw";
-        dir_depth_ = session_dir_ / "depth_raw";
-        dir_ir_ = session_dir_ / "ir_raw";
-        dir_d2c_ = session_dir_ / "depth_to_color";
-        dir_c2d_ = session_dir_ / "color_to_depth";
-        dir_calib_ = session_dir_ / "calib";
-        manifest_path_ = session_dir_ / "captures.jsonl";
-
-        fs::create_directories(dir_color_, ec);
-        fs::create_directories(dir_depth_, ec);
-        fs::create_directories(dir_ir_, ec);
-        fs::create_directories(dir_d2c_, ec);
-        fs::create_directories(dir_c2d_, ec);
-        fs::create_directories(dir_calib_, ec);
-        return true;
     }
 
     void CameraManager::initSubscriptions()
@@ -298,12 +210,6 @@ namespace behav3d::camera_manager
         srv_capture_ = this->create_service<std_srvs::srv::Trigger>(
             "capture",
             std::bind(&CameraManager::onCapture, this, _1, _2));
-
-        srv_passive_ir_ = this->create_service<std_srvs::srv::SetBool>(
-            "set_passive_ir",
-            std::bind(&CameraManager::onSetPassiveIr, this, _1, _2));
-
-        cli_set_laser_ = this->create_client<std_srvs::srv::SetBool>(set_laser_service_name_);
     }
 
     void CameraManager::onColor(const sensor_msgs::msg::Image::ConstSharedPtr &msg)
@@ -370,37 +276,6 @@ namespace behav3d::camera_manager
         }
     }
 
-    void CameraManager::onSetPassiveIr(const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
-                                       std::shared_ptr<std_srvs::srv::SetBool::Response> res)
-    {
-        // Our API: data=true means passive (laser OFF). The camera's SetBool is laser_enable.
-        if (!cli_set_laser_)
-        {
-            res->success = false;
-            res->message = "laser service client not initialized";
-            return;
-        }
-        if (!cli_set_laser_->wait_for_service(std::chrono::seconds(2)))
-        {
-            res->success = false;
-            res->message = "laser service not available";
-            return;
-        }
-        auto req_cam = std::make_shared<std_srvs::srv::SetBool::Request>();
-        req_cam->data = !req->data; // passive -> disable laser
-        try
-        {
-            auto fut = cli_set_laser_->async_send_request(req_cam);
-            auto resp = fut.get();
-            res->success = resp->success;
-            res->message = resp->message;
-        }
-        catch (const std::exception &e)
-        {
-            res->success = false;
-            res->message = std::string("service call failed: ") + e.what();
-        }
-    }
 
     // --- Calibration retrieval methods ---
     bool CameraManager::getCalibration(double timeout_sec, bool write_yaml)
@@ -628,19 +503,6 @@ namespace behav3d::camera_manager
     }
 
     // ============== Misc helpers ==============
-    std::string CameraManager::expandUser(const std::string &path)
-    {
-        if (!path.empty() && path[0] == '~')
-        {
-            const char *home = std::getenv("HOME");
-            if (home)
-            {
-                return std::string(home) + path.substr(1);
-            }
-        }
-        return path;
-    }
-
     std::string CameraManager::timeStringFromStamp(const rclcpp::Time &t)
     {
         int64_t nsec_total = t.nanoseconds();
@@ -656,22 +518,6 @@ namespace behav3d::camera_manager
         std::ostringstream oss;
         oss << std::put_time(&bt, "%Y%m%d-%H%M%S")
             << '-' << std::setw(9) << std::setfill('0') << nsec;
-        return oss.str();
-    }
-
-    std::string CameraManager::timeStringDateTime(const rclcpp::Time &t)
-    {
-        int64_t nsec_total = t.nanoseconds();
-        int64_t sec = nsec_total / 1000000000LL;
-        std::time_t tt = static_cast<std::time_t>(sec);
-        std::tm bt{};
-#ifdef _WIN32
-        localtime_s(&bt, &tt);
-#else
-        localtime_r(&tt, &bt);
-#endif
-        std::ostringstream oss;
-        oss << std::put_time(&bt, "%Y%m%d-%H%M%S");
         return oss.str();
     }
 
@@ -753,7 +599,6 @@ namespace behav3d::camera_manager
                 RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
             }
 
-            appendManifest(snap, paths);
 
             {
                 std::lock_guard<std::mutex> lk(mtx_);
@@ -779,8 +624,6 @@ namespace behav3d::camera_manager
         dir_d2c_ = session_dir_ / "depth_to_color";
         dir_c2d_ = session_dir_ / "color_to_depth";
         dir_calib_ = session_dir_ / "calib";
-        manifest_path_ = session_dir_ / "captures.jsonl"; // owned by SessionManager
-
         fs::create_directories(dir_color_, ec);
         fs::create_directories(dir_depth_, ec);
         fs::create_directories(dir_ir_, ec);
@@ -789,7 +632,6 @@ namespace behav3d::camera_manager
         fs::create_directories(dir_calib_, ec);
 
         snap_seq_.store(0, std::memory_order_relaxed);
-        write_json_manifest_ = false; // SessionManager writes
 
         RCLCPP_INFO(get_logger(), "CameraManager bound to external session: %s", session_dir_.string().c_str());
         return true;

@@ -237,7 +237,7 @@ namespace behav3d::session_manager
       // ---------------- CAPTURE ----------------
       behav3d::camera_manager::CameraManager::FilePaths files{};
       rclcpp::Time stamp = this->now();
-      bool cap_ok = cam_->capture(key, &files, &stamp);
+      bool cap_ok = cam_->capture(key, files, &stamp);
 
       // ---------------- LOG ----------------
       auto js = ctrl_->getCurrentJointState();
