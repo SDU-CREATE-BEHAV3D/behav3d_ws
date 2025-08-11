@@ -106,7 +106,7 @@ namespace behav3d::session_manager
   {
     RCLCPP_INFO(this->get_logger(), "[SessionManager] initialized");
     // Where to create session directories (keep same default as CameraManager)
-    output_dir_ = this->declare_parameter<std::string>("output_dir", "~/behav3d_captures");
+    output_dir_ = this->declare_parameter<std::string>("output_dir", "~/behav3d_ws/captures");
   }
 
   bool SessionManager::initSession(const Options &opts)
@@ -205,8 +205,8 @@ namespace behav3d::session_manager
       {
         // Log attempt with current state & no files
         auto js = ctrl_->getCurrentJointState();
+        auto eef = ctrl_->getCurrentPose();
         auto tool0 = ctrl_->getCurrentPose("ur10e_tool0");
-        auto eef = ctrl_->getCurrentPose(ctrl_->getEefLink());
         behav3d::camera_manager::CameraManager::FilePaths files{};
         writeManifestLine(i, tgt, files, js, tool0, eef,
                           /*plan_ok=*/false, /*exec_ok=*/false, /*cap_ok=*/false,
