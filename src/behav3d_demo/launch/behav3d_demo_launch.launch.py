@@ -88,6 +88,8 @@ def generate_launch_description():
             "ir_height": "576",
             "ir_fps": "30",
             "ir_format": "Y16"
+            # Laser Dot Projector (true for scan / false for calibration)
+            "enable_ldp": "false"
         }.items(),
     )
 
