@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import os
+import sys
 import time
 import json
 
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from std_srvs.srv import Trigger
 from cv_bridge import CvBridge
 import cv2
 import tf2_ros
@@ -25,10 +27,10 @@ class ImageProcessorCapture(Node):
         self.output_dir = self.get_parameter('output_dir').get_parameter_value().string_value
         os.makedirs(self.output_dir, exist_ok=True)
 
-        # Sub‐directories
-        self.rgb_dir   = os.path.join(self.output_dir, 'rgb')
+        # Sub-directories
+        self.rgb_dir   = os.path.join(self.output_dir, 'RGB')
         self.depth_dir = os.path.join(self.output_dir, 'depth')
-        self.pose_dir  = os.path.join(self.output_dir, 'poses')
+        self.pose_dir  = os.path.join(self.output_dir, 'Poses')
         for d in (self.rgb_dir, self.depth_dir, self.pose_dir):
             os.makedirs(d, exist_ok=True)
 
@@ -43,6 +45,11 @@ class ImageProcessorCapture(Node):
         self.create_subscription(Image, '/camera/color/image_raw', self.color_cb, 10)
         self.create_subscription(Image, '/camera/depth/image_raw', self.depth_cb, 10)
 
+        # Service to trigger capture
+        self.srv = self.create_service(
+            Trigger, 'capture', self.handle_capture_service
+        )
+
         # TF listener for robot pose
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -54,7 +61,10 @@ class ImageProcessorCapture(Node):
         cv2.setMouseCallback(self.window_name, self.mouse_cb)
 
         self.get_logger().info(f'Captures will be saved to: {self.output_dir}')
-        self.get_logger().info("Press 'c' to capture RGB-D and pose, 't' for timestamp sync test, click window to capture, 'q' to quit.")
+        self.get_logger().info(
+            "Press 'c' to capture via GUI, 't' for timestamp sync test, 'q' to quit,"
+            " or call the /capture service."
+        )
 
     def color_cb(self, msg: Image):
         frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
@@ -68,13 +78,30 @@ class ImageProcessorCapture(Node):
         self.latest_depth = frame
         self.latest_depth_ns = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
 
-    def capture_frame(self):
-        # 1) ensure frames exist
+    def handle_capture_service(self, request, response):
+        """
+        ROS2 Trigger service callback. Captures a frame when service is called.
+        Responds with success status and message including file paths.
+        """
         if self.latest_color is None or self.latest_depth is None:
-            self.get_logger().warning('No RGB-D frames available to capture!')
-            return
+            response.success = False
+            response.message = 'No RGB-D frames available to capture.'
+            return response
 
-        # 2) timestamp + filenames
+        self.get_logger().info('Service call received; capturing frame.')
+        success, msg = self.capture_frame()
+        response.success = success
+        response.message = msg
+        return response
+
+    def capture_frame(self):
+        # Ensure frames exist
+        if self.latest_color is None or self.latest_depth is None:
+            warning = 'No RGB-D frames available to capture!'
+            self.get_logger().warning(warning)
+            return False, warning
+
+        # Timestamp and filenames
         ts = time.strftime('%Y%m%d-%H%M%S')
         rgb_fn   = f'{ts}_rgb.png'
         depth_fn = f'{ts}_depth.png'
@@ -84,24 +111,29 @@ class ImageProcessorCapture(Node):
         depth_path = os.path.join(self.depth_dir, depth_fn)
         pose_path  = os.path.join(self.pose_dir,  pose_fn)
 
-        # 3) save images
+        # Save images
         cv2.imwrite(rgb_path,   self.latest_color)
         cv2.imwrite(depth_path, self.latest_depth)
 
-        # 4) lookup transform
+        # Lookup transform
         base = self.get_parameter('base_frame').get_parameter_value().string_value
         ee   = self.get_parameter('ee_frame').get_parameter_value().string_value
+        from rclpy.duration import Duration
         try:
-            if not self.tf_buffer.can_transform(base, ee, rclpy.time.Time(),
-                                                timeout=rclpy.duration.Duration(seconds=1.0)):
-                self.get_logger().error(f'Transform {base}→{ee} not available')
-                return
+            if not self.tf_buffer.can_transform(
+                base, ee, rclpy.time.Time(),
+                timeout=Duration(seconds=1.0)
+            ):
+                err = f'Transform {base}→{ee} not available'
+                self.get_logger().error(err)
+                return False, err
             trans = self.tf_buffer.lookup_transform(base, ee, rclpy.time.Time())
         except Exception as e:
-            self.get_logger().error(f'TF lookup failed for {ee}: {e}')
-            return
+            err = f'TF lookup failed for {ee}: {e}'
+            self.get_logger().error(err)
+            return False, err
 
-        # 5) build pose record
+        # Build pose record
         pose = {
             'timestamp': ts,
             'rgb_file': rgb_fn,
@@ -111,7 +143,7 @@ class ImageProcessorCapture(Node):
                 'y': trans.transform.translation.y,
                 'z': trans.transform.translation.z,
             },
-            'quad': {
+            'rotation': {
                 'x': trans.transform.rotation.x,
                 'y': trans.transform.rotation.y,
                 'z': trans.transform.rotation.z,
@@ -119,11 +151,11 @@ class ImageProcessorCapture(Node):
             },
         }
 
-        # 6) save individual pose JSON
+        # Save individual pose JSON
         with open(pose_path, 'w') as f:
             json.dump(pose, f, indent=2)
 
-        # 7) append to master all_poses.json
+        # Append to master all_poses.json
         master_path = os.path.join(self.output_dir, 'all_poses.json')
         try:
             with open(master_path, 'r') as mf:
@@ -137,14 +169,12 @@ class ImageProcessorCapture(Node):
             json.dump(all_poses, mf, indent=2)
         os.replace(tmp, master_path)
 
-        # 8) log success
-        self.get_logger().info(
-            f"Saved:\n"
-            f"  RGB  → {rgb_path}\n"
-            f"  Depth→ {depth_path}\n"
-            f"  Pose → {pose_path}\n"
-            f"  Appended to {master_path}"
+        # Success message
+        success_msg = (
+            f"Captured frame: RGB={rgb_path}, Depth={depth_path}, Pose={pose_path}"
         )
+        self.get_logger().info(success_msg)
+        return True, success_msg
 
     def timestamp_sync_test(self):
         if self.latest_color_ns is None or self.latest_depth_ns is None:
@@ -175,6 +205,7 @@ class ImageProcessorCapture(Node):
         cv2.destroyAllWindows()
         self.destroy_node()
         rclpy.shutdown()
+
 
 def main(args=None):
     rclpy.init(args=args)
