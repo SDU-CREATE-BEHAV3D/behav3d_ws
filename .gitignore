@@ -62,3 +62,4 @@ COLCON_IGNORE
 # Misc.
 .vscode
 .open3d_venv
+/Log
