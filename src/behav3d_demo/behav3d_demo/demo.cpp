@@ -101,7 +101,7 @@ private:
     ctrl_->executeTrajectory(traj);
   }
 
-  void fibonacci_cap(double radius = 0.75,
+  void fibonacci_cap(double radius = 0.5,
                      double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
                      double cap_deg = 30.0, int n_points = 32)
   {
