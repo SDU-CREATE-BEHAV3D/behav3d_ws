@@ -72,8 +72,17 @@ namespace behav3d::motion_controller
     bool executeTrajectory(const RobotTrajectoryPtr &traj,
                            bool apply_totg = false);
 
-    // Current link pose in requested root frame (if root_frame is empty, uses planning frame a.k.a. "world")
+    // Pose of `link` (default: eef_link_) expressed in `root_frame` (default: planning frame, usually "world");
+    // falls back to eef_link_ for unknown link and to the planning frame for unknown root_frame.
     geometry_msgs::msg::PoseStamped getCurrentPose(const std::string &link = "", const std::string &root_frame = "") const;
+
+    // Return MoveIt's planning frame (usually "world")
+    std::string planningFrame() const;
+
+    // Pose of `to_link` expressed in `from_link` (header.frame_id = from_link).
+    // If `from_link` is unknown, returns `to_link` in the planning frame.
+    geometry_msgs::msg::PoseStamped getRelativePose(const std::string &from_link,
+                                                    const std::string &to_link) const;
 
     // Current joint state vector
     sensor_msgs::msg::JointState getCurrentJointState() const;
