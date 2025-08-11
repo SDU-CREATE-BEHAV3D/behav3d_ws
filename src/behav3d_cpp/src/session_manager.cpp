@@ -145,7 +145,6 @@ namespace behav3d::session_manager
       return false;
     }
 
-    // Create standard subfolders (match CameraManager convention)
     dir_color_ = session_dir_ / "color_raw";
     dir_depth_ = session_dir_ / "depth_raw";
     dir_ir_ = session_dir_ / "ir_raw";
@@ -242,7 +241,7 @@ namespace behav3d::session_manager
 
       // ---------------- LOG ----------------
       auto js = ctrl_->getCurrentJointState();
-      auto tool0 = ctrl_->getCurrentPose("tool0");
+      auto tool0 = ctrl_->getCurrentPose("ur10e_tool0");
       auto eef = ctrl_->getCurrentPose(ctrl_->getEefLink());
 
       writeManifestLine(i, tgt, files, js, tool0, eef,
@@ -338,7 +337,7 @@ namespace behav3d::session_manager
     oss.setf(std::ios::fixed);
     oss << std::setprecision(6);
     oss << "{";
-    oss << "\"i\":" << i << ",";
+    oss << "\"index\":" << i << ",";
     oss << "\"stamp_ns\":" << stamp.nanoseconds() << ",";
     oss << "\"plan_ok\":" << (plan_ok ? "true" : "false") << ",";
     oss << "\"exec_ok\":" << (exec_ok ? "true" : "false") << ",";

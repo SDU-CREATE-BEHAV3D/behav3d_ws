@@ -79,7 +79,6 @@ namespace behav3d::camera_manager
         return true;
     }
 
-
     void CameraManager::appendManifest(const Snapshot &snap, const FilePaths &paths)
     {
         if (!write_json_manifest_)
