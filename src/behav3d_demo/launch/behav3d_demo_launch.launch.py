@@ -70,12 +70,24 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(os.path.join(orbbec_launch_dir, "femto_bolt.launch.py")),
         condition=IfCondition(LaunchConfiguration("orbbec_enable")),
         launch_arguments={
-            # Add camera-specific arguments here if you want to override defaults.
-            # Example (only if supported by the Orbbec launch):
-            # "device_index": "0",
-            # "enable_color": "true",
-            # "enable_depth": "true",
-            # "enable_ir": "true",
+            # Color: 3840 x 2160 @ 30 fps
+            "enable_color": "true",
+            "color_width": "3840",
+            "color_height": "2160",
+            "color_fps": "30",
+            "color_format": "MJPG",
+            # Depth (NFOV, unbinned-equivalent): 640 x 576 @ 30 fps
+            "enable_depth": "true",
+            "depth_width": "640",
+            "depth_height": "576",
+            "depth_fps": "30",
+            "depth_format": "Y16",
+            # IR: 640 x 576 @ 30 fps
+            "enable_ir": "true",
+            "ir_width": "640",
+            "ir_height": "576",
+            "ir_fps": "30",
+            "ir_format": "Y16"
         }.items(),
     )
 
