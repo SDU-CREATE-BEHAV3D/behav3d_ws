@@ -7,8 +7,8 @@
 //
 // Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
 // Maintainers:
-//   - Lucas José Helle <luh@iti.sdu.dk>
-//   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
+//   - Lucas Helle Pessot <luh@iti.sdu.dk>
+//   - Joseph Naguib <jomi@iti.sdu.dk>
 // Institute: University of Southern Denmark (Syddansk Universitet)
 // Date: 2025-07
 // =============================================================================
@@ -30,6 +30,7 @@
 #include "behav3d_cpp/trajectory_builder.hpp"
 #include "behav3d_cpp/util.hpp"
 #include "behav3d_cpp/camera_manager.hpp"
+#include "behav3d_cpp/session_manager.hpp"
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
@@ -194,12 +195,16 @@ int main(int argc, char **argv)
   auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(
       rclcpp::NodeOptions().use_intra_process_comms(true));
   auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera);
+  auto sess = std::make_shared<behav3d::session_manager::SessionManager>();
+  sess->sayHello();  // quick sanity check
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(controller);
   exec.add_node(visualizer);
   exec.add_node(camera);
-  exec.add_node(demo);
+  //exec.add_node(demo);
+  exec.add_node(sess);
+
   exec.spin();
 
   rclcpp::shutdown();
