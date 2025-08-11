@@ -126,7 +126,6 @@ namespace behav3d::camera_manager
         : rclcpp::Node("camera_manager", options)
     {
         initParams();
-        initSessionDirs();
         initSubscriptions();
         initServices();
 
