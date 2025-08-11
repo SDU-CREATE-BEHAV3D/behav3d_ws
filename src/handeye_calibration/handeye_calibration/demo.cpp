@@ -33,7 +33,7 @@
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
-using behav3d::target_builder::flipTarget;
+using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
 using behav3d::trajectory_builder::fibonacciSphericalCap;
 using behav3d::trajectory_builder::sweepZigzag;
@@ -132,7 +132,7 @@ private:
   void draw_square(double side = 0.4, double z_fixed = 0.4)
   {
     home();
-    const auto center = flipTarget(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()));
+    const auto center = flipTargetAxes(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()), false, true);
     // blocking PTP
     ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"), true);
     callCapture();
@@ -151,7 +151,7 @@ private:
   void draw_square_seq(double side = 0.4, double z_fixed = 0.4, double blend = 0.001)
   {
     home();
-    const auto center = flipTarget(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()));
+    const auto center = flipTargetAxes(worldXY(0.0, 0.7, z_fixed, ctrl_->getRootLink()), false, true);
     std::vector<geometry_msgs::msg::PoseStamped> wp;
     double half = side / 2.0;
     for (auto [dx,dy] : std::vector<std::pair<double,double>>{{-half,-half},{-half,half},{half,half},{half,-half},{-half,-half}}) {
@@ -169,7 +169,7 @@ private:
   void draw_circle(double radius = 0.3, double z_fixed = 0.4, int divisions = 36)
   {
     home();
-    const auto center = flipTarget(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()));
+    const auto center = flipTargetAxes(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()), false, true);
     ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"), true);
     callCapture();
     for (int i = 0; i <= divisions; ++i) {
@@ -189,7 +189,7 @@ private:
     std::vector<geometry_msgs::msg::PoseStamped> wp;
     for (int i = 0; i <= divisions; ++i) {
       double angle = 2.0 * M_PI * i / divisions;
-      auto ps = flipTarget(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()));
+      auto ps = flipTargetAxes(worldXY(0.0, 0.8, z_fixed, ctrl_->getRootLink()), false, true);
       ps.pose.position.x += radius * std::cos(angle);
       ps.pose.position.y += radius * std::sin(angle);
       wp.push_back(ps);
@@ -203,9 +203,9 @@ private:
   void draw_line()
   {
     home();
-    auto start = flipTarget(worldXY(-0.2, 0.4, 0.4, ctrl_->getRootLink()));
+    auto start = flipTargetAxes(worldXY(-0.2, 0.4, 0.4, ctrl_->getRootLink()), false, true);
     viz_->publishTargetPose(start, "start");
-    auto end = flipTarget(worldXY(0.2, 0.8, 0.8, ctrl_->getRootLink()));
+    auto end = flipTargetAxes(worldXY(0.2, 0.8, 0.8, ctrl_->getRootLink()), false, true);
     viz_->publishTargetPose(end, "end");
     viz_->prompt("Press 'next' in the RvizVisualToolsGui window to continue");
     ctrl_->executeTrajectory(ctrl_->planTarget(start, "PTP"), true); callCapture();
