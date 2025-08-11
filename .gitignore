@@ -5,6 +5,8 @@ bin/
 lib/
 install/
 log/
+Log/
+captures/
 
 msg_gen/
 srv_gen/
