@@ -5,68 +5,89 @@
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
 //
-// Author: Lucas Helle Pessot <luh@iti.sdu.dk>
-// Maintainers:
+// Author:
 //   - Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
-//   - Joseph Naguib <jomi@iti.sdu.dk>
+// Maintainers:
+//   - Lucas José Helle <luh@iti.sdu.dk>
+//   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
 // Institute: University of Southern Denmark (Syddansk Universitet)
-// Date: 2025-07
+// Date: 2025-08
 // =============================================================================
 
-#pragma once
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+#include <filesystem>
+#include <fstream>
+
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
-#include <vector>
-#include <string>
-#include <filesystem>
+#include <sensor_msgs/msg/joint_state.hpp>
 
-namespace behav3d::motion_controller { class PilzMotionController; }
-namespace behav3d::motion_visualizer { class MotionVisualizer; }
-namespace behav3d::camera_manager   { class CameraManager; }
+#include "behav3d_cpp/motion_controller.hpp"
+#include "behav3d_cpp/motion_visualizer.hpp"
+#include "behav3d_cpp/camera_manager.hpp"
 
-namespace behav3d::session_manager {
+namespace behav3d::session_manager
+{
 
-class SessionManager : public rclcpp::Node {
-public:
-  // Constructor;
-  explicit SessionManager(
-      const std::shared_ptr<motion_controller::PilzMotionController>& ctrl,
-      const std::shared_ptr<motion_visualizer::MotionVisualizer>& viz,
-      const std::shared_ptr<camera_manager::CameraManager>& cam);
-  // Simple test method to verify wiring
-  void sayHello(const std::string& who = "world");
+  class SessionManager : public rclcpp::Node
+  {
+  public:
+    struct Options
+    {
+      std::string session_tag;         // e.g., "fibcap_r0.75_cap30_n32"
+      std::string motion_type = "LIN"; // "LIN" | "PTP"
+      bool apply_totg = false;         // time-optimal parameterization on execute
+      double wait_time_sec = 0.5;      // dwell before capture
+    };
 
-  // Joint-space "home" using your default angles
-  void home();
+    SessionManager(const rclcpp::NodeOptions &options = rclcpp::NodeOptions(),
+                   std::shared_ptr<motion_controller::PilzMotionController> ctrl = nullptr,
+                   std::shared_ptr<motion_visualizer::MotionVisualizer> viz = nullptr,
+                   std::shared_ptr<behav3d::camera_manager::CameraManager> cam = nullptr,
+                   std::optional<std::vector<double>> home_joints_rad = std::nullopt);
 
-  // Go to a specific pose (LIN by default)
-  void home(const geometry_msgs::msg::PoseStamped& target,
-            const std::string& motion_type = "LIN",
-            double vel_scale = 0.5,
-            double acc_scale = 0.5);
+    bool initSession(const Options &opts);
+    bool run(const std::vector<geometry_msgs::msg::PoseStamped> &targets);
+    void finish();
 
-// Initialize a session from a file + a single target
-bool initScan(const std::string& filename,
-          const geometry_msgs::msg::PoseStamped& pose);
+  private:
+    void goHome();
+    void writeManifestLine(std::size_t i,
+                           const geometry_msgs::msg::PoseStamped &tgt,
+                           const behav3d::camera_manager::CameraManager::FilePaths &files,
+                           const sensor_msgs::msg::JointState &js,
+                           const geometry_msgs::msg::PoseStamped &tool0,
+                           const geometry_msgs::msg::PoseStamped &eef,
+                           bool plan_ok, bool exec_ok, bool cap_ok,
+                           const rclcpp::Time &stamp,
+                           const std::string &key);
 
-// Initialize a session from a file + multiple targets
-bool initScan(const std::string& filename,
-          const std::vector<geometry_msgs::msg::PoseStamped>& poses);
+    // dependencies
+    std::shared_ptr<motion_controller::PilzMotionController> ctrl_;
+    std::shared_ptr<motion_visualizer::MotionVisualizer> viz_;
+    std::shared_ptr<behav3d::camera_manager::CameraManager> cam_;
 
-const std::filesystem::path& getSessionDir() const { return session_dir_; }
-const std::filesystem::path& getCapturesRoot() const { return captures_root_; }
+    // configuration
+    std::optional<std::vector<double>> home_joints_rad_;
+    Options opts_{};
+    std::string output_dir_;
 
-private:
+    // paths
+    std::filesystem::path session_dir_;
+    std::filesystem::path dir_color_;
+    std::filesystem::path dir_depth_;
+    std::filesystem::path dir_ir_;
+    std::filesystem::path dir_d2c_;
+    std::filesystem::path dir_c2d_;
+    std::filesystem::path dir_calib_;
+    std::filesystem::path manifest_path_;
 
-  // helper to create captures/ and session dir
-  bool initScanDirs(const std::string& prefix);
-  // paths we keep around
-  std::filesystem::path captures_root_;
-  std::filesystem::path session_dir_;
+    // manifest aggregation (written once at finish())
+    rclcpp::Time start_stamp_;
+    std::vector<std::string> manifest_entries_;
+  };
 
-  std::shared_ptr<motion_controller::PilzMotionController> ctrl_;
-  std::shared_ptr<motion_visualizer::MotionVisualizer>     viz_;
-  std::shared_ptr<camera_manager::CameraManager>           cam_;
-};
-
-}  // namespace behav3d::session_manager
+} // namespace behav3d::session_manager
