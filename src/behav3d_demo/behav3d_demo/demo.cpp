@@ -34,6 +34,7 @@
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
+using behav3d::session_manager::SessionManager;
 
 using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
@@ -52,14 +53,14 @@ class Behav3dDemo : public rclcpp::Node
 public:
   explicit Behav3dDemo(const std::shared_ptr<PilzMotionController> &ctrl,
                        const std::shared_ptr<MotionVisualizer> &viz,
-                       const std::shared_ptr<behav3d::camera_manager::CameraManager> &cam)
-      : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam)
+                       const std::shared_ptr<behav3d::camera_manager::CameraManager> &cam,
+                       const std::shared_ptr<behav3d::session_manager::SessionManager> &sess)
+      : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam), sess_(sess)
   {
     sub_ = this->create_subscription<std_msgs::msg::String>(
         "user_input", 10,
         std::bind(&Behav3dDemo::callback, this, _1));
 
-    // Declare and get capture_delay_sec parameter
     capture_delay_sec_ = this->declare_parameter<double>("capture_delay_sec", 0.5);
 
     RCLCPP_INFO(this->get_logger(),
@@ -69,7 +70,9 @@ public:
 private:
   std::shared_ptr<MotionVisualizer> viz_;
   std::shared_ptr<PilzMotionController> ctrl_;
+  std::shared_ptr<SessionManager> sess_;
   std::shared_ptr<behav3d::camera_manager::CameraManager> cam_;
+  std::shared_ptr<behav3d::session_manager::SessionManager> sess_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
   double capture_delay_sec_;
 
@@ -95,84 +98,66 @@ private:
     std::transform(home_joints_deg.begin(), home_joints_deg.end(),
                    std::back_inserter(home_joints_rad),
                    [](double deg)
-                   { return deg * M_PI / 180.0; });
+                   { return deg2rad(deg); });
     auto traj = ctrl_->planJoints(home_joints_rad);
     ctrl_->executeTrajectory(traj);
   }
 
-  void fibonacci_cap(double radius = 0.75,
+  void fibonacci_cap(double radius = 0.6,
                      double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
-                     double cap_deg = 30.0, int n_points = 32)
+                     double cap_deg = 22.5, int n_points = 32)
   {
-    // 1. Start from home
-    home();
     const double cap_rad = deg2rad(cap_deg);
-    const auto center = worldXY(center_x, center_y, center_z,
-                                ctrl_->getRootLink());
-    viz_->publishTargetPose(center);
+    const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
     auto targets = fibonacciSphericalCap(center, radius, cap_rad, n_points);
     if (targets.empty())
     {
       RCLCPP_WARN(this->get_logger(), "fibonacci_cap: no targets generated!");
       return;
     }
-    viz_->publishTargetPose(targets);
-    // Loop over all targets (including first)
-    for (size_t i = 0; i < targets.size(); ++i)
-    {
-      viz_->prompt("Press 'next' to move to target " + std::to_string(i) + "/" + std::to_string(targets.size() - 1));
-      std::string motion_type = "LIN";
-      auto traj = ctrl_->planTarget(targets[i], motion_type);
-      ctrl_->executeTrajectory(traj);
-      rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::duration<double>(capture_delay_sec_)));
-      if (cam_ && !cam_->capture())
-      {
-        RCLCPP_WARN(this->get_logger(), "CameraManager: capture not ready after %s to target %zu.", motion_type.c_str(), i);
-      }
-    }
-    viz_->deleteAllMarkers();
-    home();
+
+    behav3d::session_manager::SessionManager::Options opts;
+    char tag[128];
+    std::snprintf(tag, sizeof(tag), "fibcap_r%.2f_cap%d_n%d", radius, (int)cap_deg, n_points);
+    opts.session_tag = tag;
+    opts.motion_type = "LIN";
+    opts.apply_totg = false;
+    opts.wait_time_sec = capture_delay_sec_;
+
+    if (!sess_->initSession(opts))
+      return;
+    sess_->run(targets);
+    sess_->finish();
   }
 
   void grid_sweep(double width = 1.0, double height = 0.5,
                   double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
-                  double z_off = 0.75,
+                  double z_off = 0.6,
                   int nx = 10, int ny = 5,
                   bool row_major = false)
   {
-    home();
-    const auto center = worldXY(center_x, center_y, center_z,
-                                ctrl_->getRootLink());
-    viz_->publishTargetPose(center);
+    const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
     nx = std::max(2, nx);
     ny = std::max(2, ny);
-    auto targets = sweepZigzag(center, width, height, z_off,
-                               nx, ny, row_major);
+    auto targets = sweepZigzag(center, width, height, z_off, nx, ny, row_major);
     if (targets.empty())
     {
       RCLCPP_WARN(this->get_logger(), "grid_sweep/sweepZigzag: no targets generated!");
       return;
     }
-    viz_->publishTargetPose(targets);
-    // Loop over all targets (including first)
-    for (size_t i = 0; i < targets.size(); ++i)
-    {
-      viz_->prompt("Press 'next' to move to target " + std::to_string(i) + "/" + std::to_string(targets.size() - 1));
-      std::string motion_type = "LIN";
-      auto traj = ctrl_->planTarget(targets[i], motion_type);
-      ctrl_->executeTrajectory(traj);
-      rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::duration<double>(capture_delay_sec_)));
-      RCLCPP_INFO(this->get_logger(), "Waiting for %zu seconds.", i);
 
-      if (cam_ && !cam_->capture())
-      {
-        RCLCPP_WARN(this->get_logger(), "CameraManager: capture not ready after %s to target %zu.", motion_type.c_str(), i);
-      }
-    }
-    viz_->deleteAllMarkers();
-    home();
+    behav3d::session_manager::SessionManager::Options opts;
+    char tag[160];
+    std::snprintf(tag, sizeof(tag), "raster_w%.2f_h%.2f_z%.2f_%dx%d", width, height, z_off, nx, ny);
+    opts.session_tag = tag;
+    opts.motion_type = "LIN";
+    opts.apply_totg = false;
+    opts.wait_time_sec = capture_delay_sec_;
+
+    if (!sess_->initSession(opts))
+      return;
+    sess_->run(targets);
+    sess_->finish();
   }
 };
 
@@ -194,17 +179,19 @@ int main(int argc, char **argv)
       "femto__depth_optical_frame");
   auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(
       rclcpp::NodeOptions().use_intra_process_comms(true));
-  auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera);
-  auto sess = std::make_shared<behav3d::session_manager::SessionManager>();
-  sess->sayHello();  // quick sanity check
+
+  auto sess = std::make_shared<behav3d::session_manager::SessionManager>(
+      rclcpp::NodeOptions().use_intra_process_comms(true), controller, visualizer, camera);
+
+  auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera, sess);
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(controller);
   exec.add_node(visualizer);
   exec.add_node(camera);
-  //exec.add_node(demo);
+  exec.add_node(demo);
   exec.add_node(sess);
-
+  exec.add_node(demo);
   exec.spin();
 
   rclcpp::shutdown();
