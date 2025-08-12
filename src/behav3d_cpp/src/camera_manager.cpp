@@ -424,56 +424,17 @@ namespace behav3d::camera_manager
     // ============== Conversions ==============
     cv::Mat CameraManager::toBgr(const sensor_msgs::msg::Image &msg)
     {
-        namespace enc = sensor_msgs::image_encodings;
         try
         {
-            // Prefer an explicit conversion when supported by cv_bridge
-            return cv_bridge::toCvCopy(msg, enc::BGR8)->image;
+            return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8)->image;
         }
         catch (const cv_bridge::Exception &)
         {
-            // Fallback: preserve original encoding and handle common cases
+            // Best-effort fallback: if it's grayscale, expand to BGR
             try
             {
-                auto cvimg = cv_bridge::toCvCopy(msg); // keep source encoding
-                const std::string &e = cvimg->encoding;
-                const cv::Mat &any = cvimg->image;
-                if (any.empty())
-                    return cv::Mat();
-
-                if (e == enc::RGB8)
-                {
-                    cv::Mat bgr;
-                    cv::cvtColor(any, bgr, cv::COLOR_RGB2BGR);
-                    return bgr;
-                }
-                if (e == enc::RGBA8)
-                {
-                    cv::Mat bgr;
-                    cv::cvtColor(any, bgr, cv::COLOR_RGBA2BGR);
-                    return bgr;
-                }
-                if (e == enc::BGRA8)
-                {
-                    cv::Mat bgr;
-                    cv::cvtColor(any, bgr, cv::COLOR_BGRA2BGR);
-                    return bgr;
-                }
-
-                // If cv_bridge gave us a 3/4‑channel image but we don't recognize the encoding,
-                // do a reasonable best effort instead of returning empty.
-                if (any.channels() == 3)
-                {
-                    // Assume it is already BGR/RGB; returning as‑is avoids data loss.
-                    return any;
-                }
-                if (any.channels() == 4)
-                {
-                    cv::Mat bgr;
-                    cv::cvtColor(any, bgr, cv::COLOR_BGRA2BGR);
-                    return bgr;
-                }
-                if (any.channels() == 1)
+                auto any = cv_bridge::toCvCopy(msg)->image;
+                if (!any.empty() && any.channels() == 1)
                 {
                     cv::Mat bgr;
                     cv::cvtColor(any, bgr, cv::COLOR_GRAY2BGR);
