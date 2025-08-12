@@ -607,7 +607,7 @@ namespace behav3d::camera_manager
             }
         }
     }
-    bool CameraManager::beginSession(const std::string &session_dir, const std::string &tag)
+    bool CameraManager::initSession(const std::string &session_dir, const std::string &tag)
     {
         (void)tag; // reserved for logging/metadata
         std::error_code ec;

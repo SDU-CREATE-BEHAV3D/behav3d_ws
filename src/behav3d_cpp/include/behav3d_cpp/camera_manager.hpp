@@ -46,7 +46,7 @@ namespace behav3d::camera_manager
         };
 
         // Bind to an externally-created session directory and disable internal JSONL writes.
-        bool beginSession(const std::string &session_dir, const std::string &tag);
+        bool initSession(const std::string &session_dir, const std::string &tag);
 
         // Synchronous capture: converts current frames and writes to disk before returning.
         // If stem_override (e.g., "t007") is non-empty, it is used as the filename stem.

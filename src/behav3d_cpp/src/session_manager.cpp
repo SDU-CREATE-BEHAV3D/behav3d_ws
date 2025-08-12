@@ -159,7 +159,7 @@ namespace behav3d::session_manager
     fs::create_directories(dir_calib_, ec);
 
     // Prime the CameraManager to write under this directory and to *not* write its own manifest
-    cam_->beginSession(session_dir_.string(), tag);
+    cam_->initSession(session_dir_.string(), tag);
 
     // Write calibration YAMLs once at session start (best-effort)
     const double calib_timeout_sec = this->declare_parameter<double>("calib_timeout_sec", 2.0);
