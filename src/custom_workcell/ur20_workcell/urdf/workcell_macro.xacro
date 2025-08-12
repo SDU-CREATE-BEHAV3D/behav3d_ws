@@ -16,47 +16,65 @@
     <joint name="table_base_joint" type="fixed">
       <xacro:insert_block name="origin" />
       <parent link="${parent}" />
-      <child link="table" />
+      <child link="robot_base" />
     </joint>
 
-    <link name="table">
+    <link name="robot_base">
       <visual>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/table.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/robot_base.dae"/>
         </geometry>
-        <origin rpy="0 0 0" xyz="-0.125 0.475 -0.74"/>
+        <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
       </visual>
       <collision>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/table.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/robot_base.dae"/>
         </geometry>
-        <origin rpy="0 0 0" xyz="-0.125 0.475 -0.74"/>
+        <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
       </collision>
     </link>
 
-    <link name="wall">
+    <link name="handrail">
       <visual>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/wall.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/handrail.dae"/>
         </geometry>
       </visual>
       <collision>
         <geometry>
-         <mesh filename="package://ur20_workcell/meshes/wall.dae"/>
+         <mesh filename="package://ur20_workcell/meshes/handrail.dae"/>
         </geometry>
       </collision>
     </link>
-    <joint name="base_to_wall" type="fixed">
-      <parent link="table"/>
-      <child link="wall"/>
-      <origin xyz="0 -0.67 -0.74"/>
+    <joint name="base_to_handrail" type="fixed">
+      <parent link="robot_base"/>
+      <child link="handrail"/>
+      <origin xyz="0 0 0"/>
     </joint>
 
-    <link name="robot_mount"/>
-    <joint name="base_to_robot_mount" type="fixed">
-      <parent link="table"/>
-      <child link="robot_mount"/>
-      <origin xyz="0.0 0.0 0.0" rpy="0 0 0.785" />
+    <link name="control_box">
+      <visual>
+        <geometry>
+          <mesh filename="package://ur20_workcell/meshes/control_box.dae"/>
+        </geometry>
+      </visual>
+      <collision>
+        <geometry>
+         <mesh filename="package://ur20_workcell/meshes/control_box.dae"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="base_to_control_box" type="fixed">
+      <parent link="robot_base"/>
+      <child link="control_box"/>
+      <origin xyz="0 0 0"/>
+    </joint>
+
+    <link name="table"/>
+    <joint name="base_to_table" type="fixed">
+      <parent link="robot_base"/>
+      <child link="table"/>
+      <origin xyz="0.0 0.6 0.0" rpy="0 0 0" />
     </joint>
 
     <link name="femto_mount">
