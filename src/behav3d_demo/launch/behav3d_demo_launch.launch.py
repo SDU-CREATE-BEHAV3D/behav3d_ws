@@ -71,11 +71,11 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration("orbbec_enable")),
         launch_arguments={
             # Color: 3840 x 2160 @ 30 fps
-            "enable_color": "true",
-            "color_width": "3840",
-            "color_height": "2160",
-            "color_fps": "30",
-            "color_format": "MJPG",
+            # "enable_color": "true",
+            # "color_width": "3840",
+            # "color_height": "2160",
+            # "color_fps": "30",
+            # "color_format": "MJPG",
             # Depth (NFOV, unbinned-equivalent): 640 x 576 @ 30 fps
             "enable_depth": "true",
             "depth_width": "640",
@@ -88,6 +88,8 @@ def generate_launch_description():
             "ir_height": "576",
             "ir_fps": "30",
             "ir_format": "Y16"
+            # PointCloud
+            "enable_point_cloud" : "false"
             # TODO: 'enable_ldp' throws compilation error!
             # Laser Dot Projector (true for scan / false for calibration)
             # "enable_ldp": "false"
