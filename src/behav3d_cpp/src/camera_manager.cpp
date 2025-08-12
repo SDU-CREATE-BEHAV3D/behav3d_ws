@@ -369,7 +369,17 @@ namespace behav3d::camera_manager
                 out.ir_raw = toGray(*ir);
                 out.has_ir = !out.ir_raw.empty();
                 if (out.ir_raw.empty())
+                {
                     out.has_ir = false;
+                    RCLCPP_WARN(get_logger(), "buildSnapshot: IR conversion EMPTY (encoding='%s')",
+                                ir->encoding.c_str());
+                }
+                else
+                {
+                    RCLCPP_DEBUG(get_logger(), "buildSnapshot: IR Mat %dx%d type=%d",
+                                out.ir_raw.rows, out.ir_raw.cols, out.ir_raw.type());
+                }
+                    
             }
             else
             {
@@ -379,9 +389,19 @@ namespace behav3d::camera_manager
             if (color)
             {
                 out.color_raw = toBgr(*color);
+
                 out.has_color = !out.color_raw.empty();
                 if (out.color_raw.empty())
+                {
                     out.has_color = false;
+                    RCLCPP_WARN(get_logger(), "buildSnapshot: COLOR conversion EMPTY (encoding='%s')",
+                                color->encoding.c_str());
+                }
+                else
+                {
+                    RCLCPP_DEBUG(get_logger(), "buildSnapshot: COLOR Mat %dx%d type=%d",
+                                out.color_raw.rows, out.color_raw.cols, out.color_raw.type());
+                }
             }
             else
             {
@@ -391,9 +411,18 @@ namespace behav3d::camera_manager
             if (depth)
             {
                 out.depth_raw = toUint16(*depth);
-                out.has_depth = !out.depth_raw.empty();
+                out.has_depth = !out.depth_raw.empty();                
                 if (out.depth_raw.empty())
+                {
                     out.has_depth = false;
+                    RCLCPP_WARN(get_logger(), "buildSnapshot: DEPTH conversion EMPTY (encoding='%s')",
+                                depth->encoding.c_str());
+                }
+                else
+                {
+                    RCLCPP_DEBUG(get_logger(), "buildSnapshot: DEPTH Mat %dx%d type=%d",
+                                out.depth_raw.rows, out.depth_raw.cols, out.depth_raw.type());
+                }
             }
             else
             {
