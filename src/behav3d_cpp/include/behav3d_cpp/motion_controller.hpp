@@ -13,8 +13,6 @@
 // Date: 2025-07
 // =============================================================================
 
-#pragma once
-
 #include <memory>
 #include <string>
 #include <vector>
