@@ -5,8 +5,7 @@
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
 //
-// Author:
-//   - Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
+// Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
 // Maintainers:
 //   - Lucas José Helle <luh@iti.sdu.dk>
 //   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
@@ -24,23 +23,25 @@
 #include <chrono>
 #include <ctime>
 #include <algorithm>
-#include <cmath>  
+#include <cmath>
 #include <filesystem>
 
 #define SESS_INFO(node, fmt, ...) \
   RCLCPP_INFO((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
 
-namespace {
-// simple timestamp: YYYYmmdd_HHMMSS
-inline std::string makeTimestamp() {
-  using clock = std::chrono::system_clock;
-  auto t = clock::to_time_t(clock::now());
-  std::tm tm{};
-  localtime_r(&t, &tm);
-  std::ostringstream oss;
-  oss << std::put_time(&tm, "%Y%m%d_%H%M%S");
-  return oss.str();
-}
+namespace
+{
+  // simple timestamp: YYYYmmdd_HHMMSS
+  inline std::string makeTimestamp()
+  {
+    using clock = std::chrono::system_clock;
+    auto t = clock::to_time_t(clock::now());
+    std::tm tm{};
+    localtime_r(&t, &tm);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y%m%d_%H%M%S");
+    return oss.str();
+  }
 } // anonymous
 
 #include <chrono>
@@ -309,8 +310,10 @@ namespace behav3d::session_manager
         out << "\"captures\":[";
         for (size_t i = 0; i < manifest_entries_.size(); ++i)
         {
-          if (i) out << ",";
-          out << "\n" << manifest_entries_[i];
+          if (i)
+            out << ",";
+          out << "\n"
+              << manifest_entries_[i];
         }
         out << "\n]}";
         out.close();

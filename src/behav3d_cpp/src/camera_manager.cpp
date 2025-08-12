@@ -168,7 +168,7 @@ namespace behav3d::camera_manager
         auto qos = rclcpp::SensorDataQoS();
         qos.keep_last(20)
 
-        sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
+            sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
             color_topic_, qos, std::bind(&CameraManager::onColor, this, _1));
         RCLCPP_INFO(get_logger(), "Subscribed to color: %s", color_topic_.c_str());
         sub_depth_ = this->create_subscription<sensor_msgs::msg::Image>(
@@ -378,9 +378,8 @@ namespace behav3d::camera_manager
                 else
                 {
                     RCLCPP_DEBUG(get_logger(), "buildSnapshot: IR Mat %dx%d type=%d",
-                                out.ir_raw.rows, out.ir_raw.cols, out.ir_raw.type());
+                                 out.ir_raw.rows, out.ir_raw.cols, out.ir_raw.type());
                 }
-                    
             }
             else
             {
@@ -401,7 +400,7 @@ namespace behav3d::camera_manager
                 else
                 {
                     RCLCPP_DEBUG(get_logger(), "buildSnapshot: COLOR Mat %dx%d type=%d",
-                                out.color_raw.rows, out.color_raw.cols, out.color_raw.type());
+                                 out.color_raw.rows, out.color_raw.cols, out.color_raw.type());
                 }
             }
             else
@@ -412,7 +411,7 @@ namespace behav3d::camera_manager
             if (depth)
             {
                 out.depth_raw = toUint16(*depth);
-                out.has_depth = !out.depth_raw.empty();                
+                out.has_depth = !out.depth_raw.empty();
                 if (out.depth_raw.empty())
                 {
                     out.has_depth = false;
@@ -422,7 +421,7 @@ namespace behav3d::camera_manager
                 else
                 {
                     RCLCPP_DEBUG(get_logger(), "buildSnapshot: DEPTH Mat %dx%d type=%d",
-                                out.depth_raw.rows, out.depth_raw.cols, out.depth_raw.type());
+                                 out.depth_raw.rows, out.depth_raw.cols, out.depth_raw.type());
                 }
             }
             else

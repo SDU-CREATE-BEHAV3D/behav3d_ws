@@ -5,8 +5,7 @@
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
 //
-// Author:
-//   - Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
+// Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
 // Maintainers:
 //   - Lucas José Helle <luh@iti.sdu.dk>
 //   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
