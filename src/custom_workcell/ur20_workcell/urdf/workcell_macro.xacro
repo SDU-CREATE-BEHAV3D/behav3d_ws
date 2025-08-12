@@ -34,6 +34,13 @@
       </collision>
     </link>
 
+    <link name="robot_mount"/>
+    <joint name="base_to_robot_mount" type="fixed">
+      <parent link="robot_base"/>
+      <child link="robot_mount"/>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0.0" />
+    </joint>
+
     <link name="handrail">
       <visual>
         <geometry>
@@ -70,7 +77,18 @@
       <origin xyz="0 0 0"/>
     </joint>
 
-    <link name="table"/>
+    <link name="table">
+      <visual>
+        <geometry>
+          <mesh filename="package://ur20_workcell/meshes/table.dae"/>
+        </geometry>
+      </visual>
+      <collision>
+        <geometry>
+         <mesh filename="package://ur20_workcell/meshes/table.dae"/>
+        </geometry>
+      </collision>
+    </link>
     <joint name="base_to_table" type="fixed">
       <parent link="robot_base"/>
       <child link="table"/>
