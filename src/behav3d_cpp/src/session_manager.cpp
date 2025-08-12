@@ -15,6 +15,33 @@
 // =============================================================================
 
 #include "behav3d_cpp/session_manager.hpp"
+#include "behav3d_cpp/motion_controller.hpp"
+#include "behav3d_cpp/motion_visualizer.hpp"
+#include "behav3d_cpp/camera_manager.hpp"
+
+#include <iomanip>
+#include <sstream>
+#include <chrono>
+#include <ctime>
+#include <algorithm>
+#include <cmath>  
+#include <filesystem>
+
+#define SESS_INFO(node, fmt, ...) \
+  RCLCPP_INFO((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+
+namespace {
+// simple timestamp: YYYYmmdd_HHMMSS
+inline std::string makeTimestamp() {
+  using clock = std::chrono::system_clock;
+  auto t = clock::to_time_t(clock::now());
+  std::tm tm{};
+  localtime_r(&t, &tm);
+  std::ostringstream oss;
+  oss << std::put_time(&tm, "%Y%m%d_%H%M%S");
+  return oss.str();
+}
+} // anonymous
 
 #include <chrono>
 #include <filesystem>

@@ -34,6 +34,7 @@
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
+using behav3d::session_manager::SessionManager;
 
 using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
@@ -69,6 +70,7 @@ public:
 private:
   std::shared_ptr<MotionVisualizer> viz_;
   std::shared_ptr<PilzMotionController> ctrl_;
+  std::shared_ptr<SessionManager> sess_;
   std::shared_ptr<behav3d::camera_manager::CameraManager> cam_;
   std::shared_ptr<behav3d::session_manager::SessionManager> sess_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
@@ -189,7 +191,7 @@ int main(int argc, char **argv)
   exec.add_node(camera);
   exec.add_node(demo);
   exec.add_node(sess);
-
+  exec.add_node(demo);
   exec.spin();
 
   rclcpp::shutdown();

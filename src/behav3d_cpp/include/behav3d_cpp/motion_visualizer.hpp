@@ -9,13 +9,14 @@
 // Author: Lucas Helle Pessot <luh@iti.sdu.dk>
 // Maintainers:
 //   - Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
-//   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
+//   - Joseph Naguib <jomi@iti.sdu.dk>
 // Institute: University of Southern Denmark (Syddansk Universitet)
 // Date: 2025-07
 // =============================================================================
 
 // motion_visualizer.hpp
 #pragma once
+
 #include <rclcpp/rclcpp.hpp>
 #include <moveit/move_group_interface/move_group_interface.hpp>
 #include <moveit_visual_tools/moveit_visual_tools.h>
