@@ -134,7 +134,7 @@ def generate_launch_description():
     )
     # RViz
     rviz_config_file = (
-        get_package_share_directory("viz_demo") + "/launch/move_group.rviz"
+        get_package_share_directory("i40_workcell_moveit_config") + "/config/move_group.rviz"
     )
     rviz_node = Node(
         package="rviz2",
