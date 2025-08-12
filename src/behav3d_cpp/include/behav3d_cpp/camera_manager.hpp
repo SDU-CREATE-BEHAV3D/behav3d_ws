@@ -51,7 +51,7 @@ namespace behav3d::camera_manager
         // Synchronous capture: converts current frames and writes to disk before returning.
         // If stem_override (e.g., "t007") is non-empty, it is used as the filename stem.
         // If out_paths/stamp_out are provided, they are filled with the results.
-        bool capture(const std::string &stem_override = "", FilePaths &out_paths, rclcpp::Time *stamp_out = nullptr);
+        bool capture(const std::string &stem_override, FilePaths &out_paths, rclcpp::Time *stamp_out = nullptr);
 
         // Non-blocking: enqueue latest frames and return immediately
         bool captureAsync();
