@@ -78,7 +78,6 @@ namespace behav3d::camera_manager
         return true;
     }
 
-
     CameraManager::CameraManager(const rclcpp::NodeOptions &options)
         : rclcpp::Node("camera_manager", options)
     {
@@ -88,7 +87,6 @@ namespace behav3d::camera_manager
 
         // Start writer thread
         writer_ = std::thread(&CameraManager::writerThread, this);
-
     }
 
     CameraManager::~CameraManager()
@@ -160,7 +158,6 @@ namespace behav3d::camera_manager
 
         d2c_depth_topic_ = this->declare_parameter<std::string>("d2c_depth_topic", ns_ + "/aligned_depth_to_color/image_raw");
         c2d_color_topic_ = this->declare_parameter<std::string>("c2d_color_topic", ns_ + "/aligned_color_to_depth/image_raw");
-
 
         RCLCPP_INFO(get_logger(), "CameraManager configured with ns='%s' output='%s'",
                     ns_.c_str(), output_dir_.c_str());
@@ -276,7 +273,6 @@ namespace behav3d::camera_manager
         }
     }
 
-
     // --- Calibration retrieval methods ---
     bool CameraManager::getCalibration(double timeout_sec, bool write_yaml)
     {
@@ -355,8 +351,6 @@ namespace behav3d::camera_manager
         {
             std::lock_guard<std::mutex> lk(mtx_);
             ir = last_ir_;
-            if (!ir)
-                return false; // IR required for hand-eye
             color = last_color_;
             depth = last_depth_;
             d2c = last_d2c_depth_;
@@ -370,11 +364,17 @@ namespace behav3d::camera_manager
         {
             out.stamp = ir->header.stamp;
 
-            // IR first (required)
-            out.ir_raw = toGray(*ir);
-            out.has_ir = !out.ir_raw.empty();
-            if (out.ir_raw.empty())
-                out.has_ir = false;
+            if (ir)
+            {
+                out.ir_raw = toGray(*ir);
+                out.has_ir = !out.ir_raw.empty();
+                if (out.ir_raw.empty())
+                    out.has_ir = false;
+            }
+            else
+            {
+                RCLCPP_WARN(get_logger(), "buildSnapshot: no IR frame available at capture time");
+            }
 
             if (color)
             {
@@ -383,6 +383,11 @@ namespace behav3d::camera_manager
                 if (out.color_raw.empty())
                     out.has_color = false;
             }
+            else
+            {
+                RCLCPP_WARN(get_logger(), "buildSnapshot: no COLOR frame available at capture time");
+            }
+
             if (depth)
             {
                 out.depth_raw = toUint16(*depth);
@@ -390,6 +395,11 @@ namespace behav3d::camera_manager
                 if (out.depth_raw.empty())
                     out.has_depth = false;
             }
+            else
+            {
+                RCLCPP_WARN(get_logger(), "buildSnapshot: no DEPTH frame available at capture time");
+            }
+
             if (d2c)
             {
                 out.d2c_depth = toUint16(*d2c);
@@ -598,7 +608,6 @@ namespace behav3d::camera_manager
             {
                 RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
             }
-
 
             {
                 std::lock_guard<std::mutex> lk(mtx_);
