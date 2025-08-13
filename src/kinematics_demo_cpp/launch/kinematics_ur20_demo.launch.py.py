@@ -46,31 +46,66 @@ def generate_launch_description():
         default_value="true",
         description="true = simulation/mock, false = real hardware",
     )
-    group_arg = DeclareLaunchArgument('group', default_value='ur_arm', description='MoveIt planning group')
-    root_link_arg = DeclareLaunchArgument('root_link', default_value='world', description='Root/world link frame')
-    eef_link_arg = DeclareLaunchArgument('eef_link', default_value='femto__depth_optical_frame', description='End-effector link frame')
-    planning_pipeline_arg = DeclareLaunchArgument('planning_pipeline', default_value='pilz_industrial_motion_planner', description='Planning pipeline id')
-    max_velocity_scale_arg = DeclareLaunchArgument('max_velocity_scale', default_value='0.5', description='Max velocity scale [0..1]')
-    max_accel_scale_arg = DeclareLaunchArgument('max_accel_scale', default_value='0.5', description='Max acceleration scale [0..1]')
-    debug_arg = DeclareLaunchArgument('debug', default_value='false', description='Enable debug logging')
+
+    group_arg = DeclareLaunchArgument(
+        "group",
+        default_value="ur_arm",
+        description="MoveIt planning group"
+    )
+
+    root_link_arg = DeclareLaunchArgument(
+        "root_link",
+        default_value="world",
+        description="Root/world link frame"
+    )
+
+    eef_link_arg = DeclareLaunchArgument(
+        "eef_link",
+        default_value="femto__depth_optical_frame",
+        description="End-effector link"
+    )
+
+    planning_pipeline_arg = DeclareLaunchArgument(
+        "planning_pipeline",
+        default_value="pilz_industrial_motion_planner",
+        description="Planning pipeline id"
+    )
+
+    max_velocity_scale_arg = DeclareLaunchArgument(
+        "max_velocity_scale",
+        default_value="0.5",
+        description="Max velocity scale [0..1]"
+    )
+
+    max_accel_scale_arg = DeclareLaunchArgument(
+        "max_accel_scale",
+        default_value="0.5",
+        description="Max acceleration scale [0..1]"
+    )
+
+    debug_arg = DeclareLaunchArgument(
+        "debug",
+        default_value="false",
+        description="Enable debug logging"
+    )
 
     # -------------------------------------------------------------------------
     # 2) Common paths
     # -------------------------------------------------------------------------
     ur_launch_dir = os.path.join(
-        get_package_share_directory("i40_workcell"), "launch"
+        get_package_share_directory("ur20_workcell"), "launch"
     )
     moveit_launch_dir = os.path.join(
-        get_package_share_directory("i40_workcell_moveit_config"), "launch"
+        get_package_share_directory("ur20_workcell_moveit_config"), "launch"
     )
 
     # -------------------------------------------------------------------------
-    # 3) UR driver (real robot or mock) Calling I40_workcell start_robot launch
+    # 3) UR driver (real robot or mock) Calling ur20_workcell start_robot launch
     # -------------------------------------------------------------------------
     ur_driver = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(ur_launch_dir, "start_robot.launch.py")),
         launch_arguments={
-            "ur_type": "ur10e",
+            "ur_type": "ur20",
             "robot_ip": LaunchConfiguration("robot_ip"),
             "use_mock_hardware": LaunchConfiguration("use_mock_hardware"),
             "launch_rviz": "false",
@@ -78,7 +113,7 @@ def generate_launch_description():
         }.items(),
     )
     # -------------------------------------------------------------------------
-    # 4) MoveIt stack (Initialize I40_workspace_moveit_config movegroup)
+    # 4) MoveIt stack (Initialize ur20_workspace_moveit_config movegroup)
     # -------------------------------------------------------------------------
 
     
@@ -90,7 +125,7 @@ def generate_launch_description():
     # -------------------------------------------------------------------------
 
     moveit_config = (
-        MoveItConfigsBuilder(robot_name="ur", package_name="i40_workcell_moveit_config")
+        MoveItConfigsBuilder(robot_name="ur", package_name="ur20_workcell_moveit_config")
         .robot_description_semantic(Path("config") / "ur.srdf")
         # .moveit_cpp(
         #     file_path=os.path.join(
@@ -102,7 +137,7 @@ def generate_launch_description():
     )
     # RViz
     rviz_config_file = (
-        get_package_share_directory("i40_workcell_moveit_config") + "/config/move_group.rviz"
+        get_package_share_directory("ur20_workcell_moveit_config") + "/config/move_group.rviz"
     )
     rviz_node = Node(
         package="rviz2",
@@ -115,16 +150,6 @@ def generate_launch_description():
             moveit_config.robot_description_kinematics,
             moveit_config.planning_pipelines,
             moveit_config.joint_limits,
-            {
-                # These values populate NodeOptions-backed parameters used by PilzMotionController & MotionVisualizer
-                'group': LaunchConfiguration('group'),
-                'root_link': LaunchConfiguration('root_link'),
-                'eef_link': LaunchConfiguration('eef_link'),
-                'planning_pipeline': LaunchConfiguration('planning_pipeline'),
-                'max_velocity_scale': ParameterValue(LaunchConfiguration('max_velocity_scale'), value_type=float),
-                'max_accel_scale': ParameterValue(LaunchConfiguration('max_accel_scale'), value_type=float),
-                'debug': ParameterValue(LaunchConfiguration('debug'), value_type=bool),
-            }
         ],
     )
 
@@ -140,6 +165,16 @@ def generate_launch_description():
             moveit_config.robot_description_kinematics,
             moveit_config.planning_pipelines,
             moveit_config.joint_limits,
+            {
+                # These values populate the NodeOptions-backed parameters used by PilzMotionController & MotionVisualizer
+                'group': LaunchConfiguration('group'),
+                'root_link': LaunchConfiguration('root_link'),
+                'eef_link': LaunchConfiguration('eef_link'),
+                'planning_pipeline': LaunchConfiguration('planning_pipeline'),
+                'max_velocity_scale': ParameterValue(LaunchConfiguration('max_velocity_scale'), value_type=float),
+                'max_accel_scale': ParameterValue(LaunchConfiguration('max_accel_scale'), value_type=float),
+                'debug': ParameterValue(LaunchConfiguration('debug'), value_type=bool),
+            }
         ],
     )
 
@@ -157,6 +192,6 @@ def generate_launch_description():
             ur_driver,
             moveit_stack,
             rviz_node,
-            move_group_demo,
+            move_group_demo
         ]
     )
