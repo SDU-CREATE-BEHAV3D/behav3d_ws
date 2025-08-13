@@ -17,6 +17,7 @@
 #include "behav3d_cpp/motion_controller.hpp"
 #include "behav3d_cpp/motion_visualizer.hpp"
 #include "behav3d_cpp/camera_manager.hpp"
+#include "behav3d_cpp/util.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -291,32 +292,35 @@ namespace behav3d::session_manager
     rclcpp::Time end_stamp = this->now();
     try
     {
-      std::ofstream out(manifest_path_.string(), std::ios::out | std::ios::trunc);
-      if (!out.is_open())
+      nlohmann::json root;
+      root["session_tag"] = opts_.session_tag;
+      root["motion_type"] = opts_.motion_type;
+      root["apply_totg"] = opts_.apply_totg;
+      root["wait_time_sec"] = opts_.wait_time_sec;
+      root["start_stamp_ns"] = start_stamp_.nanoseconds();
+      root["end_stamp_ns"] = end_stamp.nanoseconds();
+      root["root_dir"] = session_dir_.string();
+
+      nlohmann::json caps = nlohmann::json::array();
+      for (const auto &s : manifest_entries_)
       {
-        RCLCPP_ERROR(this->get_logger(), "[Session] Failed to open manifest for write: %s", manifest_path_.string().c_str());
+        try
+        {
+          caps.push_back(nlohmann::json::parse(s));
+        }
+        catch (...)
+        {
+          // If a single entry is malformed, keep going (optional: log a warning)
+        }
+      }
+      root["captures"] = std::move(caps);
+
+      if (!behav3d::util::writeJson(manifest_path_.string(), root))
+      {
+        RCLCPP_ERROR(this->get_logger(), "[Session] Failed to write manifest: %s", manifest_path_.string().c_str());
       }
       else
       {
-        out.setf(std::ios::fixed);
-        out << "{";
-        out << "\"session_tag\":\"" << opts_.session_tag << "\",";
-        out << "\"motion_type\":\"" << opts_.motion_type << "\",";
-        out << "\"apply_totg\":" << (opts_.apply_totg ? "true" : "false") << ",";
-        out << "\"wait_time_sec\":" << std::setprecision(3) << opts_.wait_time_sec << ",";
-        out << "\"start_stamp_ns\":" << start_stamp_.nanoseconds() << ",";
-        out << "\"end_stamp_ns\":" << end_stamp.nanoseconds() << ",";
-        out << "\"root_dir\":\"" << session_dir_.string() << "\",";
-        out << "\"captures\":[";
-        for (size_t i = 0; i < manifest_entries_.size(); ++i)
-        {
-          if (i)
-            out << ",";
-          out << "\n"
-              << manifest_entries_[i];
-        }
-        out << "\n]}";
-        out.close();
         RCLCPP_INFO(this->get_logger(), "[Session] Wrote manifest: %s", manifest_path_.string().c_str());
       }
     }

@@ -14,6 +14,7 @@
 // =============================================================================
 
 #include "behav3d_cpp/camera_manager.hpp"
+#include "behav3d_cpp/util.hpp"
 
 #include <chrono>
 #include <fstream>
@@ -570,46 +571,42 @@ namespace behav3d::camera_manager
     bool CameraManager::writeCalibrationYaml(const sensor_msgs::msg::CameraInfo &info,
                                              const std::string &path)
     {
-        std::ofstream f(path);
-        if (!f.is_open())
-            return false;
-        f << "image_width: " << info.width << '\n';
-        f << "image_height: " << info.height << '\n';
-        f << "camera_name: '" << info.header.frame_id << "'\n";
-        f << "camera_matrix:\n  rows: 3\n  cols: 3\n  data: [";
-        for (size_t i = 0; i < info.k.size(); ++i)
+        YAML::Node node;
+        node["image_width"] = info.width;
+        node["image_height"] = info.height;
+        node["camera_name"] = info.header.frame_id;
+
+        auto makeMat = [](int rows, int cols, const auto &vec)
         {
-            f << std::setprecision(10) << info.k[i];
-            if (i + 1 < info.k.size())
-                f << ", ";
-        }
-        f << "]\n";
-        f << "distortion_model: '" << info.distortion_model << "'\n";
-        f << "distortion_coefficients:\n  rows: 1\n  cols: " << info.d.size() << "\n  data: [";
-        for (size_t i = 0; i < info.d.size(); ++i)
+            YAML::Node m;
+            m["rows"] = rows;
+            m["cols"] = cols;
+            YAML::Node data(YAML::NodeType::Sequence);
+            for (const auto &v : vec)
+                data.push_back(v);
+            m["data"] = data;
+            return m;
+        };
+
+        node["camera_matrix"] = makeMat(3, 3, info.k);
+        node["distortion_model"] = info.distortion_model;
+
+        // distortion coefficients: 1 x N
         {
-            f << std::setprecision(10) << info.d[i];
-            if (i + 1 < info.d.size())
-                f << ", ";
+            YAML::Node dc;
+            dc["rows"] = 1;
+            dc["cols"] = static_cast<int>(info.d.size());
+            YAML::Node data(YAML::NodeType::Sequence);
+            for (const auto &v : info.d)
+                data.push_back(v);
+            dc["data"] = data;
+            node["distortion_coefficients"] = dc;
         }
-        f << "]\n";
-        f << "rectification_matrix:\n  rows: 3\n  cols: 3\n  data: [";
-        for (size_t i = 0; i < info.r.size(); ++i)
-        {
-            f << std::setprecision(10) << info.r[i];
-            if (i + 1 < info.r.size())
-                f << ", ";
-        }
-        f << "]\n";
-        f << "projection_matrix:\n  rows: 3\n  cols: 4\n  data: [";
-        for (size_t i = 0; i < info.p.size(); ++i)
-        {
-            f << std::setprecision(10) << info.p[i];
-            if (i + 1 < info.p.size())
-                f << ", ";
-        }
-        f << "]\n";
-        return true;
+
+        node["rectification_matrix"] = makeMat(3, 3, info.r);
+        node["projection_matrix"] = makeMat(3, 4, info.p);
+
+        return behav3d::util::writeYaml(path, node);
     }
 
     void CameraManager::writerThread()

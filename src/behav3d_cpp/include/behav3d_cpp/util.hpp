@@ -16,8 +16,12 @@
 #pragma once
 
 #include <random>
+#include <string>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+
+#include <nlohmann/json.hpp>
+#include <yaml-cpp/yaml.h>
 
 namespace behav3d::util
 {
@@ -37,5 +41,21 @@ namespace behav3d::util
     /// Roll‑pitch‑yaw (XYZ extrinsic) to quaternion.
     /// If @p degrees == true, @p rpy is interpreted in degrees.
     Eigen::Quaterniond fromRPY(const Eigen::Vector3d &rpy, bool degrees = false);
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Tiny JSON/YAML wrapper (uses nlohmann::json and yaml-cpp directly)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Load a JSON file into a nlohmann::json
+    bool readJson(const std::string &path, nlohmann::json &out);
+
+    /// Write a nlohmann::json to disk (pretty-printed)
+    bool writeJson(const std::string &path, const nlohmann::json &j);
+
+    /// Load a YAML file into a YAML::Node
+    bool readYaml(const std::string &path, YAML::Node &out);
+
+    /// Write a YAML::Node to disk
+    bool writeYaml(const std::string &path, const YAML::Node &node);
 
 } // namespace behav3d::util

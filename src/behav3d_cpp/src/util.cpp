@@ -15,7 +15,12 @@
 
 #include <cmath>
 #include <random>
+#include <string>
+#include <fstream>
 #include <Eigen/Dense>
+
+#include <nlohmann/json.hpp>
+#include <yaml-cpp/yaml.h>
 
 namespace behav3d::util
 {
@@ -63,6 +68,73 @@ namespace behav3d::util
         Eigen::AngleAxisd rz(v.z(), Eigen::Vector3d::UnitZ());
 
         return rz * ry * rx;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Tiny JSON/YAML wrapper (nlohmann::json + yaml-cpp)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    bool readJson(const std::string &path, nlohmann::json &out)
+    {
+        try
+        {
+            std::ifstream ifs(path);
+            if (!ifs.is_open())
+                return false;
+            ifs >> out; // throws on parse error
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    bool writeJson(const std::string &path, const nlohmann::json &j)
+    {
+        try
+        {
+            std::ofstream ofs(path);
+            if (!ofs.is_open())
+                return false;
+            ofs << j.dump(2); // pretty-print with 2-space indent
+            return static_cast<bool>(ofs);
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    bool readYaml(const std::string &path, YAML::Node &out)
+    {
+        try
+        {
+            out = YAML::LoadFile(path); // throws on I/O/parse error
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    bool writeYaml(const std::string &path, const YAML::Node &node)
+    {
+        try
+        {
+            YAML::Emitter emitter;
+            emitter << node;
+            std::ofstream ofs(path);
+            if (!ofs.is_open())
+                return false;
+            ofs << emitter.c_str();
+            return static_cast<bool>(ofs);
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
 } // namespace behav3d::util
