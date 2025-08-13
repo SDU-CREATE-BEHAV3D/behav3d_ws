@@ -18,6 +18,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <iterator>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/rate.hpp>
@@ -353,20 +354,14 @@ int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
-  // Instantiate the motion controller: replace "manipulator" and "world"
-  // with your MoveIt group name and root link frame as needed.
-  auto controller = std::make_shared<PilzMotionController>(
-      "ur_arm", // MoveIt planning group name
-      // "ur10e_base_link",            // Root link frame
-      "world",
-      "femto__depth_optical_frame", // End-effector link frame
-      true                          // Debug mode off
-  );
-  auto visualizer = std::make_shared<MotionVisualizer>(
-      "ur_arm",
-      // "ur10e_base_link",
-      "world",
-      "femto__depth_optical_frame");
+  rclcpp::NodeOptions controller_opts;
+  controller_opts.use_intra_process_comms(true);
+  auto controller = std::make_shared<PilzMotionController>(controller_opts);
+
+  rclcpp::NodeOptions visualizer_opts;
+  visualizer_opts.use_intra_process_comms(true);
+  auto visualizer = std::make_shared<MotionVisualizer>(visualizer_opts);
+
   auto demo = std::make_shared<PilzDemo>(controller, visualizer);
 
   rclcpp::executors::MultiThreadedExecutor exec;
