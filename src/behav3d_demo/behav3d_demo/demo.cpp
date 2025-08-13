@@ -59,8 +59,10 @@ public:
       : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam), sess_(sess)
   {
     sub_ = this->create_subscription<std_msgs::msg::String>(
-        "user_input", 10,
+        "/user_input", 10,
         std::bind(&Behav3dDemo::callback, this, _1));
+
+    RCLCPP_INFO(this->get_logger(), "Behav3dDemo subscribing to: %s", "/user_input");
 
     capture_delay_sec_ = this->declare_parameter<double>("capture_delay_sec", 0.5);
 
@@ -76,9 +78,9 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
   double capture_delay_sec_;
 
-  void callback(const std_msgs::msg::String &msg)
+  void callback(const std_msgs::msg::String::SharedPtr msg)
   {
-    const std::string cmd = msg.data;
+    const std::string &cmd = msg->data;
     if (cmd == "fibonacci_cap")
       fibonacci_cap();
     else if (cmd == "grid_sweep")
@@ -191,7 +193,6 @@ int main(int argc, char **argv)
   exec.add_node(camera);
   exec.add_node(demo);
   exec.add_node(sess);
-  exec.add_node(demo);
   exec.spin();
 
   rclcpp::shutdown();
