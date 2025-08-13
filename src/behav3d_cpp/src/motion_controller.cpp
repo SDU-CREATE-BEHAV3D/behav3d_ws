@@ -114,8 +114,8 @@ namespace behav3d::motion_controller
 
     move_group_.setPoseReferenceFrame(root_link_);
     move_group_.setEndEffectorLink(eef_link_);
-    move_group_.setMaxVelocityScalingFactor(0.5);
-    move_group_.setMaxAccelerationScalingFactor(0.5);
+    move_group_.setMaxVelocityScalingFactor(0.1);
+    move_group_.setMaxAccelerationScalingFactor(0.1);
 
     move_group_.setPlanningPipelineId("pilz_industrial_motion_planner");
 
