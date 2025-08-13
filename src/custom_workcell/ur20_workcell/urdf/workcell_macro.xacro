@@ -38,7 +38,7 @@
     <joint name="base_to_robot_mount" type="fixed">
       <parent link="robot_base"/>
       <child link="robot_mount"/>
-      <origin xyz="0.0 0.0 0.0" rpy="0 0 0.0" />
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 3.1415" />
     </joint>
 
     <link name="handrail">

@@ -98,7 +98,7 @@ private:
   void home()
   {
     // Joint‑space “home” configuration (given in degrees)
-    const std::vector<double> home_joints_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
+    const std::vector<double> home_joints_deg = {-90.0, -120.0, 120.0, -90.0, 90.0, -180.0};
 
     // Convert degrees to radians for MoveIt
     std::vector<double> home_joints_rad;
