@@ -29,10 +29,8 @@ namespace behav3d::motion_visualizer
   class MotionVisualizer : public rclcpp::Node
   {
   public:
-    MotionVisualizer(const std::string &planning_group,
-                     const std::string &root_link,
-                     const std::string &eef_link,
-                     bool debug = false);
+    // Single constructor: fully parameterized via ROS 2 NodeOptions/parameters
+    explicit MotionVisualizer(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
     // Helpers ------------------------------------------------------------------
     void publishTargetPose(const geometry_msgs::msg::PoseStamped &pose,

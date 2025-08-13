@@ -60,6 +60,11 @@ namespace fs = std::filesystem;
 namespace behav3d::session_manager
 {
 
+  // Robot link naming: driven by the `robot_prefix` parameter declared in the constructor.
+  // This makes the "*_tool0" link configurable from CLI/launch.
+  static std::string g_robot_prefix = "ur10e";
+  static inline std::string tool0Link() { return g_robot_prefix + "_tool0"; }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Helpers (local to this translation unit)
   // ─────────────────────────────────────────────────────────────────────────────
@@ -134,6 +139,9 @@ namespace behav3d::session_manager
         home_joints_rad_(std::move(home_joints_rad))
   {
     RCLCPP_INFO(this->get_logger(), "[SessionManager] initialized");
+    // Declare robot_prefix parameter once (default: "ur10e") and store it
+    g_robot_prefix = this->declare_parameter<std::string>("robot_prefix", "ur10e");
+    RCLCPP_INFO(this->get_logger(), "[SessionManager] robot_prefix: %s", g_robot_prefix.c_str());
     // Where to create session directories (keep same default as CameraManager)
     output_dir_ = this->declare_parameter<std::string>("output_dir", "~/behav3d_ws/captures");
   }
@@ -241,7 +249,7 @@ namespace behav3d::session_manager
         // Log attempt with current state & no files
         auto js = ctrl_->getCurrentJointState();
         auto eef = ctrl_->getCurrentPose();
-        auto tool0 = ctrl_->getCurrentPose("ur10e_tool0");
+        auto tool0 = ctrl_->getCurrentPose(tool0Link());
         behav3d::camera_manager::CameraManager::FilePaths files{};
         writeManifestLine(i, tgt, files, js, tool0, eef,
                           /*plan_ok=*/false, /*exec_ok=*/false, /*cap_ok=*/false,
@@ -270,7 +278,7 @@ namespace behav3d::session_manager
 
       // ---------------- LOG ----------------
       auto js = ctrl_->getCurrentJointState();
-      auto tool0 = ctrl_->getCurrentPose("ur10e_tool0");
+      auto tool0 = ctrl_->getCurrentPose(tool0Link());
       auto eef = ctrl_->getCurrentPose(ctrl_->getEefLink());
 
       writeManifestLine(i, tgt, files, js, tool0, eef,

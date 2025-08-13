@@ -92,32 +92,36 @@ namespace behav3d::motion_controller
     return ps;
   }
 
-  // High-level helper around MoveIt2 + PILZ planner
-  PilzMotionController::PilzMotionController(const std::string &group,
-                                             const std::string &root_link,
-                                             const std::string &eef_link,
-                                             bool debug)
-      : Node("pilz_motion_controller_cpp"),
-        root_link_(root_link),
-        eef_link_(eef_link),
-        move_group_(std::shared_ptr<rclcpp::Node>(this, [](auto *) {}), group)
+  // Fully-parameterized constructor (NodeOptions)
+  PilzMotionController::PilzMotionController(const rclcpp::NodeOptions &options)
+      : Node("pilz_motion_controller_cpp", options),
+        root_link_(this->declare_parameter<std::string>("root_link", "world")),
+        eef_link_(this->declare_parameter<std::string>("eef_link", "femto__depth_optical_frame")),
+        move_group_(std::shared_ptr<rclcpp::Node>(this, [](auto *) {}),
+                    this->declare_parameter<std::string>("group", "ur_arm"))
   {
+    const bool debug = this->declare_parameter<bool>("debug", false);
     if (debug)
     {
       this->get_logger().set_level(rclcpp::Logger::Level::Debug);
     }
 
     RCLCPP_DEBUG(this->get_logger(),
-                 "PilzMotionController initialized: group=%s, root_link=%s, eef_link=%s, debug=%s",
-                 group.c_str(), root_link.c_str(), eef_link.c_str(),
+                 "PilzMotionController (options) initialized: group=%s, root_link=%s, eef_link=%s, debug=%s",
+                 this->get_parameter("group").as_string().c_str(),
+                 root_link_.c_str(), eef_link_.c_str(),
                  debug ? "true" : "false");
+
+    // Parameters with sane defaults, overridable from launch/CLI
+    const double vel_scale = this->declare_parameter<double>("max_velocity_scale", 0.5);
+    const double acc_scale = this->declare_parameter<double>("max_accel_scale", 0.5);
+    const std::string pipeline = this->declare_parameter<std::string>("planning_pipeline", "pilz_industrial_motion_planner");
 
     move_group_.setPoseReferenceFrame(root_link_);
     move_group_.setEndEffectorLink(eef_link_);
-    move_group_.setMaxVelocityScalingFactor(0.5);
-    move_group_.setMaxAccelerationScalingFactor(0.5);
-
-    move_group_.setPlanningPipelineId("pilz_industrial_motion_planner");
+    move_group_.setMaxVelocityScalingFactor(vel_scale);
+    move_group_.setMaxAccelerationScalingFactor(acc_scale);
+    move_group_.setPlanningPipelineId(pipeline);
 
     sequence_client_ = rclcpp_action::create_client<MoveGroupSequence>(
         this->get_node_base_interface(),

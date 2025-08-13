@@ -18,6 +18,8 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <iterator>
+#include <cstdio>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/rate.hpp>
@@ -170,20 +172,21 @@ int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
-  auto controller = std::make_shared<PilzMotionController>(
-      "ur_arm",
-      "world",
-      "femto__depth_optical_frame",
-      true);
-  auto visualizer = std::make_shared<MotionVisualizer>(
-      "ur_arm",
-      "world",
-      "femto__depth_optical_frame");
-  auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(
-      rclcpp::NodeOptions().use_intra_process_comms(true));
+  rclcpp::NodeOptions controller_opts;
+  controller_opts.use_intra_process_comms(true);
+  auto controller = std::make_shared<PilzMotionController>(controller_opts);
 
-  auto sess = std::make_shared<behav3d::session_manager::SessionManager>(
-      rclcpp::NodeOptions().use_intra_process_comms(true), controller, visualizer, camera);
+  rclcpp::NodeOptions visualizer_opts;
+  visualizer_opts.use_intra_process_comms(true);
+  auto visualizer = std::make_shared<MotionVisualizer>(visualizer_opts);
+
+  rclcpp::NodeOptions camera_opts;
+  camera_opts.use_intra_process_comms(true);
+  auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(camera_opts);
+
+  rclcpp::NodeOptions session_opts;
+  session_opts.use_intra_process_comms(true);
+  auto sess = std::make_shared<behav3d::session_manager::SessionManager>(session_opts, controller, visualizer, camera);
 
   auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera, sess);
 

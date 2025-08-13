@@ -43,10 +43,7 @@ namespace behav3d::motion_controller
   public:
     using MoveGroupSequence = moveit_msgs::action::MoveGroupSequence;
 
-    explicit PilzMotionController(const std::string &group = "ur_arm",
-                                  const std::string &root_link = "ur10e_base_link",
-                                  const std::string &eef_link = "ur10e_tool0",
-                                  bool debug = false);
+    explicit PilzMotionController(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
     // Plan a PTP or LIN motion to a single target pose
     RobotTrajectoryPtr planTarget(const geometry_msgs::msg::PoseStamped &target,

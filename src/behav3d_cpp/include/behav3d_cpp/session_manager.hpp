@@ -73,6 +73,7 @@ namespace behav3d::session_manager
     std::optional<std::vector<double>> home_joints_rad_;
     Options opts_{};
     std::string output_dir_;
+    double calib_timeout_sec_ = 2.0;  // used when calling CameraManager::getCalibration
 
     // paths
     std::filesystem::path session_dir_;

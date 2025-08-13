@@ -23,21 +23,21 @@
 namespace behav3d::motion_visualizer
 {
   // ─────────────────────────────────────────────────────────────────────────────
-  MotionVisualizer::MotionVisualizer(const std::string &planning_group,
-                                     const std::string &root_link,
-                                     const std::string &eef_link,
-                                     bool debug)
-      : Node("motion_visualizer_cpp"),
-        root_link_(root_link),
-        eef_link_(eef_link),
+  MotionVisualizer::MotionVisualizer(const rclcpp::NodeOptions &options)
+      : Node("motion_visualizer_cpp", options),
+        root_link_(this->declare_parameter<std::string>("root_link", "world")),
+        eef_link_(this->declare_parameter<std::string>("eef_link", "femto__depth_optical_frame")),
         // Node → MoveGroupInterface
-        move_group_(std::shared_ptr<rclcpp::Node>(this, [](auto *) {}), planning_group)
+        move_group_(std::shared_ptr<rclcpp::Node>(this, [](auto *) {}),
+                    this->declare_parameter<std::string>("group", "ur_arm"))
   {
+    const bool debug = this->declare_parameter<bool>("debug", false);
     if (debug)
       this->get_logger().set_level(rclcpp::Logger::Level::Debug);
 
     PMV_INFO(this, "MotionVisualizer init: group=%s, root=%s, eef=%s, debug=%s",
-             planning_group.c_str(), root_link_.c_str(), eef_link_.c_str(),
+             this->get_parameter("group").as_string().c_str(),
+             root_link_.c_str(), eef_link_.c_str(),
              debug ? "true" : "false");
 
     move_group_.setPoseReferenceFrame(root_link_);
