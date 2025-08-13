@@ -142,7 +142,7 @@ fs::path HandeyeCalibration::resolve_session_dir() const
   fs::path root = expand_user(output_root_);
   if (!fs::exists(root) || !fs::is_directory(root)) return {};
 
-  fs::path best; std::chrono::file_clock::time_point best_t{};
+  fs::path best; fs::file_time_type best_t = fs::file_time_type::min();
   for (auto &e : fs::directory_iterator(root)) {
     if (!e.is_directory()) continue;
     const auto name = e.path().filename().string();
@@ -226,7 +226,7 @@ bool HandeyeCalibration::detect_charuco(const cv::Mat &img,
 {
   std::vector<int> ids;
   std::vector<std::vector<cv::Point2f>> corners;
-  cv::aruco::DetectorParameters params;
+  cv::Ptr<cv::aruco::DetectorParameters> params = cv::aruco::DetectorParameters::create();
   cv::aruco::detectMarkers(img, dict_, corners, ids, params);
   if (ids.empty()) return false;
 
@@ -240,7 +240,7 @@ bool HandeyeCalibration::detect_charuco(const cv::Mat &img,
   if (visualize) {
     cv::Mat vis = img.clone();
     cv::aruco::drawDetectedMarkers(vis, corners, ids);
-    cv::aruco::drawAxis(vis, K_, D_, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
+    cv::drawFrameAxes(vis, K_, D_, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
     cv::imshow("charuco", vis);
     cv::waitKey(15);
   }
