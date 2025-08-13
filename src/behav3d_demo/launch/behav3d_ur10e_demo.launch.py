@@ -115,6 +115,12 @@ def generate_launch_description():
         description="Calibration timeout [s]"
     )
     
+    home_joints_deg_arg = DeclareLaunchArgument(
+        "home_joints_deg",
+        default_value="[45.0, -120.0, 120.0, -90.0, 90.0, -180.0]",
+        description="Home joint positions in degrees (list)",
+    )
+    
     debug_arg = DeclareLaunchArgument(
         "debug",
         default_value="false",
@@ -261,6 +267,7 @@ def generate_launch_description():
                 'output_dir': LaunchConfiguration('output_dir'),
                 'capture_delay_sec': ParameterValue(LaunchConfiguration('capture_delay_sec'), value_type=float),
                 'calib_timeout_sec': ParameterValue(LaunchConfiguration('calib_timeout_sec'), value_type=float),
+                'home_joints_deg': LaunchConfiguration('home_joints_deg'),
             }
         ],
     )
@@ -281,6 +288,7 @@ def generate_launch_description():
             output_dir_arg,
             capture_delay_sec_arg,
             calib_timeout_sec_arg,
+            home_joints_deg_arg,
             debug_arg,
             # Then include/launch nodes
             ur_driver,

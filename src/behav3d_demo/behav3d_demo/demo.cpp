@@ -68,6 +68,18 @@ public:
 
     capture_delay_sec_ = this->declare_parameter<double>("capture_delay_sec", 0.5);
 
+    // Declare home_joints_deg parameter with empty default
+    std::vector<double> home_joints_deg = this->declare_parameter<std::vector<double>>(
+        "home_joints_deg", std::vector<double>{});
+    if (home_joints_deg.empty()) {
+      home_joints_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
+    }
+    home_joints_rad_.reserve(home_joints_deg.size());
+    std::transform(home_joints_deg.begin(), home_joints_deg.end(),
+                   std::back_inserter(home_joints_rad_),
+                   [](double deg)
+                   { return deg2rad(deg); });
+
     RCLCPP_INFO(this->get_logger(),
                 "Behav3dDemo ready. Commands: 'fibonacci_cap', 'grid_sweep', 'quit'. Capture delay: %.2fs", capture_delay_sec_);
   }
@@ -79,6 +91,8 @@ private:
   std::shared_ptr<SessionManager> sess_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
   double capture_delay_sec_;
+
+  std::vector<double> home_joints_rad_;
 
   void callback(const std_msgs::msg::String::SharedPtr msg)
   {
@@ -95,15 +109,8 @@ private:
 
   void home()
   {
-    // Joint‑space “home” configuration (given in degrees)
-    const std::vector<double> home_joints_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
-    std::vector<double> home_joints_rad;
-    home_joints_rad.reserve(home_joints_deg.size());
-    std::transform(home_joints_deg.begin(), home_joints_deg.end(),
-                   std::back_inserter(home_joints_rad),
-                   [](double deg)
-                   { return deg2rad(deg); });
-    auto traj = ctrl_->planJoints(home_joints_rad);
+    // Use home_joints_rad_ from parameter instead of hardcoded values
+    auto traj = ctrl_->planJoints(home_joints_rad_);
     ctrl_->executeTrajectory(traj);
   }
 

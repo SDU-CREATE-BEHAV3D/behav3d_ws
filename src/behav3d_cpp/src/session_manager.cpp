@@ -144,6 +144,23 @@ namespace behav3d::session_manager
     RCLCPP_INFO(this->get_logger(), "[SessionManager] robot_prefix: %s", g_robot_prefix.c_str());
     // Where to create session directories (keep same default as CameraManager)
     output_dir_ = this->declare_parameter<std::string>("output_dir", "~/behav3d_ws/captures");
+
+    // Declare home_joints_deg parameter with empty vector default
+    std::vector<double> home_joints_deg = this->declare_parameter<std::vector<double>>(
+        "home_joints_deg", std::vector<double>{});
+
+    // If home_joints_rad_ not provided, convert home_joints_deg to radians or fallback to default
+    if (!home_joints_rad_)
+    {
+      if (home_joints_deg.empty())
+      {
+        home_joints_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
+      }
+      home_joints_rad_.emplace();
+      home_joints_rad_->reserve(home_joints_deg.size());
+      for (double deg : home_joints_deg)
+        home_joints_rad_->push_back(deg * (3.14159265358979323846 / 180.0));
+    }
   }
 
   bool SessionManager::initSession(const Options &opts)
@@ -342,22 +359,9 @@ namespace behav3d::session_manager
 
   void SessionManager::goHome()
   {
-    std::vector<double> home_rad;
-    if (home_joints_rad_)
+    if (ctrl_ && home_joints_rad_)
     {
-      home_rad = *home_joints_rad_;
-    }
-    else
-    {
-      // Same default as demo.cpp
-      const std::vector<double> home_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
-      home_rad.reserve(home_deg.size());
-      for (double d : home_deg)
-        home_rad.push_back(d * (3.14159265358979323846 / 180.0));
-    }
-    if (ctrl_)
-    {
-      if (auto traj = ctrl_->planJoints(home_rad))
+      if (auto traj = ctrl_->planJoints(*home_joints_rad_))
       {
         (void)ctrl_->executeTrajectory(traj, /*apply_totg=*/false);
       }
