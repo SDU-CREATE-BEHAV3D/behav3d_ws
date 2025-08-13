@@ -28,9 +28,9 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -38,6 +38,22 @@ def generate_launch_description():
     # -------------------------------------------------------------------------
     # 1) User‑overridable CLI arguments
     # -------------------------------------------------------------------------
+
+    robot_ip_arg = DeclareLaunchArgument(
+        "robot_ip",
+        default_value="127.0.0.1",
+        description="IP address of the UR controller (real robot).",
+    )
+    mock_arg = DeclareLaunchArgument(
+        "use_mock_hardware",
+        default_value="true",
+        description="true = simulation/mock, false = real hardware",
+    )
+    orbbec_enable_arg = DeclareLaunchArgument(
+        "orbbec_enable",
+        default_value="true",
+        description="Start Orbbec camera (orbbec_camera/femto_bolt.launch.py)",
+    )
 
     group_arg = DeclareLaunchArgument(
         "group",
@@ -103,22 +119,6 @@ def generate_launch_description():
         "debug",
         default_value="false",
         description="Enable debug logging"
-    )
-
-    robot_ip_arg = DeclareLaunchArgument(
-        "robot_ip",
-        default_value="127.0.0.1",
-        description="IP address of the UR controller (real robot).",
-    )
-    mock_arg = DeclareLaunchArgument(
-        "use_mock_hardware",
-        default_value="true",
-        description="true = simulation/mock, false = real hardware",
-    )
-    orbbec_enable_arg = DeclareLaunchArgument(
-        "orbbec_enable",
-        default_value="true",
-        description="Start Orbbec camera (orbbec_camera/femto_bolt.launch.py)",
     )
 
     # -------------------------------------------------------------------------
@@ -226,14 +226,14 @@ def generate_launch_description():
     #     group:=ur_arm root_link:=world eef_link:=femto__depth_optical_frame \
     #     planning_pipeline:=pilz_industrial_motion_planner \
     #     max_velocity_scale:=0.35 max_accel_scale:=0.25 debug:=true \
-    #     robot_prefix:=ur5e output_dir:=~/behav3d_ws/captures \
+    #     robot_prefix:=ur10e output_dir:=~/behav3d_ws/captures \
     #     capture_delay_sec:=0.6 calib_timeout_sec:=2.0
     # Directly (no launch):
     #   ros2 run behav3d_demo demo --ros-args \
     #     -p group:=ur_arm -p root_link:=world -p eef_link:=femto__depth_optical_frame \
     #     -p planning_pipeline:=pilz_industrial_motion_planner \
     #     -p max_velocity_scale:=0.35 -p max_accel_scale:=0.25 -p debug:=true \
-    #     -p robot_prefix:=ur5e -p output_dir:=~/behav3d_ws/captures \
+    #     -p robot_prefix:=ur10e -p output_dir:=~/behav3d_ws/captures \
     #     -p capture_delay_sec:=0.6 -p calib_timeout_sec:=2.0
 
     move_group_demo = Node(
@@ -287,6 +287,6 @@ def generate_launch_description():
             moveit_stack,
             orbbec_camera,
             rviz_node,
-            move_group_demo,
+            move_group_demo
         ]
     )

@@ -28,6 +28,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
 
@@ -50,6 +51,72 @@ def generate_launch_description():
         "orbbec_enable",
         default_value="true",
         description="Start Orbbec camera (orbbec_camera/femto_bolt.launch.py)",
+    )
+    
+    group_arg = DeclareLaunchArgument(
+        "group",
+        default_value="ur_arm",
+        description="MoveIt planning group"
+    )
+    
+    root_link_arg = DeclareLaunchArgument(
+        "root_link",
+        default_value="world",
+        description="Root/world link frame"
+    )
+    
+    eef_link_arg = DeclareLaunchArgument(
+        "eef_link",
+        default_value="femto__depth_optical_frame",
+        description="End-effector link"
+    )
+    
+    planning_pipeline_arg = DeclareLaunchArgument(
+        "planning_pipeline",
+        default_value="pilz_industrial_motion_planner",
+        description="Planning pipeline id"
+    )
+    
+    max_velocity_scale_arg = DeclareLaunchArgument(
+        "max_velocity_scale",
+        default_value="0.5",
+        description="Max velocity scale [0..1]"
+    )
+    
+    max_accel_scale_arg = DeclareLaunchArgument(
+        "max_accel_scale",
+        default_value="0.5",
+        description="Max acceleration scale [0..1]"
+    )
+    
+    robot_prefix_arg = DeclareLaunchArgument(
+        "robot_prefix",
+        default_value="ur20",
+        description="Robot prefix for link names (e.g. ur20 -> ur20_tool0)"
+    )
+    
+    output_dir_arg = DeclareLaunchArgument(
+        "output_dir",
+        default_value="~/behav3d_ws/captures",
+        description="Root output directory for sessions"
+    )
+    
+    capture_delay_sec_arg = DeclareLaunchArgument(
+        "capture_delay_sec",
+        default_value="0.5",
+        description="Wait time before capture [s]"
+    )
+    
+    calib_timeout_sec_arg = DeclareLaunchArgument(
+        "calib_timeout_sec",
+        default_value="2.0",
+        description="Calibration timeout [s]"
+    )
+    
+    debug_arg = DeclareLaunchArgument(
+        "debug",
+        default_value="false",
+        description="Enable debug logging"
     )
 
     # -------------------------------------------------------------------------
@@ -150,7 +217,23 @@ def generate_launch_description():
         ],
     )
 
-    # MoveGroupInterface demo executable
+    # ---------------------------------------------------------------------
+    # How to override NodeOptions-backed parameters
+    # From launch:
+    #   ros2 launch behav3d_demo behav3d_demo_launch.launch.py \
+    #     group:=ur_arm root_link:=world eef_link:=femto__depth_optical_frame \
+    #     planning_pipeline:=pilz_industrial_motion_planner \
+    #     max_velocity_scale:=0.35 max_accel_scale:=0.25 debug:=true \
+    #     robot_prefix:=ur20 output_dir:=~/behav3d_ws/captures \
+    #     capture_delay_sec:=0.6 calib_timeout_sec:=2.0
+    # Directly (no launch):
+    #   ros2 run behav3d_demo demo --ros-args \
+    #     -p group:=ur_arm -p root_link:=world -p eef_link:=femto__depth_optical_frame \
+    #     -p planning_pipeline:=pilz_industrial_motion_planner \
+    #     -p max_velocity_scale:=0.35 -p max_accel_scale:=0.25 -p debug:=true \
+    #     -p robot_prefix:=ur20 -p output_dir:=~/behav3d_ws/captures \
+    #     -p capture_delay_sec:=0.6 -p calib_timeout_sec:=2.0
+
     move_group_demo = Node(
         name="behav3d_demo",
         package="behav3d_demo",
@@ -162,14 +245,42 @@ def generate_launch_description():
             moveit_config.robot_description_kinematics,
             moveit_config.planning_pipelines,
             moveit_config.joint_limits,
+            {
+                # These values populate the NodeOptions-backed parameters used by PilzMotionController and other nodes
+                'group': LaunchConfiguration('group'),
+                'root_link': LaunchConfiguration('root_link'),
+                'eef_link': LaunchConfiguration('eef_link'),
+                'planning_pipeline': LaunchConfiguration('planning_pipeline'),
+                'max_velocity_scale': ParameterValue(LaunchConfiguration('max_velocity_scale'), value_type=float),
+                'max_accel_scale': ParameterValue(LaunchConfiguration('max_accel_scale'), value_type=float),
+                'debug': ParameterValue(LaunchConfiguration('debug'), value_type=bool),
+                # SessionManager & Demo
+                'robot_prefix': LaunchConfiguration('robot_prefix'),
+                'output_dir': LaunchConfiguration('output_dir'),
+                'capture_delay_sec': ParameterValue(LaunchConfiguration('capture_delay_sec'), value_type=float),
+                'calib_timeout_sec': ParameterValue(LaunchConfiguration('calib_timeout_sec'), value_type=float),
+            }
         ],
     )
 
     return LaunchDescription(
         [
+            # Declare all CLI arguments first (safer resolution for LaunchConfiguration substitutions)
             robot_ip_arg,
             mock_arg,
             orbbec_enable_arg,
+            group_arg,
+            root_link_arg,
+            eef_link_arg,
+            planning_pipeline_arg,
+            max_velocity_scale_arg,
+            max_accel_scale_arg,
+            robot_prefix_arg,
+            output_dir_arg,
+            capture_delay_sec_arg,
+            calib_timeout_sec_arg,
+            debug_arg,
+            # Then include/launch nodes
             ur_driver,
             moveit_stack,
             orbbec_camera,
