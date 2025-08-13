@@ -241,7 +241,7 @@ namespace behav3d::session_manager
         // Log attempt with current state & no files
         auto js = ctrl_->getCurrentJointState();
         auto eef = ctrl_->getCurrentPose();
-        auto tool0 = ctrl_->getCurrentPose("ur10e_tool0");
+        auto tool0 = ctrl_->getCurrentPose("ur20_tool0");
         behav3d::camera_manager::CameraManager::FilePaths files{};
         writeManifestLine(i, tgt, files, js, tool0, eef,
                           /*plan_ok=*/false, /*exec_ok=*/false, /*cap_ok=*/false,
@@ -270,7 +270,7 @@ namespace behav3d::session_manager
 
       // ---------------- LOG ----------------
       auto js = ctrl_->getCurrentJointState();
-      auto tool0 = ctrl_->getCurrentPose("ur10e_tool0");
+      auto tool0 = ctrl_->getCurrentPose("ur20_tool0");
       auto eef = ctrl_->getCurrentPose(ctrl_->getEefLink());
 
       writeManifestLine(i, tgt, files, js, tool0, eef,
