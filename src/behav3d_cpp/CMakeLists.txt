@@ -32,6 +32,7 @@ add_library(${PROJECT_NAME} SHARED
   src/motion_visualizer.cpp
   src/camera_manager.cpp
   src/session_manager.cpp
+  src/handeye_calibration.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -61,6 +62,27 @@ target_link_libraries(${PROJECT_NAME}
   nlohmann_json::nlohmann_json
   yaml-cpp
 )
+
+# ─── Hand-eye executable target ─────────────────────────────────────────────
+add_executable(handeye_calibration_cpp
+  src/handeye_main.cpp
+)
+
+ament_target_dependencies(handeye_calibration_cpp
+  rclcpp
+  geometry_msgs
+  sensor_msgs
+  std_srvs
+  cv_bridge
+)
+
+# Link against our shared library so we reuse implementations
+target_link_libraries(handeye_calibration_cpp
+  ${PROJECT_NAME}
+)
+
+# Install the binary into the standard ROS 2 location for this package
+install(TARGETS handeye_calibration_cpp DESTINATION lib/${PROJECT_NAME})
 
 # ─── Install ─────────────────────────────────────────────────────
 install(
