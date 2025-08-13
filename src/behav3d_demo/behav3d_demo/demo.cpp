@@ -35,6 +35,7 @@
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
 using behav3d::session_manager::SessionManager;
+using behav3d::camera_manager::CameraManager;
 
 using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
@@ -71,8 +72,7 @@ private:
   std::shared_ptr<MotionVisualizer> viz_;
   std::shared_ptr<PilzMotionController> ctrl_;
   std::shared_ptr<SessionManager> sess_;
-  std::shared_ptr<behav3d::camera_manager::CameraManager> cam_;
-  std::shared_ptr<behav3d::session_manager::SessionManager> sess_;
+  std::shared_ptr<CameraManager> cam_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
   double capture_delay_sec_;
 

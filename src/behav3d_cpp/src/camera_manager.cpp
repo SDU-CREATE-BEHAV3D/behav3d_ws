@@ -21,6 +21,7 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <filesystem>
 #include <ctime>
 #include <cstdlib>
 
@@ -167,7 +168,7 @@ namespace behav3d::camera_manager
     void CameraManager::initSubscriptions()
     {
         auto qos = rclcpp::SensorDataQoS();
-        qos.keep_last(20)
+        qos.keep_last(20);
 
             sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
             color_topic_, qos, std::bind(&CameraManager::onColor, this, _1));

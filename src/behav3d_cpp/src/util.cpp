@@ -18,6 +18,7 @@
 #include <string>
 #include <fstream>
 #include <Eigen/Dense>
+#include <Eigen/Geometry>
 
 #include <nlohmann/json.hpp>
 #include <yaml-cpp/yaml.h>

@@ -20,6 +20,8 @@ find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 # ─── Library target ──────────────────────────────────────────────
 add_library(${PROJECT_NAME} SHARED
@@ -52,7 +54,13 @@ ament_target_dependencies(${PROJECT_NAME}
   cv_bridge
 )
 
-target_link_libraries(${PROJECT_NAME} Eigen3::Eigen ${OpenCV_LIBS} cv_bridge::cv_bridge)
+target_link_libraries(${PROJECT_NAME}
+  Eigen3::Eigen
+  ${OpenCV_LIBS}
+  cv_bridge::cv_bridge
+  nlohmann_json::nlohmann_json
+  yaml-cpp
+)
 
 # ─── Install ─────────────────────────────────────────────────────
 install(
@@ -84,6 +92,8 @@ ament_export_dependencies(
   moveit_visual_tools
   std_srvs
   cv_bridge
+  nlohmann_json
+  yaml-cpp
 )
 
 ament_package()

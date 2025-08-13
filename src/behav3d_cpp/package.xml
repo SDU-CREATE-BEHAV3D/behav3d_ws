@@ -24,7 +24,7 @@
   <depend>moveit_msgs</depend>
   <depend>eigen3_cmake_module</depend>
   <depend>moveit_visual_tools</depend>
-  
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

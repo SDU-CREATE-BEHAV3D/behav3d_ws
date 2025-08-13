@@ -89,7 +89,7 @@ def generate_launch_description():
             "ir_fps": "30",
             "ir_format": "Y16"
             # PointCloud
-            "enable_point_cloud" : "false"
+            # "enable_point_cloud" : "false"
             # TODO: 'enable_ldp' throws compilation error!
             # Laser Dot Projector (true for scan / false for calibration)
             # "enable_ldp": "false"
