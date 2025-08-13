@@ -62,26 +62,6 @@ target_link_libraries(${PROJECT_NAME}
   yaml-cpp
 )
 
-add_executable(handeye_calibration_cpp
-  src/handeye_calibration.cpp
-  src/handeye_main.cpp
-)
-ament_target_dependencies(handeye_calibration_cpp
-  rclcpp
-  geometry_msgs
-  sensor_msgs
-  cv_bridge
-)
-target_link_libraries(handeye_calibration_cpp
-  ${PROJECT_NAME}
-  Eigen3::Eigen
-  ${OpenCV_LIBS}
-  cv_bridge::cv_bridge
-  nlohmann_json::nlohmann_json
-  yaml-cpp
-)
-install(TARGETS handeye_calibration_cpp DESTINATION lib/${PROJECT_NAME})
-
 # ─── Install ─────────────────────────────────────────────────────
 install(
   TARGETS ${PROJECT_NAME}
