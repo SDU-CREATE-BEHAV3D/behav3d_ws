@@ -1,106 +1,195 @@
-// =============================================================================
-//   ____  _____ _   _    ___     _______ ____
-//  | __ )| ____| | | |  / \ \   / /___ /|  _ \
-//  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
-//  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
-//  |____/|_____|_| |_/_/   \_\_/  |____/|____/
-//
-// Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
-// Maintainers:
-//   - Lucas José Helle <luh@iti.sdu.dk>
-//   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
-// Institute: University of Southern Denmark (Syddansk Universitet)
-// Date: 2025-08
-// =============================================================================
-
-#pragma once
-
-#include <rclcpp/rclcpp.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-
-#include <opencv2/core.hpp>
-#include <opencv2/aruco.hpp>
-#include <opencv2/aruco/charuco.hpp>
-
-#include <nlohmann/json.hpp>
-
+#include <memory>
 #include <string>
 #include <vector>
-#include <filesystem>
+#include <cmath>
+#include <algorithm>
+#include <iterator>
+#include <cstdio>
 
-namespace behav3d::handeye
-{
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/rate.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 
-class HandeyeCalibration : public rclcpp::Node
+#include "behav3d_cpp/motion_controller.hpp"
+#include "behav3d_cpp/motion_visualizer.hpp"
+#include "behav3d_cpp/target_builder.hpp"
+#include "behav3d_cpp/trajectory_builder.hpp"
+#include "behav3d_cpp/util.hpp"
+#include "behav3d_cpp/camera_manager.hpp"
+#include "behav3d_cpp/session_manager.hpp"
+
+using behav3d::camera_manager::CameraManager;
+using behav3d::motion_controller::PilzMotionController;
+using behav3d::motion_visualizer::MotionVisualizer;
+using behav3d::session_manager::SessionManager;
+
+using behav3d::target_builder::flipTargetAxes;
+using behav3d::target_builder::worldXY;
+using behav3d::target_builder::worldXZ;
+using behav3d::trajectory_builder::fibonacciSphericalCap;
+using behav3d::trajectory_builder::sweepZigzag;
+using behav3d::util::deg2rad;
+
+using std::placeholders::_1;
+
+// ---------------------------------------------------------------------------
+//                                Demo Node
+// ---------------------------------------------------------------------------
+class Behav3dDemo : public rclcpp::Node
 {
 public:
-  using json = nlohmann::json;
+  explicit Behav3dDemo(const std::shared_ptr<PilzMotionController> &ctrl,
+                       const std::shared_ptr<MotionVisualizer> &viz,
+                       const std::shared_ptr<behav3d::camera_manager::CameraManager> &cam,
+                       const std::shared_ptr<behav3d::session_manager::SessionManager> &sess)
+      : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam), sess_(sess)
+  {
+    sub_ = this->create_subscription<std_msgs::msg::String>(
+        "/user_input", 10,
+        std::bind(&Behav3dDemo::callback, this, _1));
 
-  explicit HandeyeCalibration(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
+    RCLCPP_INFO(this->get_logger(), "Behav3dDemo subscribing to: %s", "/user_input");
 
-  // Top-level pipeline runner.
-  bool run();
+    capture_delay_sec_ = this->declare_parameter<double>("capture_delay_sec", 0.5);
+
+    // Declare home_joints_deg parameter with empty default
+    std::vector<double> home_joints_deg = this->declare_parameter<std::vector<double>>(
+        "home_joints_deg", std::vector<double>{});
+    if (home_joints_deg.empty()) {
+      home_joints_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
+    }
+    home_joints_rad_.reserve(home_joints_deg.size());
+    std::transform(home_joints_deg.begin(), home_joints_deg.end(),
+                   std::back_inserter(home_joints_rad_),
+                   [](double deg)
+                   { return deg2rad(deg); });
+
+    RCLCPP_INFO(this->get_logger(),
+                "Behav3dDemo ready. Commands: 'fibonacci_cap', 'grid_sweep', 'quit'. Capture delay: %.2fs", capture_delay_sec_);
+  }
 
 private:
-  // 1) Define the ChArUco specs
-  struct BoardSpec
+  std::shared_ptr<PilzMotionController> ctrl_;
+  std::shared_ptr<MotionVisualizer> viz_;
+  std::shared_ptr<CameraManager> cam_;
+  std::shared_ptr<SessionManager> sess_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
+  double capture_delay_sec_;
+
+  std::vector<double> home_joints_rad_;
+
+  void callback(const std_msgs::msg::String::SharedPtr msg)
   {
-    int squares_x{5};
-    int squares_y{7};
-    double square_len_m{0.030};
-    double marker_len_m{0.022};
-    int aruco_dict_id{cv::aruco::DICT_5X5_1000};
-  } board_{};
+    const std::string &cmd = msg->data;
+    if (cmd == "fibonacci_cap")
+      fibonacci_cap();
+    else if (cmd == "grid_sweep")
+      grid_sweep();
+    else if (cmd == "quit")
+      rclcpp::shutdown();
+    else
+      RCLCPP_WARN(this->get_logger(), "Unknown command '%s'", cmd.c_str());
+  }
 
-  // Data for each capture from manifest
-  struct CaptureItem
+  void home()
   {
-    std::string color_path;   // RGB image path
-    bool capture_ok{false};
-    geometry_msgs::msg::PoseStamped tool0_pose; // base->tool0 at capture
-  };
+    // Use home_joints_rad_ from parameter instead of hardcoded values
+    auto traj = ctrl_->planJoints(home_joints_rad_);
+    ctrl_->executeTrajectory(traj);
+  }
 
-  // 2) Open the directory folders and find the needed files
-  std::filesystem::path resolve_session_dir() const;
-  bool load_manifest(const std::filesystem::path &session_dir, std::vector<CaptureItem> &items);
+  void fibonacci_cap(double radius = 0.6,
+                     double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
+                     double cap_deg = 22.5, int n_points = 32)
+  {
+    const double cap_rad = deg2rad(cap_deg);
+    const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
+    auto targets = fibonacciSphericalCap(center, radius, cap_rad, n_points);
+    if (targets.empty())
+    {
+      RCLCPP_WARN(this->get_logger(), "fibonacci_cap: no targets generated!");
+      return;
+    }
 
-  // 3) Use the util to read the yaml and json file (camera intrinsics)
-  bool load_camera_calib(const std::filesystem::path &session_dir);
+    behav3d::session_manager::SessionManager::Options opts;
+    char tag[128];
+    std::snprintf(tag, sizeof(tag), "fibcap_r%.2f_cap%d_n%d", radius, (int)cap_deg, n_points);
+    opts.session_tag = tag;
+    opts.motion_type = "LIN";
+    opts.apply_totg = false;
+    opts.wait_time_sec = capture_delay_sec_;
 
-  // 4) Show on the screen the sequence of images after detecting the charuco
-  bool detect_charuco(const cv::Mat &img,
-                      cv::Mat &rvec, cv::Mat &tvec,
-                      bool visualize);
+    if (!sess_->initSession(opts))
+      return;
+    sess_->run(targets);
+    sess_->finish();
+  }
 
-  // 5) Run the calibration function
-  bool calibrate_handeye(const std::vector<cv::Mat> &R_gripper2base,
-                         const std::vector<cv::Mat> &t_gripper2base,
-                         const std::vector<cv::Mat> &R_target2cam,
-                         const std::vector<cv::Mat> &t_target2cam,
-                         cv::Mat &R_cam2gripper, cv::Mat &t_cam2gripper);
+  void grid_sweep(double width = 1.0, double height = 0.5,
+                  double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
+                  double z_off = 0.6,
+                  int nx = 10, int ny = 5,
+                  bool row_major = false)
+  {
+    const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
+    nx = std::max(2, nx);
+    ny = std::max(2, ny);
+    auto targets = sweepZigzag(center, width, height, z_off, nx, ny, row_major);
+    if (targets.empty())
+    {
+      RCLCPP_WARN(this->get_logger(), "grid_sweep/sweepZigzag: no targets generated!");
+      return;
+    }
 
-  // 6) Use the util functions to write the output
-  bool write_outputs(const std::filesystem::path &session_dir,
-                     const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper) const;
+    behav3d::session_manager::SessionManager::Options opts;
+    char tag[160];
+    std::snprintf(tag, sizeof(tag), "raster_w%.2f_h%.2f_z%.2f_%dx%d", width, height, z_off, nx, ny);
+    opts.session_tag = tag;
+    opts.motion_type = "LIN";
+    opts.apply_totg = false;
+    opts.wait_time_sec = capture_delay_sec_;
 
-  // Small helpers
-  static cv::Mat quat_to_R(const geometry_msgs::msg::Pose &p);
-  static cv::Mat vec3_to_t(const geometry_msgs::msg::Pose &p);
-  static std::string expand_user(const std::string &p);
-
-private:
-  // Config
-  bool visualize_{true};
-  std::string output_root_{"~/behav3d_ws/captures"};
-  std::string session_dir_param_{}; // optional explicit session path
-
-  // Cached intrinsics
-  cv::Mat K_; // 3x3
-  cv::Mat D_; // distortion
-
-  // Prebuilt aruco objects
-  cv::Ptr<cv::aruco::Dictionary> dict_;
-  cv::Ptr<cv::aruco::CharucoBoard> board_obj_;
+    if (!sess_->initSession(opts))
+      return;
+    sess_->run(targets);
+    sess_->finish();
+  }
 };
 
-} // namespace behav3d::handeye
+// ---------------------------------------------------------------------------
+//                                   main()
+// ---------------------------------------------------------------------------
+int main(int argc, char **argv)
+{
+  rclcpp::init(argc, argv);
+
+  rclcpp::NodeOptions controller_opts;
+  controller_opts.use_intra_process_comms(true);
+  auto controller = std::make_shared<PilzMotionController>(controller_opts);
+
+  rclcpp::NodeOptions visualizer_opts;
+  visualizer_opts.use_intra_process_comms(true);
+  auto visualizer = std::make_shared<MotionVisualizer>(visualizer_opts);
+
+  rclcpp::NodeOptions camera_opts;
+  camera_opts.use_intra_process_comms(true);
+  auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(camera_opts);
+
+  rclcpp::NodeOptions session_opts;
+  session_opts.use_intra_process_comms(true);
+  auto sess = std::make_shared<behav3d::session_manager::SessionManager>(session_opts, controller, visualizer, camera);
+
+  auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera, sess);
+
+  rclcpp::executors::MultiThreadedExecutor exec;
+  exec.add_node(controller);
+  exec.add_node(visualizer);
+  exec.add_node(camera);
+  exec.add_node(demo);
+  exec.add_node(sess);
+  exec.spin();
+
+  rclcpp::shutdown();
+  return 0;
+}
