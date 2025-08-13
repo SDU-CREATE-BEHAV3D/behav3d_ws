@@ -328,14 +328,28 @@ namespace behav3d::camera_manager
                 (void)ec;
                 try
                 {
-                    writeCalibrationYaml(color, (dir_calib_ / "color_camera_info.yaml").string());
-                    writeCalibrationYaml(depth, (dir_calib_ / "depth_camera_info.yaml").string());
-                    writeCalibrationYaml(ir, (dir_calib_ / "ir_camera_info.yaml").string());
-                    RCLCPP_INFO(get_logger(), "Wrote camera info YAMLs to %s", dir_calib_.string().c_str());
+                    const std::string f_color = (dir_calib_ / "color_camera_info.yaml").string();
+                    const std::string f_depth = (dir_calib_ / "depth_camera_info.yaml").string();
+                    const std::string f_ir    = (dir_calib_ / "ir_camera_info.yaml").string();
+
+                    bool ok_color = writeCalibrationYaml(color, f_color);
+                    bool ok_depth = writeCalibrationYaml(depth, f_depth);
+                    bool ok_ir    = writeCalibrationYaml(ir,    f_ir);
+
+                    if (ok_color && ok_depth && ok_ir)
+                    {
+                        RCLCPP_INFO(get_logger(), "Wrote camera info YAMLs to %s", dir_calib_.string().c_str());
+                    }
+                    else
+                    {
+                        if (!ok_color) RCLCPP_ERROR(get_logger(), "Failed to write %s", f_color.c_str());
+                        if (!ok_depth) RCLCPP_ERROR(get_logger(), "Failed to write %s", f_depth.c_str());
+                        if (!ok_ir)    RCLCPP_ERROR(get_logger(), "Failed to write %s", f_ir.c_str());
+                    }
                 }
                 catch (const std::exception &e)
                 {
-                    RCLCPP_WARN(get_logger(), "Failed to write camera info yaml: %s", e.what());
+                    RCLCPP_ERROR(get_logger(), "Exception while writing camera info YAMLs: %s", e.what());
                 }
             }
         }
