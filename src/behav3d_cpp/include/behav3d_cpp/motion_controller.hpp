@@ -53,8 +53,8 @@ namespace behav3d::motion_controller
 
     // Plan a joint-space PTP motion to given joint vector
     RobotTrajectoryPtr planJoints(const std::vector<double> &joint_positions,
-                                  double vel_scale = 0.1,
-                                  double acc_scale = 0.1);
+                                  double vel_scale = 0.5,
+                                  double acc_scale = 0.5);
 
     // Plan a blended linear sequence through way-points (PILZ MotionSequence API)
     RobotTrajectoryPtr planSequence(const std::vector<geometry_msgs::msg::PoseStamped> &waypoints,
