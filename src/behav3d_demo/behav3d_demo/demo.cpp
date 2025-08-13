@@ -71,8 +71,8 @@ public:
 private:
   std::shared_ptr<MotionVisualizer> viz_;
   std::shared_ptr<PilzMotionController> ctrl_;
-  std::shared_ptr<SessionManager> sess_;
   std::shared_ptr<CameraManager> cam_;
+  std::shared_ptr<SessionManager> sess_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
   double capture_delay_sec_;
 
