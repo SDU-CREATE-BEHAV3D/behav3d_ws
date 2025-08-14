@@ -31,10 +31,10 @@
 
 #include "behav3d_cpp/motion_controller.hpp"
 
-#define PMC_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
-#define PMC_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
-#define PMC_WARN(node, fmt, ...) RCLCPP_WARN((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
-#define PMC_ERROR(node, fmt, ...) RCLCPP_ERROR((node)->get_logger(), "[PMC] " fmt, ##__VA_ARGS__)
+#define PMC_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[MotionController] " fmt, ##__VA_ARGS__)
+#define PMC_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[MotionController] " fmt, ##__VA_ARGS__)
+#define PMC_WARN(node, fmt, ...) RCLCPP_WARN((node)->get_logger(), "[MotionController] " fmt, ##__VA_ARGS__)
+#define PMC_ERROR(node, fmt, ...) RCLCPP_ERROR((node)->get_logger(), "[MotionController] " fmt, ##__VA_ARGS__)
 
 #define TO_STR(x) #x
 

@@ -1,3 +1,5 @@
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 // =============================================================================
 //   ____  _____ _   _    ___     _______ ____
 //  | __ )| ____| | | |  / \ \   / /___ /|  _ \
@@ -22,6 +24,11 @@
 
 #include <nlohmann/json.hpp>
 #include <yaml-cpp/yaml.h>
+#include <rclcpp/time.hpp>
+#include <ctime>
+#include <cstdio>
+#include <iomanip>
+#include <sstream>
 
 namespace behav3d::util
 {
@@ -136,6 +143,64 @@ namespace behav3d::util
         {
             return false;
         }
+    }
+
+    std::string indexString(std::size_t idx, int width)
+    {
+        std::ostringstream oss;
+        oss << std::setw(width) << std::setfill('0') << idx;
+        return oss.str();
+    }
+
+    std::string timeStringDateTime(const rclcpp::Time &t)
+    {
+        std::time_t tt = static_cast<time_t>(t.seconds());
+        std::tm tm{};
+#ifdef _WIN32
+        localtime_s(&tm, &tt);
+#else
+        localtime_r(&tt, &tm);
+#endif
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%04d%02d%02d-%02d%02d%02d",
+                      tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                      tm.tm_hour, tm.tm_min, tm.tm_sec);
+        return std::string(buf);
+    }
+
+    std::string toJsonPose(const geometry_msgs::msg::PoseStamped &ps)
+    {
+        std::ostringstream oss;
+        oss.setf(std::ios::fixed);
+        oss << std::setprecision(6);
+        oss << "{\"frame\":\"" << ps.header.frame_id << "\",";
+        oss << "\"pos\":[" << ps.pose.position.x << "," << ps.pose.position.y << "," << ps.pose.position.z << "],";
+        oss << "\"quat\":[" << ps.pose.orientation.x << "," << ps.pose.orientation.y << ","
+            << ps.pose.orientation.z << "," << ps.pose.orientation.w << "]}";
+        return oss.str();
+    }
+
+    std::string toJsonJoints(const sensor_msgs::msg::JointState &js)
+    {
+        std::ostringstream oss;
+        oss.setf(std::ios::fixed);
+        oss << std::setprecision(6);
+        oss << "{\"names\":[";
+        for (size_t i = 0; i < js.name.size(); ++i)
+        {
+            if (i)
+                oss << ",";
+            oss << "\"" << js.name[i] << "\"";
+        }
+        oss << "],\"pos\":[";
+        for (size_t i = 0; i < js.position.size(); ++i)
+        {
+            if (i)
+                oss << ",";
+            oss << js.position[i];
+        }
+        oss << "]}";
+        return oss.str();
     }
 
 } // namespace behav3d::util

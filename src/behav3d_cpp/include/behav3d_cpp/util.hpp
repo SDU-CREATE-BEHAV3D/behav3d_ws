@@ -22,6 +22,9 @@
 
 #include <nlohmann/json.hpp>
 #include <yaml-cpp/yaml.h>
+#include <rclcpp/time.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 namespace behav3d::util
 {
@@ -57,5 +60,17 @@ namespace behav3d::util
 
     /// Write a YAML::Node to disk
     bool writeYaml(const std::string &path, const YAML::Node &node);
+
+    /// Zero-padded integer to string, width >= 1
+    std::string indexString(std::size_t idx, int width);
+
+    /// Format rclcpp::Time as YYYYMMDD-HHMMSS
+    std::string timeStringDateTime(const rclcpp::Time &t);
+
+    /// Serialize a PoseStamped to a compact JSON string.
+    std::string toJsonPose(const geometry_msgs::msg::PoseStamped &ps);
+
+    /// Serialize a JointState to a compact JSON string.
+    std::string toJsonJoints(const sensor_msgs::msg::JointState &js);
 
 } // namespace behav3d::util

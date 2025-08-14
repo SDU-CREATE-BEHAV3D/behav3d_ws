@@ -49,7 +49,7 @@ namespace behav3d::camera_manager
         else
         {
             const uint64_t idx = snap_seq_.fetch_add(1, std::memory_order_relaxed);
-            stem = indexString(idx, 3);
+            stem = behav3d::util::indexString(idx, 3);
         }
 
         if (snap.has_ir && !snap.ir_raw.empty())
@@ -170,7 +170,7 @@ namespace behav3d::camera_manager
         auto qos = rclcpp::SensorDataQoS();
         qos.keep_last(20);
 
-            sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
+        sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
             color_topic_, qos, std::bind(&CameraManager::onColor, this, _1));
         RCLCPP_INFO(get_logger(), "Subscribed to color: %s", color_topic_.c_str());
         sub_depth_ = this->create_subscription<sensor_msgs::msg::Image>(
@@ -330,11 +330,11 @@ namespace behav3d::camera_manager
                 {
                     const std::string f_color = (dir_calib_ / "color_intrinsics.yaml").string();
                     const std::string f_depth = (dir_calib_ / "depth_intrinsics.yaml").string();
-                    const std::string f_ir    = (dir_calib_ / "ir_intrinsics.yaml").string();
+                    const std::string f_ir = (dir_calib_ / "ir_intrinsics.yaml").string();
 
                     bool ok_color = writeCalibrationYaml(color, f_color);
                     bool ok_depth = writeCalibrationYaml(depth, f_depth);
-                    bool ok_ir    = writeCalibrationYaml(ir,    f_ir);
+                    bool ok_ir = writeCalibrationYaml(ir, f_ir);
 
                     if (ok_color && ok_depth && ok_ir)
                     {
@@ -342,9 +342,12 @@ namespace behav3d::camera_manager
                     }
                     else
                     {
-                        if (!ok_color) RCLCPP_ERROR(get_logger(), "Failed to write %s", f_color.c_str());
-                        if (!ok_depth) RCLCPP_ERROR(get_logger(), "Failed to write %s", f_depth.c_str());
-                        if (!ok_ir)    RCLCPP_ERROR(get_logger(), "Failed to write %s", f_ir.c_str());
+                        if (!ok_color)
+                            RCLCPP_ERROR(get_logger(), "Failed to write %s", f_color.c_str());
+                        if (!ok_depth)
+                            RCLCPP_ERROR(get_logger(), "Failed to write %s", f_depth.c_str());
+                        if (!ok_ir)
+                            RCLCPP_ERROR(get_logger(), "Failed to write %s", f_ir.c_str());
                     }
                 }
                 catch (const std::exception &e)
@@ -377,9 +380,43 @@ namespace behav3d::camera_manager
             ii = last_ir_info_;
         }
 
+        out.stamp = this->now();
+
         try
         {
-            out.stamp = ir->header.stamp;
+            if (depth)
+            {
+                out.stamp = depth->header.stamp;
+            }
+            else if (color)
+            {
+                out.stamp = color->header.stamp;
+            }
+            else if (ir)
+            {
+                out.stamp = ir->header.stamp;
+            }
+
+            if (depth)
+            {
+                out.depth_raw = toUint16(*depth);
+                out.has_depth = !out.depth_raw.empty();
+                if (out.depth_raw.empty())
+                {
+                    out.has_depth = false;
+                    RCLCPP_WARN(get_logger(), "buildSnapshot: DEPTH conversion EMPTY (encoding='%s')",
+                                depth->encoding.c_str());
+                }
+                else
+                {
+                    RCLCPP_DEBUG(get_logger(), "buildSnapshot: DEPTH Mat %dx%d type=%d",
+                                 out.depth_raw.rows, out.depth_raw.cols, out.depth_raw.type());
+                }
+            }
+            else
+            {
+                RCLCPP_WARN(get_logger(), "buildSnapshot: no DEPTH frame available at capture time");
+            }
 
             if (ir)
             {
@@ -422,27 +459,6 @@ namespace behav3d::camera_manager
             else
             {
                 RCLCPP_WARN(get_logger(), "buildSnapshot: no COLOR frame available at capture time");
-            }
-
-            if (depth)
-            {
-                out.depth_raw = toUint16(*depth);
-                out.has_depth = !out.depth_raw.empty();
-                if (out.depth_raw.empty())
-                {
-                    out.has_depth = false;
-                    RCLCPP_WARN(get_logger(), "buildSnapshot: DEPTH conversion EMPTY (encoding='%s')",
-                                depth->encoding.c_str());
-                }
-                else
-                {
-                    RCLCPP_DEBUG(get_logger(), "buildSnapshot: DEPTH Mat %dx%d type=%d",
-                                 out.depth_raw.rows, out.depth_raw.cols, out.depth_raw.type());
-                }
-            }
-            else
-            {
-                RCLCPP_WARN(get_logger(), "buildSnapshot: no DEPTH frame available at capture time");
             }
 
             if (d2c)

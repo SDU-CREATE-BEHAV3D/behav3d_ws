@@ -17,8 +17,8 @@
 
 #include "behav3d_cpp/motion_visualizer.hpp"
 
-#define PMV_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[PMV] " fmt, ##__VA_ARGS__)
-#define PMV_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[PMV] " fmt, ##__VA_ARGS__)
+#define PMV_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[MotionVisualizer] " fmt, ##__VA_ARGS__)
+#define PMV_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[MotionVisualizer] " fmt, ##__VA_ARGS__)
 
 namespace behav3d::motion_visualizer
 {

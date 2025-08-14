@@ -33,6 +33,7 @@
 #include "behav3d_cpp/util.hpp"
 #include "behav3d_cpp/camera_manager.hpp"
 #include "behav3d_cpp/session_manager.hpp"
+#include "behav3d_cpp/handeye_calibration.hpp"
 
 using behav3d::camera_manager::CameraManager;
 using behav3d::motion_controller::PilzMotionController;
@@ -57,8 +58,9 @@ public:
   explicit Behav3dDemo(const std::shared_ptr<PilzMotionController> &ctrl,
                        const std::shared_ptr<MotionVisualizer> &viz,
                        const std::shared_ptr<behav3d::camera_manager::CameraManager> &cam,
-                       const std::shared_ptr<behav3d::session_manager::SessionManager> &sess)
-      : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam), sess_(sess)
+                       const std::shared_ptr<behav3d::session_manager::SessionManager> &sess,
+                       const std::shared_ptr<behav3d::handeye::HandeyeCalibration> &calib)
+      : Node("behav3d_demo"), ctrl_(ctrl), viz_(viz), cam_(cam), sess_(sess), calib_(calib)
   {
     sub_ = this->create_subscription<std_msgs::msg::String>(
         "/user_input", 10,
@@ -89,6 +91,7 @@ private:
   std::shared_ptr<MotionVisualizer> viz_;
   std::shared_ptr<CameraManager> cam_;
   std::shared_ptr<SessionManager> sess_;
+  std::shared_ptr<behav3d::handeye::HandeyeCalibration> calib_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
   double capture_delay_sec_;
 
@@ -97,10 +100,10 @@ private:
   void callback(const std_msgs::msg::String::SharedPtr msg)
   {
     const std::string &cmd = msg->data;
-    if (cmd == "fibonacci_cap")
+    if (cmd == "calib")
       fibonacci_cap();
-    else if (cmd == "grid_sweep")
-      grid_sweep();
+    else if (cmd == "home")
+      home();
     else if (cmd == "quit")
       rclcpp::shutdown();
     else
@@ -132,45 +135,25 @@ private:
     std::snprintf(tag, sizeof(tag), "fibcap_r%.2f_cap%d_n%d", radius, (int)cap_deg, n_points);
     opts.session_tag = tag;
     opts.motion_type = "LIN";
-    opts.apply_totg = false;
+    opts.apply_totg = true;
     opts.wait_time_sec = capture_delay_sec_;
 
     if (!sess_->initSession(opts))
       return;
     sess_->run(targets);
     sess_->finish();
-  }
 
-  void grid_sweep(double width = 1.0, double height = 0.5,
-                  double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
-                  double z_off = 0.6,
-                  int nx = 10, int ny = 5,
-                  bool row_major = false)
-  {
-    const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
-    nx = std::max(2, nx);
-    ny = std::max(2, ny);
-    auto targets = sweepZigzag(center, width, height, z_off, nx, ny, row_major);
-    if (targets.empty())
-    {
-      RCLCPP_WARN(this->get_logger(), "grid_sweep/sweepZigzag: no targets generated!");
-      return;
+    // Run Hand-Eye calibration for this session
+    const std::string session_dir = sess_->getSessionDir();
+    if (!session_dir.empty()) {
+      calib_->set_parameters({ rclcpp::Parameter("session_dir", session_dir) });
+      if (!calib_->run()) {
+        RCLCPP_WARN(this->get_logger(), "HandEyeCalibration run() reported failure for session: %s", session_dir.c_str());
+      }
+    } else {
+      RCLCPP_WARN(this->get_logger(), "Session directory is empty; skipping HandEyeCalibration.");
     }
-
-    behav3d::session_manager::SessionManager::Options opts;
-    char tag[160];
-    std::snprintf(tag, sizeof(tag), "raster_w%.2f_h%.2f_z%.2f_%dx%d", width, height, z_off, nx, ny);
-    opts.session_tag = tag;
-    opts.motion_type = "LIN";
-    opts.apply_totg = false;
-    opts.wait_time_sec = capture_delay_sec_;
-
-    if (!sess_->initSession(opts))
-      return;
-    sess_->run(targets);
-    sess_->finish();
   }
-};
 
 // ---------------------------------------------------------------------------
 //                                   main()
@@ -195,7 +178,11 @@ int main(int argc, char **argv)
   session_opts.use_intra_process_comms(true);
   auto sess = std::make_shared<behav3d::session_manager::SessionManager>(session_opts, controller, visualizer, camera);
 
-  auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera, sess);
+  rclcpp::NodeOptions calib_opts;
+  calib_opts.use_intra_process_comms(true);
+  auto calib = std::make_shared<behav3d::handeye::HandeyeCalibration>(calib_opts);
+
+  auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera, sess, calib);
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(controller);
@@ -203,6 +190,7 @@ int main(int argc, char **argv)
   exec.add_node(camera);
   exec.add_node(demo);
   exec.add_node(sess);
+  exec.add_node(calib);
   exec.spin();
 
   rclcpp::shutdown();
