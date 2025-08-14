@@ -45,6 +45,10 @@ private:
   std::string session_dir_param_ = "";                     // explicit session dir
   bool visualize_               = true;
 
+  // Hand-eye method selection
+  int calib_method_flag_ = cv::CALIB_HAND_EYE_TSAI; // OpenCV flag
+  std::string calib_method_name_ = "tsai";         // normalized lower-case name
+
   // OpenCV board/dictionary
   cv::Ptr<cv::aruco::Dictionary>  dict_;
   cv::Ptr<cv::aruco::CharucoBoard> board_obj_;
@@ -69,6 +73,9 @@ private:
                                 const std::vector<cv::Mat> &t_target2cam,
                                 cv::Mat &R_cam2gripper,
                                 cv::Mat &t_cam2gripper);
+
+  static int methodFromString(const std::string &name);
+  static std::string methodToString(int flag);
 
   bool write_outputs(const std::filesystem::path &session_dir,
                      const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper,

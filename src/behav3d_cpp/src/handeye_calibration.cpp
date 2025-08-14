@@ -28,6 +28,11 @@ HandeyeCalibration::HandeyeCalibration(const rclcpp::NodeOptions &options)
   session_dir_param_  = this->declare_parameter<std::string>("session_dir", "");
   visualize_          = this->declare_parameter<bool>("visualize", true);
 
+  // Hand-eye method ("tsai", "park", "horaud", "daniilidis", "andreff")
+  std::string method_param = this->declare_parameter<std::string>("calibration_method", calib_method_name_);
+  calib_method_flag_ = methodFromString(method_param);
+  calib_method_name_ = methodToString(calib_method_flag_);
+
   board_.squares_x    = this->declare_parameter<int>("board_squares_x", board_.squares_x);
   board_.squares_y    = this->declare_parameter<int>("board_squares_y", board_.squares_y);
   board_.square_len_m = this->declare_parameter<double>("square_length_m", board_.square_len_m);
@@ -40,9 +45,10 @@ HandeyeCalibration::HandeyeCalibration(const rclcpp::NodeOptions &options)
                                                static_cast<float>(board_.marker_len_m),
                                                dict_);
 
-  RCLCPP_INFO(get_logger(), "[HandEye] Node ready. Board %dx%d, square=%.3f, marker=%.3f, dict=%d",
+  RCLCPP_INFO(get_logger(), "[HandEye] Node ready. Board %dx%d, square=%.3f, marker=%.3f, dict=%d, method=%s",
               board_.squares_x, board_.squares_y,
-              board_.square_len_m, board_.marker_len_m, board_.aruco_dict_id);
+              board_.square_len_m, board_.marker_len_m, board_.aruco_dict_id,
+              calib_method_name_.c_str());
 }
 
 // ----------------------------------------------------------------------------
@@ -272,8 +278,8 @@ bool HandeyeCalibration::calibrate_handeye(const std::vector<cv::Mat> &R_gripper
     cv::calibrateHandEye(R_gripper2base, t_gripper2base,
                          R_target2cam, t_target2cam,
                          R_cam2gripper, t_cam2gripper,
-                         cv::CALIB_HAND_EYE_TSAI);
-    RCLCPP_INFO(rclcpp::get_logger("handeye_calibration_cpp"), "[HandEye] calibration solved.");
+                         calib_method_flag_);
+    RCLCPP_INFO(rclcpp::get_logger("handeye_calibration_cpp"), "[HandEye] calibration solved (method=%s).", calib_method_name_.c_str());
     return true;
   } catch (const std::exception &e) {
     RCLCPP_ERROR(rclcpp::get_logger("handeye_calibration_cpp"), "[HandEye] calibrateHandEye failed: %s", e.what());
@@ -342,7 +348,7 @@ bool HandeyeCalibration::write_outputs(const fs::path &session_dir,
   {
     cv::FileStorage fsw(yaml.string(), cv::FileStorage::WRITE);
     fsw << "date" << iso_date;
-    fsw << "method" << "handeye_tsai";
+    fsw << "method" << ("handeye_" + calib_method_name_);
     fsw << "pairs_used" << static_cast<int>(pairs_used);
     fsw << "reprojection_rms_px" << 0.0;
 
@@ -380,6 +386,32 @@ bool HandeyeCalibration::write_outputs(const fs::path &session_dir,
   RCLCPP_INFO(rclcpp::get_logger("handeye_calibration_cpp"), "[HandEye] Wrote %s and %s",
               yaml.string().c_str(), jsonp.string().c_str());
   return true;
+}
+
+int HandeyeCalibration::methodFromString(const std::string &name)
+{
+  // normalize to lower-case without spaces/underscores
+  std::string s; s.reserve(name.size());
+  for (char c : name) if (c != ' ' && c != '_') s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+  if (s == "tsai") return cv::CALIB_HAND_EYE_TSAI;
+  if (s == "park") return cv::CALIB_HAND_EYE_PARK;
+  if (s == "horaud") return cv::CALIB_HAND_EYE_HORAUD;
+  if (s == "daniilidis") return cv::CALIB_HAND_EYE_DANIILIDIS;
+  if (s == "andreff") return cv::CALIB_HAND_EYE_ANDREFF;
+  RCLCPP_WARN(rclcpp::get_logger("handeye_calibration_cpp"), "[HandEye] Unknown calibration_method '%s', defaulting to 'tsai'", name.c_str());
+  return cv::CALIB_HAND_EYE_TSAI;
+}
+
+std::string HandeyeCalibration::methodToString(int flag)
+{
+  switch (flag) {
+    case cv::CALIB_HAND_EYE_TSAI: return "tsai";
+    case cv::CALIB_HAND_EYE_PARK: return "park";
+    case cv::CALIB_HAND_EYE_HORAUD: return "horaud";
+    case cv::CALIB_HAND_EYE_DANIILIDIS: return "daniilidis";
+    case cv::CALIB_HAND_EYE_ANDREFF: return "andreff";
+    default: return "tsai";
+  }
 }
 
 } // namespace behav3d::handeye
