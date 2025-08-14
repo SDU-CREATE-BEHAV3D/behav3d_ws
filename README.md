@@ -159,7 +159,7 @@ source ~/.bashrc
 
 -----
 
-## 7\. Test the Installation
+## 8\. Test the Installation
 
 You can test your setup by launching the kinematics demo.
 
