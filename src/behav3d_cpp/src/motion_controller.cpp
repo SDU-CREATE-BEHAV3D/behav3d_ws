@@ -509,7 +509,7 @@ namespace behav3d::motion_controller
       double timeout) const
   {
     MC_DEBUG(this, "computeIK: pose=(%.3f,%.3f,%.3f)",
-              pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
+             pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
 
     const auto *jmg = move_group_.getRobotModel()->getJointModelGroup(move_group_.getName());
     auto state = std::make_shared<moveit::core::RobotState>(move_group_.getRobotModel());
@@ -546,7 +546,7 @@ namespace behav3d::motion_controller
       const geometry_msgs::msg::PoseStamped &pose) const
   {
     MC_DEBUG(this, "isReachable: checking pose (%.3f,%.3f,%.3f)",
-              pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
+             pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
 
     // Use a short IK timeout; reachable if we find a solution
     return static_cast<bool>(computeIK(pose, 0.05));

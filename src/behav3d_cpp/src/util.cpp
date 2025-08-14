@@ -1,5 +1,3 @@
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
 // =============================================================================
 //   ____  _____ _   _    ___     _______ ____
 //  | __ )| ____| | | |  / \ \   / /___ /|  _ \
@@ -19,16 +17,18 @@
 #include <random>
 #include <string>
 #include <fstream>
-#include <Eigen/Dense>
-#include <Eigen/Geometry>
-
-#include <nlohmann/json.hpp>
-#include <yaml-cpp/yaml.h>
-#include <rclcpp/time.hpp>
 #include <ctime>
 #include <cstdio>
 #include <iomanip>
 #include <sstream>
+
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+#include <nlohmann/json.hpp>
+#include <yaml-cpp/yaml.h>
+#include <rclcpp/time.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 namespace behav3d::util
 {
