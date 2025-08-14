@@ -1,6 +1,6 @@
 // =============================================================================
 //   ____  _____ _   _    ___     _______ ____
-//  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
+//  | __ )| ____| | | |  / \ \   / /___ /|  _ \
 //  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
@@ -500,27 +500,87 @@ namespace behav3d::camera_manager
     // ============== Conversions ==============
     cv::Mat CameraManager::toBgr(const sensor_msgs::msg::Image &msg)
     {
+        namespace enc = sensor_msgs::image_encodings;
         try
         {
-            return cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8)->image;
-        }
-        catch (const cv_bridge::Exception &)
-        {
-            // Best-effort fallback: if it's grayscale, expand to BGR
+            // Fast path: already BGR8
+            if (msg.encoding == enc::BGR8)
+            {
+                return cv_bridge::toCvCopy(msg, enc::BGR8)->image;
+            }
+
+            // Common color encodings
+            if (msg.encoding == enc::RGB8)
+            {
+                auto rgb = cv_bridge::toCvCopy(msg, enc::RGB8)->image;
+                cv::Mat bgr;
+                cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
+                return bgr;
+            }
+            if (msg.encoding == enc::BGRA8)
+            {
+                auto bgra = cv_bridge::toCvCopy(msg, enc::BGRA8)->image;
+                cv::Mat bgr;
+                cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
+                return bgr;
+            }
+            if (msg.encoding == enc::RGBA8)
+            {
+                auto rgba = cv_bridge::toCvCopy(msg, enc::RGBA8)->image;
+                cv::Mat bgr;
+                cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
+                return bgr;
+            }
+
+            // Try the generic conversion to BGR8 (cv_bridge will throw if incompatible)
             try
             {
-                auto any = cv_bridge::toCvCopy(msg)->image;
-                if (!any.empty() && any.channels() == 1)
+                return cv_bridge::toCvCopy(msg, enc::BGR8)->image;
+            }
+            catch (const cv_bridge::Exception &)
+            {
+                // Fall through to best-effort path below
+            }
+
+            // Best-effort: try to get any cv::Mat and then infer a conversion
+            auto any = cv_bridge::toCvCopy(msg)->image;
+            if (any.empty())
+                return cv::Mat();
+
+            if (any.channels() == 1)
+            {
+                cv::Mat bgr;
+                cv::cvtColor(any, bgr, cv::COLOR_GRAY2BGR);
+                return bgr;
+            }
+            if (any.channels() == 3)
+            {
+                // Heuristic: if encoding string mentions 'rgb' assume RGB order, else assume BGR
+                std::string enc_lower = msg.encoding;
+                std::transform(enc_lower.begin(), enc_lower.end(), enc_lower.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+                if (enc_lower.find("rgb") != std::string::npos && enc_lower.find("bgr") == std::string::npos)
                 {
                     cv::Mat bgr;
-                    cv::cvtColor(any, bgr, cv::COLOR_GRAY2BGR);
+                    cv::cvtColor(any, bgr, cv::COLOR_RGB2BGR);
                     return bgr;
                 }
+                // Already BGR-like
+                return any;
             }
-            catch (...)
+            if (any.channels() == 4)
             {
-                // ignore and return empty
+                // Default to BGRA->BGR; if original is RGBA, the earlier branch should have caught it
+                cv::Mat bgr;
+                cv::cvtColor(any, bgr, cv::COLOR_BGRA2BGR);
+                return bgr;
             }
+
+            CM_WARN(this, "toBgr: unsupported color encoding '%s' (channels=%d)", msg.encoding.c_str(), any.channels());
+            return cv::Mat();
+        }
+        catch (const cv_bridge::Exception &e)
+        {
+            CM_WARN(this, "toBgr: cv_bridge exception for encoding '%s': %s", msg.encoding.c_str(), e.what());
             return cv::Mat();
         }
     }
