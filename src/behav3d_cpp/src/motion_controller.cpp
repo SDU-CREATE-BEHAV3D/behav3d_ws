@@ -143,10 +143,9 @@ namespace behav3d::motion_controller
   RobotTrajectoryPtr
   PilzMotionController::planTarget(const geometry_msgs::msg::PoseStamped &target,
                                    const std::string &motion_type,
-                                   double vel_scale,
-                                   double acc_scale)
+                                   std::optional<double> vel_scale,
+                                   std::optional<double> acc_scale)
   {
-
     move_group_.clearPoseTargets();
     move_group_.clearPathConstraints();
     move_group_.setJointValueTarget(std::vector<double>());
@@ -160,16 +159,18 @@ namespace behav3d::motion_controller
       return nullptr;
     }
 
+    // Use provided scales if given; otherwise use controller-configured defaults
+    const double vs = vel_scale.value_or(move_group_.getMaxVelocityScalingFactor());
+    const double as = acc_scale.value_or(move_group_.getMaxAccelerationScalingFactor());
+    move_group_.setMaxVelocityScalingFactor(vs);
+    move_group_.setMaxAccelerationScalingFactor(as);
+
     RCLCPP_DEBUG(this->get_logger(),
                  "planTarget called: target=(%.3f,%.3f,%.3f), motion_type=%s, vel_scale=%.3f, acc_scale=%.3f",
                  target.pose.position.x, target.pose.position.y, target.pose.position.z,
-                 motion_type.c_str(), vel_scale, acc_scale);
+                 motion_type.c_str(), vs, as);
 
     move_group_.setPlannerId(motion_type);
-
-    move_group_.setMaxVelocityScalingFactor(vel_scale);
-    move_group_.setMaxAccelerationScalingFactor(acc_scale);
-
     move_group_.setPoseTarget(target);
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     auto code = move_group_.plan(plan);
@@ -193,10 +194,9 @@ namespace behav3d::motion_controller
   // Plan a joint-space PTP motion to given joint vector
   RobotTrajectoryPtr
   PilzMotionController::planJoints(const std::vector<double> &joint_positions,
-                                   double vel_scale,
-                                   double acc_scale)
+                                   std::optional<double> vel_scale,
+                                   std::optional<double> acc_scale)
   {
-
     move_group_.clearPoseTargets();
     move_group_.clearPathConstraints();
 
@@ -209,8 +209,10 @@ namespace behav3d::motion_controller
     }
 
     move_group_.setPlannerId("PTP");
-    move_group_.setMaxVelocityScalingFactor(vel_scale);
-    move_group_.setMaxAccelerationScalingFactor(acc_scale);
+    const double vs = vel_scale.value_or(move_group_.getMaxVelocityScalingFactor());
+    const double as = acc_scale.value_or(move_group_.getMaxAccelerationScalingFactor());
+    move_group_.setMaxVelocityScalingFactor(vs);
+    move_group_.setMaxAccelerationScalingFactor(as);
 
     move_group_.setJointValueTarget(joint_positions);
 
@@ -237,19 +239,21 @@ namespace behav3d::motion_controller
   RobotTrajectoryPtr
   PilzMotionController::planSequence(const std::vector<geometry_msgs::msg::PoseStamped> &waypoints,
                                      double blend_radius,
-                                     double vel_scale,
-                                     double acc_scale,
+                                     std::optional<double> vel_scale,
+                                     std::optional<double> acc_scale,
                                      double pos_tolerance,
                                      double ori_tolerance)
   {
-
     move_group_.clearPoseTargets();
     move_group_.clearPathConstraints();
     move_group_.setJointValueTarget(std::vector<double>());
 
+    const double vs = vel_scale.value_or(move_group_.getMaxVelocityScalingFactor());
+    const double as = acc_scale.value_or(move_group_.getMaxAccelerationScalingFactor());
+
     RCLCPP_DEBUG(this->get_logger(),
                  "planSequence called: %zu waypoints, vel_scale=%.3f, acc_scale=%.3f, blend_radius=%.3f",
-                 waypoints.size(), vel_scale, acc_scale, blend_radius);
+                 waypoints.size(), vs, as, blend_radius);
     if (waypoints.size() < 2)
     {
       RCLCPP_ERROR(this->get_logger(), "planSequence: need ≥2 way-points");
@@ -266,8 +270,8 @@ namespace behav3d::motion_controller
       req.planner_id = "LIN";
       req.group_name = move_group_.getName();
       req.allowed_planning_time = 10.0;
-      req.max_velocity_scaling_factor = vel_scale;
-      req.max_acceleration_scaling_factor = acc_scale;
+      req.max_velocity_scaling_factor = vs;
+      req.max_acceleration_scaling_factor = as;
 
       // Build a fully‑specified pose constraint (position + orientation)
       moveit_msgs::msg::Constraints c =

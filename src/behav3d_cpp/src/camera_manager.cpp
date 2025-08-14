@@ -328,9 +328,9 @@ namespace behav3d::camera_manager
                 (void)ec;
                 try
                 {
-                    const std::string f_color = (dir_calib_ / "color_camera_info.yaml").string();
-                    const std::string f_depth = (dir_calib_ / "depth_camera_info.yaml").string();
-                    const std::string f_ir    = (dir_calib_ / "ir_camera_info.yaml").string();
+                    const std::string f_color = (dir_calib_ / "color_intrinsics.yaml").string();
+                    const std::string f_depth = (dir_calib_ / "depth_intrinsics.yaml").string();
+                    const std::string f_ir    = (dir_calib_ / "ir_intrinsics.yaml").string();
 
                     bool ok_color = writeCalibrationYaml(color, f_color);
                     bool ok_depth = writeCalibrationYaml(depth, f_depth);
@@ -594,32 +594,29 @@ namespace behav3d::camera_manager
         auto makeMat = [](int rows, int cols, const auto &vec)
         {
             YAML::Node m;
+            // OpenCV matrix header fields
             m["rows"] = rows;
             m["cols"] = cols;
+            m["dt"] = "d"; // double
             YAML::Node data(YAML::NodeType::Sequence);
             for (const auto &v : vec)
                 data.push_back(v);
             m["data"] = data;
+            m.SetTag("opencv-matrix");
             return m;
         };
 
         node["camera_matrix"] = makeMat(3, 3, info.k);
+        node["camera_matrix"];
         node["distortion_model"] = info.distortion_model;
 
-        // distortion coefficients: 1 x N
-        {
-            YAML::Node dc;
-            dc["rows"] = 1;
-            dc["cols"] = static_cast<int>(info.d.size());
-            YAML::Node data(YAML::NodeType::Sequence);
-            for (const auto &v : info.d)
-                data.push_back(v);
-            dc["data"] = data;
-            node["distortion_coefficients"] = dc;
-        }
+        node["distortion_coefficients"] = makeMat(1, static_cast<int>(info.d.size()), info.d);
+        node["distortion_coefficients"];
 
         node["rectification_matrix"] = makeMat(3, 3, info.r);
+        node["rectification_matrix"];
         node["projection_matrix"] = makeMat(3, 4, info.p);
+        node["projection_matrix"];
 
         return behav3d::util::writeYaml(path, node);
     }

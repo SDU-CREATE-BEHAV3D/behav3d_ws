@@ -154,7 +154,7 @@ namespace behav3d::session_manager
     {
       if (home_joints_deg.empty())
       {
-        home_joints_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
+        home_joints_deg = {0.0, -120.0, 120.0, -90.0, 90.0, -180.0};
       }
       home_joints_rad_.emplace();
       home_joints_rad_->reserve(home_joints_deg.size());
