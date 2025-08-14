@@ -180,86 +180,48 @@ ros2 topic pub --once /user_input std_msgs/msg/String "{data: 'draw_line'}"
 ```
 
 If the demo runs and responds to the command, your installation is complete and working correctly. 🎉
-Here’s your updated `README.md` with the new **Step 8** added in the same style as the rest of the document:
+-----
+## 7\. How to connect your Orbbec Femto camera for the first time on a Linux system. 
 
----
+### Step 1: Check USB Detection
 
-````markdown
-## 8. Orbbec Femto Bolt Setup (Optional but Recommended)
-
-If you plan to use the **Orbbec Femto Bolt** camera, follow these steps to ensure it is detected and accessible.
-
-### 8.1 Check USB Detection
-
-First, confirm that Linux detects the device:
+First, let's confirm that your computer recognizes the camera. Plug the device in and run the following command in your terminal:
 
 ```bash
 lsusb
-````
-
-Look for a line similar to:
-
-```
-ID 2bc5:xxxx Orbbec 3D Technology International, Inc Orbbec Femto Bolt 3D Camera
 ```
 
-If it does not appear:
+You should see a line in the output that identifies the camera. Look for the **vendor ID `2bc5`**:
 
-* Try a different USB port (preferably USB 3.x directly on the motherboard).
-* Use a high-quality USB-C data cable (not just a charging cable).
-* Avoid using USB hubs or adapters.
+`Bus 002 Device 006: ID 2bc5:066b Orbbec 3D Technology International, Inc Orbbec Femto Bolt 3D Camera`
 
-### 8.2 Fix Permissions
+If you don't see this entry, try using a different USB port (preferably a USB 3.0 port) or a different data cable.
 
-By default, you might need `sudo` to access the device. To avoid this, create a **udev rule**:
+-----
 
-```bash
-sudo nano /etc/udev/rules.d/99-orbbec.rules
-```
+### Step 2: Fix Device Permissions
 
-Paste the following line:
+To avoid needing `sudo` every time you access the camera, you'll create a **`udev` rule**. This automatically grants the correct permissions to the device when it's plugged in.
 
-```
-SUBSYSTEM=="usb", ATTR{idVendor}=="2bc5", MODE="0666"
-```
+1.  Create and open a new rules file using a text editor like `nano`:
 
-Then reload the rules and replug the camera:
+    ```bash
+    sudo nano /etc/udev/rules.d/99-orbbec.rules
+    ```
 
-```bash
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-```
+2.  Paste the following line into the file. This rule uses the **vendor ID `2bc5`** that you confirmed in the previous step.
 
-Unplug and replug the Femto Bolt.
+    ```
+    SUBSYSTEM=="usb", ATTR{idVendor}=="2bc5", MODE="0666"
+    ```
 
-### 8.3 Install the Orbbec SDK
+3.  Save the file and exit the editor. (In `nano`, press `Ctrl+X`, then `Y`, then `Enter`).
 
-If not already installed:
+4.  Finally, tell the system to reload its rules so your new rule takes effect:
 
-```bash
-sudo apt update
-sudo apt install libusb-1.0-0-dev libudev-dev cmake build-essential
-git clone https://github.com/orbbec/OrbbecSDK.git
-cd OrbbecSDK
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-sudo make install
-```
+    ```bash
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+    ```
 
-### 8.4 Test with Orbbec Viewer
-
-After building the SDK, run the viewer:
-
-```bash
-./bin/ObViewer
-```
-
-If you can see depth and RGB streams, the camera is working correctly.
-
-```
-
----
-
-Do you want me to also add a **quick Python test snippet** here so users can check the Femto Bolt output without going into ROS? That would make Step 8 immediately verifiable for them.
-```
+After completing these steps, unplug and replug your camera. It should now be fully accessible and ready to use\! ✅
