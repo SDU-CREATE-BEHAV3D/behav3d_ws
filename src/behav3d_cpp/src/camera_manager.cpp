@@ -31,6 +31,11 @@
 #include <cv_bridge/cv_bridge.hpp>
 #include <sensor_msgs/image_encodings.hpp>
 
+#define CM_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[CameraManager] " fmt, ##__VA_ARGS__)
+#define CM_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[CameraManager] " fmt, ##__VA_ARGS__)
+#define CM_WARN(node, fmt, ...) RCLCPP_WARN((node)->get_logger(), "[CameraManager] " fmt, ##__VA_ARGS__)
+#define CM_ERROR(node, fmt, ...) RCLCPP_ERROR((node)->get_logger(), "[CameraManager] " fmt, ##__VA_ARGS__)
+
 namespace fs = std::filesystem;
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -109,10 +114,10 @@ namespace behav3d::camera_manager
             if (queue_.size() >= max_queue_)
             {
                 queue_.pop_front();
-                RCLCPP_WARN(get_logger(), "Capture queue full — dropping oldest snapshot");
+                CM_WARN(this, "Capture queue full — dropping oldest snapshot");
             }
             queue_.push_back(std::move(snap));
-            RCLCPP_INFO(get_logger(), "Snapshot enqueued at %s", timeStringFromStamp(queue_.back().stamp).c_str());
+            CM_INFO(this, "Snapshot enqueued at %s", timeStringFromStamp(queue_.back().stamp).c_str());
         }
         cv_.notify_one();
         return true;
@@ -123,14 +128,14 @@ namespace behav3d::camera_manager
         Snapshot snap;
         if (!buildSnapshot(snap))
             return false;
-        RCLCPP_INFO(get_logger(), "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
+        CM_INFO(this, "Writing snapshot %s", timeStringFromStamp(snap.stamp).c_str());
         try
         {
             writeSnapshot(snap, out_paths, stem_override);
         }
         catch (const std::exception &e)
         {
-            RCLCPP_ERROR(get_logger(), "Failed to write images: %s", e.what());
+            CM_ERROR(this, "Failed to write images: %s", e.what());
             return false;
         }
         if (stamp_out)
@@ -161,8 +166,8 @@ namespace behav3d::camera_manager
         d2c_depth_topic_ = this->declare_parameter<std::string>("d2c_depth_topic", ns_ + "/aligned_depth_to_color/image_raw");
         c2d_color_topic_ = this->declare_parameter<std::string>("c2d_color_topic", ns_ + "/aligned_color_to_depth/image_raw");
 
-        RCLCPP_INFO(get_logger(), "CameraManager configured with ns='%s' output='%s'",
-                    ns_.c_str(), output_dir_.c_str());
+        CM_INFO(this, "CameraManager configured with ns='%s' output='%s'",
+                ns_.c_str(), output_dir_.c_str());
     }
 
     void CameraManager::initSubscriptions()
@@ -172,36 +177,36 @@ namespace behav3d::camera_manager
 
         sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
             color_topic_, qos, std::bind(&CameraManager::onColor, this, _1));
-        RCLCPP_INFO(get_logger(), "Subscribed to color: %s", color_topic_.c_str());
+        CM_INFO(this, "Subscribed to color: %s", color_topic_.c_str());
         sub_depth_ = this->create_subscription<sensor_msgs::msg::Image>(
             depth_topic_, qos, std::bind(&CameraManager::onDepth, this, _1));
-        RCLCPP_INFO(get_logger(), "Subscribed to depth: %s", depth_topic_.c_str());
+        CM_INFO(this, "Subscribed to depth: %s", depth_topic_.c_str());
         sub_ir_ = this->create_subscription<sensor_msgs::msg::Image>(
             ir_topic_, qos, std::bind(&CameraManager::onIr, this, _1));
-        RCLCPP_INFO(get_logger(), "Subscribed to IR: %s", ir_topic_.c_str());
+        CM_INFO(this, "Subscribed to IR: %s", ir_topic_.c_str());
 
         sub_color_info_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
             color_info_topic_, qos, std::bind(&CameraManager::onColorInfo, this, _1));
-        RCLCPP_INFO(get_logger(), "Subscribed to color_info: %s", color_info_topic_.c_str());
+        CM_INFO(this, "Subscribed to color_info: %s", color_info_topic_.c_str());
         sub_depth_info_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
             depth_info_topic_, qos, std::bind(&CameraManager::onDepthInfo, this, _1));
-        RCLCPP_INFO(get_logger(), "Subscribed to depth_info: %s", depth_info_topic_.c_str());
+        CM_INFO(this, "Subscribed to depth_info: %s", depth_info_topic_.c_str());
         sub_ir_info_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
             ir_info_topic_, qos, std::bind(&CameraManager::onIrInfo, this, _1));
-        RCLCPP_INFO(get_logger(), "Subscribed to ir_info: %s", ir_info_topic_.c_str());
+        CM_INFO(this, "Subscribed to ir_info: %s", ir_info_topic_.c_str());
 
         // Optional aligned topics (subscribe even if empty; callbacks just won't fire if not published)
         if (!d2c_depth_topic_.empty())
         {
             sub_d2c_ = this->create_subscription<sensor_msgs::msg::Image>(
                 d2c_depth_topic_, qos, std::bind(&CameraManager::onDepthAlignedToColor, this, _1));
-            RCLCPP_INFO(get_logger(), "Subscribed to depth->color (aligned depth): %s", d2c_depth_topic_.c_str());
+            CM_INFO(this, "Subscribed to depth->color (aligned depth): %s", d2c_depth_topic_.c_str());
         }
         if (!c2d_color_topic_.empty())
         {
             sub_c2d_ = this->create_subscription<sensor_msgs::msg::Image>(
                 c2d_color_topic_, qos, std::bind(&CameraManager::onColorAlignedToDepth, this, _1));
-            RCLCPP_INFO(get_logger(), "Subscribed to color->depth (aligned color): %s", c2d_color_topic_.c_str());
+            CM_INFO(this, "Subscribed to color->depth (aligned color): %s", c2d_color_topic_.c_str());
         }
     }
 
@@ -268,11 +273,11 @@ namespace behav3d::camera_manager
         res->message = ok ? "Snapshot enqueued" : "Not ready: missing IR frame";
         if (ok)
         {
-            RCLCPP_INFO(get_logger(), "Capture enqueued");
+            CM_INFO(this, "Capture enqueued");
         }
         else
         {
-            RCLCPP_INFO(get_logger(), "Capture not ready: missing IR frame");
+            CM_INFO(this, "Capture not ready: missing IR frame");
         }
     }
 
@@ -319,7 +324,7 @@ namespace behav3d::camera_manager
             // Only write calibration YAMLs when an active session directory is set
             if (session_dir_.empty())
             {
-                RCLCPP_WARN(get_logger(), "getCalibration(write_yaml=true): no active session_dir — skipping YAML write");
+                CM_WARN(this, "getCalibration(write_yaml=true): no active session_dir — skipping YAML write");
             }
             else
             {
@@ -338,21 +343,21 @@ namespace behav3d::camera_manager
 
                     if (ok_color && ok_depth && ok_ir)
                     {
-                        RCLCPP_INFO(get_logger(), "Wrote camera info YAMLs to %s", dir_calib_.string().c_str());
+                        CM_INFO(this, "Wrote camera info YAMLs to %s", dir_calib_.string().c_str());
                     }
                     else
                     {
                         if (!ok_color)
-                            RCLCPP_ERROR(get_logger(), "Failed to write %s", f_color.c_str());
+                            CM_ERROR(this, "Failed to write %s", f_color.c_str());
                         if (!ok_depth)
-                            RCLCPP_ERROR(get_logger(), "Failed to write %s", f_depth.c_str());
+                            CM_ERROR(this, "Failed to write %s", f_depth.c_str());
                         if (!ok_ir)
-                            RCLCPP_ERROR(get_logger(), "Failed to write %s", f_ir.c_str());
+                            CM_ERROR(this, "Failed to write %s", f_ir.c_str());
                     }
                 }
                 catch (const std::exception &e)
                 {
-                    RCLCPP_ERROR(get_logger(), "Exception while writing camera info YAMLs: %s", e.what());
+                    CM_ERROR(this, "Exception while writing camera info YAMLs: %s", e.what());
                 }
             }
         }
@@ -404,18 +409,18 @@ namespace behav3d::camera_manager
                 if (out.depth_raw.empty())
                 {
                     out.has_depth = false;
-                    RCLCPP_WARN(get_logger(), "buildSnapshot: DEPTH conversion EMPTY (encoding='%s')",
-                                depth->encoding.c_str());
+                    CM_WARN(this, "buildSnapshot: DEPTH conversion EMPTY (encoding='%s')",
+                            depth->encoding.c_str());
                 }
                 else
                 {
-                    RCLCPP_DEBUG(get_logger(), "buildSnapshot: DEPTH Mat %dx%d type=%d",
-                                 out.depth_raw.rows, out.depth_raw.cols, out.depth_raw.type());
+                    CM_DEBUG(this, "buildSnapshot: DEPTH Mat %dx%d type=%d",
+                             out.depth_raw.rows, out.depth_raw.cols, out.depth_raw.type());
                 }
             }
             else
             {
-                RCLCPP_WARN(get_logger(), "buildSnapshot: no DEPTH frame available at capture time");
+                CM_WARN(this, "buildSnapshot: no DEPTH frame available at capture time");
             }
 
             if (ir)
@@ -425,18 +430,18 @@ namespace behav3d::camera_manager
                 if (out.ir_raw.empty())
                 {
                     out.has_ir = false;
-                    RCLCPP_WARN(get_logger(), "buildSnapshot: IR conversion EMPTY (encoding='%s')",
-                                ir->encoding.c_str());
+                    CM_WARN(this, "buildSnapshot: IR conversion EMPTY (encoding='%s')",
+                            ir->encoding.c_str());
                 }
                 else
                 {
-                    RCLCPP_DEBUG(get_logger(), "buildSnapshot: IR Mat %dx%d type=%d",
-                                 out.ir_raw.rows, out.ir_raw.cols, out.ir_raw.type());
+                    CM_DEBUG(this, "buildSnapshot: IR Mat %dx%d type=%d",
+                             out.ir_raw.rows, out.ir_raw.cols, out.ir_raw.type());
                 }
             }
             else
             {
-                RCLCPP_WARN(get_logger(), "buildSnapshot: no IR frame available at capture time");
+                CM_WARN(this, "buildSnapshot: no IR frame available at capture time");
             }
 
             if (color)
@@ -447,18 +452,18 @@ namespace behav3d::camera_manager
                 if (out.color_raw.empty())
                 {
                     out.has_color = false;
-                    RCLCPP_WARN(get_logger(), "buildSnapshot: COLOR conversion EMPTY (encoding='%s')",
-                                color->encoding.c_str());
+                    CM_WARN(this, "buildSnapshot: COLOR conversion EMPTY (encoding='%s')",
+                            color->encoding.c_str());
                 }
                 else
                 {
-                    RCLCPP_DEBUG(get_logger(), "buildSnapshot: COLOR Mat %dx%d type=%d",
-                                 out.color_raw.rows, out.color_raw.cols, out.color_raw.type());
+                    CM_DEBUG(this, "buildSnapshot: COLOR Mat %dx%d type=%d",
+                             out.color_raw.rows, out.color_raw.cols, out.color_raw.type());
                 }
             }
             else
             {
-                RCLCPP_WARN(get_logger(), "buildSnapshot: no COLOR frame available at capture time");
+                CM_WARN(this, "buildSnapshot: no COLOR frame available at capture time");
             }
 
             if (d2c)
@@ -487,7 +492,7 @@ namespace behav3d::camera_manager
         }
         catch (const std::exception &e)
         {
-            RCLCPP_ERROR(get_logger(), "Snapshot conversion failed: %s", e.what());
+            CM_ERROR(this, "Snapshot conversion failed: %s", e.what());
             return false;
         }
     }

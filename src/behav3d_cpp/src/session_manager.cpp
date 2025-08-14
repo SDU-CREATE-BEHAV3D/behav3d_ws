@@ -28,7 +28,10 @@
 #include <cmath>
 #include <filesystem>
 
-#define SESS_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+#define SM_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+#define SM_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+#define SM_WARN(node, fmt, ...) RCLCPP_WARN((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+#define SM_ERROR(node, fmt, ...) RCLCPP_ERROR((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
 
 #include <chrono>
 #include <filesystem>
@@ -62,10 +65,10 @@ namespace behav3d::session_manager
         ctrl_(std::move(ctrl)), viz_(std::move(viz)), cam_(std::move(cam)),
         home_joints_rad_(std::move(home_joints_rad))
   {
-    RCLCPP_INFO(this->get_logger(), "[SessionManager] initialized");
+    SM_INFO(this, "initialized");
     // Declare robot_prefix parameter once (default: "ur10e") and store it
     g_robot_prefix = this->declare_parameter<std::string>("robot_prefix", "ur10e");
-    RCLCPP_INFO(this->get_logger(), "[SessionManager] robot_prefix: %s", g_robot_prefix.c_str());
+    SM_INFO(this, "robot_prefix: %s", g_robot_prefix.c_str());
     // Where to create session directories (keep same default as CameraManager)
     output_dir_ = this->declare_parameter<std::string>("output_dir", "~/behav3d_ws/captures");
 
@@ -109,8 +112,8 @@ namespace behav3d::session_manager
     fs::create_directories(root, ec);
     if (ec)
     {
-      RCLCPP_ERROR(this->get_logger(), "[Session] Failed to create output root '%s': %s",
-                   root.c_str(), ec.message().c_str());
+      SM_ERROR(this, "Failed to create output root '%s': %s",
+               root.c_str(), ec.message().c_str());
       return false;
     }
 
@@ -118,8 +121,8 @@ namespace behav3d::session_manager
     fs::create_directories(session_dir_, ec);
     if (ec)
     {
-      RCLCPP_ERROR(this->get_logger(), "[Session] Failed to create session_dir '%s': %s",
-                   session_dir_.string().c_str(), ec.message().c_str());
+      SM_ERROR(this, "Failed to create session_dir '%s': %s",
+               session_dir_.string().c_str(), ec.message().c_str());
       return false;
     }
 
@@ -143,7 +146,7 @@ namespace behav3d::session_manager
     const double calib_timeout_sec = this->declare_parameter<double>("calib_timeout_sec", 2.0);
     if (!cam_->getCalibration(calib_timeout_sec, /*write_yaml=*/true))
     {
-      RCLCPP_WARN(this->get_logger(), "[Session] Calibration not available within %.3f s; YAMLs not written for this session.", calib_timeout_sec);
+      SM_WARN(this, "Calibration not available within %.3f s; YAMLs not written for this session.", calib_timeout_sec);
     }
 
     // Manifest path (single JSON written at finish())
@@ -155,7 +158,7 @@ namespace behav3d::session_manager
       viz_->deleteAllMarkers();
     }
 
-    RCLCPP_INFO(this->get_logger(), "[Session] Ready at %s", session_dir_.string().c_str());
+    SM_INFO(this, "Ready at %s", session_dir_.string().c_str());
     return true;
   }
 
@@ -163,7 +166,7 @@ namespace behav3d::session_manager
   {
     if (targets.empty())
     {
-      RCLCPP_WARN(this->get_logger(), "[Session] No targets to run.");
+      SM_WARN(this, "No targets to run.");
       return false;
     }
 
@@ -266,16 +269,16 @@ namespace behav3d::session_manager
 
       if (!behav3d::util::writeJson(manifest_path_.string(), root))
       {
-        RCLCPP_ERROR(this->get_logger(), "[Session] Failed to write manifest: %s", manifest_path_.string().c_str());
+        SM_ERROR(this, "Failed to write manifest: %s", manifest_path_.string().c_str());
       }
       else
       {
-        RCLCPP_INFO(this->get_logger(), "[Session] Wrote manifest: %s", manifest_path_.string().c_str());
+        SM_INFO(this, "Wrote manifest: %s", manifest_path_.string().c_str());
       }
     }
     catch (const std::exception &e)
     {
-      RCLCPP_ERROR(this->get_logger(), "[Session] Error writing manifest: %s", e.what());
+      SM_ERROR(this, "Error writing manifest: %s", e.what());
     }
 
     goHome();
