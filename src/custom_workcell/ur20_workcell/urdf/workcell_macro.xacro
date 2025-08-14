@@ -110,7 +110,7 @@
     <joint name="base_to_tool0" type="fixed">
       <parent link="${ur_type}_tool0"/>
       <child link="femto_mount"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 -0.5235"/>
     </joint>
     
     <!--This will create the specific robot-->
@@ -131,7 +131,7 @@
       parent="${ur_type}_tool0"
       use_nominal_extrinsics="true"
     >
-      <origin xyz="0 0.0555 0.0103" rpy="0 0 1.5708" />
+      <origin xyz="0.027 0.048 0.0103" rpy="0 0 1.0472" />
     </xacro:femto_bolt>
 
   </xacro:macro>
