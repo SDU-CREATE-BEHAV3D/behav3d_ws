@@ -159,7 +159,7 @@ source ~/.bashrc
 
 -----
 
-## 8\. Test the Installation
+## 7\. Test the Installation
 
 You can test your setup by launching the kinematics demo.
 
@@ -181,7 +181,7 @@ ros2 topic pub --once /user_input std_msgs/msg/String "{data: 'draw_line'}"
 
 If the demo runs and responds to the command, your installation is complete and working correctly. 🎉
 -----
-## 7\. How to connect your Orbbec Femto camera for the first time on a Linux system. 
+## 8\. How to connect your Orbbec Femto camera for the first time on a Linux system. 
 
 ### Step 1: Check USB Detection
 
