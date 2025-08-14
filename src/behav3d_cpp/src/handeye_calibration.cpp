@@ -115,7 +115,8 @@ bool HandeyeCalibration::run()
   cv::Mat R_cam2gripper, t_cam2gripper;
   if (!calibrate_handeye(R_gripper2base, t_gripper2base,
                          R_target2cam, t_target2cam,
-                         R_cam2gripper, t_cam2gripper)) {
+                         R_cam2gripper, t_cam2gripper,
+                         calib_method_flag_, calib_method_name_)) {
     return false;
   }
 
@@ -272,14 +273,16 @@ bool HandeyeCalibration::calibrate_handeye(const std::vector<cv::Mat> &R_gripper
                                            const std::vector<cv::Mat> &t_gripper2base,
                                            const std::vector<cv::Mat> &R_target2cam,
                                            const std::vector<cv::Mat> &t_target2cam,
-                                           cv::Mat &R_cam2gripper, cv::Mat &t_cam2gripper)
+                                           cv::Mat &R_cam2gripper, cv::Mat &t_cam2gripper,
+                                           int method_flag,
+                                           const std::string &method_name)
 {
   try {
     cv::calibrateHandEye(R_gripper2base, t_gripper2base,
                          R_target2cam, t_target2cam,
                          R_cam2gripper, t_cam2gripper,
-                         calib_method_flag_);
-    RCLCPP_INFO(rclcpp::get_logger("handeye_calibration_cpp"), "[HandEye] calibration solved (method=%s).", calib_method_name_.c_str());
+                         static_cast<cv::HandEyeCalibrationMethod>(method_flag));
+    RCLCPP_INFO(rclcpp::get_logger("handeye_calibration_cpp"), "[HandEye] calibration solved (method=%s).", method_name.c_str());
     return true;
   } catch (const std::exception &e) {
     RCLCPP_ERROR(rclcpp::get_logger("handeye_calibration_cpp"), "[HandEye] calibrateHandEye failed: %s", e.what());

@@ -67,12 +67,14 @@ private:
   static cv::Mat quat_to_R(const geometry_msgs::msg::Pose &p);
   static cv::Mat vec3_to_t(const geometry_msgs::msg::Pose &p);
 
-  bool calibrate_handeye(const std::vector<cv::Mat> &R_gripper2base,
-                         const std::vector<cv::Mat> &t_gripper2base,
-                         const std::vector<cv::Mat> &R_target2cam,
-                         const std::vector<cv::Mat> &t_target2cam,
-                         cv::Mat &R_cam2gripper,
-                         cv::Mat &t_cam2gripper);
+  static bool calibrate_handeye(const std::vector<cv::Mat> &R_gripper2base,
+                                const std::vector<cv::Mat> &t_gripper2base,
+                                const std::vector<cv::Mat> &R_target2cam,
+                                const std::vector<cv::Mat> &t_target2cam,
+                                cv::Mat &R_cam2gripper,
+                                cv::Mat &t_cam2gripper,
+                                int method_flag,
+                                const std::string &method_name);
 
   static int methodFromString(const std::string &name);
   static std::string methodToString(int flag);
