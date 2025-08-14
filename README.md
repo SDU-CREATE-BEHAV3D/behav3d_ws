@@ -180,3 +180,86 @@ ros2 topic pub --once /user_input std_msgs/msg/String "{data: 'draw_line'}"
 ```
 
 If the demo runs and responds to the command, your installation is complete and working correctly. 🎉
+Here’s your updated `README.md` with the new **Step 8** added in the same style as the rest of the document:
+
+---
+
+````markdown
+## 8. Orbbec Femto Bolt Setup (Optional but Recommended)
+
+If you plan to use the **Orbbec Femto Bolt** camera, follow these steps to ensure it is detected and accessible.
+
+### 8.1 Check USB Detection
+
+First, confirm that Linux detects the device:
+
+```bash
+lsusb
+````
+
+Look for a line similar to:
+
+```
+ID 2bc5:xxxx Orbbec 3D Technology International, Inc Orbbec Femto Bolt 3D Camera
+```
+
+If it does not appear:
+
+* Try a different USB port (preferably USB 3.x directly on the motherboard).
+* Use a high-quality USB-C data cable (not just a charging cable).
+* Avoid using USB hubs or adapters.
+
+### 8.2 Fix Permissions
+
+By default, you might need `sudo` to access the device. To avoid this, create a **udev rule**:
+
+```bash
+sudo nano /etc/udev/rules.d/99-orbbec.rules
+```
+
+Paste the following line:
+
+```
+SUBSYSTEM=="usb", ATTR{idVendor}=="2bc5", MODE="0666"
+```
+
+Then reload the rules and replug the camera:
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Unplug and replug the Femto Bolt.
+
+### 8.3 Install the Orbbec SDK
+
+If not already installed:
+
+```bash
+sudo apt update
+sudo apt install libusb-1.0-0-dev libudev-dev cmake build-essential
+git clone https://github.com/orbbec/OrbbecSDK.git
+cd OrbbecSDK
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+sudo make install
+```
+
+### 8.4 Test with Orbbec Viewer
+
+After building the SDK, run the viewer:
+
+```bash
+./bin/ObViewer
+```
+
+If you can see depth and RGB streams, the camera is working correctly.
+
+```
+
+---
+
+Do you want me to also add a **quick Python test snippet** here so users can check the Femto Bolt output without going into ROS? That would make Step 8 immediately verifiable for them.
+```
