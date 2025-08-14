@@ -133,7 +133,7 @@ private:
 
     behav3d::session_manager::SessionManager::Options opts;
     char tag[128];
-    std::snprintf(tag, sizeof(tag), "fibcap_r%.2f_cap%d_n%d", radius, (int)cap_deg, n_points);
+    std::snprintf(tag, sizeof(tag), "fibcap_r%.2f_cap%d_n%d", (int)radius*100, (int)cap_deg, n_points);
     opts.session_tag = tag;
     opts.motion_type = "LIN";
     opts.apply_totg = true;
