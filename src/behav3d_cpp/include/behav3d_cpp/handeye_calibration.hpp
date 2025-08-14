@@ -1,6 +1,6 @@
 // =============================================================================
 //   ____  _____ _   _    ___     _______ ____
-//  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
+//  | __ )| ____| | | |  / \ \   / /___ /|  _ \
 //  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
@@ -59,6 +59,7 @@ namespace behav3d::handeye
     std::string output_root_ = "~/behav3d_ws/captures"; // where session-* live
     std::string session_dir_param_ = "";                // explicit session dir
     bool visualize_ = true;
+    int visualize_pause_ms_ = 2000; // pause between visualization frames
 
     // Hand-eye method selection
     int calib_method_flag_ = cv::CALIB_HAND_EYE_TSAI; // OpenCV flag

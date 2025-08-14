@@ -1,6 +1,6 @@
 // =============================================================================
 //   ____  _____ _   _    ___     _______ ____
-//  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
+//  | __ )| ____| | | |  / \ \   / /___ /|  _ \
 //  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
@@ -47,6 +47,7 @@ namespace behav3d::handeye
     output_root_ = this->declare_parameter<std::string>("output_dir", output_root_);
     session_dir_param_ = this->declare_parameter<std::string>("session_dir", "");
     visualize_ = this->declare_parameter<bool>("visualize", true);
+    visualize_pause_ms_ = this->declare_parameter<int>("visualize_pause_ms", visualize_pause_ms_);
 
     // Hand-eye method ("tsai", "park", "horaud", "daniilidis", "andreff")
     std::string method_param = this->declare_parameter<std::string>("calibration_method", calib_method_name_);
@@ -265,26 +266,66 @@ namespace behav3d::handeye
   bool HandeyeCalibration::load_camera_calib(const fs::path &session_dir)
   {
     const fs::path calib_dir = session_dir / "calib";
-    if (!fs::exists(calib_dir))
+    if (!fs::exists(calib_dir)) {
+      HE_ERROR(this, "Calib dir not found: %s", calib_dir.string().c_str());
       return false;
+    }
 
+    // Preferred file names
     fs::path yaml = calib_dir / "color_intrinsics.yaml";
-    if (!fs::exists(yaml))
-    {
+    if (!fs::exists(yaml)) {
       if (fs::exists(calib_dir / "intrinsics.yaml"))
         yaml = calib_dir / "intrinsics.yaml";
+      else {
+        HE_ERROR(this, "No intrinsics YAML found in %s", calib_dir.string().c_str());
+        return false;
+      }
     }
-    if (!fs::exists(yaml))
-      return false;
 
     cv::FileStorage fsr(yaml.string(), cv::FileStorage::READ);
-    if (!fsr.isOpened())
+    if (!fsr.isOpened()) {
+      HE_ERROR(this, "Failed to open intrinsics YAML: %s", yaml.string().c_str());
       return false;
-    fsr["camera_matrix"] >> K_;
-    fsr["distortion_coefficients"] >> D_;
+    }
+
+    // Try OpenCV style first: camera_matrix + distortion_coefficients as matrices
+    cv::FileNode cm = fsr["camera_matrix"];
+    cv::FileNode dc = fsr["distortion_coefficients"];
+    if (!cm.empty() && !dc.empty()) {
+      cm >> K_;
+      dc >> D_;
+    } else {
+      // Fallback to ROS CameraInfo style: sequences K (9 elems) and D (N elems)
+      cv::FileNode Knode = fsr["K"];
+      cv::FileNode Dnode = fsr["D"];
+
+      if (Knode.isSeq() && (int)Knode.size() == 9) {
+        K_ = cv::Mat(3, 3, CV_64F);
+        for (int i = 0; i < 9; ++i) {
+          K_.at<double>(i/3, i%3) = (double)Knode[i];
+        }
+      }
+
+      if (Dnode.isSeq() && (int)Dnode.size() >= 4) {
+        D_ = cv::Mat(1, (int)Dnode.size(), CV_64F);
+        for (int i = 0; i < (int)Dnode.size(); ++i) {
+          D_.at<double>(0, i) = (double)Dnode[i];
+        }
+      }
+    }
+
     fsr.release();
 
-    return !K_.empty();
+    if (K_.empty()) {
+      HE_ERROR(this, "Intrinsics YAML missing usable camera matrix.");
+      return false;
+    }
+    if (D_.empty()) {
+      // Provide a zero-distortion default if absent
+      D_ = cv::Mat::zeros(1, 5, CV_64F);
+      HE_WARN(this, "No distortion coefficients found; defaulting to zeros (5).");
+    }
+    return true;
   }
 
   bool HandeyeCalibration::detect_charuco(const cv::Mat &img, cv::Mat &rvec, cv::Mat &tvec, bool visualize)
@@ -311,7 +352,7 @@ namespace behav3d::handeye
       cv::aruco::drawDetectedMarkers(vis, corners, ids);
       cv::drawFrameAxes(vis, K_, D_, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
       cv::imshow("charuco", vis);
-      cv::waitKey(1000);
+      cv::waitKey(visualize_pause_ms_);
     }
     return true;
   }
