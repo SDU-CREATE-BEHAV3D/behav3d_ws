@@ -51,6 +51,7 @@ namespace behav3d::session_manager
     bool initSession(const Options &opts);
     bool run(const std::vector<geometry_msgs::msg::PoseStamped> &targets);
     void finish();
+    std::string getSessionDir() const;
 
   private:
     void goHome();

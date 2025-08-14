@@ -302,14 +302,14 @@ namespace behav3d::motion_controller
       status = send_goal_future.wait_for(std::chrono::seconds(1));
       if (status == std::future_status::timeout)
       {
-        RCLCPP_INFO(this->get_logger(), "[PMC] Waiting for sequence goal acceptance...");
+        MC_INFO(this, "Waiting for sequence goal acceptance...");
       }
     } while (status != std::future_status::ready);
 
     auto goal_handle = send_goal_future.get();
     if (!goal_handle)
     {
-      RCLCPP_ERROR(this->get_logger(), "[PMC] planSequence: goal rejected");
+      MC_ERROR(this, "planSequence: goal rejected");
       return nullptr;
     }
 
@@ -320,14 +320,14 @@ namespace behav3d::motion_controller
       status = result_future.wait_for(std::chrono::seconds(1));
       if (status == std::future_status::timeout)
       {
-        RCLCPP_INFO(this->get_logger(), "[PMC] Waiting for sequence result...");
+        MC_INFO(this, "Waiting for sequence result...");
       }
     } while (status != std::future_status::ready);
 
     auto wrapped_result = result_future.get();
     if (!wrapped_result.result)
     {
-      RCLCPP_ERROR(this->get_logger(), "[PMC] planSequence: empty result pointer");
+      MC_ERROR(this, "planSequence: empty result pointer");
       return nullptr;
     }
     const auto &response = wrapped_result.result->response;
@@ -508,7 +508,7 @@ namespace behav3d::motion_controller
       const geometry_msgs::msg::PoseStamped &pose,
       double timeout) const
   {
-    PMC_DEBUG(this, "computeIK: pose=(%.3f,%.3f,%.3f)",
+    MC_DEBUG(this, "computeIK: pose=(%.3f,%.3f,%.3f)",
               pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
 
     const auto *jmg = move_group_.getRobotModel()->getJointModelGroup(move_group_.getName());
@@ -519,7 +519,7 @@ namespace behav3d::motion_controller
     bool found = state->setFromIK(jmg, pose.pose, eef_link_, timeout);
     if (!found)
     {
-      PMC_DEBUG(this, "computeIK: no IK solution within %.3f s", timeout);
+      MC_DEBUG(this, "computeIK: no IK solution within %.3f s", timeout);
       return nullptr;
     }
     return state;
@@ -529,7 +529,7 @@ namespace behav3d::motion_controller
   geometry_msgs::msg::PoseStamped
   PilzMotionController::computeFK(const moveit::core::RobotState &state) const
   {
-    PMC_DEBUG(this, "computeFK called");
+    MC_DEBUG(this, "computeFK called");
 
     geometry_msgs::msg::PoseStamped ps;
     const std::string pf = planningFrame();
@@ -545,7 +545,7 @@ namespace behav3d::motion_controller
   bool PilzMotionController::isReachable(
       const geometry_msgs::msg::PoseStamped &pose) const
   {
-    PMC_DEBUG(this, "isReachable: checking pose (%.3f,%.3f,%.3f)",
+    MC_DEBUG(this, "isReachable: checking pose (%.3f,%.3f,%.3f)",
               pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
 
     // Use a short IK timeout; reachable if we find a solution

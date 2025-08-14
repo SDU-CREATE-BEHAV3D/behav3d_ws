@@ -73,7 +73,8 @@ public:
     // Declare home_joints_deg parameter with empty default
     std::vector<double> home_joints_deg = this->declare_parameter<std::vector<double>>(
         "home_joints_deg", std::vector<double>{});
-    if (home_joints_deg.empty()) {
+    if (home_joints_deg.empty())
+    {
       home_joints_deg = {45.0, -120.0, 120.0, -90.0, 90.0, -180.0};
     }
     home_joints_rad_.reserve(home_joints_deg.size());
@@ -145,54 +146,58 @@ private:
 
     // Run Hand-Eye calibration for this session
     const std::string session_dir = sess_->getSessionDir();
-    if (!session_dir.empty()) {
-      calib_->set_parameters({ rclcpp::Parameter("session_dir", session_dir) });
-      if (!calib_->run()) {
+    if (!session_dir.empty())
+    {
+      calib_->set_parameters({rclcpp::Parameter("session_dir", session_dir)});
+      if (!calib_->run())
+      {
         RCLCPP_WARN(this->get_logger(), "HandEyeCalibration run() reported failure for session: %s", session_dir.c_str());
       }
-    } else {
+    }
+    else
+    {
       RCLCPP_WARN(this->get_logger(), "Session directory is empty; skipping HandEyeCalibration.");
     }
   }
+};
+  // ---------------------------------------------------------------------------
+  //                                   main()
+  // ---------------------------------------------------------------------------
+  int main(int argc, char **argv)
+  {
+    rclcpp::init(argc, argv);
 
-// ---------------------------------------------------------------------------
-//                                   main()
-// ---------------------------------------------------------------------------
-int main(int argc, char **argv)
-{
-  rclcpp::init(argc, argv);
+    rclcpp::NodeOptions controller_opts;
+    controller_opts.use_intra_process_comms(true);
+    auto controller = std::make_shared<PilzMotionController>(controller_opts);
 
-  rclcpp::NodeOptions controller_opts;
-  controller_opts.use_intra_process_comms(true);
-  auto controller = std::make_shared<PilzMotionController>(controller_opts);
+    rclcpp::NodeOptions visualizer_opts;
+    visualizer_opts.use_intra_process_comms(true);
+    auto visualizer = std::make_shared<MotionVisualizer>(visualizer_opts);
 
-  rclcpp::NodeOptions visualizer_opts;
-  visualizer_opts.use_intra_process_comms(true);
-  auto visualizer = std::make_shared<MotionVisualizer>(visualizer_opts);
+    rclcpp::NodeOptions camera_opts;
+    camera_opts.use_intra_process_comms(true);
+    auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(camera_opts);
 
-  rclcpp::NodeOptions camera_opts;
-  camera_opts.use_intra_process_comms(true);
-  auto camera = std::make_shared<behav3d::camera_manager::CameraManager>(camera_opts);
+    rclcpp::NodeOptions session_opts;
+    session_opts.use_intra_process_comms(true);
+    auto sess = std::make_shared<behav3d::session_manager::SessionManager>(session_opts, controller, visualizer, camera);
 
-  rclcpp::NodeOptions session_opts;
-  session_opts.use_intra_process_comms(true);
-  auto sess = std::make_shared<behav3d::session_manager::SessionManager>(session_opts, controller, visualizer, camera);
+    rclcpp::NodeOptions calib_opts;
+    calib_opts.use_intra_process_comms(true);
+    auto calib = std::make_shared<behav3d::handeye::HandeyeCalibration>(calib_opts);
 
-  rclcpp::NodeOptions calib_opts;
-  calib_opts.use_intra_process_comms(true);
-  auto calib = std::make_shared<behav3d::handeye::HandeyeCalibration>(calib_opts);
+    auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera, sess, calib);
 
-  auto demo = std::make_shared<Behav3dDemo>(controller, visualizer, camera, sess, calib);
+    rclcpp::executors::MultiThreadedExecutor exec;
+    exec.add_node(controller);
+    exec.add_node(visualizer);
+    exec.add_node(camera);
+    exec.add_node(demo);
+    exec.add_node(sess);
+    exec.add_node(calib);
+    exec.spin();
 
-  rclcpp::executors::MultiThreadedExecutor exec;
-  exec.add_node(controller);
-  exec.add_node(visualizer);
-  exec.add_node(camera);
-  exec.add_node(demo);
-  exec.add_node(sess);
-  exec.add_node(calib);
-  exec.spin();
-
-  rclcpp::shutdown();
-  return 0;
-}
+    rclcpp::shutdown();
+    return 0;
+  }

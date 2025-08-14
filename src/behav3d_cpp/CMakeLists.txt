@@ -63,26 +63,6 @@ target_link_libraries(${PROJECT_NAME}
   yaml-cpp
 )
 
-# ─── Hand-eye executable target ─────────────────────────────────────────────
-add_executable(handeye_calibration_cpp
-  src/handeye_main.cpp
-)
-
-ament_target_dependencies(handeye_calibration_cpp
-  rclcpp
-  geometry_msgs
-  sensor_msgs
-  std_srvs
-  cv_bridge
-)
-
-# Link against our shared library so we reuse implementations
- target_link_libraries(handeye_calibration_cpp
-  ${PROJECT_NAME}
-)
-
-# Install the binary into the standard ROS 2 location for this package
-install(TARGETS handeye_calibration_cpp DESTINATION lib/${PROJECT_NAME})
 
 # ─── Install ─────────────────────────────────────────────────────
 install(
