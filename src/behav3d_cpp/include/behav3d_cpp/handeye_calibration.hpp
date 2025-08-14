@@ -1,100 +1,77 @@
-#include "behav3d_cpp/handeye_calibration.hpp"
+#pragma once
 
-#include <opencv2/aruco.hpp>
-#include <yaml-cpp/yaml.h>
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+
+#include <opencv2/core.hpp>
+#include <opencv2/aruco/charuco.hpp>
+
+#include <string>
+#include <vector>
+#include <filesystem>
+
+#include <nlohmann/json.hpp>
 
 namespace behav3d::handeye
 {
 
-bool HandeyeCalibration::load_camera_calib(const std::filesystem::path &session_dir)
+class HandeyeCalibration : public rclcpp::Node
 {
-  const std::filesystem::path calib_dir = session_dir / "calib";
-  if (!std::filesystem::exists(calib_dir)) return false;
+public:
+  explicit HandeyeCalibration(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
-  // Candidate filenames in priority order
-  const std::vector<std::string> candidates = {
-    "color_intrinsics.yaml",   // OpenCV format (preferred)
-    "intrinsics.yaml",         // OpenCV format (fallback)
-    "color_camera_info.yaml",  // ROS CameraInfo format
-    "camera_info.yaml",        // ROS CameraInfo format (generic)
-    "ir_camera_info.yaml"      // ROS CameraInfo format (if color not present)
+  // Full pipeline entry-point. Returns true on success, false otherwise.
+  bool run();
+
+private:
+  struct BoardSpec
+  {
+    int   squares_x    = 5;
+    int   squares_y    = 7;
+    double square_len_m = 0.030;  // meters
+    double marker_len_m = 0.022;  // meters
+    int   aruco_dict_id = cv::aruco::DICT_5X5_1000;
+  } board_;
+
+  struct CaptureItem
+  {
+    bool capture_ok = false;
+    std::string color_path;                   // absolute or session-relative
+    geometry_msgs::msg::PoseStamped tool0_pose; // base->tool0 pose
   };
 
-  auto try_read_opencv = [&](const std::filesystem::path &p) -> bool {
-    cv::FileStorage fsr(p.string(), cv::FileStorage::READ);
-    if (!fsr.isOpened()) return false;
-    cv::Mat K, D;
-    try {
-      fsr["camera_matrix"] >> K;
-      fsr["distortion_coefficients"] >> D;
-      fsr.release();
-      if (K.empty() || K.rows != 3 || K.cols != 3) return false;
-      // D can be 1xN or Nx1; accept any length >= 4
-      if (D.empty() || (D.total() < 4)) return false;
-      K_ = K; D_ = D.reshape(1, (int)D.total()); // make it Nx1
-      return true;
-    } catch (...) {
-      return false;
-    }
-  };
+  // Parameters
+  std::string output_root_      = "~/behav3d_ws/captures"; // where session-* live
+  std::string session_dir_param_ = "";                     // explicit session dir
+  bool visualize_               = true;
 
-  auto try_read_camerainfo = [&](const std::filesystem::path &p) -> bool {
-    try {
-      YAML::Node root = YAML::LoadFile(p.string());
-      // Typical ROS camera_info layout
-      YAML::Node km = root["camera_matrix"];     // has rows, cols, data (size 9)
-      YAML::Node dm = root["distortion_coefficients"]; // has rows, cols, data (size 4/5/8...)
+  // OpenCV board/dictionary
+  cv::Ptr<cv::aruco::Dictionary>  dict_;
+  cv::Ptr<cv::aruco::CharucoBoard> board_obj_;
 
-      // Some dumps might use short keys K / D
-      if (!km) km = root["K"]; // if present as a flat array size 9
-      if (!dm) dm = root["D"]; // flat array
+  // Camera intrinsics
+  cv::Mat K_;  // 3x3
+  cv::Mat D_;  // distortion coefficients
 
-      std::vector<double> kdata;
-      if (km) {
-        if (km["data"]) {
-          kdata = km["data"].as<std::vector<double>>();
-        } else if (km.IsSequence()) {
-          kdata = km.as<std::vector<double>>();
-        }
-      }
-      if (kdata.size() != 9) return false;
+  // Helpers (steps of the pipeline)
+  static std::string expand_user(const std::string &p);
+  std::filesystem::path resolve_session_dir() const;
+  bool load_manifest(const std::filesystem::path &session_dir, std::vector<CaptureItem> &items);
+  bool load_camera_calib(const std::filesystem::path &session_dir);
+  bool detect_charuco(const cv::Mat &img, cv::Mat &rvec, cv::Mat &tvec, bool visualize);
 
-      std::vector<double> ddata;
-      if (dm) {
-        if (dm["data"]) {
-          ddata = dm["data"].as<std::vector<double>>();
-        } else if (dm.IsSequence()) {
-          ddata = dm.as<std::vector<double>>();
-        }
-      }
-      if (ddata.size() < 4) return false;
+  static cv::Mat quat_to_R(const geometry_msgs::msg::Pose &p);
+  static cv::Mat vec3_to_t(const geometry_msgs::msg::Pose &p);
 
-      // Fill cv::Mat
-      K_ = (cv::Mat_<double>(3,3) <<
-        kdata[0], kdata[1], kdata[2],
-        kdata[3], kdata[4], kdata[5],
-        kdata[6], kdata[7], kdata[8]);
+  static bool calibrate_handeye(const std::vector<cv::Mat> &R_gripper2base,
+                                const std::vector<cv::Mat> &t_gripper2base,
+                                const std::vector<cv::Mat> &R_target2cam,
+                                const std::vector<cv::Mat> &t_target2cam,
+                                cv::Mat &R_cam2gripper,
+                                cv::Mat &t_cam2gripper);
 
-      D_ = cv::Mat((int)ddata.size(), 1, CV_64F);
-      for (int i = 0; i < (int)ddata.size(); ++i) D_.at<double>(i,0) = ddata[i];
-
-      return true;
-    } catch (...) {
-      return false;
-    }
-  };
-
-  for (const auto &name : candidates) {
-    const std::filesystem::path p = calib_dir / name;
-    if (!std::filesystem::exists(p)) continue;
-    if (try_read_opencv(p) || try_read_camerainfo(p)) {
-      RCLCPP_INFO(get_logger(), "[HandEye] Loaded intrinsics from %s", p.string().c_str());
-      return true;
-    }
-  }
-
-  RCLCPP_ERROR(get_logger(), "[HandEye] No usable intrinsics found under %s", calib_dir.string().c_str());
-  return false;
-}
+  bool write_outputs(const std::filesystem::path &session_dir,
+                     const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper) const;
+};
 
 } // namespace behav3d::handeye
