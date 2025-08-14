@@ -4,7 +4,7 @@
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<behav3d::handeye::HandeyeCalibration>();
+    auto node = std::make_shared<behav3d::handeye::HandeyeCalibration>(rclcpp::NodeOptions{});
     const bool ok = node->run();
     rclcpp::shutdown();
     return ok ? 0 : 1;
