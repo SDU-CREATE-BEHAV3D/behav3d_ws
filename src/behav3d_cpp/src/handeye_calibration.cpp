@@ -249,7 +249,7 @@ bool HandeyeCalibration::detect_charuco(const cv::Mat &img,
     cv::aruco::drawDetectedMarkers(vis, corners, ids);
     cv::drawFrameAxes(vis, K_, D_, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
     cv::imshow("charuco", vis);
-    cv::waitKey(2000);
+    cv::waitKey(1000);
   }
   return true;
 }
