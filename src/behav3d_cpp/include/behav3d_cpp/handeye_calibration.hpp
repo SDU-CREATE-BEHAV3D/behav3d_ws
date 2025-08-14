@@ -71,7 +71,8 @@ private:
                                 cv::Mat &t_cam2gripper);
 
   bool write_outputs(const std::filesystem::path &session_dir,
-                     const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper) const;
+                     const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper,
+                     size_t pairs_used) const;
 };
 
 } // namespace behav3d::handeye

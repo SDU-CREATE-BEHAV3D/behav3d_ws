@@ -114,7 +114,7 @@ bool HandeyeCalibration::run()
   }
 
   // 6) Write outputs
-  if (!write_outputs(session_dir, R_cam2gripper, t_cam2gripper)) return false;
+  if (!write_outputs(session_dir, R_cam2gripper, t_cam2gripper, used)) return false;
 
   RCLCPP_INFO(get_logger(), "[HandEye] Done. Used %zu image/pose pairs.", used);
   return true;
@@ -282,18 +282,77 @@ bool HandeyeCalibration::calibrate_handeye(const std::vector<cv::Mat> &R_gripper
 }
 
 bool HandeyeCalibration::write_outputs(const fs::path &session_dir,
-                                       const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper) const
+                                       const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper,
+                                       size_t pairs_used) const
 {
   const fs::path calib_dir = session_dir / "calib";
   std::error_code ec; fs::create_directories(calib_dir, ec);
 
-  // OpenCV YAML
+  // Get current time ISO string
+  auto now = std::chrono::system_clock::now();
+  std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+  char buf[64];
+  std::strftime(buf, sizeof(buf), "%FT%TZ", std::gmtime(&now_c));
+  std::string iso_date(buf);
+
+  // Convert rotation matrix to quaternion and RPY
+  cv::Mat R = R_cam2gripper;
+  double qw, qx, qy, qz;
+  {
+    double trace = R.at<double>(0,0) + R.at<double>(1,1) + R.at<double>(2,2);
+    if (trace > 0) {
+      double s = 0.5 / std::sqrt(trace + 1.0);
+      qw = 0.25 / s;
+      qx = (R.at<double>(2,1) - R.at<double>(1,2)) * s;
+      qy = (R.at<double>(0,2) - R.at<double>(2,0)) * s;
+      qz = (R.at<double>(1,0) - R.at<double>(0,1)) * s;
+    } else {
+      if (R.at<double>(0,0) > R.at<double>(1,1) && R.at<double>(0,0) > R.at<double>(2,2)) {
+        double s = 2.0 * std::sqrt(1.0 + R.at<double>(0,0) - R.at<double>(1,1) - R.at<double>(2,2));
+        qw = (R.at<double>(2,1) - R.at<double>(1,2)) / s;
+        qx = 0.25 * s;
+        qy = (R.at<double>(0,1) + R.at<double>(1,0)) / s;
+        qz = (R.at<double>(0,2) + R.at<double>(2,0)) / s;
+      } else if (R.at<double>(1,1) > R.at<double>(2,2)) {
+        double s = 2.0 * std::sqrt(1.0 + R.at<double>(1,1) - R.at<double>(0,0) - R.at<double>(2,2));
+        qw = (R.at<double>(0,2) - R.at<double>(2,0)) / s;
+        qx = (R.at<double>(0,1) + R.at<double>(1,0)) / s;
+        qy = 0.25 * s;
+        qz = (R.at<double>(1,2) + R.at<double>(2,1)) / s;
+      } else {
+        double s = 2.0 * std::sqrt(1.0 + R.at<double>(2,2) - R.at<double>(0,0) - R.at<double>(1,1));
+        qw = (R.at<double>(1,0) - R.at<double>(0,1)) / s;
+        qx = (R.at<double>(0,2) + R.at<double>(2,0)) / s;
+        qy = (R.at<double>(1,2) + R.at<double>(2,1)) / s;
+        qz = 0.25 * s;
+      }
+    }
+  }
+
+  // Convert rotation matrix to roll, pitch, yaw
+  double roll, pitch, yaw;
+  {
+    roll = std::atan2(R.at<double>(2,1), R.at<double>(2,2));
+    pitch = std::atan2(-R.at<double>(2,0), std::sqrt(R.at<double>(2,1)*R.at<double>(2,1) + R.at<double>(2,2)*R.at<double>(2,2)));
+    yaw = std::atan2(R.at<double>(1,0), R.at<double>(0,0));
+  }
+
+  // YAML export with new format
   const fs::path yaml = calib_dir / "handeye_cam_to_gripper.yaml";
   {
     cv::FileStorage fsw(yaml.string(), cv::FileStorage::WRITE);
-    fsw << "R_cam2gripper" << R_cam2gripper;
-    fsw << "t_cam2gripper" << t_cam2gripper;
-    fsw << "representation" << "T_cam_gripper";
+    fsw << "date" << iso_date;
+    fsw << "method" << "handeye_tsai";
+    fsw << "pairs_used" << static_cast<int>(pairs_used);
+    fsw << "reprojection_rms_px" << 0.0;
+
+    fsw << "color_optical_calibrated" << "{";
+    fsw << "parent" << "gripper";
+    fsw << "child" << "color_optical";
+    fsw << "translation" << "[:" << t_cam2gripper.at<double>(0) << t_cam2gripper.at<double>(1) << t_cam2gripper.at<double>(2) << "]";
+    fsw << "rotation_quat" << "[:" << qx << qy << qz << qw << "]";
+    fsw << "rotation_rpy" << "[:" << roll << pitch << yaw << "]";
+    fsw << "}";
     fsw.release();
   }
 
