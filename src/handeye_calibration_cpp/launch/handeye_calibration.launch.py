@@ -15,6 +15,7 @@ def generate_launch_description():
 
     output_dir_arg = DeclareLaunchArgument(
         'output_dir',
+        default_value='',
         description='Root directory containing session-* folders (used when session_dir is empty).'
     )
 

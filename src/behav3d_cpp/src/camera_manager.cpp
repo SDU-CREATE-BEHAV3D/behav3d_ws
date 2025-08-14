@@ -172,8 +172,8 @@ namespace behav3d::camera_manager
 
     void CameraManager::initSubscriptions()
     {
-        auto qos = rclcpp::SensorDataQoS();
-        qos.keep_last(20);
+        auto qos = rclcpp::SystemDefaultsQoS();
+        // qos.keep_last(20);
 
         sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
             color_topic_, qos, std::bind(&CameraManager::onColor, this, _1));
@@ -446,6 +446,7 @@ namespace behav3d::camera_manager
 
             if (color)
             {
+                CM_INFO(this, "buildSnapshot: color frame received");
                 out.color_raw = toBgr(*color);
 
                 out.has_color = !out.color_raw.empty();
@@ -512,9 +513,10 @@ namespace behav3d::camera_manager
             // Common color encodings
             if (msg.encoding == enc::RGB8)
             {
-                auto rgb = cv_bridge::toCvCopy(msg, enc::RGB8)->image;
-                cv::Mat bgr;
-                cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
+                auto bgr = cv_bridge::toCvCopy(msg, enc::BGR8)->image;
+                CM_INFO(this, "Converting => Color encoding '%s' (channels=%d)", msg.encoding.c_str(), bgr.channels());
+                // cv::Mat bgr;
+                // cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
                 return bgr;
             }
             if (msg.encoding == enc::BGRA8)
