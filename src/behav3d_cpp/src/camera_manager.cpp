@@ -27,13 +27,15 @@
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/core.hpp>
 
+// We still include yaml-cpp via util.hpp, but we no longer use it in writeCalibrationYaml.
 #include <cv_bridge/cv_bridge.hpp>
 #include <sensor_msgs/image_encodings.hpp>
 
 #define CM_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[CameraManager] " fmt, ##__VA_ARGS__)
-#define CM_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[CameraManager] " fmt, ##__VA_ARGS__)
-#define CM_WARN(node, fmt, ...) RCLCPP_WARN((node)->get_logger(), "[CameraManager] " fmt, ##__VA_ARGS__)
+#define CM_INFO(node, fmt, ...)  RCLCPP_INFO((node)->get_logger(),  "[CameraManager] " fmt, ##__VA_ARGS__)
+#define CM_WARN(node, fmt, ...)  RCLCPP_WARN((node)->get_logger(),  "[CameraManager] " fmt, ##__VA_ARGS__)
 #define CM_ERROR(node, fmt, ...) RCLCPP_ERROR((node)->get_logger(), "[CameraManager] " fmt, ##__VA_ARGS__)
 
 namespace fs = std::filesystem;
@@ -173,7 +175,6 @@ namespace behav3d::camera_manager
     void CameraManager::initSubscriptions()
     {
         auto qos = rclcpp::SystemDefaultsQoS();
-        // qos.keep_last(20);
 
         sub_color_ = this->create_subscription<sensor_msgs::msg::Image>(
             color_topic_, qos, std::bind(&CameraManager::onColor, this, _1));
@@ -195,7 +196,6 @@ namespace behav3d::camera_manager
             ir_info_topic_, qos, std::bind(&CameraManager::onIrInfo, this, _1));
         CM_INFO(this, "Subscribed to ir_info: %s", ir_info_topic_.c_str());
 
-        // Optional aligned topics (subscribe even if empty; callbacks just won't fire if not published)
         if (!d2c_depth_topic_.empty())
         {
             sub_d2c_ = this->create_subscription<sensor_msgs::msg::Image>(
@@ -321,7 +321,6 @@ namespace behav3d::camera_manager
 
         if (write_yaml)
         {
-            // Only write calibration YAMLs when an active session directory is set
             if (session_dir_.empty())
             {
                 CM_WARN(this, "getCalibration(write_yaml=true): no active session_dir — skipping YAML write");
@@ -335,11 +334,11 @@ namespace behav3d::camera_manager
                 {
                     const std::string f_color = (dir_calib_ / "color_intrinsics.yaml").string();
                     const std::string f_depth = (dir_calib_ / "depth_intrinsics.yaml").string();
-                    const std::string f_ir = (dir_calib_ / "ir_intrinsics.yaml").string();
+                    const std::string f_ir    = (dir_calib_ / "ir_intrinsics.yaml").string();
 
                     bool ok_color = writeCalibrationYaml(color, f_color);
                     bool ok_depth = writeCalibrationYaml(depth, f_depth);
-                    bool ok_ir = writeCalibrationYaml(ir, f_ir);
+                    bool ok_ir    = writeCalibrationYaml(ir,    f_ir);
 
                     if (ok_color && ok_depth && ok_ir)
                     {
@@ -347,12 +346,9 @@ namespace behav3d::camera_manager
                     }
                     else
                     {
-                        if (!ok_color)
-                            CM_ERROR(this, "Failed to write %s", f_color.c_str());
-                        if (!ok_depth)
-                            CM_ERROR(this, "Failed to write %s", f_depth.c_str());
-                        if (!ok_ir)
-                            CM_ERROR(this, "Failed to write %s", f_ir.c_str());
+                        if (!ok_color) CM_ERROR(this, "Failed to write %s", f_color.c_str());
+                        if (!ok_depth) CM_ERROR(this, "Failed to write %s", f_depth.c_str());
+                        if (!ok_ir)    CM_ERROR(this, "Failed to write %s", f_ir.c_str());
                     }
                 }
                 catch (const std::exception &e)
@@ -389,18 +385,9 @@ namespace behav3d::camera_manager
 
         try
         {
-            if (depth)
-            {
-                out.stamp = depth->header.stamp;
-            }
-            else if (color)
-            {
-                out.stamp = color->header.stamp;
-            }
-            else if (ir)
-            {
-                out.stamp = ir->header.stamp;
-            }
+            if (depth)      { out.stamp = depth->header.stamp; }
+            else if (color) { out.stamp = color->header.stamp; }
+            else if (ir)    { out.stamp = ir->header.stamp; }
 
             if (depth)
             {
@@ -482,12 +469,9 @@ namespace behav3d::camera_manager
                     out.has_c2d = false;
             }
 
-            if (ci)
-                out.color_info = *ci;
-            if (di)
-                out.depth_info = *di;
-            if (ii)
-                out.ir_info = *ii;
+            if (ci) out.color_info = *ci;
+            if (di) out.depth_info = *di;
+            if (ii) out.ir_info    = *ii;
 
             return true;
         }
@@ -504,76 +488,65 @@ namespace behav3d::camera_manager
         namespace enc = sensor_msgs::image_encodings;
         try
         {
-            // Fast path: already BGR8
             if (msg.encoding == enc::BGR8)
             {
                 return cv_bridge::toCvCopy(msg, enc::BGR8)->image;
             }
 
-            // Common color encodings
             if (msg.encoding == enc::RGB8)
             {
+                // cv_bridge can convert RGB8->BGR8 directly
                 auto bgr = cv_bridge::toCvCopy(msg, enc::BGR8)->image;
-                CM_INFO(this, "Converting => Color encoding '%s' (channels=%d)", msg.encoding.c_str(), bgr.channels());
-                // cv::Mat bgr;
-                // cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
+                CM_INFO(this, "toBgr: converted from RGB8 to BGR8 (channels=%d)", bgr.channels());
                 return bgr;
             }
             if (msg.encoding == enc::BGRA8)
             {
                 auto bgra = cv_bridge::toCvCopy(msg, enc::BGRA8)->image;
-                cv::Mat bgr;
-                cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
+                cv::Mat bgr; cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
                 return bgr;
             }
             if (msg.encoding == enc::RGBA8)
             {
                 auto rgba = cv_bridge::toCvCopy(msg, enc::RGBA8)->image;
-                cv::Mat bgr;
-                cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
+                cv::Mat bgr; cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
                 return bgr;
             }
 
-            // Try the generic conversion to BGR8 (cv_bridge will throw if incompatible)
+            // Try a generic conversion to BGR8
             try
             {
                 return cv_bridge::toCvCopy(msg, enc::BGR8)->image;
             }
             catch (const cv_bridge::Exception &)
             {
-                // Fall through to best-effort path below
+                // Fall through to best-effort path
             }
 
-            // Best-effort: try to get any cv::Mat and then infer a conversion
             auto any = cv_bridge::toCvCopy(msg)->image;
             if (any.empty())
                 return cv::Mat();
 
             if (any.channels() == 1)
             {
-                cv::Mat bgr;
-                cv::cvtColor(any, bgr, cv::COLOR_GRAY2BGR);
+                cv::Mat bgr; cv::cvtColor(any, bgr, cv::COLOR_GRAY2BGR);
                 return bgr;
             }
             if (any.channels() == 3)
             {
-                // Heuristic: if encoding string mentions 'rgb' assume RGB order, else assume BGR
                 std::string enc_lower = msg.encoding;
-                std::transform(enc_lower.begin(), enc_lower.end(), enc_lower.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+                std::transform(enc_lower.begin(), enc_lower.end(), enc_lower.begin(),
+                               [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
                 if (enc_lower.find("rgb") != std::string::npos && enc_lower.find("bgr") == std::string::npos)
                 {
-                    cv::Mat bgr;
-                    cv::cvtColor(any, bgr, cv::COLOR_RGB2BGR);
+                    cv::Mat bgr; cv::cvtColor(any, bgr, cv::COLOR_RGB2BGR);
                     return bgr;
                 }
-                // Already BGR-like
-                return any;
+                return any; // assume already BGR-ish
             }
             if (any.channels() == 4)
             {
-                // Default to BGRA->BGR; if original is RGBA, the earlier branch should have caught it
-                cv::Mat bgr;
-                cv::cvtColor(any, bgr, cv::COLOR_BGRA2BGR);
+                cv::Mat bgr; cv::cvtColor(any, bgr, cv::COLOR_BGRA2BGR);
                 return bgr;
             }
 
@@ -590,51 +563,29 @@ namespace behav3d::camera_manager
     cv::Mat CameraManager::toGray(const sensor_msgs::msg::Image &msg)
     {
         namespace enc = sensor_msgs::image_encodings;
-        // Accept common 1-channel grayscale encodings
-        if (msg.encoding == enc::MONO16)
-        {
-            return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
-        }
-        if (msg.encoding == enc::MONO8)
-        {
-            return cv_bridge::toCvCopy(msg, enc::MONO8)->image;
-        }
-        if (msg.encoding == enc::TYPE_16UC1)
-        {
-            return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image; // treat as 16U mono
-        }
-        if (msg.encoding == enc::TYPE_8UC1)
-        {
-            return cv_bridge::toCvCopy(msg, enc::TYPE_8UC1)->image; // treat as 8U mono
-        }
+        if (msg.encoding == enc::MONO16)   return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
+        if (msg.encoding == enc::MONO8)    return cv_bridge::toCvCopy(msg, enc::MONO8)->image;
+        if (msg.encoding == enc::TYPE_16UC1) return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image;
+        if (msg.encoding == enc::TYPE_8UC1)  return cv_bridge::toCvCopy(msg, enc::TYPE_8UC1)->image;
         return cv::Mat();
     }
 
     cv::Mat CameraManager::toUint16(const sensor_msgs::msg::Image &msg)
     {
         namespace enc = sensor_msgs::image_encodings;
-        // 16-bit depth in millimeters
         if (msg.encoding == enc::TYPE_16UC1)
-        {
             return cv_bridge::toCvCopy(msg, enc::TYPE_16UC1)->image;
-        }
-        // Some drivers expose depth as MONO16; accept it as-is
         if (msg.encoding == enc::MONO16)
-        {
             return cv_bridge::toCvCopy(msg, enc::MONO16)->image;
-        }
-        // Depth in meters (float32) -> convert to uint16 millimeters
         if (msg.encoding == enc::TYPE_32FC1)
         {
             cv::Mat f = cv_bridge::toCvCopy(msg, enc::TYPE_32FC1)->image;
-            if (f.empty())
-                return cv::Mat();
+            if (f.empty()) return cv::Mat();
             cv::patchNaNs(f, 0.0f);
             cv::Mat mm_f32 = f * 1000.0f; // meters -> millimeters
             cv::threshold(mm_f32, mm_f32, 65535.0, 65535.0, cv::THRESH_TRUNC);
-            mm_f32.setTo(0.0f, mm_f32 < 0.0f); // clamp negatives
-            cv::Mat mm_u16;
-            mm_f32.convertTo(mm_u16, CV_16UC1);
+            mm_f32.setTo(0.0f, mm_f32 < 0.0f);
+            cv::Mat mm_u16; mm_f32.convertTo(mm_u16, CV_16UC1);
             return mm_u16;
         }
         return cv::Mat();
@@ -666,43 +617,67 @@ namespace behav3d::camera_manager
         return oss.str();
     }
 
+    // --- CHANGED: Write OpenCV-FileStorage style intrinsics YAML ---
     bool CameraManager::writeCalibrationYaml(const sensor_msgs::msg::CameraInfo &info,
-                                             const std::string &path)
+                                            const std::string &path)
     {
-        YAML::Node node;
-        node["image_width"] = info.width;
-        node["image_height"] = info.height;
-        node["camera_name"] = info.header.frame_id;
+    try
+    {
+        // Prepare matrices from CameraInfo
+        cv::Mat K(3, 3, CV_64F);
+        for (int i = 0; i < 9; ++i)
+        K.at<double>(i/3, i%3) = (i < static_cast<int>(info.k.size())) ? info.k[i] : 0.0;
 
-        auto makeMat = [](int rows, int cols, const auto &vec)
+        const int dcount = static_cast<int>(info.d.size());
+        cv::Mat D = (dcount > 0) ? cv::Mat(1, dcount, CV_64F) : cv::Mat(1, 5, CV_64F, cv::Scalar(0));
+        for (int i = 0; i < dcount; ++i) D.at<double>(0, i) = info.d[i];
+
+        cv::Mat R(3, 3, CV_64F);
+        for (int i = 0; i < 9; ++i)
+        R.at<double>(i/3, i%3) = (i < static_cast<int>(info.r.size())) ? info.r[i] : 0.0;
+
+        cv::Mat P(3, 4, CV_64F);
+        for (int i = 0; i < 12; ++i)
+        P.at<double>(i/4, i%4) = (i < static_cast<int>(info.p.size())) ? info.p[i] : 0.0;
+
+        // Write using cv::FileStorage (produces !!opencv-matrix blocks)
+        cv::FileStorage fs(path, cv::FileStorage::WRITE);
+        if (!fs.isOpened())
         {
-            YAML::Node m;
-            // OpenCV matrix header fields
-            m["rows"] = rows;
-            m["cols"] = cols;
-            m["dt"] = "d"; // double
-            YAML::Node data(YAML::NodeType::Sequence);
-            for (const auto &v : vec)
-                data.push_back(v);
-            m["data"] = data;
-            m.SetTag("opencv-matrix");
-            return m;
-        };
+        RCLCPP_ERROR(rclcpp::get_logger("camera_manager"),
+                    "writeCalibrationYaml: cannot open '%s' for writing", path.c_str());
+        return false;
+        }
 
-        node["camera_matrix"] = makeMat(3, 3, info.k);
-        node["camera_matrix"];
-        node["distortion_model"] = info.distortion_model;
+        const std::string cam_name = !info.header.frame_id.empty() ? info.header.frame_id : "camera";
 
-        node["distortion_coefficients"] = makeMat(1, static_cast<int>(info.d.size()), info.d);
-        node["distortion_coefficients"];
+        fs << "image_width"  << static_cast<int>(info.width);
+        fs << "image_height" << static_cast<int>(info.height);
+        fs << "camera_name"  << cam_name;
 
-        node["rectification_matrix"] = makeMat(3, 3, info.r);
-        node["rectification_matrix"];
-        node["projection_matrix"] = makeMat(3, 4, info.p);
-        node["projection_matrix"];
+        fs << "camera_matrix"           << K;
+        fs << "distortion_model"        << (info.distortion_model.empty() ? std::string("plumb_bob")
+                                                                        : info.distortion_model);
+        fs << "distortion_coefficients" << D;
+        fs << "rectification_matrix"    << R;
+        fs << "projection_matrix"       << P;
 
-        return behav3d::util::writeYaml(path, node);
+        fs.release();
+
+        RCLCPP_INFO(rclcpp::get_logger("camera_manager"),
+                    "writeCalibrationYaml: wrote OpenCV YAML to %s (name='%s', D=%d coeffs)",
+                    path.c_str(), cam_name.c_str(), D.cols);
+        return true;
     }
+    catch (const std::exception &e)
+    {
+        RCLCPP_ERROR(rclcpp::get_logger("camera_manager"),
+                    "writeCalibrationYaml: exception while writing '%s': %s",
+                    path.c_str(), e.what());
+        return false;
+    }
+    }
+
 
     void CameraManager::writerThread()
     {
@@ -737,6 +712,7 @@ namespace behav3d::camera_manager
             }
         }
     }
+
     bool CameraManager::initSession(const std::string &session_dir, const std::string &tag)
     {
         (void)tag; // reserved for logging/metadata
@@ -750,15 +726,15 @@ namespace behav3d::camera_manager
         }
         dir_color_ = session_dir_ / "color_raw";
         dir_depth_ = session_dir_ / "depth_raw";
-        dir_ir_ = session_dir_ / "ir_raw";
-        dir_d2c_ = session_dir_ / "depth_to_color";
-        dir_c2d_ = session_dir_ / "color_to_depth";
+        dir_ir_    = session_dir_ / "ir_raw";
+        dir_d2c_   = session_dir_ / "depth_to_color";
+        dir_c2d_   = session_dir_ / "color_to_depth";
         dir_calib_ = session_dir_ / "calib";
         fs::create_directories(dir_color_, ec);
         fs::create_directories(dir_depth_, ec);
-        fs::create_directories(dir_ir_, ec);
-        fs::create_directories(dir_d2c_, ec);
-        fs::create_directories(dir_c2d_, ec);
+        fs::create_directories(dir_ir_,    ec);
+        fs::create_directories(dir_d2c_,   ec);
+        fs::create_directories(dir_c2d_,   ec);
         fs::create_directories(dir_calib_, ec);
 
         snap_seq_.store(0, std::memory_order_relaxed);
