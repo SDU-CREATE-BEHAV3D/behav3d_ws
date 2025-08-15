@@ -21,13 +21,13 @@ def generate_launch_description():
 
     board_squares_x_arg = DeclareLaunchArgument(
         'handeye_board_squares_x',
-        default_value='9',
+        default_value='12',
         description='Number of Charuco board squares along X.'
     )
 
     board_squares_y_arg = DeclareLaunchArgument(
         'handeye_board_squares_y',
-        default_value='12',
+        default_value='9',
         description='Number of Charuco board squares along Y.'
     )
 
