@@ -126,7 +126,7 @@ private:
     const double cap_rad = deg2rad(cap_deg);
     const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
     auto targets = fibonacciSphericalCap(center, radius, cap_rad, n_points);
-    targets = addJitter(targets, 0.01, 5)
+    targets = addJitter(targets, 0.01, 5);
     
     if (targets.empty())
     {
