@@ -795,8 +795,6 @@ namespace behav3d::handeye
     return true;
   }
 
-} // namespace behav3d::handeye
-
   int HandeyeCalibration::arucoDictFromString(const std::string &name)
   {
     std::string s;
@@ -830,7 +828,7 @@ namespace behav3d::handeye
     RCLCPP_WARN(rclcpp::get_logger("handeye_calibration_cpp"), "Unknown aruco dict '%s', defaulting to DICT_5X5_1000", name.c_str());
     return cv::aruco::DICT_5X5_1000;
   }
-
+  
   std::string HandeyeCalibration::arucoDictToString(int dict_id)
   {
     switch(dict_id){
@@ -853,3 +851,5 @@ namespace behav3d::handeye
       default: return "UNKNOWN";
     }
   }
+  
+} // namespace behav3d::handeye
