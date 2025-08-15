@@ -152,8 +152,8 @@ private:
       calib_->set_parameters({
         rclcpp::Parameter("session_dir", session_dir),
         rclcpp::Parameter("output_dir", "/home/lab/behav3d_ws/captures"),       // or whatever root you use
-        rclcpp::Parameter("board_squares_x", 7),                                // int
-        rclcpp::Parameter("board_squares_y", 5),                                // int
+        rclcpp::Parameter("board_squares_x", 5),                                // int
+        rclcpp::Parameter("board_squares_y", 7),                                // int
         rclcpp::Parameter("square_length_m", 0.0288),                           // double
         rclcpp::Parameter("marker_length_m", 0.022),                            // double
         rclcpp::Parameter("aruco_dict_id", 0),                                  // int (DICT_4X4_50)

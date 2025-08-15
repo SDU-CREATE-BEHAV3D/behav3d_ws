@@ -43,22 +43,21 @@ namespace behav3d::handeye
   HandeyeCalibration::HandeyeCalibration(const rclcpp::NodeOptions &options)
       : rclcpp::Node("handeye_calibration_cpp", options)
   {
-    // Parameters (do NOT change any other packages)
-    output_root_ = this->declare_parameter<std::string>("output_dir", output_root_);
-    session_dir_param_ = this->declare_parameter<std::string>("session_dir", "");
-    visualize_ = this->declare_parameter<bool>("visualize", true);
-    visualize_pause_ms_ = this->declare_parameter<int>("visualize_pause_ms", visualize_pause_ms_);
+    output_root_ = this->declare_parameter<std::string>("handeye_output_dir", output_root_);
+    session_dir_param_ = this->declare_parameter<std::string>("handeye_session_dir", "");
 
-    // Hand-eye method ("tsai", "park", "horaud", "daniilidis", "andreff")
-    std::string method_param = this->declare_parameter<std::string>("calibration_method", calib_method_name_);
+    visualize_ = this->declare_parameter<bool>("handeye_visualize", visualize_);
+    visualize_pause_ms_ = this->declare_parameter<int>("handeye_visualize_pause_ms", visualize_pause_ms_);
+
+    std::string method_param = this->declare_parameter<std::string>("handeye_calibration_method", calib_method_name_);
     calib_method_flag_ = methodFromString(method_param);
     calib_method_name_ = methodToString(calib_method_flag_);
 
-    board_.squares_x = this->declare_parameter<int>("board_squares_x", board_.squares_x);
-    board_.squares_y = this->declare_parameter<int>("board_squares_y", board_.squares_y);
-    board_.square_len_m = this->declare_parameter<double>("square_length_m", board_.square_len_m);
-    board_.marker_len_m = this->declare_parameter<double>("marker_length_m", board_.marker_len_m);
-    board_.aruco_dict_id = this->declare_parameter<int>("aruco_dict_id", board_.aruco_dict_id);
+    board_.squares_x = this->declare_parameter<int>("handeye_board_squares_x", board_.squares_x);
+    board_.squares_y = this->declare_parameter<int>("handeye_board_squares_y", board_.squares_y);
+    board_.square_len_m = this->declare_parameter<double>("handeye_square_length_m", board_.square_len_m);
+    board_.marker_len_m = this->declare_parameter<double>("handeye_marker_length_m", board_.marker_len_m);
+    board_.aruco_dict_id = this->declare_parameter<int>("handeye_aruco_dict_id", board_.aruco_dict_id);
 
     dict_ = cv::aruco::getPredefinedDictionary(board_.aruco_dict_id);
     board_obj_ = cv::aruco::CharucoBoard::create(board_.squares_x, board_.squares_y,
@@ -77,6 +76,8 @@ namespace behav3d::handeye
   // ----------------------------------------------------------------------------
   bool HandeyeCalibration::run()
   {
+    getSessionParameters();
+
     // 1) Resolve session directory
     fs::path session_dir = resolve_session_dir();
     if (session_dir.empty())
@@ -119,17 +120,21 @@ namespace behav3d::handeye
       }
 
       cv::Mat img = cv::imread(it.color_path, cv::IMREAD_COLOR);
-      if (img.empty()) {
+      if (img.empty())
+      {
         HE_DEBUG(this, "Item %zu: cv::imread failed for '%s'", dbg_idx, it.color_path.c_str());
         ++dbg_idx;
         continue;
-      } else {
+      }
+      else
+      {
         HE_DEBUG(this, "Item %zu: loaded image %dx%d", dbg_idx, img.cols, img.rows);
       }
 
       cv::Mat rvec, tvec;
       HE_DEBUG(this, "Item %zu: running Charuco detection", dbg_idx);
-      if (!detect_charuco(img, rvec, tvec, visualize_)) {
+      if (!detect_charuco(img, rvec, tvec, visualize_))
+      {
         HE_DEBUG(this, "Item %zu: Charuco detection failed", dbg_idx);
         ++dbg_idx;
         continue;
@@ -197,9 +202,6 @@ namespace behav3d::handeye
 
   fs::path HandeyeCalibration::resolve_session_dir() const
   {
-    std::string session_dir_param = this->get_parameter("session_dir").as_string();
-    std::string output_root_param = this->get_parameter("output_dir").as_string();
-    
     if (!session_dir_param_.empty())
     {
       fs::path sp = expand_user(session_dir_param_);
@@ -229,6 +231,42 @@ namespace behav3d::handeye
       }
     }
     return best;
+  }
+
+  void HandeyeCalibration::getSessionParameters()
+  {
+    // Refresh all runtime-tunable parameters from the parameter server (handeye_* only)
+    session_dir_param_ = this->get_parameter("handeye_session_dir").as_string();
+    output_root_ = this->get_parameter("handeye_output_dir").as_string();
+
+    visualize_ = this->get_parameter("handeye_visualize").as_bool();
+    visualize_pause_ms_ = this->get_parameter("handeye_visualize_pause_ms").as_int();
+
+    board_.squares_x = this->get_parameter("handeye_board_squares_x").as_int();
+    board_.squares_y = this->get_parameter("handeye_board_squares_y").as_int();
+    board_.square_len_m = this->get_parameter("handeye_square_length_m").as_double();
+    board_.marker_len_m = this->get_parameter("handeye_marker_length_m").as_double();
+    board_.aruco_dict_id = this->get_parameter("handeye_aruco_dict_id").as_int();
+
+    // Rebuild dictionary/board in case any of the above changed
+    dict_ = cv::aruco::getPredefinedDictionary(board_.aruco_dict_id);
+    board_obj_ = cv::aruco::CharucoBoard::create(board_.squares_x,
+                                                 board_.squares_y,
+                                                 static_cast<float>(board_.square_len_m),
+                                                 static_cast<float>(board_.marker_len_m),
+                                                 dict_);
+
+    std::string method_param = this->get_parameter("handeye_calibration_method").as_string();
+    calib_method_flag_ = methodFromString(method_param);
+    calib_method_name_ = methodToString(calib_method_flag_);
+
+    HE_DEBUG(this,
+             "Params updated: session_dir='%s', output_dir='%s', method=%s, dict=%d, board=%dx%d, square=%.4f, marker=%.4f, visualize=%s, pause_ms=%d",
+             session_dir_param_.c_str(), output_root_.c_str(),
+             calib_method_name_.c_str(), board_.aruco_dict_id,
+             board_.squares_x, board_.squares_y,
+             board_.square_len_m, board_.marker_len_m,
+             visualize_ ? "true" : "false", visualize_pause_ms_);
   }
 
   bool HandeyeCalibration::load_manifest(const fs::path &session_dir, std::vector<CaptureItem> &items)
@@ -290,24 +328,28 @@ namespace behav3d::handeye
   bool HandeyeCalibration::load_camera_calib(const fs::path &session_dir)
   {
     const fs::path calib_dir = session_dir / "calib";
-    if (!fs::exists(calib_dir)) {
+    if (!fs::exists(calib_dir))
+    {
       HE_ERROR(this, "Calib dir not found: %s", calib_dir.string().c_str());
       return false;
     }
 
     // Preferred file names
     fs::path yaml = calib_dir / "color_intrinsics.yaml";
-    if (!fs::exists(yaml)) {
+    if (!fs::exists(yaml))
+    {
       if (fs::exists(calib_dir / "intrinsics.yaml"))
         yaml = calib_dir / "intrinsics.yaml";
-      else {
+      else
+      {
         HE_ERROR(this, "No intrinsics YAML found in %s", calib_dir.string().c_str());
         return false;
       }
     }
 
     cv::FileStorage fsr(yaml.string(), cv::FileStorage::READ);
-    if (!fsr.isOpened()) {
+    if (!fsr.isOpened())
+    {
       HE_ERROR(this, "Failed to open intrinsics YAML: %s", yaml.string().c_str());
       return false;
     }
@@ -315,24 +357,31 @@ namespace behav3d::handeye
     // Try OpenCV style first: camera_matrix + distortion_coefficients as matrices
     cv::FileNode cm = fsr["camera_matrix"];
     cv::FileNode dc = fsr["distortion_coefficients"];
-    if (!cm.empty() && !dc.empty()) {
+    if (!cm.empty() && !dc.empty())
+    {
       cm >> K_;
       dc >> D_;
-    } else {
+    }
+    else
+    {
       // Fallback to ROS CameraInfo style: sequences K (9 elems) and D (N elems)
       cv::FileNode Knode = fsr["K"];
       cv::FileNode Dnode = fsr["D"];
 
-      if (Knode.isSeq() && (int)Knode.size() == 9) {
+      if (Knode.isSeq() && (int)Knode.size() == 9)
+      {
         K_ = cv::Mat(3, 3, CV_64F);
-        for (int i = 0; i < 9; ++i) {
-          K_.at<double>(i/3, i%3) = (double)Knode[i];
+        for (int i = 0; i < 9; ++i)
+        {
+          K_.at<double>(i / 3, i % 3) = (double)Knode[i];
         }
       }
 
-      if (Dnode.isSeq() && (int)Dnode.size() >= 4) {
+      if (Dnode.isSeq() && (int)Dnode.size() >= 4)
+      {
         D_ = cv::Mat(1, (int)Dnode.size(), CV_64F);
-        for (int i = 0; i < (int)Dnode.size(); ++i) {
+        for (int i = 0; i < (int)Dnode.size(); ++i)
+        {
           D_.at<double>(0, i) = (double)Dnode[i];
         }
       }
@@ -340,11 +389,13 @@ namespace behav3d::handeye
 
     fsr.release();
 
-    if (K_.empty()) {
+    if (K_.empty())
+    {
       HE_ERROR(this, "Intrinsics YAML missing usable camera matrix.");
       return false;
     }
-    if (D_.empty()) {
+    if (D_.empty())
+    {
       // Provide a zero-distortion default if absent
       D_ = cv::Mat::zeros(1, 5, CV_64F);
       HE_WARN(this, "No distortion coefficients found; defaulting to zeros (5).");

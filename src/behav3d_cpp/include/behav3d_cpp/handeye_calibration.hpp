@@ -36,6 +36,7 @@ namespace behav3d::handeye
     explicit HandeyeCalibration(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
     // Full pipeline entry-point. Returns true on success, false otherwise.
+    void getSessionParameters();
     bool run();
 
   private:
