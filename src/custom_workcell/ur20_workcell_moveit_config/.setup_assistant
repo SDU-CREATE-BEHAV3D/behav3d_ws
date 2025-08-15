@@ -7,7 +7,7 @@ moveit_setup_assistant_config:
   package_settings:
     author_name: Lucas
     author_email: luh@iti.sdu.dk
-    generated_timestamp: 1755015116
+    generated_timestamp: 1755242792
   control_xacro:
     command:
       - position
