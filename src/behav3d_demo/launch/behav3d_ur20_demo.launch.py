@@ -166,7 +166,7 @@ def generate_launch_description():
 
     handeye_aruco_dict_id_arg = DeclareLaunchArgument(
         'handeye_aruco_dict_id',
-        default_value='10',
+        default_value='0',
         description='ArUco dict id for hand-eye'
     )
 
