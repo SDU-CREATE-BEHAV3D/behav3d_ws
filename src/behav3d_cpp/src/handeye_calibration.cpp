@@ -105,19 +105,32 @@ namespace behav3d::handeye
     std::vector<cv::Mat> R_target2cam, t_target2cam;
     std::vector<cv::Mat> R_gripper2base, t_gripper2base;
 
+    HE_DEBUG(this, "Scanning %zu captures for images/poses", items.size());
+
     std::size_t used = 0;
     for (const auto &it : items)
     {
+      HE_DEBUG(this, "Item %s: capture_ok=%s, color_path='%s'", it.key.c_str(), it.capture_ok ? "true" : "false", it.color_path.c_str());
       if (!it.capture_ok || it.color_path.empty())
+      {
         continue;
+      }
 
       cv::Mat img = cv::imread(it.color_path, cv::IMREAD_COLOR);
-      if (img.empty())
+      if (img.empty()) {
+        HE_DEBUG(this, "Item %s: cv::imread failed for '%s'", it.key.c_str(), it.color_path.c_str());
         continue;
+      } else {
+        HE_DEBUG(this, "Item %s: loaded image %dx%d", it.key.c_str(), img.cols, img.rows);
+      }
 
       cv::Mat rvec, tvec;
-      if (!detect_charuco(img, rvec, tvec, visualize_))
+      HE_DEBUG(this, "Item %s: running Charuco detection", it.key.c_str());
+      if (!detect_charuco(img, rvec, tvec, visualize_)) {
+        HE_DEBUG(this, "Item %s: Charuco detection failed", it.key.c_str());
         continue;
+      }
+      HE_DEBUG(this, "Item %s: Charuco detection OK", it.key.c_str());
 
       cv::Mat Rtc; // target->cam rotation
       cv::Rodrigues(rvec, Rtc);
@@ -133,8 +146,11 @@ namespace behav3d::handeye
       R_gripper2base.push_back(R_g2b);
       t_gripper2base.push_back(t_g2b);
 
+      HE_DEBUG(this, "Item %s: accepted; total used will be %zu", it.key.c_str(), used + 1);
       ++used;
     }
+
+    HE_DEBUG(this, "Accumulated pairs: target2cam=%zu, gripper2base=%zu, used=%zu", R_target2cam.size(), R_gripper2base.size(), used);
 
     if (R_target2cam.size() < 3 || R_gripper2base.size() != R_target2cam.size())
     {
@@ -235,6 +251,7 @@ namespace behav3d::handeye
       try
       {
         ci.capture_ok = entry.value("capture_ok", entry.value("cap_ok", false));
+        ci.key = entry.value("key", std::string());
         if (entry.contains("files"))
         {
           const auto &files = entry["files"];
