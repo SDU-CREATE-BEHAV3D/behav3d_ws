@@ -53,7 +53,15 @@ namespace behav3d::handeye
     {
       bool capture_ok = false;
       std::string color_path;                     // absolute or session-relative
+      std::string ir_path;                        // absolute or session-relative
       geometry_msgs::msg::PoseStamped tool0_pose; // base->tool0 pose
+    };
+
+    struct ErrorStats {
+      double rot_rmse_deg = 0.0;
+      double trans_rmse_m = 0.0;
+      double rot_max_deg = 0.0;
+      double trans_max_m = 0.0;
     };
 
     // Parameters
@@ -71,16 +79,21 @@ namespace behav3d::handeye
     cv::Ptr<cv::aruco::Dictionary> dict_;
     cv::Ptr<cv::aruco::CharucoBoard> board_obj_;
 
-    // Camera intrinsics
-    cv::Mat K_; // 3x3
-    cv::Mat D_; // distortion coefficients
 
     // Helpers (steps of the pipeline)
     static std::string expand_user(const std::string &p);
     std::filesystem::path resolve_session_dir() const;
     bool load_manifest(const std::filesystem::path &session_dir, std::vector<CaptureItem> &items);
-    bool load_camera_calib(const std::filesystem::path &session_dir);
-    bool detect_charuco(const cv::Mat &img, cv::Mat &rvec, cv::Mat &tvec, bool visualize);
+    bool load_camera_calib(const std::filesystem::path &session_dir,
+                           const std::string &camera_name,
+                           cv::Mat &K_out,
+                           cv::Mat &D_out);
+    bool detect_charuco(const cv::Mat &img,
+                        const cv::Mat &K,
+                        const cv::Mat &D,
+                        cv::Mat &rvec,
+                        cv::Mat &tvec,
+                        bool visualize);
 
     static cv::Mat quat_to_R(const geometry_msgs::msg::Pose &p);
     static cv::Mat vec3_to_t(const geometry_msgs::msg::Pose &p);
@@ -96,10 +109,21 @@ namespace behav3d::handeye
 
     static int methodFromString(const std::string &name);
     static std::string methodToString(int flag);
+    static ErrorStats compute_AX_XB_error(const std::vector<cv::Mat> &R_g2b,
+                                          const std::vector<cv::Mat> &t_g2b,
+                                          const std::vector<cv::Mat> &R_t2c,
+                                          const std::vector<cv::Mat> &t_t2c,
+                                          const cv::Mat &R_c2g,
+                                          const cv::Mat &t_c2g);
 
     bool write_outputs(const std::filesystem::path &session_dir,
-                       const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper,
-                       size_t pairs_used) const;
+                       const cv::Mat &R_cam2gripper,
+                       const cv::Mat &t_cam2gripper,
+                       size_t pairs_used,
+                       const std::string &parent_frame,
+                       const std::string &child_frame,
+                       const ErrorStats &stats,
+                       const std::string &method_name) const;
   };
 
 } // namespace behav3d::handeye

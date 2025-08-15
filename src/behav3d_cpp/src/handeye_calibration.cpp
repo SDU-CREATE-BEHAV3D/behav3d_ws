@@ -79,9 +79,7 @@ namespace behav3d::handeye
   {
     getSessionParameters();
 
-    if (visualize_) {
-      cv::namedWindow("charuco", cv::WINDOW_AUTOSIZE);
-    }
+    // defer namedWindow to visualization
     // 1) Resolve session directory
     fs::path session_dir = resolve_session_dir();
     if (session_dir.empty())
@@ -101,101 +99,107 @@ namespace behav3d::handeye
       return false;
     }
 
-    // 3) Load intrinsics
-    if (!load_camera_calib(session_dir))
-    {
-      HE_ERROR(this, "Camera intrinsics missing or invalid");
-      if (visualize_) cv::destroyAllWindows();
-      return false;
-    }
-
-    // 4) Build inputs for OpenCV calibrateHandEye
-    std::vector<cv::Mat> R_target2cam, t_target2cam;
-    std::vector<cv::Mat> R_gripper2base, t_gripper2base;
-
-    HE_DEBUG(this, "Scanning %zu captures for images/poses", items.size());
-
-    std::size_t used = 0;
-    std::size_t dbg_idx = 0;
-    for (const auto &it : items)
-    {
-      HE_DEBUG(this, "Item %zu: capture_ok=%s, color_path='%s'", dbg_idx, it.capture_ok ? "true" : "false", it.color_path.c_str());
-      if (!it.capture_ok || it.color_path.empty())
+    // Calibrate for color and ir cameras using a lambda
+    auto calibrate_for_camera = [&](const std::string &camera_name,
+                                    const std::string &child_frame){
+      // 1) Load intrinsics for this camera
+      cv::Mat K, D;
+      if (!load_camera_calib(session_dir, camera_name, K, D))
       {
-        ++dbg_idx;
-        continue;
+        HE_ERROR(this, "Camera intrinsics missing or invalid for %s", camera_name.c_str());
+        return false;
       }
 
-      cv::Mat img = cv::imread(it.color_path, cv::IMREAD_COLOR);
-      if (img.empty())
+      // 2) Build inputs for OpenCV calibrateHandEye
+      std::vector<cv::Mat> R_target2cam, t_target2cam;
+      std::vector<cv::Mat> R_gripper2base, t_gripper2base;
+
+      std::size_t used_local = 0;
+      std::size_t dbg_idx_local = 0;
+      for (const auto &it : items)
       {
-        HE_DEBUG(this, "Item %zu: cv::imread failed for '%s'", dbg_idx, it.color_path.c_str());
-        ++dbg_idx;
-        continue;
+        const std::string &img_path = (camera_name == "color") ? it.color_path : it.ir_path;
+        HE_DEBUG(this, "[%s] Item %zu: capture_ok=%s, path='%s'", camera_name.c_str(), dbg_idx_local, it.capture_ok ? "true" : "false", img_path.c_str());
+        if (!it.capture_ok || img_path.empty())
+        {
+          ++dbg_idx_local;
+          continue;
+        }
+
+        cv::Mat img = cv::imread(img_path, cv::IMREAD_COLOR);
+        if (img.empty())
+        {
+          HE_DEBUG(this, "[%s] Item %zu: cv::imread failed for '%s'", camera_name.c_str(), dbg_idx_local, img_path.c_str());
+          ++dbg_idx_local;
+          continue;
+        }
+
+        cv::Mat rvec, tvec;
+        HE_DEBUG(this, "[%s] Item %zu: running Charuco detection", camera_name.c_str(), dbg_idx_local);
+        if (!detect_charuco(img, K, D, rvec, tvec, visualize_))
+        {
+          HE_DEBUG(this, "[%s] Item %zu: Charuco detection failed", camera_name.c_str(), dbg_idx_local);
+          ++dbg_idx_local;
+          continue;
+        }
+        HE_DEBUG(this, "[%s] Item %zu: Charuco detection OK", camera_name.c_str(), dbg_idx_local);
+
+        cv::Mat Rtc; // target->cam rotation
+        cv::Rodrigues(rvec, Rtc);
+        R_target2cam.push_back(Rtc);
+        t_target2cam.push_back(tvec.clone());
+
+        // base->gripper from manifest, invert to gripper->base
+        const auto &pose = it.tool0_pose.pose; // base->tool0
+        cv::Mat R_b2g = quat_to_R(pose);
+        cv::Mat t_b2g = vec3_to_t(pose);
+        cv::Mat R_g2b = R_b2g.t();
+        cv::Mat t_g2b = -R_b2g.t() * t_b2g;
+        R_gripper2base.push_back(R_g2b);
+        t_gripper2base.push_back(t_g2b);
+
+        ++used_local;
+        ++dbg_idx_local;
       }
-      else
+
+      if (R_target2cam.size() < 3 || R_gripper2base.size() != R_target2cam.size())
       {
-        HE_DEBUG(this, "Item %zu: loaded image %dx%d", dbg_idx, img.cols, img.rows);
+        HE_ERROR(this, "[%s] Not enough valid image/pose pairs: %zu", camera_name.c_str(), R_target2cam.size());
+        return false;
       }
 
-      cv::Mat rvec, tvec;
-      HE_DEBUG(this, "Item %zu: running Charuco detection", dbg_idx);
-      if (!detect_charuco(img, rvec, tvec, visualize_))
+      // 3) Calibrate
+      cv::Mat R_cam2gripper, t_cam2gripper;
+      if (!calibrate_handeye(R_gripper2base, t_gripper2base,
+                             R_target2cam, t_target2cam,
+                             R_cam2gripper, t_cam2gripper,
+                             calib_method_flag_, calib_method_name_))
       {
-        HE_DEBUG(this, "Item %zu: Charuco detection failed", dbg_idx);
-        ++dbg_idx;
-        continue;
+        return false;
       }
-      HE_DEBUG(this, "Item %zu: Charuco detection OK", dbg_idx);
 
-      cv::Mat Rtc; // target->cam rotation
-      cv::Rodrigues(rvec, Rtc);
-      R_target2cam.push_back(Rtc);
-      t_target2cam.push_back(tvec.clone());
+      // 4) Compute AX=XB residual statistics
+      ErrorStats stats = compute_AX_XB_error(R_gripper2base, t_gripper2base,
+                                             R_target2cam, t_target2cam,
+                                             R_cam2gripper, t_cam2gripper);
 
-      // base->gripper from manifest, invert to gripper->base
-      const auto &pose = it.tool0_pose.pose; // base->tool0
-      cv::Mat R_b2g = quat_to_R(pose);
-      cv::Mat t_b2g = vec3_to_t(pose);
-      cv::Mat R_g2b = R_b2g.t();
-      cv::Mat t_g2b = -R_b2g.t() * t_b2g;
-      R_gripper2base.push_back(R_g2b);
-      t_gripper2base.push_back(t_g2b);
+      // 5) Write outputs with correct frames
+      const std::string parent_frame = this->declare_parameter<std::string>("handeye_parent_frame", std::string("tool0"));
+      if (!write_outputs(session_dir, R_cam2gripper, t_cam2gripper, used_local,
+                         parent_frame, child_frame, stats, calib_method_name_))
+      {
+        return false;
+      }
 
-      HE_DEBUG(this, "Item %zu: accepted; total used will be %zu", dbg_idx, used + 1);
-      ++used;
-      ++dbg_idx;
-    }
+      HE_INFO(this, "[%s] Done. Used %zu image/pose pairs.", camera_name.c_str(), used_local);
+      return true;
+    };
 
-    HE_DEBUG(this, "Accumulated pairs: target2cam=%zu, gripper2base=%zu, used=%zu", R_target2cam.size(), R_gripper2base.size(), used);
+    bool ok_color = calibrate_for_camera("color", "color_optical");
+    bool ok_ir    = calibrate_for_camera("ir",    "ir_optical");
 
-    if (R_target2cam.size() < 3 || R_gripper2base.size() != R_target2cam.size())
-    {
-      HE_ERROR(this, "Not enough valid image/pose pairs: %zu", R_target2cam.size());
-      if (visualize_) cv::destroyAllWindows();
-      return false;
-    }
-
-    // 5) Calibrate
-    cv::Mat R_cam2gripper, t_cam2gripper;
-    if (!calibrate_handeye(R_gripper2base, t_gripper2base,
-                           R_target2cam, t_target2cam,
-                           R_cam2gripper, t_cam2gripper,
-                           calib_method_flag_, calib_method_name_))
-    {
-      if (visualize_) cv::destroyAllWindows();
-      return false;
-    }
-
-    // 6) Write outputs
-    if (!write_outputs(session_dir, R_cam2gripper, t_cam2gripper, used)) {
-      if (visualize_) cv::destroyAllWindows();
-      return false;
-    }
-
-    HE_INFO(this, "Done. Used %zu image/pose pairs.", used);
     if (visualize_) cv::destroyAllWindows();
-    return true;
+    return ok_color && ok_ir;
   }
 
   // ----------------------------------------------------------------------------
@@ -312,6 +316,8 @@ namespace behav3d::handeye
           const auto &files = entry["files"];
           if (files.contains("color") && !files["color"].is_null())
             ci.color_path = files["color"].get<std::string>();
+          if (files.contains("ir") && !files["ir"].is_null())
+            ci.ir_path = files["ir"].get<std::string>();
         }
         const auto &pt = entry.at("pose_tool0");
         geometry_msgs::msg::PoseStamped ps;
@@ -327,7 +333,7 @@ namespace behav3d::handeye
         ps.pose.orientation.w = quat[3];
         ci.tool0_pose = ps;
 
-        if (!ci.color_path.empty())
+        if (!ci.color_path.empty() || !ci.ir_path.empty())
           items.push_back(std::move(ci));
       }
       catch (...)
@@ -338,7 +344,10 @@ namespace behav3d::handeye
     return !items.empty();
   }
 
-  bool HandeyeCalibration::load_camera_calib(const fs::path &session_dir)
+  bool HandeyeCalibration::load_camera_calib(const fs::path &session_dir,
+                                             const std::string &camera_name,
+                                             cv::Mat &K_out,
+                                             cv::Mat &D_out)
   {
     const fs::path calib_dir = session_dir / "calib";
     if (!fs::exists(calib_dir))
@@ -347,15 +356,16 @@ namespace behav3d::handeye
       return false;
     }
 
-    // Preferred file names
-    fs::path yaml = calib_dir / "color_intrinsics.yaml";
+    // Preferred file names per camera
+    fs::path yaml = calib_dir / (camera_name + std::string("_intrinsics.yaml"));
     if (!fs::exists(yaml))
     {
-      if (fs::exists(calib_dir / "intrinsics.yaml"))
+      // Fallbacks
+      if (camera_name == "color" && fs::exists(calib_dir / "intrinsics.yaml"))
         yaml = calib_dir / "intrinsics.yaml";
       else
       {
-        HE_ERROR(this, "No intrinsics YAML found in %s", calib_dir.string().c_str());
+        HE_ERROR(this, "No intrinsics YAML found for camera '%s' in %s", camera_name.c_str(), calib_dir.string().c_str());
         return false;
       }
     }
@@ -372,8 +382,8 @@ namespace behav3d::handeye
     cv::FileNode dc = fsr["distortion_coefficients"];
     if (!cm.empty() && !dc.empty())
     {
-      cm >> K_;
-      dc >> D_;
+      cm >> K_out;
+      dc >> D_out;
     }
     else
     {
@@ -383,40 +393,40 @@ namespace behav3d::handeye
 
       if (Knode.isSeq() && (int)Knode.size() == 9)
       {
-        K_ = cv::Mat(3, 3, CV_64F);
+        K_out = cv::Mat(3, 3, CV_64F);
         for (int i = 0; i < 9; ++i)
-        {
-          K_.at<double>(i / 3, i % 3) = (double)Knode[i];
-        }
+          K_out.at<double>(i / 3, i % 3) = (double)Knode[i];
       }
 
       if (Dnode.isSeq() && (int)Dnode.size() >= 4)
       {
-        D_ = cv::Mat(1, (int)Dnode.size(), CV_64F);
+        D_out = cv::Mat(1, (int)Dnode.size(), CV_64F);
         for (int i = 0; i < (int)Dnode.size(); ++i)
-        {
-          D_.at<double>(0, i) = (double)Dnode[i];
-        }
+          D_out.at<double>(0, i) = (double)Dnode[i];
       }
     }
-
     fsr.release();
 
-    if (K_.empty())
+    if (K_out.empty())
     {
-      HE_ERROR(this, "Intrinsics YAML missing usable camera matrix.");
+      HE_ERROR(this, "Intrinsics YAML missing usable camera matrix for '%s'.", camera_name.c_str());
       return false;
     }
-    if (D_.empty())
+    if (D_out.empty())
     {
       // Provide a zero-distortion default if absent
-      D_ = cv::Mat::zeros(1, 5, CV_64F);
-      HE_WARN(this, "No distortion coefficients found; defaulting to zeros (5).");
+      D_out = cv::Mat::zeros(1, 5, CV_64F);
+      HE_WARN(this, "[%s] No distortion coefficients found; defaulting to zeros (5).", camera_name.c_str());
     }
     return true;
   }
 
-  bool HandeyeCalibration::detect_charuco(const cv::Mat &img, cv::Mat &rvec, cv::Mat &tvec, bool visualize)
+  bool HandeyeCalibration::detect_charuco(const cv::Mat &img,
+                                          const cv::Mat &K,
+                                          const cv::Mat &D,
+                                          cv::Mat &rvec,
+                                          cv::Mat &tvec,
+                                          bool visualize)
   {
     std::vector<int> ids;
     std::vector<std::vector<cv::Point2f>> corners;
@@ -430,7 +440,7 @@ namespace behav3d::handeye
     if (charuco_corners.empty())
       return false;
 
-    bool pose_ok = cv::aruco::estimatePoseCharucoBoard(charuco_corners, charuco_ids, board_obj_, K_, D_, rvec, tvec);
+    bool pose_ok = cv::aruco::estimatePoseCharucoBoard(charuco_corners, charuco_ids, board_obj_, K, D, rvec, tvec);
     if (!pose_ok)
       return false;
 
@@ -438,8 +448,7 @@ namespace behav3d::handeye
     {
       cv::Mat vis = img.clone();
       cv::aruco::drawDetectedMarkers(vis, corners, ids);
-      cv::drawFrameAxes(vis, K_, D_, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
-      // Apply uniform scaling for display only
+      cv::drawFrameAxes(vis, K, D, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
       double s = std::clamp(visualize_display_scale_, 0.05, 4.0);
       cv::Mat vis_scaled;
       int interp = (s < 1.0) ? cv::INTER_AREA : cv::INTER_LINEAR;
@@ -448,6 +457,84 @@ namespace behav3d::handeye
       cv::waitKey(visualize_pause_ms_);
     }
     return true;
+  }
+  static inline cv::Mat makeT(const cv::Mat &R, const cv::Mat &t)
+  {
+    cv::Mat T = cv::Mat::eye(4, 4, CV_64F);
+    R.copyTo(T(cv::Rect(0, 0, 3, 3)));
+    T.at<double>(0, 3) = t.at<double>(0);
+    T.at<double>(1, 3) = t.at<double>(1);
+    T.at<double>(2, 3) = t.at<double>(2);
+    return T;
+  }
+
+  static inline cv::Mat invT(const cv::Mat &T)
+  {
+    cv::Mat R = T(cv::Rect(0, 0, 3, 3)).clone();
+    cv::Mat Rt = R.t();
+    cv::Mat t = (cv::Mat_<double>(3,1) << T.at<double>(0,3), T.at<double>(1,3), T.at<double>(2,3));
+    cv::Mat Ti = cv::Mat::eye(4, 4, CV_64F);
+    Rt.copyTo(Ti(cv::Rect(0, 0, 3, 3)));
+    cv::Mat ti = -Rt * t;
+    Ti.at<double>(0,3) = ti.at<double>(0);
+    Ti.at<double>(1,3) = ti.at<double>(1);
+    Ti.at<double>(2,3) = ti.at<double>(2);
+    return Ti;
+  }
+
+  HandeyeCalibration::ErrorStats HandeyeCalibration::compute_AX_XB_error(
+      const std::vector<cv::Mat> &R_g2b,
+      const std::vector<cv::Mat> &t_g2b,
+      const std::vector<cv::Mat> &R_t2c,
+      const std::vector<cv::Mat> &t_t2c,
+      const cv::Mat &R_c2g,
+      const cv::Mat &t_c2g)
+  {
+    std::vector<double> rot_err_deg;
+    std::vector<double> trans_err_m;
+
+    cv::Mat X = makeT(R_c2g, t_c2g);
+
+    for (size_t i = 1; i < R_g2b.size(); ++i)
+    {
+      cv::Mat Tg_i_1 = makeT(R_g2b[i-1], t_g2b[i-1]);
+      cv::Mat Tg_i   = makeT(R_g2b[i],   t_g2b[i]);
+      cv::Mat A = invT(Tg_i_1) * Tg_i; // gripper motion
+
+      cv::Mat Tt_i_1_c = makeT(R_t2c[i-1], t_t2c[i-1]);
+      cv::Mat Tt_i_c   = makeT(R_t2c[i],   t_t2c[i]);
+      cv::Mat Tc_i_1_t = invT(Tt_i_1_c); // c->t
+      cv::Mat Tc_i_t   = invT(Tt_i_c);
+      cv::Mat B = Tc_i_1_t * invT(Tc_i_t); // camera-target motion
+
+      cv::Mat L = A * X;
+      cv::Mat Rhs = X * B;
+      cv::Mat Delta = invT(L) * Rhs;
+
+      // rotation angle from Delta
+      cv::Mat Rdelta = Delta(cv::Rect(0,0,3,3)).clone();
+      double trace = Rdelta.at<double>(0,0) + Rdelta.at<double>(1,1) + Rdelta.at<double>(2,2);
+      double cos_theta = std::clamp((trace - 1.0) / 2.0, -1.0, 1.0);
+      double theta = std::acos(cos_theta); // radians
+      rot_err_deg.push_back(theta * 180.0 / M_PI);
+
+      double dx = Delta.at<double>(0,3);
+      double dy = Delta.at<double>(1,3);
+      double dz = Delta.at<double>(2,3);
+      trans_err_m.push_back(std::sqrt(dx*dx + dy*dy + dz*dz));
+    }
+
+    auto rmse = [](const std::vector<double> &v){
+      if (v.empty()) return 0.0; double s=0.0; for(double x: v) s += x*x; return std::sqrt(s / v.size()); };
+    auto vmax = [](const std::vector<double> &v){
+      if (v.empty()) return 0.0; return *std::max_element(v.begin(), v.end()); };
+
+    ErrorStats s;
+    s.rot_rmse_deg = rmse(rot_err_deg);
+    s.trans_rmse_m = rmse(trans_err_m);
+    s.rot_max_deg = vmax(rot_err_deg);
+    s.trans_max_m = vmax(trans_err_m);
+    return s;
   }
 
   cv::Mat HandeyeCalibration::quat_to_R(const geometry_msgs::msg::Pose &p)
@@ -541,8 +628,13 @@ namespace behav3d::handeye
   }
 
   bool HandeyeCalibration::write_outputs(const fs::path &session_dir,
-                                         const cv::Mat &R_cam2gripper, const cv::Mat &t_cam2gripper,
-                                         size_t pairs_used) const
+                                         const cv::Mat &R_cam2gripper,
+                                         const cv::Mat &t_cam2gripper,
+                                         size_t pairs_used,
+                                         const std::string &parent_frame,
+                                         const std::string &child_frame,
+                                         const ErrorStats &stats,
+                                         const std::string &method_name) const
   {
     const fs::path calib_dir = session_dir / "calib";
     std::error_code ec;
@@ -601,31 +693,38 @@ namespace behav3d::handeye
       yaw = std::atan2(R.at<double>(1, 0), R.at<double>(0, 0));
     }
 
+    // Choose filename from child frame
+    std::string base_name = std::string("handeye_") + child_frame + std::string("_to_") + parent_frame;
+    for (auto &c : base_name) if (c == '/') c = '_';
+
     // YAML export
-    const fs::path yaml = calib_dir / "handeye_cam_to_gripper.yaml";
+    const fs::path yaml = calib_dir / (base_name + std::string(".yaml"));
     {
       cv::FileStorage fsw(yaml.string(), cv::FileStorage::WRITE);
       fsw << "date" << iso_date;
-      fsw << "method" << ("handeye_" + calib_method_name_);
+      fsw << "method" << ("handeye_" + method_name);
       fsw << "pairs_used" << static_cast<int>(pairs_used);
-      fsw << "reprojection_rms_px" << 0.0;
+      fsw << "ax_xb_rot_rmse_deg" << stats.rot_rmse_deg;
+      fsw << "ax_xb_trans_rmse_m" << stats.trans_rmse_m;
+      fsw << "ax_xb_rot_max_deg" << stats.rot_max_deg;
+      fsw << "ax_xb_trans_max_m" << stats.trans_max_m;
 
-      fsw << "color_optical_calibrated" << "{";
-      fsw << "parent" << "gripper";
-      fsw << "child" << "color_optical";
+      fsw << "transform" << "{";
+      fsw << "parent" << parent_frame;
+      fsw << "child" << child_frame;
       fsw << "translation" << "[:"
           << t_cam2gripper.at<double>(0)
           << t_cam2gripper.at<double>(1)
           << t_cam2gripper.at<double>(2) << "]";
-      fsw << "rotation_quat" << "[:"
+      fsw << "rotation_quat_xyzw" << "[:"
           << qx << qy << qz << qw << "]";
-      fsw << "rotation_rpy" << "[:"
+      fsw << "rotation_rpy_rad" << "[:"
           << roll << pitch << yaw << "]";
       fsw << "}";
       fsw.release();
     }
 
-    // JSON export
+    // JSON export for programmatic use
     nlohmann::json j;
     j["timestamp_ns"] = rclcpp::Clock().now().nanoseconds();
     j["board"] = {
@@ -642,8 +741,15 @@ namespace behav3d::handeye
       tv[r] = t_cam2gripper.at<double>(r);
     j["R_cam2gripper"] = Rv;
     j["t_cam2gripper"] = tv;
+    j["ax_xb_error"] = {
+      {"rot_rmse_deg", stats.rot_rmse_deg},
+      {"trans_rmse_m", stats.trans_rmse_m},
+      {"rot_max_deg", stats.rot_max_deg},
+      {"trans_max_m", stats.trans_max_m}
+    };
+    j["frames"] = { {"parent", parent_frame}, {"child", child_frame} };
 
-    const fs::path jsonp = calib_dir / "handeye_results.json";
+    const fs::path jsonp = calib_dir / (base_name + std::string(".json"));
     if (!behav3d::util::writeJson(jsonp.string(), j))
     {
       HE_WARN(this, "util::writeJson failed for %s", jsonp.string().c_str());
