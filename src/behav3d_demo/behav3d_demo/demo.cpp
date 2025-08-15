@@ -150,16 +150,7 @@ private:
     {
       // Push every hand-eye parameter here (types must match what the node declares)
       calib_->set_parameters({
-        rclcpp::Parameter("session_dir", session_dir),
-        rclcpp::Parameter("output_dir", "/home/lab/behav3d_ws/captures"),       // or whatever root you use
-        rclcpp::Parameter("board_squares_x", 5),                                // int
-        rclcpp::Parameter("board_squares_y", 7),                                // int
-        rclcpp::Parameter("square_length_m", 0.0288),                           // double
-        rclcpp::Parameter("marker_length_m", 0.022),                            // double
-        rclcpp::Parameter("aruco_dict_id", 0),                                  // int (DICT_4X4_50)
-        rclcpp::Parameter("calibration_method", std::string("tsai")),           // string
-        rclcpp::Parameter("visualize", true),                                   // bool
-        rclcpp::Parameter("visualize_pause_ms", 2000)                           // int (2s between images)
+        rclcpp::Parameter("handeye_session_dir", session_dir),
       });
 
       if (!calib_->run())

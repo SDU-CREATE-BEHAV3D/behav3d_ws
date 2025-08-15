@@ -178,7 +178,7 @@ def generate_launch_description():
 
     handeye_visualize_pause_ms_arg = DeclareLaunchArgument(
         'handeye_visualize_pause_ms',
-        default_value='1',
+        default_value='1000',
         description='Wait time for visualization window in milliseconds.'
     )
 
