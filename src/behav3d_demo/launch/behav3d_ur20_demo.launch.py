@@ -115,13 +115,13 @@ def generate_launch_description():
 
     home_joints_deg_arg = DeclareLaunchArgument(
         "home_joints_deg",
-        default_value="[-90.0, -120.0, 120.0, -90.0, 90.0, -180.0]",
+        default_value="[-90.0, -120.0, 120.0, -90.0, 90.0, -150.0]",
         description="Home joint positions in degrees (list)"
     )
     
     debug_arg = DeclareLaunchArgument(
         "debug",
-        default_value="false",
+        default_value="true",
         description="Enable debug logging"
     )
 
