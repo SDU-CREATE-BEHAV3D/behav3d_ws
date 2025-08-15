@@ -120,13 +120,13 @@ private:
   }
 
   void fibonacci_cap(double radius = 0.6,
-                     double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
-                     double cap_deg = 22.5, int n_points = 32)
+                     double center_x = 0.0, double center_y = 0.5, double center_z = -0.075,
+                     double cap_deg = 22.5, int n_points = 64)
   {
     const double cap_rad = deg2rad(cap_deg);
     const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
     auto targets = fibonacciSphericalCap(center, radius, cap_rad, n_points);
-    targets = addJitter(targets, 0.01, 5);
+    targets = addJitter(targets, 0.01, 2.5);
     
     if (targets.empty())
     {
