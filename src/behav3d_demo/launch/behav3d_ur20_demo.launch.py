@@ -164,10 +164,10 @@ def generate_launch_description():
         description='Marker length (m) for hand-eye'
     )
 
-    handeye_aruco_dict_id_arg = DeclareLaunchArgument(
-        'handeye_aruco_dict_id',
-        default_value='0',
-        description='ArUco dict id for hand-eye'
+    handeye_aruco_dict_arg = DeclareLaunchArgument(
+        'handeye_aruco_dict',
+        default_value='DICT_5X5_100',
+        description='ArUco dictionary name for hand-eye (e.g., "DICT_5X5_1000").'
     )
 
     handeye_calibration_method_arg = DeclareLaunchArgument(
@@ -191,6 +191,31 @@ def generate_launch_description():
         'handeye_visualize_display_scale',
         default_value='0.5',
         description='Uniform scale factor for on-screen visualization (0.1–4.0)'
+    )
+    handeye_ir_clip_max_arg = DeclareLaunchArgument(
+        'handeye_ir_clip_max',
+        default_value='-1',
+        description='If >0, clamp 16-bit IR to this value before normalization.'
+    )
+    handeye_ir_invert_arg = DeclareLaunchArgument(
+        'handeye_ir_invert',
+        default_value='false',
+        description='Invert IR image after normalization.'
+    )
+    handeye_ir_use_clahe_arg = DeclareLaunchArgument(
+        'handeye_ir_use_clahe',
+        default_value='true',
+        description='Apply CLAHE to IR image.'
+    )
+    handeye_ir_clahe_clip_arg = DeclareLaunchArgument(
+        'handeye_ir_clahe_clip',
+        default_value='3.0',
+        description='CLAHE clip limit for IR.'
+    )
+    handeye_ir_clahe_tiles_arg = DeclareLaunchArgument(
+        'handeye_ir_clahe_tiles',
+        default_value='8',
+        description='CLAHE tile grid size (NxN) for IR.'
     )
 
     # Misc
@@ -353,11 +378,16 @@ def generate_launch_description():
                 'handeye_board_squares_y': ParameterValue(LaunchConfiguration('handeye_board_squares_y'), value_type=int),
                 'handeye_square_length_m': ParameterValue(LaunchConfiguration('handeye_square_length_m'), value_type=float),
                 'handeye_marker_length_m': ParameterValue(LaunchConfiguration('handeye_marker_length_m'), value_type=float),
-                'handeye_aruco_dict_id': ParameterValue(LaunchConfiguration('handeye_aruco_dict_id'), value_type=int),
+                'handeye_aruco_dict': LaunchConfiguration('handeye_aruco_dict'),
                 'handeye_calibration_method': LaunchConfiguration('handeye_calibration_method'),
                 'handeye_visualize_pause_ms': ParameterValue(LaunchConfiguration('handeye_visualize_pause_ms'), value_type=int),
                 'handeye_visualize': ParameterValue(LaunchConfiguration('handeye_visualize'), value_type=bool),
                 'handeye_visualize_display_scale': ParameterValue(LaunchConfiguration('handeye_visualize_display_scale'), value_type=float),
+                'handeye_ir_clip_max': ParameterValue(LaunchConfiguration('handeye_ir_clip_max'), value_type=int),
+                'handeye_ir_invert': ParameterValue(LaunchConfiguration('handeye_ir_invert'), value_type=bool),
+                'handeye_ir_use_clahe': ParameterValue(LaunchConfiguration('handeye_ir_use_clahe'), value_type=bool),
+                'handeye_ir_clahe_clip': ParameterValue(LaunchConfiguration('handeye_ir_clahe_clip'), value_type=float),
+                'handeye_ir_clahe_tiles': ParameterValue(LaunchConfiguration('handeye_ir_clahe_tiles'), value_type=int),
             }
         ],
     )
@@ -385,11 +415,16 @@ def generate_launch_description():
             handeye_board_squares_y_arg,
             handeye_square_length_m_arg,
             handeye_marker_length_m_arg,
-            handeye_aruco_dict_id_arg,
+            handeye_aruco_dict_arg,
             handeye_calibration_method_arg,
             handeye_visualize_pause_ms_arg,
             handeye_visualize_arg,
             handeye_visualize_display_scale_arg,
+            handeye_ir_clip_max_arg,
+            handeye_ir_invert_arg,
+            handeye_ir_use_clahe_arg,
+            handeye_ir_clahe_clip_arg,
+            handeye_ir_clahe_tiles_arg,
             debug_arg,
             # Then include/launch nodes
             ur_driver,

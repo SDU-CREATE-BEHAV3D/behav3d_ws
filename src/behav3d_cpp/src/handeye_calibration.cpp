@@ -60,6 +60,10 @@ namespace behav3d::handeye
     board_.square_len_m = this->declare_parameter<double>("handeye_square_length_m", board_.square_len_m);
     board_.marker_len_m = this->declare_parameter<double>("handeye_marker_length_m", board_.marker_len_m);
     board_.aruco_dict_id = this->declare_parameter<int>("handeye_aruco_dict_id", board_.aruco_dict_id);
+    // Optional string dictionary param takes precedence if provided
+    std::string dict_name = this->declare_parameter<std::string>("handeye_aruco_dict", std::string(""));
+    if (!dict_name.empty())
+      board_.aruco_dict_id = arucoDictFromString(dict_name);
 
     // IR preprocessing parameters
     ir_clip_max_ = this->declare_parameter<int>("handeye_ir_clip_max", ir_clip_max_);
@@ -74,9 +78,9 @@ namespace behav3d::handeye
                                                  static_cast<float>(board_.marker_len_m),
                                                  dict_);
 
-    HE_INFO(this, "Node ready. Board %dx%d, square=%.3f, marker=%.3f, dict=%d, method=%s",
+    HE_INFO(this, "Node ready. Board %dx%d, square=%.3f, marker=%.3f, dict=%s, method=%s",
             board_.squares_x, board_.squares_y,
-            board_.square_len_m, board_.marker_len_m, board_.aruco_dict_id,
+            board_.square_len_m, board_.marker_len_m, arucoDictToString(board_.aruco_dict_id).c_str(),
             calib_method_name_.c_str());
   }
 
@@ -187,15 +191,10 @@ namespace behav3d::handeye
         return false;
       }
 
-      // 4) Compute AX=XB residual statistics
-      ErrorStats stats = compute_AX_XB_error(R_gripper2base, t_gripper2base,
-                                             R_target2cam, t_target2cam,
-                                             R_cam2gripper, t_cam2gripper);
-
-      // 5) Write outputs with correct frames
+      // 4) Write outputs with correct frames
       const std::string parent_frame = this->declare_parameter<std::string>("handeye_parent_frame", std::string("tool0"));
       if (!write_outputs(session_dir, R_cam2gripper, t_cam2gripper, used_local,
-                         parent_frame, child_frame, stats, calib_method_name_))
+                         parent_frame, child_frame, calib_method_name_))
       {
         return false;
       }
@@ -273,6 +272,9 @@ namespace behav3d::handeye
     board_.square_len_m = this->get_parameter("handeye_square_length_m").as_double();
     board_.marker_len_m = this->get_parameter("handeye_marker_length_m").as_double();
     board_.aruco_dict_id = this->get_parameter("handeye_aruco_dict_id").as_int();
+    std::string dict_name = this->get_parameter("handeye_aruco_dict").as_string();
+    if (!dict_name.empty())
+      board_.aruco_dict_id = arucoDictFromString(dict_name);
 
     // Rebuild dictionary/board in case any of the above changed
     dict_ = cv::aruco::getPredefinedDictionary(board_.aruco_dict_id);
@@ -294,9 +296,9 @@ namespace behav3d::handeye
     ir_clahe_tiles_ = this->get_parameter("handeye_ir_clahe_tiles").as_int();
 
     HE_DEBUG(this,
-             "Params updated: session_dir='%s', output_dir='%s', method=%s, dict=%d, board=%dx%d, square=%.4f, marker=%.4f, visualize=%s, pause_ms=%d, scale=%.2f",
+             "Params updated: session_dir='%s', output_dir='%s', method=%s, dict=%s, board=%dx%d, square=%.4f, marker=%.4f, visualize=%s, pause_ms=%d, scale=%.2f",
              session_dir_param_.c_str(), output_root_.c_str(),
-             calib_method_name_.c_str(), board_.aruco_dict_id,
+             calib_method_name_.c_str(), arucoDictToString(board_.aruco_dict_id).c_str(),
              board_.squares_x, board_.squares_y,
              board_.square_len_m, board_.marker_len_m,
              visualize_ ? "true" : "false", visualize_pause_ms_, visualize_display_scale_);
@@ -559,30 +561,16 @@ namespace behav3d::handeye
           cv::circle(vis, pt, 2, cv::Scalar(0,255,255), -1, cv::LINE_AA);
       }
 
-      // 3) Compute and print reprojection error for detected ChArUco corners (diagnostic)
-      double reproj_rmse = 0.0;
-      if (!charuco_corners.empty())
-      {
-        std::vector<cv::Point3f> used_obj_pts;
-        used_obj_pts.reserve(charuco_ids.total());
-        for (int i = 0; i < charuco_ids.total(); ++i)
-        {
-          int id = charuco_ids.at<int>(i,0);
-          used_obj_pts.push_back(board_obj_->chessboardCorners[(size_t)id]);
-        }
-        std::vector<cv::Point2f> proj_pts;
-        cv::projectPoints(used_obj_pts, rvec, tvec, K, D, proj_pts);
-        double se = 0.0; int N = (int)proj_pts.size();
-        for (int i = 0; i < N; ++i)
-        {
-          cv::Point2f d = proj_pts[i] - charuco_corners.row(i).at<cv::Point2f>(0);
-          se += d.x*d.x + d.y*d.y;
-        }
-        reproj_rmse = (N>0) ? std::sqrt(se / N) : 0.0;
-      }
-      char text[128]; std::snprintf(text, sizeof(text), "RMSE: %.2f px", reproj_rmse);
-      cv::putText(vis, text, {15,30}, cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,0), 3, cv::LINE_AA);
-      cv::putText(vis, text, {15,30}, cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,255,0), 1, cv::LINE_AA);
+      // (Removed RMSE overlay)
+
+      // Board spec overlay
+      char spec[256];
+      std::snprintf(spec, sizeof(spec), "Nx=%d Ny=%d sq=%.1fmm mk=%.1fmm dict=%s",
+                    board_.squares_x, board_.squares_y,
+                    board_.square_len_m*1000.0, board_.marker_len_m*1000.0,
+                    arucoDictToString(board_.aruco_dict_id).c_str());
+      cv::putText(vis, spec, {15,60}, cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,0), 3, cv::LINE_AA);
+      cv::putText(vis, spec, {15,60}, cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,255,255), 1, cv::LINE_AA);
 
       // Scale and show
       double s = std::clamp(visualize_display_scale_, 0.05, 4.0);
@@ -593,84 +581,6 @@ namespace behav3d::handeye
       cv::waitKey(visualize_pause_ms_);
     }
     return true;
-  }
-  static inline cv::Mat makeT(const cv::Mat &R, const cv::Mat &t)
-  {
-    cv::Mat T = cv::Mat::eye(4, 4, CV_64F);
-    R.copyTo(T(cv::Rect(0, 0, 3, 3)));
-    T.at<double>(0, 3) = t.at<double>(0);
-    T.at<double>(1, 3) = t.at<double>(1);
-    T.at<double>(2, 3) = t.at<double>(2);
-    return T;
-  }
-
-  static inline cv::Mat invT(const cv::Mat &T)
-  {
-    cv::Mat R = T(cv::Rect(0, 0, 3, 3)).clone();
-    cv::Mat Rt = R.t();
-    cv::Mat t = (cv::Mat_<double>(3,1) << T.at<double>(0,3), T.at<double>(1,3), T.at<double>(2,3));
-    cv::Mat Ti = cv::Mat::eye(4, 4, CV_64F);
-    Rt.copyTo(Ti(cv::Rect(0, 0, 3, 3)));
-    cv::Mat ti = -Rt * t;
-    Ti.at<double>(0,3) = ti.at<double>(0);
-    Ti.at<double>(1,3) = ti.at<double>(1);
-    Ti.at<double>(2,3) = ti.at<double>(2);
-    return Ti;
-  }
-
-  HandeyeCalibration::ErrorStats HandeyeCalibration::compute_AX_XB_error(
-      const std::vector<cv::Mat> &R_g2b,
-      const std::vector<cv::Mat> &t_g2b,
-      const std::vector<cv::Mat> &R_t2c,
-      const std::vector<cv::Mat> &t_t2c,
-      const cv::Mat &R_c2g,
-      const cv::Mat &t_c2g)
-  {
-    std::vector<double> rot_err_deg;
-    std::vector<double> trans_err_m;
-
-    cv::Mat X = makeT(R_c2g, t_c2g);
-
-    for (size_t i = 1; i < R_g2b.size(); ++i)
-    {
-      cv::Mat Tg_i_1 = makeT(R_g2b[i-1], t_g2b[i-1]);
-      cv::Mat Tg_i   = makeT(R_g2b[i],   t_g2b[i]);
-      cv::Mat A = invT(Tg_i_1) * Tg_i; // gripper motion
-
-      cv::Mat Tt_i_1_c = makeT(R_t2c[i-1], t_t2c[i-1]);
-      cv::Mat Tt_i_c   = makeT(R_t2c[i],   t_t2c[i]);
-      cv::Mat Tc_i_1_t = invT(Tt_i_1_c); // c->t
-      cv::Mat Tc_i_t   = invT(Tt_i_c);
-      cv::Mat B = Tc_i_1_t * invT(Tc_i_t); // camera-target motion
-
-      cv::Mat L = A * X;
-      cv::Mat Rhs = X * B;
-      cv::Mat Delta = invT(L) * Rhs;
-
-      // rotation angle from Delta
-      cv::Mat Rdelta = Delta(cv::Rect(0,0,3,3)).clone();
-      double trace = Rdelta.at<double>(0,0) + Rdelta.at<double>(1,1) + Rdelta.at<double>(2,2);
-      double cos_theta = std::clamp((trace - 1.0) / 2.0, -1.0, 1.0);
-      double theta = std::acos(cos_theta); // radians
-      rot_err_deg.push_back(theta * 180.0 / M_PI);
-
-      double dx = Delta.at<double>(0,3);
-      double dy = Delta.at<double>(1,3);
-      double dz = Delta.at<double>(2,3);
-      trans_err_m.push_back(std::sqrt(dx*dx + dy*dy + dz*dz));
-    }
-
-    auto rmse = [](const std::vector<double> &v){
-      if (v.empty()) return 0.0; double s=0.0; for(double x: v) s += x*x; return std::sqrt(s / v.size()); };
-    auto vmax = [](const std::vector<double> &v){
-      if (v.empty()) return 0.0; return *std::max_element(v.begin(), v.end()); };
-
-    ErrorStats s;
-    s.rot_rmse_deg = rmse(rot_err_deg);
-    s.trans_rmse_m = rmse(trans_err_m);
-    s.rot_max_deg = vmax(rot_err_deg);
-    s.trans_max_m = vmax(trans_err_m);
-    return s;
   }
 
   cv::Mat HandeyeCalibration::quat_to_R(const geometry_msgs::msg::Pose &p)
@@ -769,7 +679,6 @@ namespace behav3d::handeye
                                          size_t pairs_used,
                                          const std::string &parent_frame,
                                          const std::string &child_frame,
-                                         const ErrorStats &stats,
                                          const std::string &method_name) const
   {
     const fs::path calib_dir = session_dir / "calib";
@@ -840,10 +749,6 @@ namespace behav3d::handeye
       fsw << "date" << iso_date;
       fsw << "method" << ("handeye_" + method_name);
       fsw << "pairs_used" << static_cast<int>(pairs_used);
-      fsw << "ax_xb_rot_rmse_deg" << stats.rot_rmse_deg;
-      fsw << "ax_xb_trans_rmse_m" << stats.trans_rmse_m;
-      fsw << "ax_xb_rot_max_deg" << stats.rot_max_deg;
-      fsw << "ax_xb_trans_max_m" << stats.trans_max_m;
 
       fsw << "transform" << "{";
       fsw << "parent" << parent_frame;
@@ -877,12 +782,7 @@ namespace behav3d::handeye
       tv[r] = t_cam2gripper.at<double>(r);
     j["R_cam2gripper"] = Rv;
     j["t_cam2gripper"] = tv;
-    j["ax_xb_error"] = {
-      {"rot_rmse_deg", stats.rot_rmse_deg},
-      {"trans_rmse_m", stats.trans_rmse_m},
-      {"rot_max_deg", stats.rot_max_deg},
-      {"trans_max_m", stats.trans_max_m}
-    };
+    // Removed ax_xb_error block from JSON output
     j["frames"] = { {"parent", parent_frame}, {"child", child_frame} };
 
     const fs::path jsonp = calib_dir / (base_name + std::string(".json"));
@@ -896,3 +796,60 @@ namespace behav3d::handeye
   }
 
 } // namespace behav3d::handeye
+
+  int HandeyeCalibration::arucoDictFromString(const std::string &name)
+  {
+    std::string s;
+    s.reserve(name.size());
+    for (char c : name) { if (c != ' ' && c != '"') s.push_back((char)std::toupper((unsigned char)c)); }
+    // normalize underscores
+    for (char &c : s) if (c == '-') c = '_';
+    // Accept short forms like 5X5_1000 or DICT_5X5_1000
+    auto ensure_prefix = [&](const std::string &t){ return (s.rfind("DICT_",0)==0)? s : std::string("DICT_")+s; };
+    s = ensure_prefix(s);
+    // Map known OpenCV dict names
+    struct Map { const char* n; int v; } table[] = {
+      {"DICT_4X4_50", cv::aruco::DICT_4X4_50},
+      {"DICT_4X4_100", cv::aruco::DICT_4X4_100},
+      {"DICT_4X4_250", cv::aruco::DICT_4X4_250},
+      {"DICT_4X4_1000", cv::aruco::DICT_4X4_1000},
+      {"DICT_5X5_50", cv::aruco::DICT_5X5_50},
+      {"DICT_5X5_100", cv::aruco::DICT_5X5_100},
+      {"DICT_5X5_250", cv::aruco::DICT_5X5_250},
+      {"DICT_5X5_1000", cv::aruco::DICT_5X5_1000},
+      {"DICT_6X6_50", cv::aruco::DICT_6X6_50},
+      {"DICT_6X6_100", cv::aruco::DICT_6X6_100},
+      {"DICT_6X6_250", cv::aruco::DICT_6X6_250},
+      {"DICT_6X6_1000", cv::aruco::DICT_6X6_1000},
+      {"DICT_APRILTAG_16H5", cv::aruco::DICT_APRILTAG_16h5},
+      {"DICT_APRILTAG_25H9", cv::aruco::DICT_APRILTAG_25h9},
+      {"DICT_APRILTAG_36H10", cv::aruco::DICT_APRILTAG_36h10},
+      {"DICT_APRILTAG_36H11", cv::aruco::DICT_APRILTAG_36h11}
+    };
+    for (const auto &m : table) if (s == m.n) return m.v;
+    RCLCPP_WARN(rclcpp::get_logger("handeye_calibration_cpp"), "Unknown aruco dict '%s', defaulting to DICT_5X5_1000", name.c_str());
+    return cv::aruco::DICT_5X5_1000;
+  }
+
+  std::string HandeyeCalibration::arucoDictToString(int dict_id)
+  {
+    switch(dict_id){
+      case cv::aruco::DICT_4X4_50: return "DICT_4X4_50";
+      case cv::aruco::DICT_4X4_100: return "DICT_4X4_100";
+      case cv::aruco::DICT_4X4_250: return "DICT_4X4_250";
+      case cv::aruco::DICT_4X4_1000: return "DICT_4X4_1000";
+      case cv::aruco::DICT_5X5_50: return "DICT_5X5_50";
+      case cv::aruco::DICT_5X5_100: return "DICT_5X5_100";
+      case cv::aruco::DICT_5X5_250: return "DICT_5X5_250";
+      case cv::aruco::DICT_5X5_1000: return "DICT_5X5_1000";
+      case cv::aruco::DICT_6X6_50: return "DICT_6X6_50";
+      case cv::aruco::DICT_6X6_100: return "DICT_6X6_100";
+      case cv::aruco::DICT_6X6_250: return "DICT_6X6_250";
+      case cv::aruco::DICT_6X6_1000: return "DICT_6X6_1000";
+      case cv::aruco::DICT_APRILTAG_16h5: return "DICT_APRILTAG_16H5";
+      case cv::aruco::DICT_APRILTAG_25h9: return "DICT_APRILTAG_25H9";
+      case cv::aruco::DICT_APRILTAG_36h10: return "DICT_APRILTAG_36H10";
+      case cv::aruco::DICT_APRILTAG_36h11: return "DICT_APRILTAG_36H11";
+      default: return "UNKNOWN";
+    }
+  }

@@ -57,12 +57,6 @@ namespace behav3d::handeye
       geometry_msgs::msg::PoseStamped tool0_pose; // base->tool0 pose
     };
 
-    struct ErrorStats {
-      double rot_rmse_deg = 0.0;
-      double trans_rmse_m = 0.0;
-      double rot_max_deg = 0.0;
-      double trans_max_m = 0.0;
-    };
 
     // Parameters
     std::string output_root_ = "~/behav3d_ws/captures"; // where session-* live
@@ -119,12 +113,8 @@ namespace behav3d::handeye
 
     static int methodFromString(const std::string &name);
     static std::string methodToString(int flag);
-    static ErrorStats compute_AX_XB_error(const std::vector<cv::Mat> &R_g2b,
-                                          const std::vector<cv::Mat> &t_g2b,
-                                          const std::vector<cv::Mat> &R_t2c,
-                                          const std::vector<cv::Mat> &t_t2c,
-                                          const cv::Mat &R_c2g,
-                                          const cv::Mat &t_c2g);
+    static int arucoDictFromString(const std::string &name);
+    static std::string arucoDictToString(int dict_id);
 
     bool write_outputs(const std::filesystem::path &session_dir,
                        const cv::Mat &R_cam2gripper,
@@ -132,7 +122,6 @@ namespace behav3d::handeye
                        size_t pairs_used,
                        const std::string &parent_frame,
                        const std::string &child_frame,
-                       const ErrorStats &stats,
                        const std::string &method_name) const;
   };
 
