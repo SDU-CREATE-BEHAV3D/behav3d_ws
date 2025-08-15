@@ -513,13 +513,78 @@ namespace behav3d::handeye
     if (!pose_ok)
       return false;
 
+    // Basic sanity: board should be in front of camera (z > 0)
+    if (tvec.total() >= 3 && tvec.depth() == CV_64F)
+    {
+      if (tvec.at<double>(2) <= 0)
+        HE_WARN(this, "estimatePoseCharucoBoard yielded tvec.z <= 0 (%.4f). Check dictionary/square sizes.", tvec.at<double>(2));
+    }
+
     if (visualize)
     {
       cv::Mat vis = gray.clone();
       cv::cvtColor(vis, vis, cv::COLOR_GRAY2BGR);
+
+      // Draw raw detections
       cv::aruco::drawDetectedMarkers(vis, corners, ids);
       cv::aruco::drawDetectedCornersCharuco(vis, charuco_corners, charuco_ids, cv::Scalar(0,255,0));
-      cv::drawFrameAxes(vis, K, D, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
+
+      // 1) Draw camera axes at board origin
+      // Axis length in *board units* (meters). If axes look wrong, check board square_len_m!
+      const float axis_len = static_cast<float>(board_.square_len_m) * 2.0f;
+      cv::drawFrameAxes(vis, K, D, rvec, tvec, axis_len);
+
+      // 2) Reproject board chessboard corners and draw outline to verify geometry
+      std::vector<cv::Point3f> obj_pts = board_obj_->chessboardCorners;
+      std::vector<cv::Point2f> img_pts;
+      if (!obj_pts.empty())
+      {
+        cv::projectPoints(obj_pts, rvec, tvec, K, D, img_pts);
+
+        // Draw outer border (four corners: (0,0), (Nx-1,0), (Nx-1,Ny-1), (0,Ny-1))
+        int Nx = board_.squares_x;
+        int Ny = board_.squares_y;
+        auto idx = [Nx](int x, int y){ return y * Nx + x; };
+        std::vector<cv::Point> border;
+        border.push_back(img_pts[idx(0,0)]);
+        border.push_back(img_pts[idx(Nx-1,0)]);
+        border.push_back(img_pts[idx(Nx-1,Ny-1)]);
+        border.push_back(img_pts[idx(0,Ny-1)]);
+        const cv::Point *bp = border.data();
+        int nbp = (int)border.size();
+        cv::polylines(vis, &bp, &nbp, 1, true, cv::Scalar(255,0,0), 2);
+
+        // Draw a grid of small dots for every board corner
+        for (const auto &pt : img_pts)
+          cv::circle(vis, pt, 2, cv::Scalar(0,255,255), -1, cv::LINE_AA);
+      }
+
+      // 3) Compute and print reprojection error for detected ChArUco corners (diagnostic)
+      double reproj_rmse = 0.0;
+      if (!charuco_corners.empty())
+      {
+        std::vector<cv::Point3f> used_obj_pts;
+        used_obj_pts.reserve(charuco_ids.total());
+        for (int i = 0; i < charuco_ids.total(); ++i)
+        {
+          int id = charuco_ids.at<int>(i,0);
+          used_obj_pts.push_back(board_obj_->chessboardCorners[(size_t)id]);
+        }
+        std::vector<cv::Point2f> proj_pts;
+        cv::projectPoints(used_obj_pts, rvec, tvec, K, D, proj_pts);
+        double se = 0.0; int N = (int)proj_pts.size();
+        for (int i = 0; i < N; ++i)
+        {
+          cv::Point2f d = proj_pts[i] - charuco_corners.row(i).at<cv::Point2f>(0);
+          se += d.x*d.x + d.y*d.y;
+        }
+        reproj_rmse = (N>0) ? std::sqrt(se / N) : 0.0;
+      }
+      char text[128]; std::snprintf(text, sizeof(text), "RMSE: %.2f px", reproj_rmse);
+      cv::putText(vis, text, {15,30}, cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,0), 3, cv::LINE_AA);
+      cv::putText(vis, text, {15,30}, cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,255,0), 1, cv::LINE_AA);
+
+      // Scale and show
       double s = std::clamp(visualize_display_scale_, 0.05, 4.0);
       cv::Mat vis_scaled;
       int interp = (s < 1.0) ? cv::INTER_AREA : cv::INTER_LINEAR;
