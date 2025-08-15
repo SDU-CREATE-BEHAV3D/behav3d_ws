@@ -139,6 +139,12 @@ namespace behav3d::handeye
       }
 
       int imread_flag = (camera_name == "ir") ? cv::IMREAD_UNCHANGED : cv::IMREAD_COLOR;
+      // Existence guard before imread to avoid fallback behavior
+      if (!fs::exists(img_path)) {
+        HE_DEBUG(this, "[%s] Item %zu: file does not exist '%s'", camera_name.c_str(), dbg_idx_local, img_path.c_str());
+        ++dbg_idx_local;
+        continue;
+      }
       cv::Mat img = cv::imread(img_path, imread_flag);
       if (img.empty())
       {
@@ -337,6 +343,28 @@ namespace behav3d::handeye
           if (files.contains("ir") && !files["ir"].is_null())
             ci.ir_path = files["ir"].get<std::string>();
         }
+
+        // Normalize file paths to be absolute under this session directory if needed
+        auto make_abs = [&](const std::string &p) -> std::string {
+          if (p.empty()) return p;
+          fs::path pp(p);
+          if (pp.is_absolute()) return pp.string();
+          return (session_dir / pp).string();
+        };
+
+        ci.color_path = make_abs(ci.color_path);
+        ci.ir_path    = make_abs(ci.ir_path);
+
+        // Validate existence to avoid accidentally picking up similarly named files elsewhere
+        if (!ci.color_path.empty() && !fs::exists(ci.color_path)) {
+          HE_DEBUG(this, "[manifest] Missing color file resolved to '%s' — skipping color for this capture.", ci.color_path.c_str());
+          ci.color_path.clear();
+        }
+        if (!ci.ir_path.empty() && !fs::exists(ci.ir_path)) {
+          HE_DEBUG(this, "[manifest] Missing IR file resolved to '%s' — skipping IR for this capture.", ci.ir_path.c_str());
+          ci.ir_path.clear();
+        }
+
         const auto &pt = entry.at("pose_tool0");
         geometry_msgs::msg::PoseStamped ps;
         ps.header.frame_id = pt.value("frame", std::string(""));
