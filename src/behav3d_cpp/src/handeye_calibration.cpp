@@ -48,6 +48,7 @@ namespace behav3d::handeye
 
     visualize_ = this->declare_parameter<bool>("handeye_visualize", visualize_);
     visualize_pause_ms_ = this->declare_parameter<int>("handeye_visualize_pause_ms", visualize_pause_ms_);
+    visualize_display_scale_ = this->declare_parameter<double>("handeye_visualize_display_scale", visualize_display_scale_);
 
     std::string method_param = this->declare_parameter<std::string>("handeye_calibration_method", calib_method_name_);
     calib_method_flag_ = methodFromString(method_param);
@@ -78,11 +79,15 @@ namespace behav3d::handeye
   {
     getSessionParameters();
 
+    if (visualize_) {
+      cv::namedWindow("charuco", cv::WINDOW_AUTOSIZE);
+    }
     // 1) Resolve session directory
     fs::path session_dir = resolve_session_dir();
     if (session_dir.empty())
     {
       HE_ERROR(this, "No valid session directory found. Set 'session_dir' or ensure output root exists.");
+      if (visualize_) cv::destroyAllWindows();
       return false;
     }
     HE_INFO(this, "Using session: %s", session_dir.string().c_str());
@@ -92,6 +97,7 @@ namespace behav3d::handeye
     if (!load_manifest(session_dir, items) || items.empty())
     {
       HE_ERROR(this, "No valid captures found in manifest.json");
+      if (visualize_) cv::destroyAllWindows();
       return false;
     }
 
@@ -99,6 +105,7 @@ namespace behav3d::handeye
     if (!load_camera_calib(session_dir))
     {
       HE_ERROR(this, "Camera intrinsics missing or invalid");
+      if (visualize_) cv::destroyAllWindows();
       return false;
     }
 
@@ -165,6 +172,7 @@ namespace behav3d::handeye
     if (R_target2cam.size() < 3 || R_gripper2base.size() != R_target2cam.size())
     {
       HE_ERROR(this, "Not enough valid image/pose pairs: %zu", R_target2cam.size());
+      if (visualize_) cv::destroyAllWindows();
       return false;
     }
 
@@ -175,14 +183,18 @@ namespace behav3d::handeye
                            R_cam2gripper, t_cam2gripper,
                            calib_method_flag_, calib_method_name_))
     {
+      if (visualize_) cv::destroyAllWindows();
       return false;
     }
 
     // 6) Write outputs
-    if (!write_outputs(session_dir, R_cam2gripper, t_cam2gripper, used))
+    if (!write_outputs(session_dir, R_cam2gripper, t_cam2gripper, used)) {
+      if (visualize_) cv::destroyAllWindows();
       return false;
+    }
 
     HE_INFO(this, "Done. Used %zu image/pose pairs.", used);
+    if (visualize_) cv::destroyAllWindows();
     return true;
   }
 
@@ -241,6 +253,7 @@ namespace behav3d::handeye
 
     visualize_ = this->get_parameter("handeye_visualize").as_bool();
     visualize_pause_ms_ = this->get_parameter("handeye_visualize_pause_ms").as_int();
+    visualize_display_scale_ = this->get_parameter("handeye_visualize_display_scale").as_double();
 
     board_.squares_x = this->get_parameter("handeye_board_squares_x").as_int();
     board_.squares_y = this->get_parameter("handeye_board_squares_y").as_int();
@@ -261,12 +274,12 @@ namespace behav3d::handeye
     calib_method_name_ = methodToString(calib_method_flag_);
 
     HE_DEBUG(this,
-             "Params updated: session_dir='%s', output_dir='%s', method=%s, dict=%d, board=%dx%d, square=%.4f, marker=%.4f, visualize=%s, pause_ms=%d",
+             "Params updated: session_dir='%s', output_dir='%s', method=%s, dict=%d, board=%dx%d, square=%.4f, marker=%.4f, visualize=%s, pause_ms=%d, scale=%.2f",
              session_dir_param_.c_str(), output_root_.c_str(),
              calib_method_name_.c_str(), board_.aruco_dict_id,
              board_.squares_x, board_.squares_y,
              board_.square_len_m, board_.marker_len_m,
-             visualize_ ? "true" : "false", visualize_pause_ms_);
+             visualize_ ? "true" : "false", visualize_pause_ms_, visualize_display_scale_);
   }
 
   bool HandeyeCalibration::load_manifest(const fs::path &session_dir, std::vector<CaptureItem> &items)
@@ -426,7 +439,12 @@ namespace behav3d::handeye
       cv::Mat vis = img.clone();
       cv::aruco::drawDetectedMarkers(vis, corners, ids);
       cv::drawFrameAxes(vis, K_, D_, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
-      cv::imshow("charuco", vis);
+      // Apply uniform scaling for display only
+      double s = std::clamp(visualize_display_scale_, 0.05, 4.0);
+      cv::Mat vis_scaled;
+      int interp = (s < 1.0) ? cv::INTER_AREA : cv::INTER_LINEAR;
+      cv::resize(vis, vis_scaled, cv::Size(), s, s, interp);
+      cv::imshow("charuco", vis_scaled);
       cv::waitKey(visualize_pause_ms_);
     }
     return true;

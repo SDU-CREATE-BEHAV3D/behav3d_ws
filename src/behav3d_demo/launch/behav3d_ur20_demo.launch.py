@@ -187,6 +187,11 @@ def generate_launch_description():
         default_value='true',
         description='Enable visualization for hand-eye (Charuco overlays, axes)'
     )
+    handeye_visualize_display_scale_arg = DeclareLaunchArgument(
+        'handeye_visualize_display_scale',
+        default_value='0.5',
+        description='Uniform scale factor for on-screen visualization (0.1–4.0)'
+    )
 
     # Misc
     
@@ -352,6 +357,7 @@ def generate_launch_description():
                 'handeye_calibration_method': LaunchConfiguration('handeye_calibration_method'),
                 'handeye_visualize_pause_ms': ParameterValue(LaunchConfiguration('handeye_visualize_pause_ms'), value_type=int),
                 'handeye_visualize': ParameterValue(LaunchConfiguration('handeye_visualize'), value_type=bool),
+                'handeye_visualize_display_scale': ParameterValue(LaunchConfiguration('handeye_visualize_display_scale'), value_type=float),
             }
         ],
     )
@@ -383,6 +389,7 @@ def generate_launch_description():
             handeye_calibration_method_arg,
             handeye_visualize_pause_ms_arg,
             handeye_visualize_arg,
+            handeye_visualize_display_scale_arg,
             debug_arg,
             # Then include/launch nodes
             ur_driver,
