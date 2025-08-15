@@ -176,6 +176,9 @@ namespace behav3d::handeye
 
   fs::path HandeyeCalibration::resolve_session_dir() const
   {
+    std::string session_dir_param = this->get_parameter("session_dir").as_string();
+    std::string output_root_param = this->get_parameter("output_dir").as_string();
+    
     if (!session_dir_param_.empty())
     {
       fs::path sp = expand_user(session_dir_param_);

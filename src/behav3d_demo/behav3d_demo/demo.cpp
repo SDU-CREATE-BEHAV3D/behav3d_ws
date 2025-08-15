@@ -147,14 +147,11 @@ private:
     // Run Hand-Eye calibration for this session
     const std::string session_dir = sess_->getSessionDir();
     if (!session_dir.empty())
-    // Run Hand-Eye calibration for this session
-    const std::string session_dir = sess_->getSessionDir();
-    if (!session_dir.empty())
     {
       // Push every hand-eye parameter here (types must match what the node declares)
       calib_->set_parameters({
         rclcpp::Parameter("session_dir", session_dir),
-        rclcpp::Parameter("output_dir", "/home/lab/behav3d_ws/captures"),      // or whatever root you use
+        rclcpp::Parameter("output_dir", "/home/lab/behav3d_ws/captures"),       // or whatever root you use
         rclcpp::Parameter("board_squares_x", 7),                                // int
         rclcpp::Parameter("board_squares_y", 5),                                // int
         rclcpp::Parameter("square_length_m", 0.0288),                           // double
