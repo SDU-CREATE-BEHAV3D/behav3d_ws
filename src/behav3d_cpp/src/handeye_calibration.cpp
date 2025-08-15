@@ -61,6 +61,13 @@ namespace behav3d::handeye
     board_.marker_len_m = this->declare_parameter<double>("handeye_marker_length_m", board_.marker_len_m);
     board_.aruco_dict_id = this->declare_parameter<int>("handeye_aruco_dict_id", board_.aruco_dict_id);
 
+    // IR preprocessing parameters
+    ir_clip_max_ = this->declare_parameter<int>("handeye_ir_clip_max", ir_clip_max_);
+    ir_invert_ = this->declare_parameter<bool>("handeye_ir_invert", ir_invert_);
+    ir_use_clahe_ = this->declare_parameter<bool>("handeye_ir_use_clahe", ir_use_clahe_);
+    ir_clahe_clip_ = this->declare_parameter<double>("handeye_ir_clahe_clip", ir_clahe_clip_);
+    ir_clahe_tiles_ = this->declare_parameter<int>("handeye_ir_clahe_tiles", ir_clahe_tiles_);
+
     dict_ = cv::aruco::getPredefinedDictionary(board_.aruco_dict_id);
     board_obj_ = cv::aruco::CharucoBoard::create(board_.squares_x, board_.squares_y,
                                                  static_cast<float>(board_.square_len_m),
@@ -117,51 +124,52 @@ namespace behav3d::handeye
 
       std::size_t used_local = 0;
       std::size_t dbg_idx_local = 0;
-      for (const auto &it : items)
+    for (const auto &it : items)
+    {
+      const std::string &img_path = (camera_name == "color") ? it.color_path : it.ir_path;
+      HE_DEBUG(this, "[%s] Item %zu: capture_ok=%s, path='%s'", camera_name.c_str(), dbg_idx_local, it.capture_ok ? "true" : "false", img_path.c_str());
+      if (!it.capture_ok || img_path.empty())
       {
-        const std::string &img_path = (camera_name == "color") ? it.color_path : it.ir_path;
-        HE_DEBUG(this, "[%s] Item %zu: capture_ok=%s, path='%s'", camera_name.c_str(), dbg_idx_local, it.capture_ok ? "true" : "false", img_path.c_str());
-        if (!it.capture_ok || img_path.empty())
-        {
-          ++dbg_idx_local;
-          continue;
-        }
-
-        cv::Mat img = cv::imread(img_path, cv::IMREAD_COLOR);
-        if (img.empty())
-        {
-          HE_DEBUG(this, "[%s] Item %zu: cv::imread failed for '%s'", camera_name.c_str(), dbg_idx_local, img_path.c_str());
-          ++dbg_idx_local;
-          continue;
-        }
-
-        cv::Mat rvec, tvec;
-        HE_DEBUG(this, "[%s] Item %zu: running Charuco detection", camera_name.c_str(), dbg_idx_local);
-        if (!detect_charuco(img, K, D, rvec, tvec, visualize_))
-        {
-          HE_DEBUG(this, "[%s] Item %zu: Charuco detection failed", camera_name.c_str(), dbg_idx_local);
-          ++dbg_idx_local;
-          continue;
-        }
-        HE_DEBUG(this, "[%s] Item %zu: Charuco detection OK", camera_name.c_str(), dbg_idx_local);
-
-        cv::Mat Rtc; // target->cam rotation
-        cv::Rodrigues(rvec, Rtc);
-        R_target2cam.push_back(Rtc);
-        t_target2cam.push_back(tvec.clone());
-
-        // base->gripper from manifest, invert to gripper->base
-        const auto &pose = it.tool0_pose.pose; // base->tool0
-        cv::Mat R_b2g = quat_to_R(pose);
-        cv::Mat t_b2g = vec3_to_t(pose);
-        cv::Mat R_g2b = R_b2g.t();
-        cv::Mat t_g2b = -R_b2g.t() * t_b2g;
-        R_gripper2base.push_back(R_g2b);
-        t_gripper2base.push_back(t_g2b);
-
-        ++used_local;
         ++dbg_idx_local;
+        continue;
       }
+
+      int imread_flag = (camera_name == "ir") ? cv::IMREAD_UNCHANGED : cv::IMREAD_COLOR;
+      cv::Mat img = cv::imread(img_path, imread_flag);
+      if (img.empty())
+      {
+        HE_DEBUG(this, "[%s] Item %zu: cv::imread failed for '%s'", camera_name.c_str(), dbg_idx_local, img_path.c_str());
+        ++dbg_idx_local;
+        continue;
+      }
+
+      cv::Mat rvec, tvec;
+      HE_DEBUG(this, "[%s] Item %zu: running Charuco detection", camera_name.c_str(), dbg_idx_local);
+      if (!detect_charuco(img, K, D, rvec, tvec, visualize_))
+      {
+        HE_DEBUG(this, "[%s] Item %zu: Charuco detection failed", camera_name.c_str(), dbg_idx_local);
+        ++dbg_idx_local;
+        continue;
+      }
+      HE_DEBUG(this, "[%s] Item %zu: Charuco detection OK", camera_name.c_str(), dbg_idx_local);
+
+      cv::Mat Rtc; // target->cam rotation
+      cv::Rodrigues(rvec, Rtc);
+      R_target2cam.push_back(Rtc);
+      t_target2cam.push_back(tvec.clone());
+
+      // base->gripper from manifest, invert to gripper->base
+      const auto &pose = it.tool0_pose.pose; // base->tool0
+      cv::Mat R_b2g = quat_to_R(pose);
+      cv::Mat t_b2g = vec3_to_t(pose);
+      cv::Mat R_g2b = R_b2g.t();
+      cv::Mat t_g2b = -R_b2g.t() * t_b2g;
+      R_gripper2base.push_back(R_g2b);
+      t_gripper2base.push_back(t_g2b);
+
+      ++used_local;
+      ++dbg_idx_local;
+    }
 
       if (R_target2cam.size() < 3 || R_gripper2base.size() != R_target2cam.size())
       {
@@ -277,6 +285,13 @@ namespace behav3d::handeye
     std::string method_param = this->get_parameter("handeye_calibration_method").as_string();
     calib_method_flag_ = methodFromString(method_param);
     calib_method_name_ = methodToString(calib_method_flag_);
+
+    // Refresh IR preprocessing parameters
+    ir_clip_max_ = this->get_parameter("handeye_ir_clip_max").as_int();
+    ir_invert_ = this->get_parameter("handeye_ir_invert").as_bool();
+    ir_use_clahe_ = this->get_parameter("handeye_ir_use_clahe").as_bool();
+    ir_clahe_clip_ = this->get_parameter("handeye_ir_clahe_clip").as_double();
+    ir_clahe_tiles_ = this->get_parameter("handeye_ir_clahe_tiles").as_int();
 
     HE_DEBUG(this,
              "Params updated: session_dir='%s', output_dir='%s', method=%s, dict=%d, board=%dx%d, square=%.4f, marker=%.4f, visualize=%s, pause_ms=%d, scale=%.2f",
@@ -422,6 +437,52 @@ namespace behav3d::handeye
     return true;
   }
 
+  cv::Mat HandeyeCalibration::preprocess_ir_to_gray(const cv::Mat &img) const
+  {
+    // Convert to grayscale if needed
+    cv::Mat gray;
+    if (img.channels() == 3)
+    {
+      cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+    }
+    else
+    {
+      gray = img.clone();
+    }
+
+    // If not 8-bit, normalize to 0..255 (with optional clipping)
+    if (gray.depth() != CV_8U)
+    {
+      if (ir_clip_max_ > 0)
+      {
+        cv::Mat tmp;
+        cv::threshold(gray, tmp, ir_clip_max_, ir_clip_max_, cv::THRESH_TRUNC);
+        gray = tmp;
+      }
+      cv::Mat norm8;
+      cv::normalize(gray, norm8, 0, 255, cv::NORM_MINMAX, CV_8U);
+      gray = norm8;
+    }
+
+    // Optional local contrast enhancement
+    if (ir_use_clahe_)
+    {
+      cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(ir_clahe_clip_, cv::Size(std::max(1, ir_clahe_tiles_), std::max(1, ir_clahe_tiles_)));
+      cv::Mat cl;
+      clahe->apply(gray, cl);
+      gray = cl;
+    }
+
+    if (ir_invert_)
+    {
+      cv::bitwise_not(gray, gray);
+    }
+
+    // Light denoise
+    cv::GaussianBlur(gray, gray, cv::Size(3,3), 0.0);
+    return gray;
+  }
+
   bool HandeyeCalibration::detect_charuco(const cv::Mat &img,
                                           const cv::Mat &K,
                                           const cv::Mat &D,
@@ -429,15 +490,22 @@ namespace behav3d::handeye
                                           cv::Mat &tvec,
                                           bool visualize)
   {
+    // --- Preprocess to 8-bit grayscale (handles 16-bit IR) ---
+    cv::Mat gray;
+    if (img.channels() == 3 && img.depth() == CV_8U)
+      cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+    else
+      gray = preprocess_ir_to_gray(img);
+
     std::vector<int> ids;
     std::vector<std::vector<cv::Point2f>> corners;
     cv::Ptr<cv::aruco::DetectorParameters> params = cv::aruco::DetectorParameters::create();
-    cv::aruco::detectMarkers(img, dict_, corners, ids, params);
+    cv::aruco::detectMarkers(gray, dict_, corners, ids, params);
     if (ids.empty())
       return false;
 
     cv::Mat charuco_corners, charuco_ids;
-    cv::aruco::interpolateCornersCharuco(corners, ids, img, board_obj_, charuco_corners, charuco_ids);
+    cv::aruco::interpolateCornersCharuco(corners, ids, gray, board_obj_, charuco_corners, charuco_ids);
     if (charuco_corners.empty())
       return false;
 
@@ -447,8 +515,10 @@ namespace behav3d::handeye
 
     if (visualize)
     {
-      cv::Mat vis = img.clone();
+      cv::Mat vis = gray.clone();
+      cv::cvtColor(vis, vis, cv::COLOR_GRAY2BGR);
       cv::aruco::drawDetectedMarkers(vis, corners, ids);
+      cv::aruco::drawDetectedCornersCharuco(vis, charuco_corners, charuco_ids, cv::Scalar(0,255,0));
       cv::drawFrameAxes(vis, K, D, rvec, tvec, static_cast<float>(board_.square_len_m) * 2.0f);
       double s = std::clamp(visualize_display_scale_, 0.05, 4.0);
       cv::Mat vis_scaled;

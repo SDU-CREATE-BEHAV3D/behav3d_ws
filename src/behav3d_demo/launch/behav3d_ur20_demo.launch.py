@@ -142,13 +142,13 @@ def generate_launch_description():
 
     handeye_board_squares_x_arg = DeclareLaunchArgument(
         'handeye_board_squares_x',
-        default_value='5',
+        default_value='9',
         description='Charuco squares X for hand-eye'
     )
 
     handeye_board_squares_y_arg = DeclareLaunchArgument(
         'handeye_board_squares_y',
-        default_value='7',
+        default_value='12',
         description='Charuco squares Y for hand-eye'
     )
 
@@ -160,13 +160,13 @@ def generate_launch_description():
 
     handeye_marker_length_m_arg = DeclareLaunchArgument(
         'handeye_marker_length_m',
-        default_value='0.02',
+        default_value='0.022',
         description='Marker length (m) for hand-eye'
     )
 
     handeye_aruco_dict_id_arg = DeclareLaunchArgument(
         'handeye_aruco_dict_id',
-        default_value='0',
+        default_value='10',
         description='ArUco dict id for hand-eye'
     )
 

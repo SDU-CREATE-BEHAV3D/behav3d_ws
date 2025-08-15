@@ -79,6 +79,13 @@ namespace behav3d::handeye
     cv::Ptr<cv::aruco::Dictionary> dict_;
     cv::Ptr<cv::aruco::CharucoBoard> board_obj_;
 
+    // IR preprocessing parameters
+    int ir_clip_max_ = -1;          // if >0, clamp 16-bit IR to this before normalization
+    bool ir_invert_ = false;        // optionally invert IR image after normalization
+    bool ir_use_clahe_ = true;      // apply CLAHE to boost contrast
+    double ir_clahe_clip_ = 3.0;    // CLAHE clip limit
+    int ir_clahe_tiles_ = 8;        // CLAHE tile grid size (NxN)
+
 
     // Helpers (steps of the pipeline)
     static std::string expand_user(const std::string &p);
@@ -97,6 +104,9 @@ namespace behav3d::handeye
 
     static cv::Mat quat_to_R(const geometry_msgs::msg::Pose &p);
     static cv::Mat vec3_to_t(const geometry_msgs::msg::Pose &p);
+
+    // IR preprocessing helper
+    cv::Mat preprocess_ir_to_gray(const cv::Mat &img) const;
 
     static bool calibrate_handeye(const std::vector<cv::Mat> &R_gripper2base,
                                   const std::vector<cv::Mat> &t_gripper2base,
