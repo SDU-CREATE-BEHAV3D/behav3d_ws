@@ -44,6 +44,7 @@ using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
 using behav3d::target_builder::worldXZ;
 using behav3d::trajectory_builder::fibonacciSphericalCap;
+using behav3d::trajectory_builder::addJitter;
 using behav3d::trajectory_builder::sweepZigzag;
 using behav3d::util::deg2rad;
 
@@ -125,6 +126,8 @@ private:
     const double cap_rad = deg2rad(cap_deg);
     const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
     auto targets = fibonacciSphericalCap(center, radius, cap_rad, n_points);
+    targets = addJitter(targets, 0.01, 5)
+    
     if (targets.empty())
     {
       RCLCPP_WARN(this->get_logger(), "fibonacci_cap: no targets generated!");
