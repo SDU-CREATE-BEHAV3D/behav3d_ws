@@ -85,13 +85,13 @@ def generate_launch_description():
 
     max_velocity_scale_arg = DeclareLaunchArgument(
         "max_velocity_scale",
-        default_value="0.5",
+        default_value="0.2",
         description="Max velocity scale [0..1]"
     )
 
     max_accel_scale_arg = DeclareLaunchArgument(
         "max_accel_scale",
-        default_value="0.5",
+        default_value="0.2",
         description="Max acceleration scale [0..1]"
     )
 
@@ -217,8 +217,8 @@ def generate_launch_description():
         launch_arguments={
             # Color: 3840 x 2160 @ 30 fps
             "enable_color": "true",
-            "color_width": "1920",
-            "color_height": "1080",
+            "color_width": "3840",
+            "color_height": "2160",
             "color_fps": "30",
             "color_format": "MJPG",
             # Depth (NFOV, unbinned-equivalent): 640 x 576 @ 30 fps
