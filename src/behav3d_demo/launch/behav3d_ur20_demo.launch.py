@@ -116,7 +116,7 @@ def generate_launch_description():
 
     capture_delay_sec_arg = DeclareLaunchArgument(
         "capture_delay_sec",
-        default_value="0.5",
+        default_value="2.0",
         description="Wait time before capture [s]"
     )
 
