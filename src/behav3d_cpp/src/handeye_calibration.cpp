@@ -108,29 +108,33 @@ namespace behav3d::handeye
     HE_DEBUG(this, "Scanning %zu captures for images/poses", items.size());
 
     std::size_t used = 0;
+    std::size_t dbg_idx = 0;
     for (const auto &it : items)
     {
-      HE_DEBUG(this, "Item %s: capture_ok=%s, color_path='%s'", it.key.c_str(), it.capture_ok ? "true" : "false", it.color_path.c_str());
+      HE_DEBUG(this, "Item %zu: capture_ok=%s, color_path='%s'", dbg_idx, it.capture_ok ? "true" : "false", it.color_path.c_str());
       if (!it.capture_ok || it.color_path.empty())
       {
+        ++dbg_idx;
         continue;
       }
 
       cv::Mat img = cv::imread(it.color_path, cv::IMREAD_COLOR);
       if (img.empty()) {
-        HE_DEBUG(this, "Item %s: cv::imread failed for '%s'", it.key.c_str(), it.color_path.c_str());
+        HE_DEBUG(this, "Item %zu: cv::imread failed for '%s'", dbg_idx, it.color_path.c_str());
+        ++dbg_idx;
         continue;
       } else {
-        HE_DEBUG(this, "Item %s: loaded image %dx%d", it.key.c_str(), img.cols, img.rows);
+        HE_DEBUG(this, "Item %zu: loaded image %dx%d", dbg_idx, img.cols, img.rows);
       }
 
       cv::Mat rvec, tvec;
-      HE_DEBUG(this, "Item %s: running Charuco detection", it.key.c_str());
+      HE_DEBUG(this, "Item %zu: running Charuco detection", dbg_idx);
       if (!detect_charuco(img, rvec, tvec, visualize_)) {
-        HE_DEBUG(this, "Item %s: Charuco detection failed", it.key.c_str());
+        HE_DEBUG(this, "Item %zu: Charuco detection failed", dbg_idx);
+        ++dbg_idx;
         continue;
       }
-      HE_DEBUG(this, "Item %s: Charuco detection OK", it.key.c_str());
+      HE_DEBUG(this, "Item %zu: Charuco detection OK", dbg_idx);
 
       cv::Mat Rtc; // target->cam rotation
       cv::Rodrigues(rvec, Rtc);
@@ -146,8 +150,9 @@ namespace behav3d::handeye
       R_gripper2base.push_back(R_g2b);
       t_gripper2base.push_back(t_g2b);
 
-      HE_DEBUG(this, "Item %s: accepted; total used will be %zu", it.key.c_str(), used + 1);
+      HE_DEBUG(this, "Item %zu: accepted; total used will be %zu", dbg_idx, used + 1);
       ++used;
+      ++dbg_idx;
     }
 
     HE_DEBUG(this, "Accumulated pairs: target2cam=%zu, gripper2base=%zu, used=%zu", R_target2cam.size(), R_gripper2base.size(), used);
@@ -251,7 +256,6 @@ namespace behav3d::handeye
       try
       {
         ci.capture_ok = entry.value("capture_ok", entry.value("cap_ok", false));
-        ci.key = entry.value("key", std::string());
         if (entry.contains("files"))
         {
           const auto &files = entry["files"];
