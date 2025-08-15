@@ -31,7 +31,8 @@ add_library(${PROJECT_NAME} SHARED
   src/util.cpp
   src/motion_visualizer.cpp
   src/camera_manager.cpp
-  src/session_manager.cpp 
+  src/session_manager.cpp
+  src/handeye_calibration.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -61,6 +62,7 @@ target_link_libraries(${PROJECT_NAME}
   nlohmann_json::nlohmann_json
   yaml-cpp
 )
+
 
 # ─── Install ─────────────────────────────────────────────────────
 install(

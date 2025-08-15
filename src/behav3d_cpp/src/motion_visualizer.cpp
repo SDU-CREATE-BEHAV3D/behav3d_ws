@@ -17,8 +17,10 @@
 
 #include "behav3d_cpp/motion_visualizer.hpp"
 
-#define PMV_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[PMV] " fmt, ##__VA_ARGS__)
-#define PMV_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[PMV] " fmt, ##__VA_ARGS__)
+#define MV_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[MotionVisualizer] " fmt, ##__VA_ARGS__)
+#define MV_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[MotionVisualizer] " fmt, ##__VA_ARGS__)
+#define MV_WARN(node, fmt, ...) RCLCPP_WARN((node)->get_logger(), "[MotionVisualizer] " fmt, ##__VA_ARGS__)
+#define MV_ERROR(node, fmt, ...) RCLCPP_ERROR((node)->get_logger(), "[MotionVisualizer] " fmt, ##__VA_ARGS__)
 
 namespace behav3d::motion_visualizer
 {
@@ -35,10 +37,10 @@ namespace behav3d::motion_visualizer
     if (debug)
       this->get_logger().set_level(rclcpp::Logger::Level::Debug);
 
-    PMV_INFO(this, "MotionVisualizer init: group=%s, root=%s, eef=%s, debug=%s",
-             this->get_parameter("group").as_string().c_str(),
-             root_link_.c_str(), eef_link_.c_str(),
-             debug ? "true" : "false");
+    MV_INFO(this, "MotionVisualizer init: group=%s, root=%s, eef=%s, debug=%s",
+            this->get_parameter("group").as_string().c_str(),
+            root_link_.c_str(), eef_link_.c_str(),
+            debug ? "true" : "false");
 
     move_group_.setPoseReferenceFrame(root_link_);
     move_group_.setEndEffectorLink(eef_link_);
@@ -50,15 +52,15 @@ namespace behav3d::motion_visualizer
 
     vt_->deleteAllMarkers();
     vt_->loadRemoteControl();
-    PMV_DEBUG(this, "MoveItVisualTools ready");
+    MV_DEBUG(this, "MoveItVisualTools ready");
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   void MotionVisualizer::publishTargetPose(const geometry_msgs::msg::PoseStamped &pose,
                                            const std::string &label)
   {
-    PMV_DEBUG(this, "publishTargetPose: (%.3f,%.3f,%.3f)",
-              pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
+    MV_DEBUG(this, "publishTargetPose: (%.3f,%.3f,%.3f)",
+             pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
     vt_->publishAxisLabeled(pose.pose, label);
     vt_->trigger();
   }
@@ -66,7 +68,7 @@ namespace behav3d::motion_visualizer
   void MotionVisualizer::publishTargetPose(
       const std::vector<geometry_msgs::msg::PoseStamped> &poses)
   {
-    PMV_DEBUG(this, "publishTargetPose batch: %zu poses", poses.size());
+    MV_DEBUG(this, "publishTargetPose batch: %zu poses", poses.size());
 
     for (size_t i = 0; i < poses.size(); ++i)
     {
@@ -91,8 +93,8 @@ namespace behav3d::motion_visualizer
       const robot_trajectory::RobotTrajectoryPtr &traj_ptr,
       const std::string &label)
   {
-    PMV_DEBUG(this, "publishTrail RTTPtr: label=%s, points=%zu",
-              label.c_str(), traj_ptr->getWayPointCount());
+    MV_DEBUG(this, "publishTrail RTTPtr: label=%s, points=%zu",
+             label.c_str(), traj_ptr->getWayPointCount());
     // get the tip link once
     const auto *tip_link =
         move_group_.getRobotModel()->getLinkModel(eef_link_);
@@ -106,10 +108,10 @@ namespace behav3d::motion_visualizer
   }
   void MotionVisualizer::prompt(const std::string &text)
   {
-    PMV_INFO(this, "Prompt RViz: '%s'", text.c_str());
+    MV_INFO(this, "Prompt RViz: '%s'", text.c_str());
     // Original call to MoveItVisualTools:
     vt_->prompt(text);
-    PMV_INFO(this, "Continuando tras prompt");
+    MV_INFO(this, "Continuando tras prompt");
   }
 
 } // namespace behav3d::motion_visualizer

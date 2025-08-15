@@ -14,6 +14,7 @@
 // =============================================================================
 
 #include "behav3d_cpp/session_manager.hpp"
+#include "behav3d_cpp/handeye_calibration.hpp"
 #include "behav3d_cpp/motion_controller.hpp"
 #include "behav3d_cpp/motion_visualizer.hpp"
 #include "behav3d_cpp/camera_manager.hpp"
@@ -27,23 +28,10 @@
 #include <cmath>
 #include <filesystem>
 
-#define SESS_INFO(node, fmt, ...) \
-  RCLCPP_INFO((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
-
-namespace
-{
-  // simple timestamp: YYYYmmdd_HHMMSS
-  inline std::string makeTimestamp()
-  {
-    using clock = std::chrono::system_clock;
-    auto t = clock::to_time_t(clock::now());
-    std::tm tm{};
-    localtime_r(&t, &tm);
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y%m%d_%H%M%S");
-    return oss.str();
-  }
-} // anonymous
+#define SM_DEBUG(node, fmt, ...) RCLCPP_DEBUG((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+#define SM_INFO(node, fmt, ...) RCLCPP_INFO((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+#define SM_WARN(node, fmt, ...) RCLCPP_WARN((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
+#define SM_ERROR(node, fmt, ...) RCLCPP_ERROR((node)->get_logger(), "[SessionManager] " fmt, ##__VA_ARGS__)
 
 #include <chrono>
 #include <filesystem>
@@ -66,67 +54,6 @@ namespace behav3d::session_manager
   static inline std::string tool0Link() { return g_robot_prefix + "_tool0"; }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Helpers (local to this translation unit)
-  // ─────────────────────────────────────────────────────────────────────────────
-  static std::string indexString(std::size_t idx, int width)
-  {
-    std::ostringstream oss;
-    oss << std::setw(width) << std::setfill('0') << idx;
-    return oss.str();
-  }
-
-  static std::string timeStringDateTime(const rclcpp::Time &t)
-  {
-    std::time_t tt = static_cast<time_t>(t.seconds());
-    std::tm tm{};
-#ifdef _WIN32
-    localtime_s(&tm, &tt);
-#else
-    localtime_r(&tt, &tm);
-#endif
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%04d%02d%02d-%02d%02d%02d",
-                  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-                  tm.tm_hour, tm.tm_min, tm.tm_sec);
-    return std::string(buf);
-  }
-
-  static std::string toJsonPose(const geometry_msgs::msg::PoseStamped &ps)
-  {
-    std::ostringstream oss;
-    oss.setf(std::ios::fixed);
-    oss << std::setprecision(6);
-    oss << "{\"frame\":\"" << ps.header.frame_id << "\",";
-    oss << "\"pos\":[" << ps.pose.position.x << "," << ps.pose.position.y << "," << ps.pose.position.z << "],";
-    oss << "\"quat\":[" << ps.pose.orientation.x << "," << ps.pose.orientation.y << ","
-        << ps.pose.orientation.z << "," << ps.pose.orientation.w << "]}";
-    return oss.str();
-  }
-
-  static std::string toJsonJoints(const sensor_msgs::msg::JointState &js)
-  {
-    std::ostringstream oss;
-    oss.setf(std::ios::fixed);
-    oss << std::setprecision(6);
-    oss << "{\"names\":[";
-    for (size_t i = 0; i < js.name.size(); ++i)
-    {
-      if (i)
-        oss << ",";
-      oss << "\"" << js.name[i] << "\"";
-    }
-    oss << "],\"pos\":[";
-    for (size_t i = 0; i < js.position.size(); ++i)
-    {
-      if (i)
-        oss << ",";
-      oss << js.position[i];
-    }
-    oss << "]}";
-    return oss.str();
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
   // SessionManager
   // ─────────────────────────────────────────────────────────────────────────────
   SessionManager::SessionManager(const rclcpp::NodeOptions &options,
@@ -138,10 +65,10 @@ namespace behav3d::session_manager
         ctrl_(std::move(ctrl)), viz_(std::move(viz)), cam_(std::move(cam)),
         home_joints_rad_(std::move(home_joints_rad))
   {
-    RCLCPP_INFO(this->get_logger(), "[SessionManager] initialized");
+    SM_INFO(this, "initialized");
     // Declare robot_prefix parameter once (default: "ur10e") and store it
     g_robot_prefix = this->declare_parameter<std::string>("robot_prefix", "ur10e");
-    RCLCPP_INFO(this->get_logger(), "[SessionManager] robot_prefix: %s", g_robot_prefix.c_str());
+    SM_INFO(this, "robot_prefix: %s", g_robot_prefix.c_str());
     // Where to create session directories (keep same default as CameraManager)
     output_dir_ = this->declare_parameter<std::string>("output_dir", "~/behav3d_ws/captures");
 
@@ -170,7 +97,7 @@ namespace behav3d::session_manager
     // Build session directory name
     auto now = this->now();
     start_stamp_ = now;
-    const std::string ts = timeStringDateTime(now);
+    const std::string ts = behav3d::util::timeStringDateTime(now);
     const std::string tag = opts_.session_tag.empty() ? std::string("untitled") : opts_.session_tag;
 
     // Expand ~ if present
@@ -185,17 +112,17 @@ namespace behav3d::session_manager
     fs::create_directories(root, ec);
     if (ec)
     {
-      RCLCPP_ERROR(this->get_logger(), "[Session] Failed to create output root '%s': %s",
-                   root.c_str(), ec.message().c_str());
+      SM_ERROR(this, "Failed to create output root '%s': %s",
+               root.c_str(), ec.message().c_str());
       return false;
     }
 
-    session_dir_ = fs::path(root) / ("session-" + ts + "_" + tag);
+    session_dir_ = fs::path(root) / ("session-" + ts + "_" + tag + "-" + behav3d::util::timeStringDateTime(now));
     fs::create_directories(session_dir_, ec);
     if (ec)
     {
-      RCLCPP_ERROR(this->get_logger(), "[Session] Failed to create session_dir '%s': %s",
-                   session_dir_.string().c_str(), ec.message().c_str());
+      SM_ERROR(this, "Failed to create session_dir '%s': %s",
+               session_dir_.string().c_str(), ec.message().c_str());
       return false;
     }
 
@@ -219,7 +146,7 @@ namespace behav3d::session_manager
     const double calib_timeout_sec = this->declare_parameter<double>("calib_timeout_sec", 2.0);
     if (!cam_->getCalibration(calib_timeout_sec, /*write_yaml=*/true))
     {
-      RCLCPP_WARN(this->get_logger(), "[Session] Calibration not available within %.3f s; YAMLs not written for this session.", calib_timeout_sec);
+      SM_WARN(this, "Calibration not available within %.3f s; YAMLs not written for this session.", calib_timeout_sec);
     }
 
     // Manifest path (single JSON written at finish())
@@ -231,7 +158,7 @@ namespace behav3d::session_manager
       viz_->deleteAllMarkers();
     }
 
-    RCLCPP_INFO(this->get_logger(), "[Session] Ready at %s", session_dir_.string().c_str());
+    SM_INFO(this, "Ready at %s", session_dir_.string().c_str());
     return true;
   }
 
@@ -239,7 +166,7 @@ namespace behav3d::session_manager
   {
     if (targets.empty())
     {
-      RCLCPP_WARN(this->get_logger(), "[Session] No targets to run.");
+      SM_WARN(this, "No targets to run.");
       return false;
     }
 
@@ -255,7 +182,7 @@ namespace behav3d::session_manager
     for (size_t i = 0; i < targets.size(); ++i)
     {
       const auto &tgt = targets[i];
-      const std::string key = std::string("t") + indexString(i, 3);
+      const std::string key = std::string("t") + behav3d::util::indexString(i, 3);
 
       // ---------------- PLAN ----------------
       auto traj = ctrl_ ? ctrl_->planTarget(tgt, opts_.motion_type) : nullptr;
@@ -342,16 +269,16 @@ namespace behav3d::session_manager
 
       if (!behav3d::util::writeJson(manifest_path_.string(), root))
       {
-        RCLCPP_ERROR(this->get_logger(), "[Session] Failed to write manifest: %s", manifest_path_.string().c_str());
+        SM_ERROR(this, "Failed to write manifest: %s", manifest_path_.string().c_str());
       }
       else
       {
-        RCLCPP_INFO(this->get_logger(), "[Session] Wrote manifest: %s", manifest_path_.string().c_str());
+        SM_INFO(this, "Wrote manifest: %s", manifest_path_.string().c_str());
       }
     }
     catch (const std::exception &e)
     {
-      RCLCPP_ERROR(this->get_logger(), "[Session] Error writing manifest: %s", e.what());
+      SM_ERROR(this, "Error writing manifest: %s", e.what());
     }
 
     goHome();
@@ -396,13 +323,18 @@ namespace behav3d::session_manager
         << "\"d2c\":" << (files.d2c.empty() ? "null" : ("\"" + files.d2c + "\"")) << ","
         << "\"c2d\":" << (files.c2d.empty() ? "null" : ("\"" + files.c2d + "\""))
         << "},";
-    oss << "\"target\":" << toJsonPose(tgt) << ",";
-    oss << "\"pose_tool0\":" << toJsonPose(tool0) << ",";
-    oss << "\"pose_eef\":" << toJsonPose(eef) << ",";
-    oss << "\"joints\":" << toJsonJoints(js);
+    oss << "\"target\":" << behav3d::util::toJsonPose(tgt) << ",";
+    oss << "\"pose_tool0\":" << behav3d::util::toJsonPose(tool0) << ",";
+    oss << "\"pose_eef\":" << behav3d::util::toJsonPose(eef) << ",";
+    oss << "\"joints\":" << behav3d::util::toJsonJoints(js);
     oss << "}";
 
     manifest_entries_.push_back(oss.str());
+  }
+
+  std::string SessionManager::getSessionDir() const
+  {
+    return session_dir_.string();
   }
 
 } // namespace behav3d::session_manager

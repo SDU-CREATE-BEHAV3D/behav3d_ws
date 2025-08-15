@@ -22,6 +22,10 @@
 
 #include <nlohmann/json.hpp>
 #include <yaml-cpp/yaml.h>
+#include <rclcpp/time.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>   // Added for CameraInfo declaration
 
 namespace behav3d::util
 {
@@ -32,13 +36,13 @@ namespace behav3d::util
     /// Radians → degrees
     double rad2deg(double rad);
 
-    /// Wrap angle to (‑π, π]
+    /// Wrap angle to (-π, π]
     double wrapAngle(double rad);
 
     /// Random unit vector (seedable, deterministic).  Default seed uses std::random_device.
     Eigen::Vector3d randomUnitVector(unsigned seed = std::random_device{}());
 
-    /// Roll‑pitch‑yaw (XYZ extrinsic) to quaternion.
+    /// Roll-pitch-yaw (XYZ extrinsic) to quaternion.
     /// If @p degrees == true, @p rpy is interpreted in degrees.
     Eigen::Quaterniond fromRPY(const Eigen::Vector3d &rpy, bool degrees = false);
 
@@ -57,5 +61,23 @@ namespace behav3d::util
 
     /// Write a YAML::Node to disk
     bool writeYaml(const std::string &path, const YAML::Node &node);
+
+    /// Zero-padded integer to string, width >= 1
+    std::string indexString(uint64_t idx, int width);  // Changed to uint64_t
+
+    /// Format rclcpp::Time as YYYYMMDD-HHMMSS
+    std::string timeStringDateTime(const rclcpp::Time &t);
+
+    /// Serialize a PoseStamped to a compact JSON string.
+    std::string toJsonPose(const geometry_msgs::msg::PoseStamped &ps);
+
+    /// Serialize a JointState to a compact JSON string.
+    std::string toJsonJoints(const sensor_msgs::msg::JointState &js);
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // New: Write CameraInfo to OpenCV-style intrinsics YAML (with !!opencv-matrix)
+    // ─────────────────────────────────────────────────────────────────────────────
+    bool writeIntrinsicsYAML_OpenCV(const std::string& path,
+                                    const sensor_msgs::msg::CameraInfo& info);
 
 } // namespace behav3d::util

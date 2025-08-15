@@ -1,141 +1,173 @@
 // =============================================================================
 //   ____  _____ _   _    ___     _______ ____
-//  | __ )| ____| | | |  / \ \   / /___ /|  _ \ 
+//  | __ )| ____| | | |  / \ \   / /___ /|  _ \
 //  |  _ \|  _| | |_| | / _ \ \ / /  |_ \| | | |
 //  | |_) | |___|  _  |/ ___ \ V /  ___) | |_| |
 //  |____/|_____|_| |_/_/   \_\_/  |____/|____/
 //
-// Author: Özgüç Bertuğ Çapunaman <ozca@iti.sdu.dk>
-// Maintainers:
-//   - Lucas José Helle <luh@iti.sdu.dk>
-//   - Joseph Milad Wadie Naguib <jomi@iti.sdu.dk>
-// Institute: University of Southern Denmark (Syddansk Universitet)
-// Date: 2025-07
+// Author: behav3d team
 // =============================================================================
 
-#include <cmath>
-#include <random>
-#include <string>
-#include <fstream>
-#include <Eigen/Dense>
-#include <Eigen/Geometry>
+#include "behav3d_cpp/util.hpp"
 
-#include <nlohmann/json.hpp>
+#include <cmath>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <random>
+#include <stdexcept>
+
 #include <yaml-cpp/yaml.h>
+#include <nlohmann/json.hpp>
 
 namespace behav3d::util
 {
+    // ─────────────────────────────────────────────────────────────────────────
+    // Angles & random
+    // ─────────────────────────────────────────────────────────────────────────
+    double deg2rad(double deg) { return deg * M_PI / 180.0; }
+    double rad2deg(double rad) { return rad * 180.0 / M_PI; }
 
-    constexpr double PI = 3.14159265358979323846;
-
-    /// Degrees → radians
-    double deg2rad(double deg) { return deg * PI / 180.0; }
-
-    /// Radians → degrees
-    double rad2deg(double rad) { return rad * 180.0 / PI; }
-
-    /// Wrap angle to (‑π, π]
     double wrapAngle(double rad)
     {
-        while (rad > PI)
-            rad -= 2.0 * PI;
-        while (rad <= -PI)
-            rad += 2.0 * PI;
-        return rad;
+        // wrap to (-pi, pi]
+        double x = std::fmod(rad + M_PI, 2.0 * M_PI);
+        if (x < 0) x += 2.0 * M_PI;
+        return x - M_PI;
     }
 
-    /// Random unit vector (seedable, deterministic)
-    Eigen::Vector3d randomUnitVector(unsigned seed = std::random_device{}())
+    Eigen::Vector3d randomUnitVector(unsigned seed)
     {
-        std::mt19937 gen(seed);
-        std::uniform_real_distribution<double> dist(0.0, 1.0);
+        std::mt19937 rng(seed);
+        std::uniform_real_distribution<double> unif(-1.0, 1.0);
+        std::uniform_real_distribution<double> angle(0.0, 2.0 * M_PI);
 
-        const double z = 2.0 * dist(gen) - 1.0;
-        const double theta = 2.0 * PI * dist(gen);
-        const double r = std::sqrt(1.0 - z * z);
-
-        return {r * std::cos(theta), r * std::sin(theta), z};
+        // Marsaglia method
+        double z = unif(rng);
+        double t = angle(rng);
+        double r = std::sqrt(std::max(0.0, 1.0 - z*z));
+        return { r * std::cos(t), r * std::sin(t), z };
     }
 
-    /// Roll‑pitch‑yaw (XYZ extrinsic) to quaternion
-    Eigen::Quaterniond fromRPY(const Eigen::Vector3d &rpy, bool degrees = false)
+    Eigen::Quaterniond fromRPY(const Eigen::Vector3d &rpy, bool degrees)
     {
-        Eigen::Vector3d v = degrees ? rpy.unaryExpr([](double d)
-                                                    { return deg2rad(d); })
-                                    : rpy;
+        const double rx = degrees ? deg2rad(rpy.x()) : rpy.x();
+        const double ry = degrees ? deg2rad(rpy.y()) : rpy.y();
+        const double rz = degrees ? deg2rad(rpy.z()) : rpy.z();
 
-        Eigen::AngleAxisd rx(v.x(), Eigen::Vector3d::UnitX());
-        Eigen::AngleAxisd ry(v.y(), Eigen::Vector3d::UnitY());
-        Eigen::AngleAxisd rz(v.z(), Eigen::Vector3d::UnitZ());
+        Eigen::AngleAxisd Rx(rx, Eigen::Vector3d::UnitX());
+        Eigen::AngleAxisd Ry(ry, Eigen::Vector3d::UnitY());
+        Eigen::AngleAxisd Rz(rz, Eigen::Vector3d::UnitZ());
 
-        return rz * ry * rx;
+        // XYZ extrinsic (roll, pitch, yaw)
+        Eigen::Quaterniond q = Rz * Ry * Rx;
+        q.normalize();
+        return q;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────────
-    // Tiny JSON/YAML wrapper (nlohmann::json + yaml-cpp)
-    // ─────────────────────────────────────────────────────────────────────────────
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Tiny JSON/YAML helpers
+    // ─────────────────────────────────────────────────────────────────────────
     bool readJson(const std::string &path, nlohmann::json &out)
     {
-        try
-        {
+        try {
             std::ifstream ifs(path);
-            if (!ifs.is_open())
-                return false;
-            ifs >> out; // throws on parse error
+            if (!ifs.is_open()) return false;
+            ifs >> out;
             return true;
-        }
-        catch (...)
-        {
+        } catch (...) {
             return false;
         }
     }
 
     bool writeJson(const std::string &path, const nlohmann::json &j)
     {
-        try
-        {
+        try {
             std::ofstream ofs(path);
-            if (!ofs.is_open())
-                return false;
-            ofs << j.dump(2); // pretty-print with 2-space indent
-            return static_cast<bool>(ofs);
-        }
-        catch (...)
-        {
+            if (!ofs.is_open()) return false;
+            ofs << std::setw(2) << j;
+            return true;
+        } catch (...) {
             return false;
         }
     }
 
     bool readYaml(const std::string &path, YAML::Node &out)
     {
-        try
-        {
-            out = YAML::LoadFile(path); // throws on I/O/parse error
+        try {
+            out = YAML::LoadFile(path);
             return true;
-        }
-        catch (...)
-        {
+        } catch (...) {
             return false;
         }
     }
 
     bool writeYaml(const std::string &path, const YAML::Node &node)
     {
-        try
-        {
-            YAML::Emitter emitter;
-            emitter << node;
+        try {
             std::ofstream ofs(path);
-            if (!ofs.is_open())
-                return false;
-            ofs << emitter.c_str();
-            return static_cast<bool>(ofs);
-        }
-        catch (...)
-        {
+            if (!ofs.is_open()) return false;
+            ofs << node;
+            return true;
+        } catch (...) {
             return false;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Misc utils
+    // ─────────────────────────────────────────────────────────────────────────
+    std::string indexString(std::size_t idx, int width)
+    {
+        std::ostringstream oss;
+        oss << std::setw(width) << std::setfill('0') << idx;
+        return oss.str();
+    }
+
+    std::string timeStringDateTime(const rclcpp::Time &t)
+    {
+        // Format as YYYYMMDD-HHMMSS
+        int64_t nsec_total = t.nanoseconds();
+        int64_t sec = nsec_total / 1000000000LL;
+
+        std::time_t tt = static_cast<std::time_t>(sec);
+        std::tm bt{};
+    #ifdef _WIN32
+        localtime_s(&bt, &tt);
+    #else
+        localtime_r(&tt, &bt);
+    #endif
+        std::ostringstream oss;
+        oss << std::put_time(&bt, "%Y%m%d-%H%M%S");
+        return oss.str();
+    }
+
+    std::string toJsonPose(const geometry_msgs::msg::PoseStamped &ps)
+    {
+        nlohmann::json j;
+        j["frame"] = ps.header.frame_id;
+        j["stamp"] = {
+            {"sec",  ps.header.stamp.sec},
+            {"nsec", ps.header.stamp.nanosec}
+        };
+        j["pos"]  = { ps.pose.position.x, ps.pose.position.y, ps.pose.position.z };
+        j["quat"] = { ps.pose.orientation.x, ps.pose.orientation.y,
+                      ps.pose.orientation.z, ps.pose.orientation.w };
+        return j.dump();
+    }
+
+    std::string toJsonJoints(const sensor_msgs::msg::JointState &js)
+    {
+        nlohmann::json j;
+        j["stamp"] = {
+            {"sec",  js.header.stamp.sec},
+            {"nsec", js.header.stamp.nanosec}
+        };
+        j["names"]    = js.name;
+        j["position"] = js.position;
+        j["velocity"] = js.velocity;
+        j["effort"]   = js.effort;
+        return j.dump();
     }
 
 } // namespace behav3d::util

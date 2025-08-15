@@ -24,6 +24,8 @@
   <depend>moveit_msgs</depend>
   <depend>eigen3_cmake_module</depend>
   <depend>moveit_visual_tools</depend>
+  <depend>nlohmann_json</depend>
+  <depend>yaml-cpp</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
