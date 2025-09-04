@@ -24,6 +24,7 @@ from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
 )
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -48,6 +49,12 @@ def generate_launch_description():
         description="true = simulation/mock, false = real hardware",
     )
 
+    # Orbbec Params
+    orbbec_enable_arg = DeclareLaunchArgument(
+        "orbbec_enable",
+        default_value="true",
+        description="Start Orbbec camera (orbbec_camera/femto_bolt.launch.py)",
+    )
     # MotionController Params
     group_arg = DeclareLaunchArgument(
         "group",
@@ -63,7 +70,7 @@ def generate_launch_description():
 
     eef_link_arg = DeclareLaunchArgument(
         "eef_link",
-        default_value="femto__depth_optical_frame",
+        default_value="femto__color_optical_frame",
         description="End-effector link"
     )
 
@@ -75,13 +82,13 @@ def generate_launch_description():
 
     max_velocity_scale_arg = DeclareLaunchArgument(
         "max_velocity_scale",
-        default_value="0.5",
+        default_value="0.2",
         description="Max velocity scale [0..1]"
     )
 
     max_accel_scale_arg = DeclareLaunchArgument(
         "max_accel_scale",
-        default_value="0.5",
+        default_value="0.2",
         description="Max acceleration scale [0..1]"
     )
 
@@ -97,6 +104,7 @@ def generate_launch_description():
         default_value="true",
         description="Enable debug logging"
     )
+
     # -------------------------------------------------------------------------
     # 2) Common paths
     # -------------------------------------------------------------------------
@@ -106,7 +114,40 @@ def generate_launch_description():
     moveit_launch_dir = os.path.join(
         get_package_share_directory("ur20_workcell_moveit_config"), "launch"
     )
+    orbbec_launch_dir = os.path.join(
+        get_package_share_directory("orbbec_camera"), "launch"
+    )
 
+    orbbec_camera = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(
+            orbbec_launch_dir, "femto_bolt.launch.py")),
+        condition=IfCondition(LaunchConfiguration("orbbec_enable")),
+        launch_arguments={
+            # Color: 3840 x 2160 @ 30 fps
+            "enable_color": "true",
+            "color_width": "1920",
+            "color_height": "1080",
+            "color_fps": "30",
+            "color_format": "MJPG",
+            # Depth (NFOV, unbinned-equivalent): 640 x 576 @ 30 fps
+            "enable_depth": "true",
+            "depth_width": "640",
+            "depth_height": "576",
+            "depth_fps": "30",
+            "depth_format": "Y16",
+            # IR: 640 x 576 @ 30 fps
+            "enable_ir": "true",
+            "ir_width": "640",
+            "ir_height": "576",
+            "ir_fps": "30",
+            "ir_format": "Y16"
+            # PointCloud
+            # "enable_point_cloud" : "false"
+            # TODO: 'enable_ldp' throws compilation error!
+            # Laser Dot Projector (true for scan / false for calibration)
+            # "enable_ldp": "false"
+        }.items(),
+    )
     # -------------------------------------------------------------------------
     # 3) UR driver (real robot or mock) Calling ur20_workcell start_robot launch
     # -------------------------------------------------------------------------
@@ -163,9 +204,9 @@ def generate_launch_description():
 
     # MoveGroupInterface demo executable
     move_group_demo = Node(
-        name="kinematics_demo_cpp",
-        package="kinematics_demo_cpp",
-        executable="demo",
+        name="behav3d_demo",
+        package="behav3d_demo",
+        executable="mancap",
         output="screen",
         parameters=[
             moveit_config.robot_description,
@@ -197,8 +238,11 @@ def generate_launch_description():
             max_velocity_scale_arg,
             max_accel_scale_arg,
             debug_arg,
+            orbbec_enable_arg,
+            
             ur_driver,
             moveit_stack,
+            orbbec_camera,
             rviz_node,
             move_group_demo
         ]

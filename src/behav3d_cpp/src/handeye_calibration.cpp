@@ -165,6 +165,14 @@ namespace behav3d::handeye
 
       cv::Mat Rtc; // target->cam rotation
       cv::Rodrigues(rvec, Rtc);
+      
+double norm_t = cv::norm(tvec);
+RCLCPP_INFO(this->get_logger(),
+            "[Handeye] tvec = (%.3f, %.3f, %.3f), norm = %.3f m",
+            tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2),
+            norm_t);
+
+
       R_target2cam.push_back(Rtc);
       t_target2cam.push_back(tvec.clone());
 
@@ -197,10 +205,16 @@ namespace behav3d::handeye
         return false;
       }
 
+      // Testtool0→camera, no camera→tool0
+      cv::Mat R_g2c = R_cam2gripper.t();
+      cv::Mat t_g2c = -R_cam2gripper.t() * t_cam2gripper;
+
       // 4) Write outputs with correct frames
-      const std::string parent_frame = this->declare_parameter<std::string>("handeye_parent_frame", std::string("tool0"));
-      if (!write_outputs(session_dir, R_cam2gripper, t_cam2gripper, used_local,
-                         parent_frame, child_frame, calib_method_name_))
+      const std::string parent_frame = this->declare_parameter<std::string>(
+          "handeye_parent_frame", std::string("tool0"));
+      if (!write_outputs(session_dir, R_g2c, t_g2c, used_local,
+                        parent_frame, child_frame, calib_method_name_))
+
       {
         return false;
       }
