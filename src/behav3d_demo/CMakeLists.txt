@@ -7,6 +7,8 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(behav3d_cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(behav3d_interfaces REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -32,6 +34,8 @@ ament_target_dependencies(mancap
   behav3d_cpp
   tf2 tf2_ros tf2_geometry_msgs
   nlohmann_json
+  behav3d_interfaces
+  ament_index_cpp
 )
 
 # (no necesitas target_link_libraries(rclcpp::rclcpp) si usas ament_target_dependencies)

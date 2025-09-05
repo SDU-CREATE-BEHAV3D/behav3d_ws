@@ -1,0 +1,13 @@
+# Request
+string session_dir    # absolute path to the capture session folder
+bool   one_shot       # solver should shut down after replying
+
+---
+# Response
+float64[3] t_m        # translation tool->cam in meters
+float64[4] q_xyzw     # quaternion [x,y,z,w] tool->cam
+int32     num_pairs   # number of valid pairs used
+float64   rms_px      # reprojection RMS (0.0 if not computed)
+string    out_json    # path to saved JSON result
+bool      ok          # success flag
+string    message     # summary/error

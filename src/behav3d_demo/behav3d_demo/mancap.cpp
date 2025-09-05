@@ -35,7 +35,7 @@
 #include <iomanip>
 #include <sstream>
 #include <ctime>
-#include <nlohmann/json.hpp>  // header-only (already used elsewhere in your repo)
+#include <nlohmann/json.hpp>  
 namespace fs = std::filesystem;
 
 #include "behav3d_cpp/camera_manager.hpp"
@@ -44,6 +44,10 @@ namespace fs = std::filesystem;
 #include "behav3d_cpp/target_builder.hpp"
 #include "behav3d_cpp/trajectory_builder.hpp"
 #include "behav3d_cpp/util.hpp"
+#include <behav3d_interfaces/srv/compute_hand_eye.hpp>
+#include <ament_index_cpp/get_package_prefix.hpp>
+#include <thread>
+#include <atomic>
 
 using behav3d::motion_controller::PilzMotionController;
 using behav3d::motion_visualizer::MotionVisualizer;
@@ -185,6 +189,39 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+//                                Spawn handeye srv
+// ---------------------------------------------------------------------------
+// Start the installed Python solver (behav3d_py/handeye_solver) as a background process.
+// Returns true if the spawn was attempted (even if the solver later exits on its own).
+static std::atomic<bool> g_solver_running{false};
+
+static bool spawn_handeye_solver() {
+  try {
+    const std::string prefix = ament_index_cpp::get_package_prefix("behav3d_py");
+    const std::string exe    = prefix + "/lib/behav3d_py/handeye_solver";
+
+    // Prevent multiple concurrent spawns
+    bool expected = false;
+    if (!g_solver_running.compare_exchange_strong(expected, true)) {
+      RCLCPP_WARN(rclcpp::get_logger("mancap"), "handeye_solver already running; skipping spawn.");
+      return true;
+    }
+
+    RCLCPP_INFO(rclcpp::get_logger("mancap"), "Spawning solver: %s", exe.c_str());
+    std::thread([exe]{
+      // Run solver; inherits this process' stdout/stderr (no redirection)
+      std::system(exe.c_str());
+      g_solver_running.store(false);
+    }).detach();
+
+    return true;
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(rclcpp::get_logger("mancap"), "Failed to locate behav3d_py: %s", e.what());
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 //                                Demo Node
 // ---------------------------------------------------------------------------
 class PilzDemo : public rclcpp::Node
@@ -208,12 +245,8 @@ public:
   }
 
 private:
-
-
-
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-
   std::shared_ptr<CameraManager> cam_;
   std::shared_ptr<MotionVisualizer> viz_;
   SessionLogger logger_{this}; 
@@ -382,8 +415,47 @@ private:
     logger_.finish();
 
     home();
-  }
+    
+    // 1) Spawn the solver 
+    if (!spawn_handeye_solver()) {
+      RCLCPP_ERROR(this->get_logger(), "Could not spawn handeye_solver.");
+      return;
+    }
+    // 2) Create the service client
+    using behav3d_interfaces::srv::ComputeHandEye;
+    auto client = this->create_client<ComputeHandEye>("compute_handeye");
+    // 3) Wait briefly for the service to appear (up to ~5 seconds total)
+    for (int i = 0; i < 50; ++i) {
+      if (client->wait_for_service(std::chrono::milliseconds(100))) break;
+      rclcpp::sleep_for(std::chrono::milliseconds(100));
+    }
+    if (!client->service_is_ready()) {
+      RCLCPP_ERROR(this->get_logger(), "Service '~/compute_handeye' not available.");
+      return;
+    }
+    // 4) Build and send the request
+    auto req = std::make_shared<ComputeHandEye::Request>();
+    req->session_dir = logger_.session_dir().string();  // use the just-created session
+    req->one_shot    = true;                            // solver will shut down after replying
+    auto future = client->async_send_request(req);
+    // 5) Optionally block until the result is ready (set a sensible timeout)
+    if (future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
+      RCLCPP_ERROR(this->get_logger(), "ComputeHandEye request timed out.");
+      return;
+    }
+    const auto resp = future.get();
+    if (!resp->ok) {
+      RCLCPP_ERROR(this->get_logger(), "Hand-eye failed: %s", resp->message.c_str());
+      return;
+    }
 
+    RCLCPP_INFO(this->get_logger(),
+      "Hand-eye OK: t=[%.6f %.6f %.6f], q=[%.6f %.6f %.6f %.6f]\nJSON: %s",
+      resp->t_m[0], resp->t_m[1], resp->t_m[2],
+      resp->q_xyzw[0], resp->q_xyzw[1], resp->q_xyzw[2], resp->q_xyzw[3],
+      resp->out_json.c_str());
+
+  }
 
   void grid_sweep(double width = 1.0, double height = 0.5,
                   double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
@@ -395,7 +467,6 @@ private:
     home();
 
     // 2. Build center pose and generate a zig‑zag raster pattern that
-    //    matches the sweepZigzag parameter space.
     const auto center = worldXY(center_x, center_y, center_z,
                                 ctrl_->getRootLink());
 
