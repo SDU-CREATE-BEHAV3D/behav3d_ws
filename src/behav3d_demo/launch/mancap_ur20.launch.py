@@ -70,7 +70,7 @@ def generate_launch_description():
 
     eef_link_arg = DeclareLaunchArgument(
         "eef_link",
-        default_value="femto__color_optical_frame",
+        default_value="femto_color_optical_calib",
         description="End-effector link"
     )
 

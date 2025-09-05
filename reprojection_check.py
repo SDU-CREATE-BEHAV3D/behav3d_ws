@@ -159,14 +159,13 @@ def main():
     K, D = load_cam_info(CAMERA_INFO_YAML)
     board, aruco_dict, detector, legacy_params = make_board_and_detector()
 
-    # --- Cargar hand-eye (cam->tool0) y convertir a tool0->cam ---
+    # Hand-eye JSON (OpenCV da cam->tool0)
     with open(HANDEYE_JSON, "r") as f:
         he = json.load(f)
-    R_cg = quat_xyzw_to_R(he["quaternion_xyzw"])   # cam->gripper
+    R_cg = quat_xyzw_to_R(he["quaternion_xyzw"])
     t_cg = np.array(he["translation_m"], dtype=np.float64).reshape(3,1)
-    R_gc, t_gc = invert(R_cg, t_cg)  # tool0->cam (lo que necesitamos)
 
-    # Recolectar observaciones
+    # Frames con base->tool0 y Charuco
     frames = []
     for idx, img_path, pose in iter_caps(manifest):
         if pose is None: continue
@@ -174,49 +173,64 @@ def main():
         if img is None: continue
         obs = detect_charuco_pose(img, board, aruco_dict, detector, legacy_params, K, D)
         if obs is None: continue
-
+        R_bt = quat_xyzw_to_R(pose["orientation_xyzw"])
         t_bt = np.array(pose["position"], dtype=np.float64).reshape(3,1)
-        R_bt = quat_xyzw_to_R(pose["orientation_xyzw"])  # base->tool0
-
-        # base->cam = (base->tool0) ∘ (tool0->cam)
-        R_bc, t_bc = compose(R_bt, t_bt, R_gc, t_gc)
-
         frames.append({
             "index": idx, "img": img_path,
+            "R_bt": R_bt, "t_bt": t_bt,
             "R_tc_obs": obs["R_tc"], "t_tc_obs": obs["t_tc"],
-            "ch_ids": obs["charuco_ids"], "ch_corners": obs["charuco_corners"],
-            "R_bc": R_bc, "t_bc": t_bc
+            "ch_ids": obs["charuco_ids"], "ch_corners": obs["charuco_corners"]
         })
 
     if len(frames) < 3:
-        print(f"[ERR] Not enough valid frames: {len(frames)}"); sys.exit(1)
+        print("[ERR] Not enough valid frames"); sys.exit(1)
 
-    # Fijar board->base con primer frame
-    f0 = frames[0]
-    R_cb, t_cb = invert(f0["R_bc"], f0["t_bc"])  # cam->base
-    R_tb, t_tb = compose(f0["R_tc_obs"], f0["t_tc_obs"], R_cb, t_cb)
+    # Flags de prueba
+    TEST_SHIFT = 0      # 0 = normal, 1 = usar pose siguiente, -1 = anterior
+    USE_OPTICAL = False # True = aplicar rotación ROS optical
 
-    # Validación reprojection
-    per_frame_rmse = []
-    lines = []
-    for f in frames:
-        R_tc_pred, t_tc_pred = compose(R_tb, t_tb, f["R_bc"], f["t_bc"])
-        rvec_pred = R_to_rvec(R_tc_pred)
-        ids = f["ch_ids"].flatten()
-        obj_pts = board.chessboardCorners[ids, :]
-        img_pred, _ = cv2.projectPoints(obj_pts, rvec_pred, t_tc_pred, K, D)
-        img_pred = img_pred.reshape(-1,2)
-        img_obs  = f["ch_corners"].reshape(-1,2)
-        err = np.linalg.norm(img_pred - img_obs, axis=1)
-        rmse = math.sqrt(np.mean(err**2))
-        per_frame_rmse.append(rmse)
-        lines.append(f"t{f['index']:04d} | N={len(ids)} | RMSE={rmse:.3f} px | img={os.path.basename(f['img'])}")
+    # Convención ROS optical (X->Z, Y->-X, Z->-Y)
+    R_opt = np.array([[0,0,1],
+                      [-1,0,0],
+                      [0,-1,0]], dtype=np.float64)
 
-    global_rmse = mean(per_frame_rmse)
-    print(f"[INFO] Frames used: {len(frames)}")
-    print(f"[OK] Global reprojection RMSE: {global_rmse:.3f} px (best {min(per_frame_rmse):.3f}, worst {max(per_frame_rmse):.3f})")
-    with open(OUT_REPORT,"w") as rf:
-        rf.write("\n".join(lines))
+    def rmse_for_candidate(R_gc, t_gc):
+        Rbc_list, tbc_list = [], []
+        for i,f in enumerate(frames):
+            j = min(max(i+TEST_SHIFT,0), len(frames)-1)
+            f_pose = frames[j]
+            R_bc, t_bc = compose(f_pose["R_bt"], f_pose["t_bt"], R_gc, t_gc)
+            if USE_OPTICAL:
+                R_bc, t_bc = compose(R_bc, t_bc, R_opt, np.zeros((3,1)))
+            Rbc_list.append(R_bc); tbc_list.append(t_bc)
+
+        R_cb0, t_cb0 = invert(Rbc_list[0], tbc_list[0])
+        R_tb, t_tb   = compose(frames[0]["R_tc_obs"], frames[0]["t_tc_obs"], R_cb0, t_cb0)
+
+        rmses = []
+        for (R_bc, t_bc), f in zip(zip(Rbc_list, tbc_list), frames):
+            R_tc_pred, t_tc_pred = compose(R_tb, t_tb, R_bc, t_bc)
+            rvec = R_to_rvec(R_tc_pred)
+            ids = f["ch_ids"].flatten()
+            obj_pts = board.chessboardCorners[ids, :]
+            img_pred, _ = cv2.projectPoints(obj_pts, rvec, t_tc_pred, K, D)
+            img_pred = img_pred.reshape(-1,2)
+            img_obs  = f["ch_corners"].reshape(-1,2)
+            err = np.linalg.norm(img_pred - img_obs, axis=1)
+            rmses.append(float(np.sqrt(np.mean(err**2))))
+        return float(np.mean(rmses)), float(min(rmses)), float(max(rmses))
+
+    # Candidatos tool0->cam
+    R_gc_A, t_gc_A = invert(R_cg, t_cg) # invertido
+    R_gc_B, t_gc_B = R_cg, t_cg         # directo
+
+    rmseA, bestA, worstA = rmse_for_candidate(R_gc_A, t_gc_A)
+    rmseB, bestB, worstB = rmse_for_candidate(R_gc_B, t_gc_B)
+
+    print(f"[CMP] A) Invert JSON: RMSE={rmseA:.3f} px (best {bestA:.3f}, worst {worstA:.3f})")
+    print(f"[CMP] B) Direct JSON: RMSE={rmseB:.3f} px (best {bestB:.3f}, worst {worstB:.3f})")
+    print(f"[INFO] TEST_SHIFT={TEST_SHIFT}, USE_OPTICAL={USE_OPTICAL}")
+
 
 if __name__ == "__main__":
     main()

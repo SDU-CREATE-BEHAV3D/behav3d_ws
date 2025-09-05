@@ -62,7 +62,7 @@ using std::placeholders::_1;
 
 class SessionLogger {
 public:
-  SessionLogger(rclcpp::Node* node)
+  explicit SessionLogger(rclcpp::Node* node)
   : node_(node) {}
 
   // Call once at the beginning
@@ -98,7 +98,7 @@ public:
       return false;
     }
 
-    // Open manifest and write header
+    // Open manifest
     manifest_path_ = session_dir_ / "manifest.json";
     ofs_.open(manifest_path_, std::ios::out | std::ios::trunc);
     if (!ofs_) {
@@ -107,19 +107,22 @@ public:
       return false;
     }
 
+    // Build header WITHOUT "captures"
     nlohmann::json header;
-    header["version"] = 1;
-    header["session_dir"] = session_dir_.string();
+    header["version"]          = 1;
+    header["session_dir"]      = session_dir_.string();
     header["started_at_local"] = ts.str();
-    header["frames"] = { {"base", base_frame_}, {"tool0", tool0_frame_} };
-    header["captures"] = nlohmann::json::array(); // will be streamed
+    header["frames"]           = { {"base", base_frame_}, {"tool0", tool0_frame_} };
 
-    // Write header up to "captures": [
+    // Dump header prettily, then remove final '}' and append "captures":[
     std::string pre = header.dump(2);
-    const std::string key = "\"captures\": []";
-    auto pos = pre.find(key);
-    pre.replace(pos, key.size(), "\"captures\": [\n");
-    ofs_ << pre;
+    auto pos = pre.rfind('}');
+    if (pos == std::string::npos) {
+      RCLCPP_ERROR(node_->get_logger(), "Internal error building JSON header.");
+      return false;
+    }
+    ofs_ << pre.substr(0, pos) << ",\n"
+         << "  \"captures\": [\n";
     first_ = true;
     return true;
   }
@@ -158,7 +161,7 @@ public:
 
     // Stream with comma if needed
     if (!first_) ofs_ << ",\n";
-    ofs_ << "  " << j.dump(2);
+    ofs_ << "    " << j.dump(2);
     first_ = false;
   }
 
@@ -166,7 +169,7 @@ public:
   void finish()
   {
     if (!ofs_) return;
-    ofs_ << "\n]\n}\n"; // close "captures": [ ... ] and the root object
+    ofs_ << "\n  ]\n}\n"; // close "captures": [ ... ] and the root object
     ofs_.close();
     RCLCPP_INFO(node_->get_logger(), "Wrote manifest: %s", manifest_path_.string().c_str());
   }
@@ -201,8 +204,7 @@ public:
         std::bind(&PilzDemo::callback, this, _1));
 
     RCLCPP_INFO(this->get_logger(),
-                "PilzDemo ready. Commands: 'home', 'draw_line', 'draw_square', "
-                "'draw_square_seq', 'draw_circle', 'draw_circle_seq', 'draw_line', 'grid_sweep', 'fibonacci_cap', 'quit'");
+                "PilzDemo ready. Commands: 'home', 'grid_sweep', 'fibonacci_cap', 'get_pose'");
   }
 
 private:
@@ -305,7 +307,7 @@ private:
 
   void fibonacci_cap(double radius = 0.5,
                      double center_x = 0.0, double center_y = 0.75, double center_z = -0.075,
-                     double cap_deg = 22.5, int n_points = 32)
+                     double cap_deg = 22.5, int n_points = 16)
   {
     home();
     const std::string base  = "ur20_base_link";
@@ -313,6 +315,17 @@ private:
     if (!logger_.start(base, tool0, /*output_root*/"~/behav3d_ws/captures", /*tag*/"mancap"))
       return;
     cam_->initSession(logger_.session_dir(), "mancap");
+    {
+      sensor_msgs::msg::CameraInfo ci_color, ci_depth, ci_ir;
+      const double timeout_sec = 2.0; 
+      const bool write_yaml = true;
+      if (!cam_->getCalibration(ci_color, ci_depth, ci_ir, timeout_sec, write_yaml)) {
+        RCLCPP_WARN(this->get_logger(), "Did not get Camera info");
+      } else {
+        RCLCPP_INFO(this->get_logger(), "Intrinsics saved: %s/calib/{color,depth,ir}_intrinsics.yaml",
+                    logger_.session_dir().string().c_str());
+      }
+    }
     const double cap_rad = deg2rad(cap_deg);
     const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
 

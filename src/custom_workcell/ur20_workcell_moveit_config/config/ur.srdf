@@ -22,8 +22,11 @@
         <joint name="ur20_wrist_3_joint" value="2.9506"/>
     </group_state>
     <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
-    <end_effector name="femto_of_ir" parent_link="femto__ir_optical_frame" group="ur_arm" parent_group="ur_arm"/>
-    <end_effector name="femto_of_color" parent_link="femto__color_optical_frame" group="ur_arm"/>
+    <end_effector name="femto_of_ir" parent_link="ur20_tool0" group="ur_arm" parent_group="ur_arm"/>
+    <end_effector name="camera_eef" parent_link="ur20_tool0" group="ur_arm" parent_group="ur_arm">
+        <link name="femto_color_optical_calib"/>
+    </end_effector>
+
     <!--DISABLE COLLISIONS: By default it is assumed that any link of the robot could potentially come into collision with any other link in the robot. This tag disables collision checking between a specified pair of links. -->
     <disable_collisions link1="control_box" link2="handrail" reason="Never"/>
     <disable_collisions link1="control_box" link2="robot_base" reason="Adjacent"/>
