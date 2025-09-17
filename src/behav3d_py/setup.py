@@ -19,8 +19,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            # ros2 run behav3d_py handeye_solver
             'handeye_solver = behav3d_py.handeye_solver:main',
+            'modbus_test = behav3d_py.modbus_test:main',   # <--- agrega esta línea
         ],
     },
 )
