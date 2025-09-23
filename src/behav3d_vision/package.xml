@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>behav3d_vision</name>
+  <version>0.1.0</version>
+  <description>RGB-D capture/processing (MVP)</description>
+  <maintainer email="you@example.com">behav3d</maintainer>
+  <license>MIT</license>
+
+  <!-- Build with CMake -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Python package install via CMake -->
+  <build_depend>ament_cmake_python</build_depend>
+  <exec_depend>ament_cmake_python</exec_depend>
+
+  <exec_depend>behav3d_interfaces</exec_depend>
+  <exec_depend>rosidl_runtime_py</exec_depend>
+
+  <!-- Runtime deps -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>message_filters</exec_depend>
+</package>
+
+
+

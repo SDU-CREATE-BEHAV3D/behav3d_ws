@@ -1,0 +1,20 @@
+# Request
+string prefix                 # filename prefix (e.g. "trial_001")
+string save_dir               # absolute/relative dir; created if missing
+bool   save_color             # save RGB
+bool   save_depth             # save depth (16UC1 PNG or NPY)
+string image_format           # "png" | "jpg" | "npy"
+bool   wait_for_sync          # if true, require a near-synchronized pair
+builtin_interfaces/Duration timeout  # max wait for frames
+
+---
+# Response
+bool   success
+string message
+builtin_interfaces/Time stamp          # stamp of the color frame used
+string color_path
+string depth_path
+uint32 color_width
+uint32 color_height
+uint32 depth_width
+uint32 depth_height
