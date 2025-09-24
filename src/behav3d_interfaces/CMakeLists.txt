@@ -11,6 +11,7 @@ find_package(sensor_msgs REQUIRED)
 # List all your .action and .srv files here
 set(action_files
   action/PlanAndExecute.action
+  action/PrintTime.action
 )
 
 set(srv_files
@@ -20,6 +21,7 @@ set(srv_files
   srv/Resume.srv
   srv/Abort.srv
   srv/CaptureSnapshot.srv
+  srv/UpdatePrintConfig.srv
 )
 
 # Generate interfaces
