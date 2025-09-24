@@ -20,7 +20,8 @@ setup(
     entry_points={
         'console_scripts': [
             'handeye_solver = behav3d_py.handeye_solver:main',
-            'modbus_test = behav3d_py.modbus_test:main',   # <--- agrega esta línea
+            'modbus_test = behav3d_py.modbus_test:main',
+            'print_test = behav3d_py.print_test:main',
         ],
     },
 )
