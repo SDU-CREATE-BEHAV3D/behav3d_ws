@@ -22,6 +22,7 @@ set(srv_files
   srv/Abort.srv
   srv/CaptureSnapshot.srv
   srv/UpdatePrintConfig.srv
+  srv/GetPrintStatus.srv
 )
 
 # Generate interfaces

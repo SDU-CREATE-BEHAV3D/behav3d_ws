@@ -10,6 +10,7 @@ from rclpy.executors import MultiThreadedExecutor
 
 from behav3d_interfaces.action import PrintTime   
 from behav3d_interfaces.srv import UpdatePrintConfig
+from behav3d_interfaces.srv import GetPrintStatus
 
 # --- Static config (no ROS params) ---
 MODBUS_IP      = "192.168.1.10"
@@ -50,7 +51,12 @@ class PrintNode(Node):
             UpdatePrintConfig,
             "update_print_config",
             self._on_update_config )
-
+        # Service: Get print status
+        self.srv_get_status = self.create_service(
+            GetPrintStatus,
+            "get_print_status",
+            self._on_get_status
+        )
         # Action server: time-based print
         self._print_action = ActionServer(
             self,
@@ -145,6 +151,13 @@ class PrintNode(Node):
 
         res.success = True
         res.message = "Config updated"
+        return res
+
+    def _on_get_status(self, req: GetPrintStatus.Request, res: GetPrintStatus.Response):
+        # Read from internal, authoritative state
+        res.speed = int(self.current_speed)
+        res.extrude_on = bool(self.extrude_enabled)
+        res.state = str(self.state)
         return res
 
     # --- Action cancel callback ---

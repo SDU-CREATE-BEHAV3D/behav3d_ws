@@ -16,7 +16,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from behav3d_interfaces.action import PrintTime
-from behav3d_interfaces.srv import UpdatePrintConfig
+from behav3d_interfaces.srv import UpdatePrintConfig, GetPrintStatus
 
 GOAL_DURATION_S = 60
 GOAL_SPEED      = 120
@@ -95,16 +95,21 @@ class OrchestratorNode(Node):
         self.gh = None
         self._result_future = None
 
-        # Service client
+        # Service clients
         self.cfg_cli = self.create_client(UpdatePrintConfig, "update_print_config")
-        self.get_logger().info("Waiting for update_print_config service...")
-        self.cfg_cli.wait_for_service()
-        self.get_logger().info("Service available.")
+        self.get_cli = self.create_client(GetPrintStatus, "get_print_status")
 
-        self.current_speed = int(GOAL_SPEED)
+        self.get_logger().info("Waiting for services...")
+        self.cfg_cli.wait_for_service()
+        self.get_cli.wait_for_service()
+        self.get_logger().info("Services available.")
+
+        # Initialize local cache of speed from authoritative source
+        st = self._get_status(timeout_s=1.0)
+        self.current_speed = int(st.speed) if st is not None else int(GOAL_SPEED)
 
         # Send goal
-        self._send_goal(GOAL_DURATION_S, GOAL_SPEED, USE_PREV_SPEED)
+        self._send_goal(GOAL_DURATION_S, self.current_speed, USE_PREV_SPEED)
 
         self.get_logger().info(
             "Controls:\n"
@@ -169,7 +174,17 @@ class OrchestratorNode(Node):
             while not self._result_future.done() and (time.monotonic() - t1) < timeout_s:
                 rclpy.spin_once(self, timeout_sec=0.05)
 
-    # ---- Service helper ----
+    # ---- Status (read-only) helper ----
+    def _get_status(self, timeout_s: float = 1.0):
+        """Call get_print_status and return the response or None on timeout."""
+        req = GetPrintStatus.Request()
+        fut = self.get_cli.call_async(req)
+        t0 = time.monotonic()
+        while not fut.done() and (time.monotonic() - t0) < timeout_s:
+            rclpy.spin_once(self, timeout_sec=0.05)
+        return fut.result() if fut.done() else None
+
+    # ---- Config (write) helper ----
     def _set_speed(self, speed_val: int):
         req = UpdatePrintConfig.Request()
         req.set_speed = True
@@ -185,6 +200,7 @@ class OrchestratorNode(Node):
         res = fut.result() if fut.done() else None
         if res and res.success:
             self.get_logger().info(f"Speed updated to {speed_val}")
+            self.current_speed = int(speed_val)  # update local cache to reflect the change
         else:
             msg = (res.message if res else "no response (timeout)")
             self.get_logger().error(f"Failed to update speed to {speed_val}: {msg}")
@@ -194,16 +210,21 @@ class OrchestratorNode(Node):
         if ch in ("\r", "\n"):  # ENTER
             self.get_logger().warn("ENTER pressed -> requesting cancel…")
             self._cancel_goal_and_wait(timeout_s=1.0)
-        elif ch.lower() == "u":
-            self.current_speed += SPEED_STEP
-            self._set_speed(self.current_speed)
+            return
+
+        # Always refresh from authoritative state before computing deltas
+        st = self._get_status(timeout_s=0.5)
+        base_speed = int(st.speed) if st is not None else int(self.current_speed)
+
+        if ch.lower() == "u":
+            new_speed = base_speed + SPEED_STEP
+            self._set_speed(new_speed)
         elif ch.lower() == "d":
-            new_speed = self.current_speed - SPEED_STEP
+            new_speed = base_speed - SPEED_STEP
             if new_speed < 0:
                 self.get_logger().warn("Rejecting speed update: would go below 0")
             else:
-                self.current_speed = new_speed
-                self._set_speed(self.current_speed)
+                self._set_speed(new_speed)
 
     # ---- Callbacks ----
     def _on_feedback(self, fb_msg):
@@ -242,7 +263,6 @@ def main():
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        # On Ctrl+C: cancel the active goal first, give it a short grace period.
         node.get_logger().info("Interrupted by user -> canceling goal then shutting down…")
         try:
             node._cancel_goal_and_wait(timeout_s=1.0)
