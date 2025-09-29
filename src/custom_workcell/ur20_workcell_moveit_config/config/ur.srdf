@@ -26,7 +26,9 @@
     <end_effector name="camera_eef" parent_link="ur20_tool0" group="ur_arm" parent_group="ur_arm">
         <link name="femto_color_optical_calib"/>
     </end_effector>
-
+    <end_effector name="extruder_eef" parent_link="ur20_tool0" group="ur_arm" parent_group="ur_arm">
+        <link name="extruder_tcp"/>
+    </end_effector>
     <!--DISABLE COLLISIONS: By default it is assumed that any link of the robot could potentially come into collision with any other link in the robot. This tag disables collision checking between a specified pair of links. -->
     <disable_collisions link1="control_box" link2="handrail" reason="Never"/>
     <disable_collisions link1="control_box" link2="robot_base" reason="Adjacent"/>
