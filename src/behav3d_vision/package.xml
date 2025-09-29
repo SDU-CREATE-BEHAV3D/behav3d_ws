@@ -6,22 +6,31 @@
   <maintainer email="you@example.com">behav3d</maintainer>
   <license>MIT</license>
 
-  <!-- Build with CMake -->
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_python</buildtool_depend>
 
-  <!-- Python package install via CMake -->
-  <build_depend>ament_cmake_python</build_depend>
-  <exec_depend>ament_cmake_python</exec_depend>
 
-  <exec_depend>behav3d_interfaces</exec_depend>
-  <exec_depend>rosidl_runtime_py</exec_depend>
+
+  <exec_depend>rclpy</exec_depend>
 
   <!-- Runtime deps -->
-  <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>image_transport</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>message_filters</exec_depend>
+
+  <exec_depend>moveit_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <depend>behav3d_interfaces</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+  
 </package>
 
 

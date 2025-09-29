@@ -221,8 +221,10 @@ class OrchestratorNode(Node):
             self._set_speed(new_speed)
         elif ch.lower() == "d":
             new_speed = base_speed - SPEED_STEP
-            if new_speed < 0:
+            if new_speed <= 0:
                 self.get_logger().warn("Rejecting speed update: would go below 0")
+                new_speed = 1
+                self._set_speed(new_speed)
             else:
                 self._set_speed(new_speed)
 
