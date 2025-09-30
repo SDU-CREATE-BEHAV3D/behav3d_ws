@@ -35,6 +35,7 @@
 #include "behav3d_interfaces/srv/plan_pilz_lin.hpp"
 #include "behav3d_interfaces/srv/plan_pilz_ptp.hpp"
 #include "behav3d_interfaces/srv/plan_pilz_sequence.hpp"
+#include "behav3d_interfaces/srv/get_link_pose.hpp"
 
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -72,6 +73,7 @@ public:
         "/behav3d/markers/eef_path", latched);
 
     // Services
+    
     service_ = this->create_service<behav3d_interfaces::srv::PlanWithMoveIt>(
         "/behav3d/plan_with_moveit",
         std::bind(&MotionBridge::planWithMoveItCallback, this, _1, _2));
@@ -99,6 +101,11 @@ public:
     // Dedicated node for the MoveGroupSequence action client to avoid double-adding this node to an executor
     seq_client_node_ = std::make_shared<rclcpp::Node>("motion_bridge_seq_client_node");
     mgs_client_ = rclcpp_action::create_client<MGS>(seq_client_node_, "sequence_move_group");
+
+    // Get current pose of a link expressed in a base frame
+    get_link_pose_srv_ = this->create_service<behav3d_interfaces::srv::GetLinkPose>(
+        "/behav3d/get_link_pose",
+        std::bind(&MotionBridge::getLinkPoseCallback, this, _1, _2));
 
     // Joint state subscription
     joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
@@ -191,6 +198,51 @@ private:
     }
     marker_pub_->publish(m);
   }
+
+  
+  // Get current pose of a link expressed in a base frame
+  void getLinkPoseCallback(
+    const std::shared_ptr<behav3d_interfaces::srv::GetLinkPose::Request> req,
+    std::shared_ptr<behav3d_interfaces::srv::GetLinkPose::Response> res)
+  {
+    // Create a MoveGroupInterface (pick your default group or make it a param)
+    moveit::planning_interface::MoveGroupInterface mgi(shared_from_this(), "ur_arm");
+    auto model = mgi.getRobotModel();
+
+    // Build current RobotState from /joint_states
+    moveit::core::RobotState state = makeStartStateFromJointState(model);
+
+    // Determine frames
+    const std::string base = req->base_frame.empty() ? mgi.getPlanningFrame() : req->base_frame;
+    const std::string tip  = req->link;
+
+    // Validate tip link exists
+    if (!model->hasLinkModel(tip)) {
+      res->success = false;
+      res->message = "Unknown link: " + tip;
+      return;
+    }
+
+    // Get transforms in RobotState's global frame
+    Eigen::Isometry3d T_base = Eigen::Isometry3d::Identity();
+    if (model->hasLinkModel(base)) {
+      T_base = state.getGlobalLinkTransform(base);
+    }
+    const Eigen::Isometry3d T_tip = state.getGlobalLinkTransform(tip);
+
+    // Pose of tip expressed in base
+    const Eigen::Isometry3d T_base_tip = T_base.inverse() * T_tip;
+
+    geometry_msgs::msg::PoseStamped out;
+    out.header.stamp = this->now();
+    out.header.frame_id = base;
+    out.pose = tf2::toMsg(T_base_tip);
+
+    res->success = true;
+    res->message = "OK";
+    res->pose = out;
+  }
+
 
   // --- PlanWithMoveIt callback ---
   void planWithMoveItCallback(
@@ -696,6 +748,7 @@ private:
   rclcpp::Service<behav3d_interfaces::srv::PlanPilzLin>::SharedPtr pilz_lin_srv_;
   rclcpp::Service<behav3d_interfaces::srv::PlanPilzPtp>::SharedPtr pilz_ptp_srv_;
   rclcpp::Service<behav3d_interfaces::srv::PlanPilzSequence>::SharedPtr pilz_seq_srv_;
+  rclcpp::Service<behav3d_interfaces::srv::GetLinkPose>::SharedPtr get_link_pose_srv_;
 
   rclcpp_action::Client<FJT>::SharedPtr fjt_client_;
 

@@ -1,3 +1,4 @@
+#For running this node you must first run: ros2 run behav3d_print print_node
 #!/usr/bin/env python3
 # run_print_keys.py (tty-safe)
 # ENTER -> cancel

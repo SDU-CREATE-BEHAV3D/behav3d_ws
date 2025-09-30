@@ -1,0 +1,10 @@
+# Request
+# Express 'link' pose in 'base_frame'. If base_frame is empty, use MoveIt's planning frame.
+string base_frame
+string link
+
+---
+# Response
+bool success
+string message
+geometry_msgs/PoseStamped pose

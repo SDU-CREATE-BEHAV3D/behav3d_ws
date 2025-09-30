@@ -173,18 +173,8 @@ def generate_launch_description():
     # -------------------------------------------------------------------------
     # 5) Re‑build the *same* MoveIt config so we can share it with a helper node
     # -------------------------------------------------------------------------
+    moveit_config = MoveItConfigsBuilder("ur", package_name="ur20_workcell_moveit_config").to_moveit_configs()
 
-    moveit_config = (
-        MoveItConfigsBuilder(robot_name="ur", package_name="ur20_workcell_moveit_config")
-        .robot_description_semantic(Path("config") / "ur.srdf")
-        # .moveit_cpp(
-        #     file_path=os.path.join(
-        #         get_package_share_directory("pilz_demo"),
-        #         "config/pilz_demo.yaml",
-        #     )
-        # )
-        .to_moveit_configs()
-    )
     # RViz
     rviz_config_file = (
         get_package_share_directory("ur20_workcell_moveit_config") + "/config/move_group.rviz"
@@ -198,7 +188,6 @@ def generate_launch_description():
             moveit_config.robot_description,
             moveit_config.robot_description_semantic,
             moveit_config.robot_description_kinematics,
-            moveit_config.planning_pipelines,
             moveit_config.joint_limits,
         ],
     )
@@ -213,18 +202,17 @@ def generate_launch_description():
             moveit_config.robot_description,
             moveit_config.robot_description_semantic,
             moveit_config.robot_description_kinematics,
-            moveit_config.planning_pipelines,
             moveit_config.joint_limits,
-        #     {
-        #    #     "viz_enabled": True,
-        #         "flange_link": LaunchConfiguration("eef_link"),
-        #     },
         ],
     )
-
     motion_bridge = TimerAction(period=2.0, actions=[motion_bridge_node])
 
-    # MoveGroupInterface demo executable
+    print_node= Node(
+        name="behav3d_print",
+        package="behav3d_print",
+        executable="print_node",
+        output="screen",
+    )
     node_demo = Node(
         name="behav3d_demo",
         package="behav3d_demo",
@@ -248,7 +236,6 @@ def generate_launch_description():
             }
         ],
     )
-
     return LaunchDescription(
         [
             robot_ip_arg,
@@ -267,6 +254,7 @@ def generate_launch_description():
      #       orbbec_camera,
             rviz_node,
             motion_bridge,
+            print_node,
        #    node_demo
         ]
     )

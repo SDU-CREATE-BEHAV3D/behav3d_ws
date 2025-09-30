@@ -38,7 +38,7 @@
     <joint name="base_to_robot_mount" type="fixed">
       <parent link="robot_base"/>
       <child link="robot_mount"/>
-      <origin xyz="0.0 0.0 0.0" rpy="0 0 3.1415" />
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 3.1415926" />
     </joint>
 
     <link name="handrail">
@@ -131,7 +131,7 @@
     <joint name="tool0_to_extruder_tcp" type="fixed">
       <parent link="${ur_type}_tool0"/>
       <child link="extruder_tcp"/>
-      <!-- Origin is tool0 -> camera (meters, radians). 
+      <!-- Origin is tool0 -> extruder(meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
       <origin xyz="0.0094 0.2272 0.07784"
               rpy="1.5641113421 0.0 0.0"/>

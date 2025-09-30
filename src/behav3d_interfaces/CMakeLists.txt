@@ -29,6 +29,7 @@ set(srv_files
   srv/PlanPilzLin.srv
   srv/PlanPilzPtp.srv
   srv/PlanPilzSequence.srv
+  srv/GetLinkPose.srv
 )
 
 # Generate interfaces
