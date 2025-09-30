@@ -4,13 +4,14 @@
 import math
 from typing import Callable, Optional, Dict, Any, List, Tuple
 
+
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint, JointTrajectory
 from geometry_msgs.msg import Pose, PoseStamped
-from behav3d_interfaces.srv import PlanPilzPtp
+from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin 
 from behav3d_interfaces.action import PrintTime
 OnMoveDone = Optional[Callable[[Dict[str, Any]], None]]
 
@@ -35,12 +36,13 @@ class Commands:
         # Action client (controller)
         self._ctrl_client = ActionClient(node, FollowJointTrajectory, controller_action)
 
-        # Planning service (Pilz PTP via Motion Bridge)
+        # Planning service (Pilz PTP and LIN via Motion Bridge)
         self._ptp_cli = node.create_client(PlanPilzPtp, "/behav3d/plan_pilz_ptp")
-        
+        self._lin_cli = node.create_client(PlanPilzLin, "/behav3d/plan_pilz_lin") 
         # PrintTime action client (process / extruder)
         self._print_ac = ActionClient(node, PrintTime, "print")
- 
+
+        self._motion_mode = "PTP"  # default
         # UR20 joint names
         self._joint_names = [
             "ur20_shoulder_pan_joint",
@@ -71,38 +73,48 @@ class Commands:
         pt.time_from_start.nanosec = int((duration_s - int(duration_s)) * 1e9)
         jt.points.append(pt)
         self._enqueue("follow_traj", {"jt": jt, "on_move_done": on_move_done, "kind": "home"})
-
     def goto(self,
-             *,
-             x: float, y: float, z: float,
-             eef: str = "extruder_tcp",
-             vel_scale: float = 0.1,
-             accel_scale: float = 0.1,
-             exec: bool = True,
-             on_move_done: OnMoveDone = None,
-             start_print: Optional[Dict[str, Any]] = None):
-        """
-        Enqueue plan (Pilz PTP) to (x, y, z) in 'world'.
-        If exec=True, execution happens immediately after planning (atomic).
-        """
+            *,
+            x: float, y: float, z: float,
+            rx: Optional[float] = None,
+            ry: Optional[float] = None,
+            rz: Optional[float] = None,
+            eef: str = "extruder_tcp",
+            vel_scale: float = 0.1,
+            accel_scale: float = 0.1,
+            exec: bool = True,
+            on_move_done: OnMoveDone = None,
+            start_print: Optional[Dict[str, Any]] = None,
+            motion: Optional[str] = None):
+      
+        """Enqueue plan (Pilz PTP) to (x, y, z) in 'world'. Optional absolute RPY in radians."""
         ps = PoseStamped()
         ps.header.frame_id = "world"
-        ps.pose = Pose()
         ps.pose.position.x = float(x)
         ps.pose.position.y = float(y)
         ps.pose.position.z = float(z)
-        ps.pose.orientation.w = 1.0  # TODO: add Rx/Ry/Rz support
 
-        self._enqueue("plan_ptp", {
-            "pose": ps,
-            "eef": eef,
-            "vel_scale": float(vel_scale),
-            "accel_scale": float(accel_scale),
-            "exec": bool(exec),
-            "start_print": start_print, 
+        # Orientation: if any of rx/ry/rz provided, use them (others default to 0); else identity
+        use_rpy = (rx is not None) or (ry is not None) or (rz is not None)
+        if use_rpy:
+            r = 0.0 if rx is None else float(rx)
+            p = 0.0 if ry is None else float(ry)
+            y_ = 0.0 if rz is None else float(rz)
+            qx, qy, qz, qw = _quat_from_euler(r, p, y_)
+            ps.pose.orientation.x = qx
+            ps.pose.orientation.y = qy
+            ps.pose.orientation.z = qz
+            ps.pose.orientation.w = qw
+        else:
+            ps.pose.orientation.w = 1.0
+
+        self._enqueue("plan_motion", {      
+            "pose": ps, "eef": eef,
+            "vel_scale": float(vel_scale), "accel_scale": float(accel_scale),
+            "exec": bool(exec), "start_print": start_print,
             "on_move_done": on_move_done,
+            "motion": (motion or self._motion_mode)  
         })
-
     def print(self,
             *,
             secs: float,
@@ -119,7 +131,11 @@ class Commands:
             "use_prev": bool(use_previous_speed),
             "on_done": on_done
         })
+    def PTP(self):  
+        self._motion_mode = "PTP"
 
+    def LIN(self):
+        self._motion_mode = "LIN"
     # ---------------- Queue core ----------------
 
     def _enqueue(self, kind: str, payload: Dict[str, Any]):
@@ -138,8 +154,8 @@ class Commands:
 
         if kind == "follow_traj":
             self._do_follow_traj(p)
-        elif kind == "plan_ptp":
-            self._do_plan_ptp(p)
+        elif kind == "plan_motion":
+            self._do_plan_motion(p)
         elif kind == "print_time":
             self._do_print_time(p)
 
@@ -191,25 +207,33 @@ class Commands:
 
         send_fut.add_done_callback(_on_goal_sent)
 
-    def _do_plan_ptp(self, p: Dict[str, Any]):
-        """
-        Plan Pilz PTP via service. If exec=True, execute immediately (atomic plan+exec),
-        keeping _busy=True until execution finishes.
-        """
-        ps: PoseStamped = p["pose"]
-        eef = p["eef"]
-        vs = p["vel_scale"]
-        ac = p["accel_scale"]
-        do_exec = p["exec"]
-        on_move_done: OnMoveDone = p.get("on_move_done")
+    def _do_plan_motion(self, p: Dict[str, Any]):
+        ps = p["pose"]; eef = p["eef"]
+        vs = p["vel_scale"]; ac = p["accel_scale"]
+        do_exec = p["exec"]; on_move_done = p.get("on_move_done")
         start_print = p.get("start_print")
+        motion = (p.get("motion") or "PTP").upper()
 
-        if not self._ptp_cli.wait_for_service(timeout_sec=2.0):
+        # Pick service
+        if motion == "PTP":
+            cli = self._ptp_cli
+            Req = PlanPilzPtp.Request
+            label = "GOTO(PTP)"
+        elif motion == "LIN":
+            cli = self._lin_cli
+            Req = PlanPilzLin.Request
+            label = "GOTO(LIN)"
+        else:
             self._finish_move(on_move_done, "goto", ok=False, phase="plan",
-                              error="plan_pilz_ptp not available")
+                            error=f"unknown motion mode '{motion}'")
             return
 
-        req = PlanPilzPtp.Request()
+        if not cli.wait_for_service(timeout_sec=2.0):
+            self._finish_move(on_move_done, "goto", ok=False, phase="plan",
+                            error=f"{motion.lower()} planner not available")
+            return
+
+        req = Req()
         req.group_name = "ur_arm"
         req.eef_link = eef
         req.velocity_scale = vs
@@ -218,33 +242,32 @@ class Commands:
         req.target = ps
 
         self.node.get_logger().info(
-            f"GOTO: planning Pilz PTP to ({ps.pose.position.x:.3f}, "
-            f"{ps.pose.position.y:.3f}, {ps.pose.position.z:.3f}) eef={eef}..."
+            f"{label}: planning to ({ps.pose.position.x:.3f}, {ps.pose.position.y:.3f}, {ps.pose.position.z:.3f}) eef={eef}..."
         )
-        fut = self._ptp_cli.call_async(req)
+        fut = cli.call_async(req)
 
         def _on_planned(fr):
             resp = fr.result()
             if resp is None or not resp.success:
                 self._finish_move(on_move_done, "goto", ok=False, phase="plan",
-                                  error="planning failed")
+                                error="planning failed")
                 return
 
             jt = resp.trajectory.joint_trajectory
             if len(jt.points) == 0:
                 self._finish_move(on_move_done, "goto", ok=False, phase="plan",
-                                  error="empty trajectory")
+                                error="empty trajectory")
                 return
 
             if not do_exec:
-                # Plan-only: finish here (planned_only=True); release busy and continue queue.
                 self._finish_move(on_move_done, "goto", ok=True, phase="plan",
-                                  metrics={"points": len(jt.points)}, planned_only=True)
+                                metrics={"points": len(jt.points), "mode": motion},
+                                planned_only=True)
                 return
 
-            # Atomic path: execute immediately without enqueueing or releasing _busy.
-            # _do_follow_traj will call _finish_move when execution finishes, which releases _busy and advances the queue.
-            self._do_follow_traj({"jt": jt, "on_move_done": on_move_done, "kind": "goto","start_print": start_print})
+            # Atomic execution (same as before), pass through start_print
+            self._do_follow_traj({"jt": jt, "on_move_done": on_move_done, "kind": "goto",
+                                "start_print": start_print})
 
         fut.add_done_callback(_on_planned)
 
@@ -367,3 +390,17 @@ class Commands:
         finally:
             self._busy = False
             self._process_next()
+
+# ---------------- HELPERS ----------------
+
+
+def _quat_from_euler(roll: float, pitch: float, yaw: float):
+    """RPY (rad) -> quaternion (x,y,z,w), extrinsic XYZ (ROS-style)."""
+    cr = math.cos(roll * 0.5); sr = math.sin(roll * 0.5)
+    cp = math.cos(pitch * 0.5); sp = math.sin(pitch * 0.5)
+    cy = math.cos(yaw * 0.5); sy = math.sin(yaw * 0.5)
+    w = cr*cp*cy + sr*sp*sy
+    x = sr*cp*cy - cr*sp*sy
+    y = cr*sp*cy + sr*cp*sy
+    z = cr*cp*sy - sr*cp*cy
+    return x, y, z, w

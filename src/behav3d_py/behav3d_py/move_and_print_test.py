@@ -21,15 +21,33 @@ class MoveAndPrintTest(Node):
             return
         self._started = True
 
-        # 1) COMMANDS HERE AMIGOS!!!
-        self.cmd.home(duration_s=2.0, on_move_done=self._on_move_done)
-        self.cmd.goto(x=-0.0500, y=1.30, z=0.31,eef="extruder_tcp",vel_scale=0.5, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
-        self.cmd.print(secs=1.2, speed=500, on_done=self._on_move_done) 
-        self.cmd.goto(x=-0.0500, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.5, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
-        self.cmd.print(secs=1.2, speed=500, on_done=self._on_move_done) 
-        self.cmd.goto(x=0.50, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, start_print={"secs": 0.5, "speed": 1200, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
-        self.cmd.home(duration_s=2.0, on_move_done=self._on_move_done)
-        
+        # 1) SAMPLE COMMANDS HERE AMIGOS!!!
+    #     self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+    #     self.cmd.goto(x=-0.0500, y=1.30, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
+    #  #   self.cmd.goto(x=0.5, y=1.5, z=0.3, ry=1.57, exec=True)
+    #     self.cmd.goto(x=0.5, y=1.5, z=0.3, exec=True)
+    #     self.cmd.print(secs=1.2, speed=500, on_done=self._on_move_done) 
+    #     self.cmd.LIN()
+    #     self.cmd.goto(x=-0.0500, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
+    #     self.cmd.print(secs=1.2, speed=500, on_done=self._on_move_done) 
+    #     self.cmd.goto(x=0.50, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="PTP", start_print={"secs": 1.5, "speed": 1200, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
+    #     self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+        # 2) 3 Dots Sequence!!!
+
+        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+        self.cmd.goto(x=-0.1965, y=0.955, z=-0.044,eef="extruder_tcp",vel_scale=0.05, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
+        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
+        self.cmd.LIN()
+        self.cmd.goto(x=-0.1965, y=0.955, z=0.0, exec=True)
+        self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True)
+        self.cmd.goto(x=-0.205, y=0.955, z=-0.044, exec=True)
+        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done)
+        self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True) 
+        self.cmd.goto(x=-0.215, y=0.955, z=0.0, exec=True) 
+        self.cmd.goto(x=-0.215, y=0.955, z=-0.044, exec=True)
+        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
+        self.cmd.home(duration_s=12.0, on_move_done=self._on_move_done)
+
     def _on_move_done(self, res):
         # Unified callback for both HOME and GOTO
         if not res["ok"]:
