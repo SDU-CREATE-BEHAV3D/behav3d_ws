@@ -1,4 +1,4 @@
-perfect—here are **YAML snippets** (one per command/config) matching your current API and behaviors. Keep them as **list items** under a sequence.
+**YAML snippets** (one per command/config) matching current API and behaviors. Keep as **list items** under a sequence.
 
 ### Motion mode & config (stateful “setters”)
 
