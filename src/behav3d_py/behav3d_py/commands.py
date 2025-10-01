@@ -73,6 +73,7 @@ class Commands:
         pt.time_from_start.nanosec = int((duration_s - int(duration_s)) * 1e9)
         jt.points.append(pt)
         self._enqueue("follow_traj", {"jt": jt, "on_move_done": on_move_done, "kind": "home"})
+   
     def goto(self,
             *,
             x: float, y: float, z: float,
@@ -115,6 +116,7 @@ class Commands:
             "on_move_done": on_move_done,
             "motion": (motion or self._motion_mode)  
         })
+   
     def print(self,
             *,
             secs: float,
@@ -131,11 +133,17 @@ class Commands:
             "use_prev": bool(use_previous_speed),
             "on_done": on_done
         })
+ 
     def PTP(self):  
         self._motion_mode = "PTP"
 
     def LIN(self):
         self._motion_mode = "LIN"
+   
+    def wait(self, secs: float, on_done: OnMoveDone = None):
+        """Enqueue a time delay (secs) before the next command."""
+        self._enqueue("wait", {"secs": float(secs), "on_done": on_done})
+
     # ---------------- Queue core ----------------
 
     def _enqueue(self, kind: str, payload: Dict[str, Any]):
@@ -158,6 +166,8 @@ class Commands:
             self._do_plan_motion(p)
         elif kind == "print_time":
             self._do_print_time(p)
+        elif kind == "wait":
+            self._do_wait(p)
 
         else:
             self.node.get_logger().error(f"Unknown queue item kind: {kind}")
@@ -364,6 +374,22 @@ class Commands:
         else:
             _send_print_goal()
 
+    def _do_wait(self, p: Dict[str, Any]):
+        secs = float(p["secs"])
+        cb = p.get("on_done")
+        #self.node.get_logger().info(f"WAIT: delaying for {secs:.2f} s")
+
+        t = None  # will hold the timer so we can cancel it
+
+        def _one_shot():
+            nonlocal t
+            if t is not None:
+                t.cancel()     # stop it from firing again
+                t = None
+            # now finish the command and advance FIFO
+            self._finish_move(cb, "wait", ok=True, phase="exec", metrics={"secs": secs})
+
+        t = self.node.create_timer(secs, _one_shot)
 
     # ---------------- Finish & advance ----------------
 

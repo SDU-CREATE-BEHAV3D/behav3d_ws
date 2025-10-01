@@ -36,16 +36,18 @@ class MoveAndPrintTest(Node):
 
         self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
         self.cmd.goto(x=-0.1965, y=0.955, z=-0.044,eef="extruder_tcp",vel_scale=0.05, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
-        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
+ #       self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
         self.cmd.LIN()
         self.cmd.goto(x=-0.1965, y=0.955, z=0.0, exec=True)
+        self.cmd.wait(5.0, on_done=self._on_move_done)
         self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True)
+        self.cmd.wait(5.0, on_done=self._on_move_done)
         self.cmd.goto(x=-0.205, y=0.955, z=-0.044, exec=True)
-        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done)
+#       self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done)
         self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True) 
         self.cmd.goto(x=-0.215, y=0.955, z=0.0, exec=True) 
         self.cmd.goto(x=-0.215, y=0.955, z=-0.044, exec=True)
-        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
+  #      self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
         self.cmd.home(duration_s=12.0, on_move_done=self._on_move_done)
 
     def _on_move_done(self, res):
