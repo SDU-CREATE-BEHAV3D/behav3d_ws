@@ -1,13 +1,13 @@
 **YAML snippets** (one per command/config) matching current API and behaviors. Keep as **list items** under a sequence.
 
-### Motion mode & config (stateful “setters”)
+### Motion mode & config can be used at the start(stateful “setters”)
 
 ```yaml
 - PTP                 # set default motion planner to PTP
 - LIN                 # set default motion planner to LIN
 - EEF: extruder_tcp   # set default end-effector
-- SPD: 0.10           #TODO default velocity_scale (0..1)
-- ACC: 0.10           #TODO default accel_scale (0..1)
+- SPD: 0.10           # default velocity_scale (0..1)
+- ACC: 0.10           # default accel_scale (0..1)
 - TOTG: on            #TODO (placeholder if you wire a time-optimizer toggle)
 ```
 

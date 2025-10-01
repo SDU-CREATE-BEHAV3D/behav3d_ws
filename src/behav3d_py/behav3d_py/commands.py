@@ -41,8 +41,13 @@ class Commands:
         self._lin_cli = node.create_client(PlanPilzLin, "/behav3d/plan_pilz_lin") 
         # PrintTime action client (process / extruder)
         self._print_ac = ActionClient(node, PrintTime, "print")
-
+        
+        # DEFAULT
         self._motion_mode = "PTP"  # default
+        self._default_eef = "extruder_tcp"
+        self._default_vel_scale = 0.1
+        self._default_accel_scale = 0.1
+
         # UR20 joint names
         self._joint_names = [
             "ur20_shoulder_pan_joint",
@@ -74,15 +79,14 @@ class Commands:
         jt.points.append(pt)
         self._enqueue("follow_traj", {"jt": jt, "on_move_done": on_move_done, "kind": "home"})
    
-    def goto(self,
-            *,
+    def goto(self, *,
             x: float, y: float, z: float,
             rx: Optional[float] = None,
             ry: Optional[float] = None,
             rz: Optional[float] = None,
-            eef: str = "extruder_tcp",
-            vel_scale: float = 0.1,
-            accel_scale: float = 0.1,
+            eef: Optional[str] = None,
+            vel_scale: Optional[float] = None,
+            accel_scale: Optional[float] = None,
             exec: bool = True,
             on_move_done: OnMoveDone = None,
             start_print: Optional[Dict[str, Any]] = None,
@@ -109,14 +113,17 @@ class Commands:
         else:
             ps.pose.orientation.w = 1.0
 
-        self._enqueue("plan_motion", {      
-            "pose": ps, "eef": eef,
-            "vel_scale": float(vel_scale), "accel_scale": float(accel_scale),
-            "exec": bool(exec), "start_print": start_print,
+        self._enqueue("plan_motion", {
+            "pose": ps,
+            "eef": eef or self._default_eef,
+            "vel_scale": self._default_vel_scale if vel_scale is None else float(vel_scale),
+            "accel_scale": self._default_accel_scale if accel_scale is None else float(accel_scale),
+            "exec": bool(exec),
+            "start_print": start_print,
             "on_move_done": on_move_done,
-            "motion": (motion or self._motion_mode)  
+            "motion": (motion or self._motion_mode)
         })
-   
+
     def print(self,
             *,
             secs: float,
@@ -143,6 +150,19 @@ class Commands:
     def wait(self, secs: float, on_done: OnMoveDone = None):
         """Enqueue a time delay (secs) before the next command."""
         self._enqueue("wait", {"secs": float(secs), "on_done": on_done})
+
+    def EEF(self, name: str):
+        """Set default end-effector for all subsequent goto() calls."""
+        self._default_eef = str(name)
+
+    def SPD(self, val: float):
+        """Set default velocity scale (clamped 0..1)."""
+        self._default_vel_scale = max(0.0, min(1.0, float(val)))
+
+    def ACC(self, val: float):
+        """Set default accel scale (clamped 0..1)."""
+        self._default_accel_scale = max(0.0, min(1.0, float(val)))
+
 
     # ---------------- Queue core ----------------
 
