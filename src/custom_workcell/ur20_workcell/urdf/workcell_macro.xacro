@@ -98,12 +98,12 @@
     <link name="clay_extruder">
       <visual>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/clay_extruder.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam.dae"/>
         </geometry>
       </visual>
       <collision>
         <geometry>
-         <mesh filename="package://ur20_workcell/meshes/clay_extruder.dae"/>
+         <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam.dae"/>
         </geometry>
       </collision>
     </link>
@@ -154,7 +154,7 @@
       parent="${ur_type}_tool0"
       use_nominal_extrinsics="true"
     >
-      <origin xyz="0.027 0.048 0.0103" rpy="0 0 1.0472" />
+      <origin xyz="0.0 0.178 -0.051" rpy="0 3.141592 0" />
     </xacro:femto_bolt>
 
   </xacro:macro>
