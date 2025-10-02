@@ -95,22 +95,22 @@
       <origin xyz="-0.15 0.5 -0.08" rpy="0 0 0" />
     </joint>
 
-    <link name="femto_mount">
+    <link name="clay_extruder">
       <visual>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/ur20_bolt_mount_v2.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/clay_extruder.dae"/>
         </geometry>
       </visual>
       <collision>
         <geometry>
-         <mesh filename="package://ur20_workcell/meshes/ur20_bolt_mount_v2.dae"/>
+         <mesh filename="package://ur20_workcell/meshes/clay_extruder.dae"/>
         </geometry>
       </collision>
     </link>
     <joint name="base_to_tool0" type="fixed">
       <parent link="${ur_type}_tool0"/>
-      <child link="femto_mount"/>
-      <origin xyz="0 0 0" rpy="0 0 -0.5235"/>
+      <child link="clay_extruder"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
         
     <!-- Fixed frame for calibrated camera pose relative to tool0 -->
