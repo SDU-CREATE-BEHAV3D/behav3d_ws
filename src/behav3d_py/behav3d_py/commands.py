@@ -397,7 +397,7 @@ class Commands:
     def _do_wait(self, p: Dict[str, Any]):
         secs = float(p["secs"])
         cb = p.get("on_done")
-        #self.node.get_logger().info(f"WAIT: delaying for {secs:.2f} s")
+        self.node.get_logger().info(f"WAIT: delaying for {secs:.2f} s")
 
         t = None  # will hold the timer so we can cancel it
 

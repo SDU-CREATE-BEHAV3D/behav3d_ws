@@ -34,7 +34,7 @@ class MoveAndPrintTest(Node):
     #     self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
         # 2) 3 Dots Sequence!!!
 
-        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
         self.cmd.goto(x=-0.1965, y=0.955, z=-0.044,eef="extruder_tcp",vel_scale=0.9, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
         self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
         self.cmd.LIN()

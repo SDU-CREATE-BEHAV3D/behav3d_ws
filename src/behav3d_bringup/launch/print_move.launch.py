@@ -174,7 +174,7 @@ def generate_launch_description():
     # 5) Re‑build the *same* MoveIt config so we can share it with a helper node
     # -------------------------------------------------------------------------
     moveit_config = MoveItConfigsBuilder("ur", package_name="ur20_workcell_moveit_config").to_moveit_configs()
-
+        # Starts Pilz Industrial Motion Planner MoveGroupSequenceAction and MoveGroupSequenceService servers
     # RViz
     rviz_config_file = (
         get_package_share_directory("ur20_workcell_moveit_config") + "/config/move_group.rviz"
