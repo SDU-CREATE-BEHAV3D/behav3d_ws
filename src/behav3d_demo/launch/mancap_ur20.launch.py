@@ -70,7 +70,7 @@ def generate_launch_description():
 
     eef_link_arg = DeclareLaunchArgument(
         "eef_link",
-        default_value="femto_color_optical_calib",
+        default_value="femto__color_optical_frame",
         description="End-effector link"
     )
 
@@ -82,13 +82,13 @@ def generate_launch_description():
 
     max_velocity_scale_arg = DeclareLaunchArgument(
         "max_velocity_scale",
-        default_value="0.2",
+        default_value="0.1",
         description="Max velocity scale [0..1]"
     )
 
     max_accel_scale_arg = DeclareLaunchArgument(
         "max_accel_scale",
-        default_value="0.2",
+        default_value="0.1",
         description="Max acceleration scale [0..1]"
     )
 

@@ -11,7 +11,7 @@ MARKER_LENGTH_M = 0.022  # Charuco marker size in meters
 ARUCO_DICT_NAME = "DICT_5X5_100"
 
 # Hardcoded path to the current session manifest
-MANIFEST_PATH = "/home/lab/behav3d_ws/captures/session-20250905_140746_mancap/manifest.json"
+MANIFEST_PATH = "/home/lab/behav3d_ws/captures/session-20251003_113628_mancap/manifest.json"
 
 # Resolve session_dir from the manifest (source of truth for per-session files)
 with open(MANIFEST_PATH, "r") as f:

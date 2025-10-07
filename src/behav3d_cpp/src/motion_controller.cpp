@@ -113,8 +113,8 @@ namespace behav3d::motion_controller
                  debug ? "true" : "false");
 
     // Parameters with sane defaults, overridable from launch/CLI
-    const double vel_scale = this->declare_parameter<double>("max_velocity_scale", 0.2);
-    const double acc_scale = this->declare_parameter<double>("max_accel_scale", 0.2);
+    const double vel_scale = this->declare_parameter<double>("max_velocity_scale", 0.1);
+    const double acc_scale = this->declare_parameter<double>("max_accel_scale", 0.1);
     const std::string pipeline = this->declare_parameter<std::string>("planning_pipeline", "pilz_industrial_motion_planner");
 
     move_group_.setPoseReferenceFrame(root_link_);

@@ -532,8 +532,8 @@ int main(int argc, char **argv)
   auto demo = std::make_shared<PilzDemo>(controller, visualizer, camera);
 
   controller->set_parameters({
-    rclcpp::Parameter("max_velocity_scale", 0.2),
-    rclcpp::Parameter("max_accel_scale", 0.2),
+    rclcpp::Parameter("max_velocity_scale", 0.1),
+    rclcpp::Parameter("max_accel_scale", 0.1),
   });
 
   rclcpp::executors::MultiThreadedExecutor exec;
