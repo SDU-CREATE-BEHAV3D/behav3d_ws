@@ -122,7 +122,7 @@
       <!-- Origin is tool0 -> camera (meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
       <origin xyz="-0.0445562   0.17385712 -0.07569992" 
-               quat="0.01124485 0.7136558  0.70033581 0.00993505"/>
+               rpy="1.589 -0.00152 3.111"/>
     </joint>
 
     <!-- Fixed frame for calibrated Extruder tcp pose relative to tool0 -->
