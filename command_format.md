@@ -84,13 +84,6 @@
 # Express pose of 'extruder_tcp' in 'ur20_base_link' (MoveIt service).
 ```
 
-#### Pose using the MoveIt planning frame (empty base → planning frame)
-
-```yaml
-- pose: { eef: extruder_tcp, base: null }
-# base=null maps to "" in the service request → MoveIt's planning frame.
-```
-
 #### Pose via TF (latest transform)
 
 ```yaml
