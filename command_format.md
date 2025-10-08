@@ -70,6 +70,83 @@
     start_print: {secs: 1.5, speed: 1200, offset_s: 0.0, sync: accept}
 ```
 
+### Pose (queued; query EEF/link pose)
+
+```yaml
+- pose: extruder_tcp
+# Queries pose of 'extruder_tcp' in 'world' using MoveIt (default).
+```
+
+#### Pose with explicit base frame (MoveIt service)
+
+```yaml
+- pose: { eef: extruder_tcp, base: ur20_base_link }
+# Express pose of 'extruder_tcp' in 'ur20_base_link' (MoveIt service).
+```
+
+#### Pose using the MoveIt planning frame (empty base → planning frame)
+
+```yaml
+- pose: { eef: extruder_tcp, base: null }
+# base=null maps to "" in the service request → MoveIt's planning frame.
+```
+
+#### Pose via TF (latest transform)
+
+```yaml
+- pose: { eef: extruder_tcp, base: ur20_base_link, tf: true }
+# Uses TF2 instead of MoveIt. If 'base' is omitted/empty, defaults to 'world'.
+```
+
+#### Pose via TF with default base (world)
+
+```yaml
+- pose: { eef: extruder_tcp, tf: true }
+# Equivalent to base='world' in TF path.
+```
+
+---
+
+## Notes for `pose`
+
+* **Queued by default:** `pose` respects the FIFO, executes exactly where you place it in the sequence.
+* **Backends:**
+
+  * `tf: false` (default) → uses your MoveIt pose service (`GetLinkPose`); `base: null` means “planning frame”.
+  * `tf: true` → uses TF2 (`lookup_transform`) at **latest** time; if `base` is empty/omitted, it defaults to `'world'` (adjust in code if your base is different).
+* **Keys:**
+
+  * Scalar form: `- pose: extruder_tcp` is shorthand for `{ eef: extruder_tcp, base: world, tf: false }`.
+  * Mapping form supports: `eef` (or `link`), `base`, and `tf`.
+* **Result:** your callback receives a payload with `pose` (PoseStamped), `base_frame`, `link`, and `metrics.source` (`moveit` or `tf`).
+* **Common uses:** sanity checks after a move, logging end effector drift, verifying tool offsets.
+
+---
+
+## Example mini-sequence with `pose`
+
+```yaml
+- LIN
+- EEF: extruder_tcp
+- SPD: 0.10
+- ACC: 0.10
+
+- home: {duration_s: 2.0}
+
+- goto: {x: -0.1965, y: 0.9550, z: -0.0440, exec: true}
+- pose: extruder_tcp                      # MoveIt, in 'world'
+
+- goto: {x: -0.1965, y: 0.9550, z: 0.0000, exec: true}
+- wait: 1.0
+- pose: { eef: extruder_tcp, base: ur20_base_link }  # MoveIt, in base link
+
+- goto: {x: -0.2050, y: 0.9550, z: 0.0000, exec: true}
+- wait: 1.0
+- pose: { eef: extruder_tcp, base: ur20_base_link, tf: true }  # TF, latest
+
+- home: {duration_s: 4.0}
+```
+
 ---
 
 

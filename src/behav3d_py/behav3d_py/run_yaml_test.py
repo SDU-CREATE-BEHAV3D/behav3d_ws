@@ -1,3 +1,6 @@
+# For running this node first:
+# ros2 launch behav3d_bringup print_move.launch.py robot_ip:=192.168.1.8 use_mock_hardware:=true
+# Sample node run (change the path): ros2 run behav3d_py run_yaml_test --path /home/lab/Desktop/three_dots_demo.yaml
 # file: behav3d_py/yaml_runner.py
 #!/usr/bin/env python3
 import rclpy
