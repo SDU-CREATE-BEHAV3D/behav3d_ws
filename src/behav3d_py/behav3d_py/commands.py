@@ -4,15 +4,21 @@
 import math
 from typing import Callable, Optional, Dict, Any, List, Tuple
 
-
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
+from rclpy.time import Time
+from rclpy.duration import Duration
+import tf2_ros
+
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint, JointTrajectory
 from geometry_msgs.msg import Pose, PoseStamped
-from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin 
+from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin, GetLinkPose  
+
 from behav3d_interfaces.action import PrintTime
+
+
 OnMoveDone = Optional[Callable[[Dict[str, Any]], None]]
 
 class Commands:
@@ -36,12 +42,17 @@ class Commands:
         # Action client (controller)
         self._ctrl_client = ActionClient(node, FollowJointTrajectory, controller_action)
 
-        # Planning service (Pilz PTP and LIN via Motion Bridge)
+        # Planning and logging services  (Pilz PTP, LIN and Pose via Motion Bridge)
         self._ptp_cli = node.create_client(PlanPilzPtp, "/behav3d/plan_pilz_ptp")
         self._lin_cli = node.create_client(PlanPilzLin, "/behav3d/plan_pilz_lin") 
+        self._pose_cli = node.create_client(GetLinkPose, "/behav3d/get_link_pose")
+                                            
         # PrintTime action client (process / extruder)
         self._print_ac = ActionClient(node, PrintTime, "print")
-        
+        #TF buffer and listener
+        self._tf_buffer = tf2_ros.Buffer(cache_time=Duration(seconds=10.0))
+        self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self.node)
+
         # DEFAULT
         self._motion_mode = "PTP"  # default
         self._default_eef = "extruder_tcp"
@@ -163,6 +174,26 @@ class Commands:
         """Set default accel scale (clamped 0..1)."""
         self._default_accel_scale = max(0.0, min(1.0, float(val)))
 
+    def getPose(self,
+                eef: str,
+                base_frame: Optional[str] = "world",
+                *,
+                use_tf: bool = False,
+                on_done: Optional[Callable[[Dict[str, Any]], None]] = None):
+        """
+        ALWAYS-QUEUED: enqueue a pose query so it respects FIFO order.
+        - eef: link name (e.g., 'extruder_tcp')
+        - base_frame: reference frame (default 'world'); None -> planning frame ('')
+        - use_tf: reserved; TF path not implemented yet
+        on_done will receive a dict with keys:
+        ok, kind='get_pose', phase='exec', metrics{source, base_frame, link}, pose?, error?
+        """
+        self._enqueue("get_pose", {
+            "link": str(eef),
+            "base_frame": ("" if base_frame is None else str(base_frame)),
+            "use_tf": bool(use_tf),
+            "on_done": on_done,
+        })
 
     # ---------------- Queue core ----------------
 
@@ -188,7 +219,8 @@ class Commands:
             self._do_print_time(p)
         elif kind == "wait":
             self._do_wait(p)
-
+        elif kind == "get_pose":
+            self._do_get_pose(p)
         else:
             self.node.get_logger().error(f"Unknown queue item kind: {kind}")
             self._busy = False
@@ -410,6 +442,115 @@ class Commands:
             self._finish_move(cb, "wait", ok=True, phase="exec", metrics={"secs": secs})
 
         t = self.node.create_timer(secs, _one_shot)
+
+    def _do_get_pose(self, p: Dict[str, Any]):
+        link = p["link"]
+        base_frame = p["base_frame"]          # '' means "planning frame" for the MoveIt path
+        use_tf = bool(p.get("use_tf", False))
+        cb = p.get("on_done")
+
+        # ---------- TF path ----------
+        if use_tf:
+            # Choose frames: if base_frame is empty, default to 'world' (adjust to your base if needed)
+            target = base_frame if base_frame else "world"
+            source = link
+
+            timeout = Duration(seconds=0.3)
+            stamp = Time()  # latest available transform
+
+            try:
+                ok = self._tf_buffer.can_transform(target, source, stamp, timeout)
+            except Exception:
+                ok = False
+
+            if not ok:
+                self._finish_move(cb, "get_pose", ok=False, phase="exec",
+                                error=f"TF not available: {target} <- {source}",
+                                metrics={"source": "tf", "base_frame": target, "link": source})
+                return
+
+            try:
+                tf = self._tf_buffer.lookup_transform(target, source, stamp, timeout)
+            except Exception as e:
+                self._finish_move(cb, "get_pose", ok=False, phase="exec",
+                                error=f"lookup_transform exception: {e}",
+                                metrics={"source": "tf", "base_frame": target, "link": source})
+                return
+
+            ps = PoseStamped()
+            ps.header = tf.header
+            ps.header.frame_id = target
+            ps.pose.position.x = tf.transform.translation.x
+            ps.pose.position.y = tf.transform.translation.y
+            ps.pose.position.z = tf.transform.translation.z
+            ps.pose.orientation = tf.transform.rotation
+
+            payload = {
+                "ok": True,
+                "kind": "get_pose",
+                "phase": "exec",
+                "planned_only": False,
+                "error": None,
+                "metrics": {"source": "tf"},
+                "base_frame": target,
+                "link": source,
+                "pose": ps,
+            }
+            try:
+                if cb:
+                    cb(payload)
+            finally:
+                self._busy = False
+                self._process_next()
+            return
+
+        # ---------- MoveIt service path ----------
+        if not self._pose_cli.wait_for_service(timeout_sec=2.0):
+            self._finish_move(cb, "get_pose", ok=False, phase="exec",
+                            error="GetLinkPose service not available",
+                            metrics={"source": "moveit", "base_frame": base_frame, "link": link})
+            return
+
+        req = GetLinkPose.Request()
+        req.base_frame = base_frame  # '' -> planning frame on the backend
+        req.link = link
+
+        fut = self._pose_cli.call_async(req)
+
+        def _on_resp(fr):
+            try:
+                resp = fr.result()
+            except Exception as e:
+                self._finish_move(cb, "get_pose", ok=False, phase="exec",
+                                error=f"exception: {e}",
+                                metrics={"source": "moveit", "base_frame": req.base_frame, "link": req.link})
+                return
+
+            if not resp or not getattr(resp, "success", False):
+                self._finish_move(cb, "get_pose", ok=False, phase="exec",
+                                error=getattr(resp, "message", "no response / failed"),
+                                metrics={"source": "moveit", "base_frame": req.base_frame, "link": req.link})
+                return
+
+            payload = {
+                "ok": True,
+                "kind": "get_pose",
+                "phase": "exec",
+                "planned_only": False,
+                "error": None,
+                "metrics": {"source": "moveit"},
+                "base_frame": req.base_frame,
+                "link": req.link,
+                "pose": resp.pose,
+            }
+            try:
+                if cb:
+                    cb(payload)
+            finally:
+                self._busy = False
+                self._process_next()
+
+        fut.add_done_callback(_on_resp)
 
     # ---------------- Finish & advance ----------------
 

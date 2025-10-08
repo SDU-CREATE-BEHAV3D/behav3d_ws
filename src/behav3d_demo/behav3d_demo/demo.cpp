@@ -25,6 +25,8 @@
 #include <rclcpp/rate.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp> 
 
 #include "behav3d_cpp/motion_controller.hpp"
 #include "behav3d_cpp/motion_visualizer.hpp"
@@ -133,7 +135,7 @@ private:
       RCLCPP_WARN(this->get_logger(), "fibonacci_cap: no targets generated!");
       return;
     }
-
+  
     behav3d::session_manager::SessionManager::Options opts;
     char tag[128];
     std::snprintf(tag, sizeof(tag), "fibcap_r%dcm_cap%ddeg_n%d", (int)(radius*100), (int)cap_deg, n_points);

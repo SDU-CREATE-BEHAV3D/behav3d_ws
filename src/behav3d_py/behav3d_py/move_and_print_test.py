@@ -34,21 +34,28 @@ class MoveAndPrintTest(Node):
     #     self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
         # 2) 3 Dots Sequence!!!
 
-        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+        self.cmd.home(duration_s=2.0, on_move_done=self._on_move_done)
         self.cmd.goto(x=-0.1965, y=0.955, z=-0.044,eef="extruder_tcp",vel_scale=0.9, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
-        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
+        #self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
         self.cmd.LIN()
-        self.cmd.SPD(0.01)
+        self.cmd.SPD(0.1)
         self.cmd.goto(x=-0.1965, y=0.955, z=0.0, exec=True)
         self.cmd.wait(5.0, on_done=self._on_move_done)
-        self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True)
-        self.cmd.wait(5.0, on_done=self._on_move_done)
-        self.cmd.goto(x=-0.205, y=0.955, z=-0.044, exec=True)
-        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done)
-        self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True) 
-        self.cmd.goto(x=-0.215, y=0.955, z=0.0, exec=True) 
-        self.cmd.goto(x=-0.215, y=0.955, z=-0.044, exec=True)
-        self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
+        self.cmd.getPose("extruder_tcp", on_done=self._on_pose)
+        self.cmd.getPose("extruder_tcp", use_tf=True, on_done=self._on_pose)
+        self.cmd.getPose("femto_color_optical_calib", "ur20_tool0", on_done=self._on_pose)
+        self.cmd.getPose("femto_color_optical_calib", "ur20_tool0", use_tf=True, on_done=self._on_pose)
+        self.cmd.wait(45.0, on_done=self._on_move_done)
+
+#        self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True)
+ #       self.cmd.wait(1.0, on_done=self._on_move_done)
+  #      self.cmd.getPose("extruder_tcp", on_done=self._on_pose)
+   #     self.cmd.goto(x=-0.205, y=0.955, z=-0.044, exec=True)
+        #self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done)
+   #     self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True) 
+   #     self.cmd.goto(x=-0.215, y=0.955, z=0.0, exec=True) 
+    #    self.cmd.goto(x=-0.215, y=0.955, z=-0.044, exec=True)
+        #self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
         self.cmd.home(duration_s=12.0, on_move_done=self._on_move_done)
 
     def _on_move_done(self, res):
@@ -58,7 +65,20 @@ class MoveAndPrintTest(Node):
         else:
             self.get_logger().info(f"[{res['kind']} {res['phase']}] OK {res['metrics']}")
 
-
+    def _on_pose(self, res):
+        if not res.get("ok", False):
+            self.get_logger().error(f"getPose failed: {res.get('error')}")
+            return
+        ps = res["pose"]
+        p, q = ps.pose.position, ps.pose.orientation
+        src = res["metrics"]["source"]
+        base = res["base_frame"] or "(planning frame)"
+        link = res["link"]
+        self.get_logger().info(
+            f"[{src}] {link} in {base}: "
+            f"p=({p.x:.5f},{p.y:.5f},{p.z:.5f}) "
+            f"q=({q.x:.5f},{q.y:.5f},{q.z:.5f},{q.w:.5f})"
+        )
 
 def main(args=None):
     rclpy.init(args=args)
