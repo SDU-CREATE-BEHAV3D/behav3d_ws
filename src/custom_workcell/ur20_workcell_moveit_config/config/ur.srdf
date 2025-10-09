@@ -15,6 +15,7 @@
 
     <group name="eef_group">
     <link name="femto_color_optical_calib"/>
+    <link name="femto_ir_optical_calib"/>
     <link name="extruder_tcp"/>
     </group>
 
@@ -31,6 +32,9 @@
     <end_effector name="femto_of_ir" parent_link="ur20_tool0" group="eef_group" parent_group="ur_arm"/>
     <end_effector name="camera_eef" parent_link="ur20_tool0" group="eef_group" parent_group="ur_arm">
         <link name="femto_color_optical_calib"/>
+    </end_effector>
+    <end_effector name="ir_eef" parent_link="ur20_tool0" group="eef_group" parent_group="ur_arm">
+        <link name="femto_ir_optical_calib"/>
     </end_effector>
     <end_effector name="extruder_eef" parent_link="ur20_tool0" group="eef_group" parent_group="ur_arm">
         <link name="extruder_tcp"/>

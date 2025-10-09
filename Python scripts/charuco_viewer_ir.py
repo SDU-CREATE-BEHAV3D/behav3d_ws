@@ -16,10 +16,10 @@ ARUCO_DICT_NAME = "DICT_5X5_100"
 
 # ---------- Quick-use paths ----------
 SESS_PATH = "/home/lab/behav3d_ws/captures/session-20251009_153835_mancap/"
-IMG_NAME  = "color_t1.png"
+IMG_NAME  = "ir_t4.png"
 
-IMG_PATH  = os.path.join(SESS_PATH, "color_raw", IMG_NAME)
-INTR_PATH = os.path.join(SESS_PATH, "calib", "color_intrinsics.yaml")
+IMG_PATH  = os.path.join(SESS_PATH, "ir_raw", IMG_NAME)
+INTR_PATH = os.path.join(SESS_PATH, "calib", "ir_intrinsics.yaml")
 
 OUT_PATH  = os.path.join(SESS_PATH, "calib",
                          f"annotated_{os.path.splitext(IMG_NAME)[0]}.png")
@@ -93,6 +93,63 @@ def _interpolate_charuco(gray, corners, ids, board, K, D):
     if ch_ids is not None:
         ch_ids = np.asarray(ch_ids, dtype=np.int32)
     return ch_corners, ch_ids
+# --- IR utilities ---
+def _load_ir_image(path: str) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Load IR image preserving depth; return (bgr_for_viz, gray_u8).
+    Supports 8UC1/8UC3/16UC1. Normalizes 16-bit to 8-bit with robust percentiles.
+    """
+    img_raw = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    if img_raw is None:
+        return None, None
+
+    if img_raw.dtype == np.uint16:  # 16-bit IR
+        ir16 = img_raw
+        p1, p99 = np.percentile(ir16, (1, 99))
+        if p99 <= p1:
+            p1, p99 = ir16.min(), ir16.max()
+        ir16 = np.clip(ir16, p1, p99)
+        gray = ((ir16 - p1) * (255.0 / (p99 - p1 + 1e-9))).astype(np.uint8)
+        bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    elif len(img_raw.shape) == 2:  # 8-bit grayscale
+        gray = img_raw.astype(np.uint8, copy=False)
+        bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    else:  # 8-bit BGR
+        bgr = img_raw
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    return bgr, gray
+
+def _preprocess_ir(gray_u8: np.ndarray, *, invert: bool=False, use_clahe: bool=True) -> np.ndarray:
+    g = gray_u8
+    if invert:
+        g = cv2.bitwise_not(g)
+
+    g = cv2.medianBlur(g, 3)
+
+    if use_clahe:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        g = clahe.apply(g)
+
+    blur = cv2.GaussianBlur(g, (0,0), 1.0)
+    g = cv2.addWeighted(g, 1.5, blur, -0.5, 0)
+    return g
+
+def _make_detector_params() -> cv2.aruco.DetectorParameters:
+    p = cv2.aruco.DetectorParameters_create()
+    p.adaptiveThreshWinSizeMin = 3
+    p.adaptiveThreshWinSizeMax = 33
+    p.adaptiveThreshWinSizeStep = 2
+    p.adaptiveThreshConstant = 7
+    p.minMarkerPerimeterRate = 0.02
+    p.maxMarkerPerimeterRate = 0.40
+    p.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+    p.cornerRefinementWinSize = 5
+    p.cornerRefinementMaxIterations = 50
+    p.cornerRefinementMinAccuracy = 0.01
+    p.minOtsuStdDev = 5.0
+    p.perspectiveRemovePixelPerCell = 8
+    p.polygonalApproxAccuracyRate = 0.03
+    return p
 
 def _board_charuco_objpoints(board, charuco_ids):
     """Get 3D object points for given ChArUco corner IDs (OpenCV 4.6: board.chessboardCorners)."""
@@ -123,25 +180,83 @@ def estimate_pose_charuco(charuco_corners, charuco_ids, board, K, D):
 def infer_intr_from_image(img_path: str) -> str:
     try:
         base = os.path.dirname(os.path.dirname(img_path))
-        cand = os.path.join(base, "calib", "color_intrinsics.yaml")
+        cand = os.path.join(base, "calib", "ir_intrinsics.yaml")
         return cand
     except Exception:
         return INTR_PATH
+# --- IR utilities ---
+def _load_ir_image(path: str) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Load IR image preserving depth; return (bgr_for_viz, gray_u8).
+    Supports 8UC1/8UC3/16UC1. Normalizes 16-bit to 8-bit with robust percentiles.
+    """
+    img_raw = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    if img_raw is None:
+        return None, None
+
+    if img_raw.dtype == np.uint16:  # 16-bit IR
+        ir16 = img_raw
+        p1, p99 = np.percentile(ir16, (1, 99))
+        if p99 <= p1:
+            p1, p99 = ir16.min(), ir16.max()
+        ir16 = np.clip(ir16, p1, p99)
+        gray = ((ir16 - p1) * (255.0 / (p99 - p1 + 1e-9))).astype(np.uint8)
+        bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    elif len(img_raw.shape) == 2:  # 8-bit grayscale
+        gray = img_raw.astype(np.uint8, copy=False)
+        bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    else:  # 8-bit BGR
+        bgr = img_raw
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    return bgr, gray
+
+def _preprocess_ir(gray_u8: np.ndarray, *, invert: bool=False, use_clahe: bool=True) -> np.ndarray:
+    g = gray_u8
+    if invert:
+        g = cv2.bitwise_not(g)
+
+    g = cv2.medianBlur(g, 3)
+
+    if use_clahe:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        g = clahe.apply(g)
+
+    blur = cv2.GaussianBlur(g, (0,0), 1.0)
+    g = cv2.addWeighted(g, 1.5, blur, -0.5, 0)
+    return g
+
+def _make_detector_params() -> cv2.aruco.DetectorParameters:
+    p = cv2.aruco.DetectorParameters_create()
+    p.adaptiveThreshWinSizeMin = 3
+    p.adaptiveThreshWinSizeMax = 33
+    p.adaptiveThreshWinSizeStep = 2
+    p.adaptiveThreshConstant = 7
+    p.minMarkerPerimeterRate = 0.02
+    p.maxMarkerPerimeterRate = 0.40
+    p.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+    p.cornerRefinementWinSize = 5
+    p.cornerRefinementMaxIterations = 50
+    p.cornerRefinementMinAccuracy = 0.01
+    p.minOtsuStdDev = 5.0
+    p.perspectiveRemovePixelPerCell = 8
+    p.polygonalApproxAccuracyRate = 0.03
+    return p
 
 def main():
-    parser = argparse.ArgumentParser(description="ChArUco board detector & pose viewer")
-    parser.add_argument("--image", "-i", default=IMG_PATH, help="Path to input image")
-    parser.add_argument("--intr", "-k", default=INTR_PATH, help="Path to intrinsics YAML (OpenCV format)")
-    parser.add_argument("--out", "-o", default=OUT_PATH, help="Path to save annotated image")
-    parser.add_argument("--undistort", action="store_true", help="Undistort preview before detection (optional)")
-    parser.add_argument("--axis", type=float, default=0.1, help="Axis length in meters for drawFrameAxes")
+    parser = argparse.ArgumentParser(description="ChArUco board detector & pose viewer (RGB/IR)")
+    parser.add_argument("--image", "-i", default=IMG_PATH)
+    parser.add_argument("--intr", "-k", default=INTR_PATH)
+    parser.add_argument("--out", "-o", default=OUT_PATH)
+    parser.add_argument("--undistort", action="store_true")
+    parser.add_argument("--axis", type=float, default=0.1)
+    parser.add_argument("--invert", action="store_true", help="Invert IR intensities if board appears low-contrast")
+    parser.add_argument("--no-clahe", action="store_true", help="Disable CLAHE preprocessing")
     args = parser.parse_args()
 
-    img = cv2.imread(args.image, cv2.IMREAD_COLOR)
-    if img is None:
+    bgr, gray0 = _load_ir_image(args.image)
+    if bgr is None:
         print(f"[error] Could not load image: {args.image}", file=sys.stderr)
         return 2
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     intr_path = args.intr
     if not os.path.isfile(intr_path):
@@ -160,14 +275,18 @@ def main():
         return 3
 
     if args.undistort:
-        img = cv2.undistort(img, K, D)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        bgr = cv2.undistort(bgr, K, D)
+        gray0 = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+    gray = _preprocess_ir(gray0, invert=args.invert, use_clahe=not args.no_clahe)
 
     dictionary = _get_dict(ARUCO_DICT_NAME)
     board = _make_board(dictionary)
+    params = _make_detector_params()
 
-    corners, ids = _detect_markers(gray, dictionary)
-    annotated = img.copy()
+    corners, ids, _ = cv2.aruco.detectMarkers(gray, dictionary, parameters=params)
+
+    annotated = bgr.copy()
     if ids is not None and len(ids) > 0:
         cv2.aruco.drawDetectedMarkers(annotated, corners, ids)
 
@@ -197,8 +316,6 @@ def main():
     print(f"Markers: {n_markers}, ChArUco corners: {n_char}")
     if rvec is not None and tvec is not None:
         R, _ = cv2.Rodrigues(rvec)
-        print("Rotation matrix:\n", R)
-
         yaw = math.degrees(math.atan2(R[1,0], R[0,0]))
         pitch = math.degrees(math.atan2(-R[2,0], math.hypot(R[2,1], R[2,2])))
         roll = math.degrees(math.atan2(R[2,1], R[2,2]))

@@ -338,9 +338,9 @@ private:
   }
 
 
-  void fibonacci_cap(double radius = 0.5,
+  void fibonacci_cap(double radius = 0.55,
                      double center_x = 0.0, double center_y = 0.75, double center_z = -0.075,
-                     double cap_deg = 22.5, int n_points = 16)
+                     double cap_deg = 22.5, int n_points = 32)
   {
     home();
     const std::string base  = "ur20_base_link";
