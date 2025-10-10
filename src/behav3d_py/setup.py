@@ -25,6 +25,7 @@ setup(
             'move_and_print_test = behav3d_py.move_and_print_test:main',
             'run_yaml_test = behav3d_py.run_yaml_test:main',
             'pilz_sequence_test = behav3d_py.pilz_sequence_test:main',
+            'o3d_test = behav3d_py.o3d_test:main',
         ],
     },
 )
