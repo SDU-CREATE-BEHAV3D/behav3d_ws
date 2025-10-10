@@ -25,9 +25,9 @@ import numpy as np
 import cv2
 
 # ---------- Session / options ----------
-SESS_PATH = "/home/lab/behav3d_ws/captures/session-20251009_175916_mancap/"
+SESS_PATH = "/home/lab/behav3d_ws/captures/session-20251009_181643_mancap/"
 PREVIEW = True
-METHOD = "Tsai"  # Tsai | Park | Horaud | Andreff | Daniilidis
+METHOD = "Park"  # Tsai | Park | Horaud | Andreff | Daniilidis
 STREAM_DEFAULT = "ir"  # "ir" or "color"
 
 # ---------- Board config ----------
