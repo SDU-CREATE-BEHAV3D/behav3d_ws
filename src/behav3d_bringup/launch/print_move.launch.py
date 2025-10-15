@@ -220,6 +220,8 @@ def generate_launch_description():
         executable="sense_node",
         output="screen",
     )
+    sense_node_call = TimerAction(period=2.0, actions=[sense_node])
+
     node_demo = Node(
         name="behav3d_demo",
         package="behav3d_demo",
@@ -263,7 +265,7 @@ def generate_launch_description():
             rviz_node,
             motion_bridge,
             print_node,
-            sense_node,
+            sense_node_call,
        #    node_demo
         ]
     )

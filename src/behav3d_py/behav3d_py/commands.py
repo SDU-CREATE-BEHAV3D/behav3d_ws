@@ -222,6 +222,25 @@ class Commands:
             "on_done": on_done
         })
 
+    def input(self,
+            *,
+            key: Optional[str] = None,
+            prompt: Optional[str] = None,
+            on_done: OnMoveDone = None):
+        """
+        Enqueue a keyboard input wait command.
+        - key=None: waits for ENTER.
+        - key='q': waits until the user types 'q' + ENTER.
+        'on_done' will receive metrics={'value': <typed text>}.
+        """
+        self._enqueue("wait_input", {
+            "key": (None if key is None else str(key)),
+            "prompt": (prompt if prompt is not None else
+                    ("Press ENTER to continue..." if key is None
+                        else f"Type '{key}' + ENTER to continue...")),
+            "on_done": on_done
+        })
+
     # ---------------- Queue core ----------------
 
     def _enqueue(self, kind: str, payload: Dict[str, Any]):
@@ -250,6 +269,9 @@ class Commands:
             self._do_get_pose(p)
         elif kind == "capture":
             self._do_capture(p)
+        elif kind == "wait_input":
+            self._do_wait_input(p)
+
         else:
             self.node.get_logger().error(f"Unknown queue item kind: {kind}")
             self._busy = False
@@ -628,6 +650,41 @@ class Commands:
 
         fut.add_done_callback(_on_resp)
 
+    def _do_wait_input(self, p: Dict[str, Any]):
+        import sys
+        import threading
+
+        key = p.get("key", None)
+        prompt = p.get("prompt", "Press ENTER to continue...")
+        cb = p.get("on_done")
+
+        # If running without a TTY (e.g., launched headless), continue automatically.
+        if not sys.stdin or not sys.stdin.isatty():
+            self.node.get_logger().warn("WAIT_INPUT: no TTY detected; continuing automatically.")
+            self._finish_move(cb, "input", ok=True, phase="exec",
+                            metrics={"value": "", "reason": "no-tty-autocontinue"})
+            return
+
+        self.node.get_logger().info(f"WAIT_INPUT: {prompt}")
+
+        def _reader():
+            try:
+                text = input()
+                value = text.strip()
+                if key is not None:
+                    ok = (value == str(key))
+                    self._finish_move(cb, "input", ok=ok, phase="exec",
+                                    metrics={"value": value},
+                                    error=None if ok else f"expected '{key}', got '{value}'")
+                else:
+                    self._finish_move(cb, "input", ok=True, phase="exec",
+                                    metrics={"value": value})
+            except Exception as e:
+                self._finish_move(cb, "input", ok=False, phase="exec",
+                                error=f"stdin exception: {e}")
+
+        t = threading.Thread(target=_reader, daemon=True)
+        t.start()
 
     # ---------------- Finish & advance ----------------
 
