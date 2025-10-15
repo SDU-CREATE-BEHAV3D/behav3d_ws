@@ -24,7 +24,6 @@ try:
 except Exception:
     CvBridge = None
 
-
 def stamp_to_ns(msg) -> int:
     # sensor_msgs/Image header stamp -> epoch ns
     return int(msg.header.stamp.sec) * 1_000_000_000 + int(msg.header.stamp.nanosec)
@@ -299,7 +298,7 @@ class SenseNode(Node):
         if self.bridge is None or color_msg is None:
             return None
         try:
-            cv_img = self._to_bgr8(color_msg)  # tu helper robusto
+            cv_img = self._to_bgr8(color_msg)  
             cv_img = self._decimate(cv_img, self.decimate)
             tag = self._idx_tag(idx)
             fname = f'rgb_{tag}.png'

@@ -230,7 +230,7 @@ class Commands:
         """
         Enqueue a keyboard input wait command.
         - key=None: waits for ENTER.
-        - key='q': waits until the user types 'q' + ENTER.
+        - key='q': waits until the user types 'q' + ENTER. (not working in yaml yet)
         'on_done' will receive metrics={'value': <typed text>}.
         """
         self._enqueue("wait_input", {

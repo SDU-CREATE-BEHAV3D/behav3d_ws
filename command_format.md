@@ -139,6 +139,53 @@
 
 - home: {duration_s: 4.0}
 ```
+---
+
+### Input (pause sequence until ENTER)
+
+```yaml
+- input
+# Waits for user to press ENTER before continuing.
+```
+
+#### Input with custom prompt
+
+```yaml
+- input: { prompt: "Press ENTER to continue..." }
+# Displays the given message, then waits for ENTER.
+```
+
+---
+
+### Capture (image or data acquisition)
+
+#### Capture with selected streams
+
+```yaml
+- capture: { rgb: true, depth: true, ir: true }
+# Captures RGB, depth, and IR images using the configured service.
+```
+
+#### Capture including pose
+
+```yaml
+- capture: { rgb: true, depth: true, ir: true, pose: true }
+# Captures RGB/depth/IR and records the current pose.
+```
+
+#### Capture with folder change
+
+```yaml
+- capture: { folder: "/data/folder_name" }
+# Sets the active capture folder before running the capture.
+```
+
+---
+
+### Notes
+
+* `input` pauses the FIFO until ENTER is pressed (no key mapping).
+* `capture` calls the capture service; omitted keys default to `false`.
 
 ---
 

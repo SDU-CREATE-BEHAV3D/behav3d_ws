@@ -32,10 +32,11 @@ class SequenceParser:
             "goto":  lambda v: self.cmd.goto(**self._ensure_dict(v)),
             "print": lambda v: self.cmd.print(**self._ensure_dict(v)),
             "wait":  lambda v: self.cmd.wait(float(v)),
-            # ---  pose/getPose/GETPOSE map to the same handler ---
+            "input":   lambda v: self._handle_input(v),
+            "capture": lambda v: self._handle_capture(v),
+            # ---  pose/getPose map to the same handler ---
             "pose": _pose_handler,
             "getPose": _pose_handler,
-            "GETPOSE": _pose_handler,
         }
 
     # Optional: default callback for pose to print a short line
@@ -130,3 +131,56 @@ class SequenceParser:
                 "on_done": getattr(self, "_on_pose_log", None),
             }
         raise ValueError(f"pose: expected scalar or mapping, got {type(val).__name__}")
+
+    def _handle_input(self, val: Any):
+        """
+        YAML forms:
+        - input
+        - input: null
+        - input: "q"
+        - input: { key: "q", prompt: "Type 'q' + ENTER to shutdown..." }
+        """
+        if val is None:
+            self.cmd.input()  # wait for ENTER
+            return
+
+        if isinstance(val, str):
+            self.cmd.input(key=val)
+            return
+
+        if isinstance(val, dict):
+            key = val.get("key", None)
+            prompt = val.get("prompt", None)
+            self.cmd.input(key=key, prompt=prompt)
+            return
+
+        raise ValueError(f"input: expected null, string, or mapping; got {type(val).__name__}")
+
+    def _handle_capture(self, val: Any):
+        """
+        YAML forms:
+        - capture                      # no streams, no folder change
+        - capture: { rgb: true, depth: true, ir: true }      # pose omitted -> False
+        - capture: { rgb: true, depth: true, ir: true, pose: true }
+        - capture: { folder: "" }       # set_folder=True, folder=""
+        - capture: { folder: "/data/run_042" }  # set_folder=True to given path
+        - capture: { rgb: true, folder: "/tmp" }             # mix flags + folder
+        """
+        if val is None:
+            self.cmd.capture()  # all False, no folder change
+            return
+
+        if not isinstance(val, dict):
+            raise ValueError(f"capture: expected mapping, got {type(val).__name__}")
+
+        rgb   = bool(val.get("rgb", False))
+        depth = bool(val.get("depth", False))
+        ir    = bool(val.get("ir", False))
+        pose  = bool(val.get("pose", False))
+
+        # folder: None -> do not change; "" -> clear; "path" -> set to that path
+        folder = val.get("folder", None)
+        if folder is not None:
+            folder = str(folder)
+
+        self.cmd.capture(rgb=rgb, depth=depth, ir=ir, pose=pose, folder=folder)
