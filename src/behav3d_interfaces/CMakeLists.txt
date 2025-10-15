@@ -19,9 +19,7 @@ set(action_files
 set(srv_files
   srv/PlanWithMoveIt.srv
   srv/ComputeHandEye.srv
-  srv/Pause.srv
-  srv/Resume.srv
-  srv/Abort.srv
+  srv/Capture.srv
   srv/CaptureSnapshot.srv
   srv/UpdatePrintConfig.srv
   srv/GetPrintStatus.srv

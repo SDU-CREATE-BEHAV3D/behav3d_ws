@@ -1,0 +1,11 @@
+# Request
+bool do_rgb
+bool do_depth
+bool do_ir
+bool do_pose
+bool set_folder
+string folder
+---
+# Response
+bool success
+string message
