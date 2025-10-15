@@ -30,29 +30,36 @@ class MeshVisualizer(Node):
     def __init__(self):
         super().__init__('mesh_visualizer')
 
-        # Parameters
-        self.declare_parameter('mesh_dir', '/home/lab/robot/meshes')
-        self.declare_parameter('frame_id', 'ur20_base_link')  # <<-- important
+        # === Hardcoded defaults ===
+        default_mesh_dir = '/home/lab/robot/meshes'
+        default_frame_id = 'ur20_base_link'
+
+        # === Declare parameters (still overridable if needed) ===
+        self.declare_parameter('mesh_dir', default_mesh_dir)
+        self.declare_parameter('frame_id', default_frame_id)
 
         self.mesh_dir = self.get_parameter('mesh_dir').value
         self.frame_id = self.get_parameter('frame_id').value
 
         self.marker_pub = self.create_publisher(Marker, '/visualization_marker', 10)
 
-        # Watchdog
+        # === File watcher ===
         self.event_handler = MeshUpdateHandler(self.publish_latest_mesh)
         self.observer = Observer()
         self.observer.schedule(self.event_handler, self.mesh_dir, recursive=False)
         self.observer.start()
 
-        self.get_logger().info(f"Watching directory: {self.mesh_dir}")
-        self.get_logger().info(f"Publishing meshes in frame: {self.frame_id}")
+        self.get_logger().info("=== Mesh Visualizer Node Started ===")
+        self.get_logger().info(f"📁 Watching directory: {self.mesh_dir}")
+        self.get_logger().info(f"🗺️  Publishing in frame: {self.frame_id}")
 
+        # Publish the most recent mesh on startup
         self.publish_latest_mesh(None, initial=True)
 
     def publish_latest_mesh(self, file_path=None, initial=False):
         """Publishes the newest mesh file as a visualization marker."""
         try:
+            # Find newest file if not specified
             if file_path is None or initial:
                 files = [
                     os.path.join(self.mesh_dir, f)
@@ -83,7 +90,7 @@ class MeshVisualizer(Node):
             marker.color.a = 1.0
 
             self.marker_pub.publish(marker)
-            self.get_logger().info(f"✅ Published mesh (in {self.frame_id}): {abs_path}")
+            self.get_logger().info(f"✅ Published mesh ({self.frame_id}): {abs_path}")
 
         except Exception as e:
             self.get_logger().error(f"Failed to publish mesh: {e}")
