@@ -14,7 +14,7 @@ import tf2_ros
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint, JointTrajectory
 from geometry_msgs.msg import Pose, PoseStamped
-from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin, GetLinkPose  
+from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin, GetLinkPose, Capture  
 
 from behav3d_interfaces.action import PrintTime
 
@@ -46,7 +46,7 @@ class Commands:
         self._ptp_cli = node.create_client(PlanPilzPtp, "/behav3d/plan_pilz_ptp")
         self._lin_cli = node.create_client(PlanPilzLin, "/behav3d/plan_pilz_lin") 
         self._pose_cli = node.create_client(GetLinkPose, "/behav3d/get_link_pose")
-                                            
+        self._capture_cli = node.create_client(Capture, "/capture")                                              
         # PrintTime action client (process / extruder)
         self._print_ac = ActionClient(node, PrintTime, "print")
         #TF buffer and listener
@@ -195,6 +195,32 @@ class Commands:
             "on_done": on_done,
         })
 
+    def capture(self,
+                *,
+                rgb: bool = False,
+                depth: bool = False,
+                ir: bool = False,
+                pose: bool = False,
+                folder: Optional[str] = None,
+                on_done: OnMoveDone = None):
+        """
+        Enqueue a capture request to the image manager.
+
+        Semantics:
+        - Each of {rgb, depth, ir, pose}: if True => set corresponding do_* = True, else False.
+        - folder:
+            * If folder is None  -> set_folder = False (leave current folder unchanged).
+            * If folder is ""    -> set_folder = True and folder = "" (clear/reset).
+            * If folder is "abc" -> set_folder = True and folder = "abc" (change).
+        """
+        self._enqueue("capture", {
+            "rgb": bool(rgb),
+            "depth": bool(depth),
+            "ir": bool(ir),
+            "pose": bool(pose),
+            "folder": folder,      # None, "" or a path
+            "on_done": on_done
+        })
 
     # ---------------- Queue core ----------------
 
@@ -222,6 +248,8 @@ class Commands:
             self._do_wait(p)
         elif kind == "get_pose":
             self._do_get_pose(p)
+        elif kind == "capture":
+            self._do_capture(p)
         else:
             self.node.get_logger().error(f"Unknown queue item kind: {kind}")
             self._busy = False
@@ -552,6 +580,54 @@ class Commands:
                 self._process_next()
 
         fut.add_done_callback(_on_resp)
+
+    def _do_capture(self, p: Dict[str, Any]):
+        on_done: OnMoveDone = p.get("on_done")
+
+        if not self._capture_cli.wait_for_service(timeout_sec=2.0):
+            self._finish_move(on_done, "capture", ok=False, phase="exec",
+                            error="capture service not available")
+            return
+
+        req = Capture.Request()
+        # booleans
+        req.do_rgb   = bool(p.get("rgb", False))
+        req.do_depth = bool(p.get("depth", False))
+        req.do_ir    = bool(p.get("ir", False))
+        req.do_pose  = bool(p.get("pose", False))
+
+        # folder semantics
+        folder = p.get("folder", None)
+        if folder is None:
+            req.set_folder = False
+            req.folder = ""          # ignored by server when set_folder == False
+        else:
+            req.set_folder = True
+            req.folder = str(folder) # may be "" to clear, or a path to set
+
+        self.node.get_logger().info(
+            f"CAPTURE: rgb={req.do_rgb} depth={req.do_depth} ir={req.do_ir} pose={req.do_pose} "
+            f"set_folder={req.set_folder} folder='{req.folder}'"
+        )
+
+        fut = self._capture_cli.call_async(req)
+
+        def _on_resp(fr):
+            try:
+                resp = fr.result()
+            except Exception as e:
+                self._finish_move(on_done, "capture", ok=False, phase="exec",
+                                error=f"exception: {e}")
+                return
+
+            ok = bool(getattr(resp, "success", False))
+            metrics = {"message": getattr(resp, "message", "")}
+            self._finish_move(on_done, "capture", ok=ok, phase="exec",
+                            metrics=metrics,
+                            error=None if ok else metrics["message"])
+
+        fut.add_done_callback(_on_resp)
+
 
     # ---------------- Finish & advance ----------------
 

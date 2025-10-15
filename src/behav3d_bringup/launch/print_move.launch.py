@@ -213,6 +213,13 @@ def generate_launch_description():
         executable="print_node",
         output="screen",
     )
+
+    sense_node= Node(
+        name="behav3d_sense",
+        package="behav3d_sense",
+        executable="sense_node",
+        output="screen",
+    )
     node_demo = Node(
         name="behav3d_demo",
         package="behav3d_demo",
@@ -256,6 +263,7 @@ def generate_launch_description():
             rviz_node,
             motion_bridge,
             print_node,
+            sense_node,
        #    node_demo
         ]
     )
