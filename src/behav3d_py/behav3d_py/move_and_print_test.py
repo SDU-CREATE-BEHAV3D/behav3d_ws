@@ -44,18 +44,20 @@ class MoveAndPrintTest(Node):
         self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
         self.cmd.SPD(0.3)
         self.cmd.EEF("femto_color_optical_calib") 
+        self.cmd.LIN()
         self.cmd.input(prompt="Press ENTER to go to target...")
         # Run the Fibonacci spherical-cap scan (ENTER-only prompt between captures)
         self.mac.fibScan(
             target=target_ps,
             distance=0.60,
             cap_rad=math.radians(35),
-            samples=16,
-            prompt="Press ENTER to capture...",
+            samples=8,
+         #   step_before_move=True,
             folder="@session/scan_1",
             settle_s=0.2,
             debug=False,
         )
+
     # def _run_once(self):
     #     if self._started:
     #         return
@@ -87,7 +89,7 @@ class MoveAndPrintTest(Node):
     #    self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="")
         # self.cmd.wait(5.0, on_done=self._on_move_done)
         # self.cmd.getPose("extruder_tcp", on_done=self._on_pose)
-        # self.cmd.getPose("extruder_tcp", use_tf=True, on_done=self._on_pose)
+        #self.cmd.getPose("extruder_tcp", use_tf=True, on_done=self._on_pose)
         # self.cmd.getPose("femto_color_optical_calib", "ur20_tool0", on_done=self._on_pose)
         # self.cmd.getPose("femto_color_optical_calib", "ur20_tool0", use_tf=True, on_done=self._on_pose)
         # self.cmd.wait(45.0, on_done=self._on_move_done)
@@ -119,9 +121,9 @@ class MoveAndPrintTest(Node):
 
     #     self.cmd.home(on_move_done=lambda r: self.get_logger().info("[home #2 done]"))
     #     self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_1")
-    #     self.cmd.input(key="q",
-    #                 prompt="Type 'q' + ENTER to shutdown...",
-    #                 on_done=self._on_quit)
+        self.cmd.input(key="q",
+                     prompt="Type 'q' + ENTER to shutdown...",
+                     on_done=self._on_quit)
         
     def _on_move_done(self, res):
         # Unified callback for both HOME and GOTO

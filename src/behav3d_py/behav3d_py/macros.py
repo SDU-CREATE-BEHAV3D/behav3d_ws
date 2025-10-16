@@ -149,7 +149,7 @@ class Macros:
             first = False
 
         # Barrier
-        self.cmd.wait(0.0)
+        self.cmd.wait(0.2)
 
         return {
             "ok": True,
