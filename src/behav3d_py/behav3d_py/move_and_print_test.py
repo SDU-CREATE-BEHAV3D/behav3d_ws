@@ -4,9 +4,12 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-
 from .commands import Commands   # Both in the same ROS2 Python package
+from .macros import Macros     # Both in the same ROS2 Python package
 
+import math
+from geometry_msgs.msg import PoseStamped
+from scipy.spatial.transform import Rotation as R
 
 class MoveAndPrintTest(Node):
     """Demo: HOME → GOTO(plan+exec). Single on_move_done callback for all moves."""
@@ -15,12 +18,49 @@ class MoveAndPrintTest(Node):
         self.cmd = Commands(self)
         self._started = False
         self.create_timer(0.25, self._run_once)
+        self.mac = Macros(self.cmd)
 
     def _run_once(self):
         if self._started:
             return
         self._started = True
 
+        # Hardcoded target pose in 'world' using XYZ + RPY (radians)
+        px, py, pz = 0.00, 0.70, 0.20
+        rx, ry, rz = 0.0, 0.0, math.radians(0)
+
+        target_ps = PoseStamped()
+        target_ps.header.frame_id = "world"
+        target_ps.pose.position.x = px
+        target_ps.pose.position.y = py
+        target_ps.pose.position.z = pz
+
+        qx, qy, qz, qw = R.from_euler("xyz", [rx, ry, rz], degrees=False).as_quat()
+        target_ps.pose.orientation.x = float(qx)
+        target_ps.pose.orientation.y = float(qy)
+        target_ps.pose.orientation.z = float(qz)
+        target_ps.pose.orientation.w = float(qw)
+
+        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
+        self.cmd.SPD(0.3)
+        self.cmd.EEF("femto_color_optical_calib") 
+        self.cmd.input(prompt="Press ENTER to go to target...")
+        # Run the Fibonacci spherical-cap scan (ENTER-only prompt between captures)
+        self.mac.fibScan(
+            target=target_ps,
+            distance=0.60,
+            cap_rad=math.radians(35),
+            samples=16,
+            prompt="Press ENTER to capture...",
+            folder="@session/scan_1",
+            settle_s=0.2,
+            debug=False,
+        )
+    # def _run_once(self):
+    #     if self._started:
+    #         return
+    #     self._started = True
+#
         # 1) SAMPLE COMMANDS HERE AMIGOS!!!
     #     self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
     #     self.cmd.goto(x=-0.0500, y=1.30, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
@@ -60,28 +100,28 @@ class MoveAndPrintTest(Node):
    #     self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True) 
    #     self.cmd.goto(x=-0.215, y=0.955, z=0.0, exec=True) 
     #    self.cmd.goto(x=-0.215, y=0.955, z=-0.044, exec=True)
-        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_1")
-        #self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
-    #    self.cmd.home(duration_s=12.0, on_move_done=self._on_move_done)
+    #     self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_1")
+    #     #self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
+    # #    self.cmd.home(duration_s=12.0, on_move_done=self._on_move_done)
 
-        self.cmd.home(on_move_done=lambda r: self.get_logger().info("[home #1 done]"))
+    #     self.cmd.home(on_move_done=lambda r: self.get_logger().info("[home #1 done]"))
 
-        self.cmd.input(prompt="Press ENTER to go to target...")
-        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True)
+    #     self.cmd.input(prompt="Press ENTER to go to target...")
+    #     self.cmd.capture(rgb=True, depth=True, ir=True, pose=True)
 
-        self.cmd.goto(x=-0.1965, y=0.955, z=0.0, exec=True)
-        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_2")
-        self.cmd.input(prompt="Press ENTER to capture (rgb+depth+ir)...")
+    #     self.cmd.goto(x=-0.1965, y=0.955, z=0.0, exec=True)
+    #     self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_2")
+    #     self.cmd.input(prompt="Press ENTER to capture (rgb+depth+ir)...")
 
-        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True)
+    #     self.cmd.capture(rgb=True, depth=True, ir=True, pose=True)
    
-        self.cmd.input(prompt="Press ENTER to go home...")
+    #     self.cmd.input(prompt="Press ENTER to go home...")
 
-        self.cmd.home(on_move_done=lambda r: self.get_logger().info("[home #2 done]"))
-        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_1")
-        self.cmd.input(key="q",
-                    prompt="Type 'q' + ENTER to shutdown...",
-                    on_done=self._on_quit)
+    #     self.cmd.home(on_move_done=lambda r: self.get_logger().info("[home #2 done]"))
+    #     self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_1")
+    #     self.cmd.input(key="q",
+    #                 prompt="Type 'q' + ENTER to shutdown...",
+    #                 on_done=self._on_quit)
         
     def _on_move_done(self, res):
         # Unified callback for both HOME and GOTO

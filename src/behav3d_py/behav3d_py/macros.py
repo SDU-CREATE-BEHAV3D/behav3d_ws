@@ -1,0 +1,202 @@
+# macros.py
+# High-level, queued macros built on top of Commands primitives.
+# NumPy + SciPy version (concise, reliable rotations).
+
+from typing import Any, Dict, List, Optional
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+from geometry_msgs.msg import PoseStamped
+
+# Set this according to your TCP convention:
+# True  -> tool +Z points OUTWARD (common when optical axis is -Z looking to target)
+# False -> tool +Z points INWARD (directly at the target center)
+TOOL_PLUS_Z_POINTS_OUTWARD = False
+
+
+class Macros:
+    """
+    Compose higher-level routines from Commands.
+    Initialize with a Commands instance that provides: goto, wait, input, capture.
+    """
+
+    def __init__(self, commands):
+        self.cmd = commands  # Commands instance
+
+    def fibScan(
+        self,
+        target: PoseStamped,          # must be in 'world'
+        distance: float,
+        cap_rad: float,
+        samples: int,
+        *,
+        prompt: Optional[str] = None, # ENTER-only gate text
+        folder: Optional[str] = None, # applied only on first capture
+        settle_s: float = 0.2,
+        debug: bool = False,          # plan-only (no exec)
+    ) -> Dict[str, Any]:
+        """
+        Enqueue: for each viewpoint on a spherical cap (half-angle cap_rad) around 'target':
+          goto -> wait(settle_s) -> input(prompt) -> capture
+        """
+        if not isinstance(target, PoseStamped):
+            raise TypeError("target must be geometry_msgs.msg.PoseStamped in 'world'.")
+        if target.header.frame_id not in ("world", "", None):
+            raise ValueError("target.header.frame_id must be 'world'.")
+
+        if samples <= 0:
+            return {
+                "ok": True,
+                "msg": "No samples requested (samples <= 0).",
+                "poses_world": [],
+                "params": {"distance": distance, "cap_rad": cap_rad, "samples": samples},
+                "folder": folder,
+            }
+
+        # Target pose (world)
+        p_t = np.array(
+            [target.pose.position.x, target.pose.position.y, target.pose.position.z],
+            dtype=float,
+        )
+        q_t = np.array(
+            [target.pose.orientation.x, target.pose.orientation.y,
+             target.pose.orientation.z, target.pose.orientation.w],
+            dtype=float,
+        )
+        qn = np.linalg.norm(q_t)
+        R_t = R.identity() if qn < 1e-12 else R.from_quat(q_t / qn)
+
+        # 1) Fibonacci directions on spherical cap (target-local), outward unit vectors
+        dirs_local = _fibonacci_cap_dirs_np(cap_rad, samples)  # (N,3)
+        order = np.arange(samples - 1, -1, -1, dtype=int)      # keep C++ order n-1..0
+
+        poses_world: List[PoseStamped] = []
+
+        # Roll offset of +pi about local Z (kept from your C++; adjust if your tool needs different roll)
+        Rz_pi = R.from_rotvec([0.0, 0.0, np.pi])
+
+        # 2) Build each local pose and transform to world
+        for idx in order:
+            d = dirs_local[idx]            # outward unit from target
+            p_loc = distance * d
+
+            # Choose tool +Z axis direction according to convention
+            z_axis = d if TOOL_PLUS_Z_POINTS_OUTWARD else -d
+
+            # Minimal alignment of +X with target +X by projecting onto plane ⟂ z
+            x_guess = np.array([1.0, 0.0, 0.0])
+            x_axis = x_guess - np.dot(x_guess, z_axis) * z_axis
+            nx = np.linalg.norm(x_axis)
+            if nx < 1e-9:
+                y_guess = np.array([0.0, 1.0, 0.0])
+                x_axis = y_guess - np.dot(y_guess, z_axis) * z_axis
+                nx = np.linalg.norm(x_axis)
+                if nx < 1e-12:
+                    x_axis = _any_orthonormal(z_axis)
+                    nx = np.linalg.norm(x_axis)
+            x_axis /= nx
+            y_axis = np.cross(z_axis, x_axis)
+            y_axis /= max(np.linalg.norm(y_axis), 1e-12)
+
+            # Local rotation with columns [x y z], then apply +pi yaw about local Z
+            R_loc = R.from_matrix(np.column_stack((x_axis, y_axis, z_axis))) * Rz_pi
+
+            # Transform to world
+            p_w = p_t + R_t.apply(p_loc)
+            R_w = R_t * R_loc
+
+            # Store PoseStamped (world)
+            ps_w = PoseStamped()
+            ps_w.header.frame_id = "world"
+            ps_w.pose.position.x, ps_w.pose.position.y, ps_w.pose.position.z = p_w.tolist()
+            q_w = R_w.as_quat()  # [x,y,z,w]
+            ps_w.pose.orientation.x = float(q_w[0])
+            ps_w.pose.orientation.y = float(q_w[1])
+            ps_w.pose.orientation.z = float(q_w[2])
+            ps_w.pose.orientation.w = float(q_w[3])
+            poses_world.append(ps_w)
+
+        # 3) Enqueue: goto -> settle -> input -> capture
+        first = True
+        for ps in poses_world:
+            rpy = R.from_quat([
+                ps.pose.orientation.x,
+                ps.pose.orientation.y,
+                ps.pose.orientation.z,
+                ps.pose.orientation.w,
+            ]).as_euler("xyz", degrees=False)
+
+            self.cmd.goto(
+                x=ps.pose.position.x,
+                y=ps.pose.position.y,
+                z=ps.pose.position.z,
+                rx=float(rpy[0]),
+                ry=float(rpy[1]),
+                rz=float(rpy[2]),
+                exec=(not debug),
+            )
+            if settle_s > 0.0:
+                self.cmd.wait(float(settle_s))
+
+            self.cmd.input(prompt=prompt)
+
+            self.cmd.capture(
+                rgb=True,
+                depth=True,
+                ir=False,
+                pose=True,
+                folder=(folder if first else None),
+            )
+            first = False
+
+        # Barrier
+        self.cmd.wait(0.0)
+
+        return {
+            "ok": True,
+            "poses_world": poses_world,
+            "params": {
+                "distance": distance,
+                "cap_rad": cap_rad,
+                "samples": samples,
+                "settle_s": settle_s,
+                "debug": debug,
+            },
+            "folder": folder,
+        }
+
+
+# ---------------------------- Helpers ---------------------------------------
+
+def _fibonacci_cap_dirs_np(cap_rad: float, n: int) -> np.ndarray:
+    """Vectorized Fibonacci sampling on a spherical cap (half-angle cap_rad).
+    Returns (n,3) outward unit directions in target-local coordinates.
+    """
+    if n <= 0:
+        return np.zeros((0, 3), dtype=float)
+
+    cos_cap = float(np.cos(cap_rad))
+    i = np.arange(n, dtype=float)
+    z = cos_cap + (1.0 - cos_cap) * ((i + 0.5) / n)
+    r_xy = np.sqrt(np.maximum(0.0, 1.0 - z * z))
+
+    golden = (1.0 + np.sqrt(5.0)) * 0.5
+    lon = 2.0 * np.pi * (i + 0.5) / golden
+
+    x = r_xy * np.cos(lon)
+    y = r_xy * np.sin(lon)
+
+    dirs = np.stack([x, y, z], axis=1)
+    norms = np.linalg.norm(dirs, axis=1, keepdims=True)
+    norms = np.where(norms < 1e-12, 1.0, norms)
+    return dirs / norms
+
+
+def _any_orthonormal(v: np.ndarray) -> np.ndarray:
+    """Return any unit vector orthonormal to v."""
+    v = np.asarray(v, dtype=float)
+    idx = np.argmin(np.abs(v))
+    basis = np.zeros(3, dtype=float)
+    basis[idx] = 1.0
+    u = basis - np.dot(basis, v) * v
+    n = np.linalg.norm(u)
+    return u / (n if n > 1e-12 else 1.0)
