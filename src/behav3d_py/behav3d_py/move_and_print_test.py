@@ -60,24 +60,25 @@ class MoveAndPrintTest(Node):
    #     self.cmd.goto(x=-0.205, y=0.955, z=0.0, exec=True) 
    #     self.cmd.goto(x=-0.215, y=0.955, z=0.0, exec=True) 
     #    self.cmd.goto(x=-0.215, y=0.955, z=-0.044, exec=True)
-    #    self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="other_name")
+        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_1")
         #self.cmd.print(secs=6.2, speed=900, on_done=self._on_move_done) 
     #    self.cmd.home(duration_s=12.0, on_move_done=self._on_move_done)
 
         self.cmd.home(on_move_done=lambda r: self.get_logger().info("[home #1 done]"))
 
         self.cmd.input(prompt="Press ENTER to go to target...")
+        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True)
 
         self.cmd.goto(x=-0.1965, y=0.955, z=0.0, exec=True)
-
+        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_2")
         self.cmd.input(prompt="Press ENTER to capture (rgb+depth+ir)...")
 
         self.cmd.capture(rgb=True, depth=True, ir=True, pose=True)
- 
+   
         self.cmd.input(prompt="Press ENTER to go home...")
 
         self.cmd.home(on_move_done=lambda r: self.get_logger().info("[home #2 done]"))
-
+        self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_1")
         self.cmd.input(key="q",
                     prompt="Type 'q' + ENTER to shutdown...",
                     on_done=self._on_quit)
