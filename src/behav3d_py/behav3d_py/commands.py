@@ -242,6 +242,9 @@ class Commands:
         })
 
     # ---------------- Queue core ----------------
+    def _prepend(self, kind: str, payload: Dict[str, Any]):
+        """Insert a queue item at the head so it runs immediately after the current one."""
+        self._queue.insert(0, (kind, payload))
 
     def _enqueue(self, kind: str, payload: Dict[str, Any]):
         """Push intent to FIFO and start processing if idle."""

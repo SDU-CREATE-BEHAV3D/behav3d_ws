@@ -115,9 +115,15 @@ class Macros:
             ps_w.pose.orientation.w = float(q_w[3])
             poses_world.append(ps_w)
 
-        # 3) Enqueue: goto -> settle -> input -> capture
-        first = True
-        for ps in poses_world:
+        # 3) Conditional chain via prepend:
+        # After each move finishes, decide whether to prepend settle/input/capture,
+        # and always prepend the next goto to keep the scan contiguous.
+
+        first = True  # apply 'folder' only on the first successful capture
+
+        def _prepend_goto_for_index(i: int, cb):
+            """Build and prepend a plan_motion for poses_world[i]."""
+            ps = poses_world[i]
             rpy = R.from_quat([
                 ps.pose.orientation.x,
                 ps.pose.orientation.y,
@@ -125,28 +131,68 @@ class Macros:
                 ps.pose.orientation.w,
             ]).as_euler("xyz", degrees=False)
 
+            self.cmd._prepend("plan_motion", {
+                "pose": ps,
+                "eef": self.cmd._default_eef,
+                "vel_scale": self.cmd._default_vel_scale,
+                "accel_scale": self.cmd._default_accel_scale,
+                "exec": (not debug),
+                "start_print": None,
+                "on_move_done": cb,
+                "motion": self.cmd._motion_mode,
+            })
+
+        def _after_goto(i: int):
+            """Return a callback that decides the next steps for index i."""
+            def _cb(res):
+                nonlocal first
+                ok = bool(res.get("ok", False))
+                # Always schedule the next viewpoint first (so it executes last in the bundle)
+                next_i = i - 1
+                if next_i >= 0:
+                    _prepend_goto_for_index(next_i, _after_goto(next_i))
+
+                if not ok:
+                    # Move failed: skip settle/input/capture for this viewpoint
+                    self.cmd.node.get_logger().warn(f"[fibScan] Move failed at viewpoint {i}; skipping capture/input.")
+                    return
+
+                # Move succeeded: prepend capture chain in reverse order so it executes as:
+                # wait(settle) -> input(prompt?) -> capture -> next goto
+                self.cmd._prepend("capture", {
+                    "rgb": True, "depth": True, "ir": False, "pose": True,
+                    "folder": (folder if first else None),
+                    "on_done": None,
+                })
+                if prompt:
+                    self.cmd._prepend("wait_input", {
+                        "key": None, "prompt": prompt, "on_done": None
+                    })
+                if settle_s > 0.0:
+                    self.cmd._prepend("wait", {"secs": float(settle_s), "on_done": None})
+
+                first = False
+            return _cb
+
+        # Kick off the chain by enqueuing (to tail) the first goto (last index n-1)
+        if poses_world:
+            i0 = len(poses_world) - 1
+            ps0 = poses_world[i0]
+            rpy0 = R.from_quat([
+                ps0.pose.orientation.x, ps0.pose.orientation.y,
+                ps0.pose.orientation.z, ps0.pose.orientation.w,
+            ]).as_euler("xyz", degrees=False)
+
             self.cmd.goto(
-                x=ps.pose.position.x,
-                y=ps.pose.position.y,
-                z=ps.pose.position.z,
-                rx=float(rpy[0]),
-                ry=float(rpy[1]),
-                rz=float(rpy[2]),
+                x=ps0.pose.position.x,
+                y=ps0.pose.position.y,
+                z=ps0.pose.position.z,
+                rx=float(rpy0[0]),
+                ry=float(rpy0[1]),
+                rz=float(rpy0[2]),
                 exec=(not debug),
+                on_move_done=_after_goto(i0),
             )
-            if settle_s > 0.0:
-                self.cmd.wait(float(settle_s))
-
-            self.cmd.input(prompt=prompt)
-
-            self.cmd.capture(
-                rgb=True,
-                depth=True,
-                ir=False,
-                pose=True,
-                folder=(folder if first else None),
-            )
-            first = False
 
         # Barrier
         self.cmd.wait(0.2)

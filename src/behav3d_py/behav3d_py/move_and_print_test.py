@@ -41,26 +41,26 @@ class MoveAndPrintTest(Node):
         target_ps.pose.orientation.z = float(qz)
         target_ps.pose.orientation.w = float(qw)
 
-        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
-        self.cmd.SPD(0.3)
+        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+        self.cmd.SPD(0.1)
         self.cmd.EEF("femto_color_optical_calib") 
         self.cmd.LIN()
         self.cmd.input(prompt="Press ENTER to go to target...")
         # Run the Fibonacci spherical-cap scan (ENTER-only prompt between captures)
         self.mac.fibScan(
             target=target_ps,
-            distance=0.60,
-            cap_rad=math.radians(45),
+            distance=0.50,
+            cap_rad=math.radians(35),
             samples=8,
-         #   step_before_move=True,
             folder="@session/scan_1",
             settle_s=0.2,
+            prompt="Press ENTER to capture...",
             debug=False,
         )
+        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
         self.cmd.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)
-        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
 
     # def _run_once(self):
     #     if self._started:
