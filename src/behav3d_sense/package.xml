@@ -2,11 +2,29 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>behav3d_sense</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="lucas.helle.p@gmail.com">lab</maintainer>
-  <license>TODO: License declaration</license>
+  <version>0.0.1</version>
+  <description>3D sensing and reconstruction node for the Behav3D system.</description>
+  <maintainer email="jomi@iti.sdu.dk">Joseph Milad Wadie Naguib</maintainer>
+  <license>MIT</license>
 
+  <!-- Core ROS2 dependencies -->
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>behav3d_interfaces</depend>
+
+  <!-- Math & 3D processing dependencies -->
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-open3d</exec_depend>
+
+  <!-- Launch dependencies -->
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <!-- Testing (optional, already present) -->
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

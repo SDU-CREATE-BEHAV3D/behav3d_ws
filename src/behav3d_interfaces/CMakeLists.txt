@@ -28,6 +28,7 @@ set(srv_files
   srv/PlanPilzPtp.srv
   srv/PlanPilzSequence.srv
   srv/GetLinkPose.srv
+  srv/ReconstructMesh.srv
 )
 
 # Generate interfaces
