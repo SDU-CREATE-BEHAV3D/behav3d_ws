@@ -95,10 +95,10 @@ class ThreeDReconstructor(Node):
 
             T_ir_to_opt = np.linalg.inv(T_tool_ir) @ T_tool_opt
 
-            VOXEL_SIZE = 0.0011
-            SDF_TRUNC = 0.007
-            DEPTH_SCALE = 900.0
-            DEPTH_TRUNC = 0.6
+            VOXEL_SIZE = 0.0012
+            SDF_TRUNC = 0.008
+            DEPTH_SCALE = 1000.0
+            DEPTH_TRUNC = 0.7
             NUM_SCANS = 9
             USE_MEDIAN_BLUR = True
             ENABLE_PRE_CROP = True

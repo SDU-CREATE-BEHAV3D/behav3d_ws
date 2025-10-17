@@ -160,7 +160,7 @@ class Macros:
                 # Move succeeded: prepend capture chain in reverse order so it executes as:
                 # wait(settle) -> input(prompt?) -> capture -> next goto
                 self.cmd._prepend("capture", {
-                    "rgb": True, "depth": True, "ir": False, "pose": True,
+                    "rgb": True, "depth": True, "ir": True, "pose": True,
                     "folder": (folder if first else None),
                     "on_done": None,
                 })
