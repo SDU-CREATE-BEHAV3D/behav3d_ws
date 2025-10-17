@@ -50,13 +50,17 @@ class MoveAndPrintTest(Node):
         self.mac.fibScan(
             target=target_ps,
             distance=0.60,
-            cap_rad=math.radians(35),
+            cap_rad=math.radians(45),
             samples=8,
          #   step_before_move=True,
             folder="@session/scan_1",
             settle_s=0.2,
             debug=False,
         )
+        self.cmd.input(key="q",
+                     prompt="Type 'q' + ENTER to shutdown...",
+                     on_done=self._on_quit)
+        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
 
     # def _run_once(self):
     #     if self._started:
@@ -121,9 +125,7 @@ class MoveAndPrintTest(Node):
 
     #     self.cmd.home(on_move_done=lambda r: self.get_logger().info("[home #2 done]"))
     #     self.cmd.capture(rgb=True, depth=True, ir=True, pose=True, folder="@session/folder_1")
-        self.cmd.input(key="q",
-                     prompt="Type 'q' + ENTER to shutdown...",
-                     on_done=self._on_quit)
+
         
     def _on_move_done(self, res):
         # Unified callback for both HOME and GOTO

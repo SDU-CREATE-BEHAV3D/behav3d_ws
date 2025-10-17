@@ -315,8 +315,13 @@ class Commands:
 
         def _on_result(rf):
             res = rf.result().result
-            self._finish_move(on_move_done, kind, ok=True, phase="exec",
-                              metrics={"error_code": res.error_code})
+            # control_msgs/FollowJointTrajectoryResult: 0 == SUCCESS
+            err = int(getattr(res, "error_code", -999))
+            is_ok = (err == 0)
+            self._finish_move(on_move_done, kind, ok=is_ok, phase="exec",
+                            metrics={"error_code": err},
+                            error=(None if is_ok else f"exec failed (error_code={err})"))
+
 
         send_fut.add_done_callback(_on_goal_sent)
 
