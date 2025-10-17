@@ -5,15 +5,17 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
+    # Optional (kept for flexibility)
     mesh_dir_arg = DeclareLaunchArgument(
         'mesh_dir',
         default_value='/home/lab/robot/meshes',
         description='Directory containing reconstructed mesh files'
     )
 
+    # Hardcoded to the correct robot frame
     frame_id_arg = DeclareLaunchArgument(
         'frame_id',
-        default_value='world',
+        default_value='ur20_base_link',
         description='Reference frame for mesh visualization'
     )
 

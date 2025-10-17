@@ -222,6 +222,20 @@ def generate_launch_description():
     )
     sense_node_call = TimerAction(period=2.0, actions=[sense_node])
 
+    #world_visualizer node
+    world_visualizer = Node(
+        package='world_visualizer',
+        executable='mesh_visualizer',
+        name='mesh_visualizer',
+        output='screen',
+        parameters=[
+            {'mesh_dir': str(Path.home() / 'robot/meshes')},
+            {'frame_id': 'ur20_base_link'}
+        ]
+    )   
+    delayed_visualizer = TimerAction(period=2.0, actions=[world_visualizer]
+)
+
     node_demo = Node(
         name="behav3d_demo",
         package="behav3d_demo",
@@ -261,6 +275,7 @@ def generate_launch_description():
             ur_driver,
             moveit_stack,
             orbbec_camera,
+            delayed_visualizer,
 
             rviz_node,
             motion_bridge,
