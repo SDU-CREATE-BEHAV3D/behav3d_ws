@@ -41,8 +41,8 @@ class MoveAndPrintTest(Node):
         target_ps.pose.orientation.z = float(qz)
         target_ps.pose.orientation.w = float(qw)
 
-        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
-        self.cmd.SPD(0.1)
+        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
+        self.cmd.SPD(0.5)
         self.cmd.EEF("femto_color_optical_calib") 
         self.cmd.LIN()
         self.cmd.input(prompt="Press ENTER to go to target...")
@@ -51,13 +51,22 @@ class MoveAndPrintTest(Node):
             target=target_ps,
             distance=0.50,
             cap_rad=math.radians(35),
-            samples=8,
+            samples=4,
             folder="@session/scan_1",
             settle_s=0.2,
             prompt="Press ENTER to capture...",
             debug=False,
         )
-        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+        self.cmd.wait(1.0)
+
+        # reconstruction scan
+        self.cmd.reconstruct(
+            session_path="",
+            use_latest=True,
+            on_done=lambda res: self.get_logger().info(f"Reconstruction request done: {res}"),
+        )        
+
+        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
         self.cmd.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)

@@ -21,7 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sense_node = behav3d_sense.sense_node:main',
-            '3dreconstruct = behav3d_sense.3dreconstruct:main',
+            'reconstruction_service = behav3d_sense.reconstruction:main',
         ],
     },
 )
