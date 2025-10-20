@@ -22,7 +22,7 @@ import numpy as np
 import cv2
 
 # ---------- Session / options ----------
-SESS_PATH = "/home/lab/behav3d_ws/captures/251020_132419/scan_1"  # set your session folder here
+SESS_PATH = "/home/lab/behav3d_ws/captures/251020_155808/scan_1"  # set your session folder here
 PREVIEW = True
 METHOD = "Park"         # Tsai | Park | Horaud | Andreff | Daniilidis
 STREAM_DEFAULT = "ir"   # "ir" or "color"

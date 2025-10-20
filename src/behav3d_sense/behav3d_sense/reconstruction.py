@@ -100,23 +100,23 @@ class ThreeDReconstructor(Node):
             FX, FY, CX, CY = 505.085205078125, 505.0267028808594, 337.96063232421875, 338.32763671875
             INTR_IR = o3d.camera.PinholeCameraIntrinsic(IR_W, IR_H, FX, FY, CX, CY)
 
-            r_tool_opt = R.from_euler('xyz', [1.5843051752,0.0075921822,-3.1405280027])
+            r_tool_opt = R.from_euler('xyz', [1.5836070435,0.0075223691,-3.1412784943])
             T_tool_opt = np.eye(4, dtype=np.float32)
             T_tool_opt[:3, :3] = r_tool_opt.as_matrix()
-            T_tool_opt[:3, 3] = np.array([-0.02920643,0.15712499,-0.03328242])
+            T_tool_opt[:3, 3] = np.array([-0.03041263,0.15675367,-0.03452134])
 
-            r_tool_ir = R.from_euler('xyz', [1.4738781934,0.0028099801,-3.1294800686])
+            r_tool_ir = R.from_euler('xyz', [1.4796203267,0.0010471976,-3.1372642370])
             T_tool_ir = np.eye(4, dtype=np.float32)
             T_tool_ir[:3, :3] = r_tool_ir.as_matrix()
-            T_tool_ir[:3, 3] = np.array([0.00589702,0.16138198,-0.04035296])
+            T_tool_ir[:3, 3] = np.array([0.00180271,0.15873923,-0.03501765])
 
             T_ir_to_opt = np.linalg.inv(T_tool_ir) @ T_tool_opt
 
             VOXEL_SIZE = 0.0012
             SDF_TRUNC = 0.008
             DEPTH_SCALE = 1000.0
-            DEPTH_TRUNC = 0.7
-            NUM_SCANS = 9
+            DEPTH_TRUNC = 0.9
+            NUM_SCANS = 12
             USE_MEDIAN_BLUR = True
             ENABLE_PRE_CROP = True
             CROP_BOUNDS = dict(x=(-0.3, 1.9), y=(-1.7, 0.6), z=(-2.0, 0.4))

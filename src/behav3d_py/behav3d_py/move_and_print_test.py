@@ -26,7 +26,7 @@ class MoveAndPrintTest(Node):
         self._started = True
 
         # Hardcoded target pose in 'world' using XYZ + RPY (radians)
-        px, py, pz = 0.00, 0.70, 0.20
+        px, py, pz = 0.00, 0.70, -0.05
         rx, ry, rz = 0.0, 0.0, math.radians(0)
 
         target_ps = PoseStamped()
@@ -49,12 +49,12 @@ class MoveAndPrintTest(Node):
         # Run the Fibonacci spherical-cap scan (ENTER-only prompt between captures)
         self.mac.fibScan(
             target=target_ps,
-            distance=0.50,
-            cap_rad=math.radians(30),
-            samples=6,
+            distance=0.44,
+            cap_rad=math.radians(28),
+            samples=12,
             folder="@session/scan_1",
             settle_s=0.2,
-            z_jitter=0.0,
+            z_jitter=0.02,
             prompt="Press ENTER to capture...",
             debug=False,
         )
