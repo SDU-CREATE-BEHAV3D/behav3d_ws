@@ -41,8 +41,8 @@ class MoveAndPrintTest(Node):
         target_ps.pose.orientation.z = float(qz)
         target_ps.pose.orientation.w = float(qw)
 
-        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
-        self.cmd.SPD(0.5)
+        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+        self.cmd.SPD(0.2)
         self.cmd.EEF("femto_color_optical_calib") 
         self.cmd.LIN()
         self.cmd.input(prompt="Press ENTER to go to target...")
@@ -50,10 +50,11 @@ class MoveAndPrintTest(Node):
         self.mac.fibScan(
             target=target_ps,
             distance=0.50,
-            cap_rad=math.radians(35),
-            samples=4,
+            cap_rad=math.radians(30),
+            samples=6,
             folder="@session/scan_1",
             settle_s=0.2,
+            z_jitter=0.0,
             prompt="Press ENTER to capture...",
             debug=False,
         )
@@ -61,12 +62,12 @@ class MoveAndPrintTest(Node):
 
         # reconstruction scan
         self.cmd.reconstruct(
-            session_path="",
+            session_path="@session/scan_1",
             use_latest=True,
             on_done=lambda res: self.get_logger().info(f"Reconstruction request done: {res}"),
         )        
 
-        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
+        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
         self.cmd.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)

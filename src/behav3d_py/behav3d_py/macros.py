@@ -33,10 +33,14 @@ class Macros:
         folder: Optional[str] = None, # applied only on first capture
         settle_s: float = 0.2,
         debug: bool = False,          # plan-only (no exec)
+        z_jitter: float = 0.0,        # +/- random offset on world Z (in meters)
     ) -> Dict[str, Any]:
         """
         Enqueue: for each viewpoint on a spherical cap (half-angle cap_rad) around 'target':
-          goto -> wait(settle_s) -> input(prompt) -> capture
+        goto -> wait(settle_s) -> input(prompt) -> capture
+
+        Adds a uniform random offset in [-z_jitter, +z_jitter] to the world Z coordinate
+        of each viewpoint if z_jitter > 0.
         """
         if not isinstance(target, PoseStamped):
             raise TypeError("target must be geometry_msgs.msg.PoseStamped in 'world'.")
@@ -48,7 +52,10 @@ class Macros:
                 "ok": True,
                 "msg": "No samples requested (samples <= 0).",
                 "poses_world": [],
-                "params": {"distance": distance, "cap_rad": cap_rad, "samples": samples},
+                "params": {
+                    "distance": distance, "cap_rad": cap_rad, "samples": samples,
+                    "settle_s": settle_s, "debug": debug, "z_jitter": z_jitter
+                },
                 "folder": folder,
             }
 
@@ -59,30 +66,24 @@ class Macros:
         )
         q_t = np.array(
             [target.pose.orientation.x, target.pose.orientation.y,
-             target.pose.orientation.z, target.pose.orientation.w],
+            target.pose.orientation.z, target.pose.orientation.w],
             dtype=float,
         )
         qn = np.linalg.norm(q_t)
         R_t = R.identity() if qn < 1e-12 else R.from_quat(q_t / qn)
 
-        # 1) Fibonacci directions on spherical cap (target-local), outward unit vectors
-        dirs_local = _fibonacci_cap_dirs_np(cap_rad, samples)  # (N,3)
-        order = np.arange(samples - 1, -1, -1, dtype=int)      # keep C++ order n-1..0
+        # Fibonacci directions on spherical cap (target-local)
+        dirs_local = _fibonacci_cap_dirs_np(cap_rad, samples)
+        order = np.arange(samples - 1, -1, -1, dtype=int)
 
         poses_world: List[PoseStamped] = []
-
-        # Roll offset of +pi about local Z (kept from your C++; adjust if your tool needs different roll)
         Rz_pi = R.from_rotvec([0.0, 0.0, np.pi])
 
-        # 2) Build each local pose and transform to world
         for idx in order:
-            d = dirs_local[idx]            # outward unit from target
+            d = dirs_local[idx]
             p_loc = distance * d
 
-            # Choose tool +Z axis direction according to convention
             z_axis = d if TOOL_PLUS_Z_POINTS_OUTWARD else -d
-
-            # Minimal alignment of +X with target +X by projecting onto plane ⟂ z
             x_guess = np.array([1.0, 0.0, 0.0])
             x_axis = x_guess - np.dot(x_guess, z_axis) * z_axis
             nx = np.linalg.norm(x_axis)
@@ -97,25 +98,27 @@ class Macros:
             y_axis = np.cross(z_axis, x_axis)
             y_axis /= max(np.linalg.norm(y_axis), 1e-12)
 
-            # Local rotation with columns [x y z], then apply +pi yaw about local Z
             R_loc = R.from_matrix(np.column_stack((x_axis, y_axis, z_axis))) * Rz_pi
 
-            # Transform to world
+            # Transform to world coordinates
             p_w = p_t + R_t.apply(p_loc)
             R_w = R_t * R_loc
 
-            # Store PoseStamped (world)
+            # Apply Z jitter if requested
+            if z_jitter > 0.0:
+                p_w[2] += np.random.uniform(-z_jitter, +z_jitter)
+
+            # Create PoseStamped
             ps_w = PoseStamped()
             ps_w.header.frame_id = "world"
             ps_w.pose.position.x, ps_w.pose.position.y, ps_w.pose.position.z = p_w.tolist()
-            q_w = R_w.as_quat()  # [x,y,z,w]
+            q_w = R_w.as_quat()
             ps_w.pose.orientation.x = float(q_w[0])
             ps_w.pose.orientation.y = float(q_w[1])
             ps_w.pose.orientation.z = float(q_w[2])
             ps_w.pose.orientation.w = float(q_w[3])
             poses_world.append(ps_w)
-
-        # 3) Conditional chain via prepend:
+        # Conditional chain via prepend:
         # After each move finishes, decide whether to prepend settle/input/capture,
         # and always prepend the next goto to keep the scan contiguous.
 

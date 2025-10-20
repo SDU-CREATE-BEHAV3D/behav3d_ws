@@ -121,8 +121,8 @@
       <child link="femto_color_optical_calib"/>
       <!-- Origin is tool0 -> camera (meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
-      <origin xyz="-0.03056191  0.15579223 -0.0323924" 
-               rpy="1.5842179087 0.0069115038 -3.1414530273"/>
+      <origin xyz="-0.02920643  0.15712499 -0.03328242" 
+               rpy="1.5843051752 0.0075921822 -3.1405280027"/>
     </joint>
 
     <!-- Fixed frame for calibrated camera pose relative to tool0 -->
@@ -133,8 +133,8 @@
       <child link="femto_ir_optical_calib"/>
       <!-- Origin is tool0 -> camera (meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
-      <origin xyz="0.00406406  0.14887232 -0.03403896" 
-               rpy="1.4770372394 -0.0096691241 -3.1290437363"/>
+      <origin xyz="0.00589702  0.16138198 -0.04035296" 
+               rpy="1.4738781934 0.0028099801 -3.1294800686"/>
     </joint>
     <!-- Fixed frame for calibrated Extruder tcp pose relative to tool0 -->
     <link name="extruder_tcp"/>
@@ -144,7 +144,7 @@
       <child link="extruder_tcp"/>
       <!-- Origin is tool0 -> extruder(meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
-      <origin xyz="0.00094 0.2272 0.07784"
+      <origin xyz="-0.00094 0.24496 0.06159"
               rpy="1.5641113421 0.0 0.0"/>
     </joint>
     <!--This will create the specific robot-->

@@ -12,7 +12,7 @@ from scipy.spatial.transform import Rotation as R
 import rclpy
 from rclpy.node import Node
 from behav3d_interfaces.srv import ReconstructMesh
-
+import yaml
 
 class ThreeDReconstructor(Node):
     def __init__(self):
@@ -40,12 +40,7 @@ class ThreeDReconstructor(Node):
             response.message = "Reconstruction already running."
             return response
 
-        if request.session_path.strip():
-            session_dir = Path(request.session_path.strip()).expanduser()
-        elif request.use_latest:
-            session_dir = self._get_latest_session()
-        else:
-            session_dir = self._get_latest_session()
+        session_dir = self._resolve_session_path(request.session_path.strip() if request.session_path else "")
 
         if not session_dir.exists():
             response.success = False
@@ -70,10 +65,32 @@ class ThreeDReconstructor(Node):
             self.get_logger().warn("No capture sessions found.")
             return self.captures_root
         return max(subdirs, key=lambda d: d.stat().st_mtime)
+    def _resolve_session_path(self, path_arg: str) -> Path:
+        p = path_arg.strip() if path_arg else ""
 
+        # Case 1: starts with @session
+        if p.startswith("@session"):
+            active = os.environ.get("BEHAV3D_ACTIVE_SESSION", "")
+            if active and Path(active).exists():
+                session_root = Path(active)
+            else:
+                session_root = self._get_latest_session()
+            sub = p.replace("@session", "").lstrip("/")
+            return session_root / sub if sub else session_root
+
+        # Case 2: relative path -> under captures_root
+        if not os.path.isabs(p):
+            return (self.captures_root / p).resolve()
+
+        # Case 3: absolute path
+        return Path(p).expanduser().resolve()
+
+    # =====================================================================
     # =====================================================================
     def _run_reconstruction(self, session_dir: Path):
         try:
+            import yaml  # local import to avoid global dependency errors
+
             self.get_logger().info(f"⚙️ Running full TSDF reconstruction for {session_dir}")
 
             # ===============================
@@ -83,15 +100,15 @@ class ThreeDReconstructor(Node):
             FX, FY, CX, CY = 505.085205078125, 505.0267028808594, 337.96063232421875, 338.32763671875
             INTR_IR = o3d.camera.PinholeCameraIntrinsic(IR_W, IR_H, FX, FY, CX, CY)
 
-            r_tool_opt = R.from_euler('xyz', [1.599, 0.002, -3.139])
+            r_tool_opt = R.from_euler('xyz', [1.5843051752,0.0075921822,-3.1405280027])
             T_tool_opt = np.eye(4, dtype=np.float32)
             T_tool_opt[:3, :3] = r_tool_opt.as_matrix()
-            T_tool_opt[:3, 3] = np.array([-0.03158908, 0.1747814, -0.07149736])
+            T_tool_opt[:3, 3] = np.array([-0.02920643,0.15712499,-0.03328242])
 
-            r_tool_ir = R.from_euler('xyz', [1.496, -0.005, -3.140])
+            r_tool_ir = R.from_euler('xyz', [1.4738781934,0.0028099801,-3.1294800686])
             T_tool_ir = np.eye(4, dtype=np.float32)
             T_tool_ir[:3, :3] = r_tool_ir.as_matrix()
-            T_tool_ir[:3, 3] = np.array([0.00028979, 0.17421966, -0.07240817])
+            T_tool_ir[:3, 3] = np.array([0.00589702,0.16138198,-0.04035296])
 
             T_ir_to_opt = np.linalg.inv(T_tool_ir) @ T_tool_opt
 
@@ -107,13 +124,14 @@ class ThreeDReconstructor(Node):
             # ===================================
             # === LOAD MANIFEST & CAPTURES ===
             # ===================================
-            manifest_path = session_dir / "manifest.json"
+            manifest_path = session_dir / "manifest.yaml"
             if not manifest_path.exists():
-                self.get_logger().error(f"❌ No manifest.json found in {session_dir}")
+                self.get_logger().error(f"❌ No manifest.yaml found in {session_dir}")
                 return
 
             with open(manifest_path, "r") as f:
-                manifest = json.load(f)
+                manifest = yaml.safe_load(f)
+
             captures = manifest.get("captures", [])
             if not captures:
                 self.get_logger().error("❌ No captures found in manifest.")
@@ -131,12 +149,14 @@ class ThreeDReconstructor(Node):
             )
 
             # ===================================================
-            # === CORE FUSION LOOP (exactly like tsdf_fusion) ===
+            # === CORE FUSION LOOP (YAML version) ===
             # ===================================================
             for cap in subset:
                 idx = cap["index"]
-                color_path = session_dir / "color_raw" / f"color_t{idx}.png"
-                depth_path = session_dir / "depth_raw" / f"depth_t{idx}.png"
+
+                # new manifest uses relative paths (rgb, depth)
+                color_path = session_dir / cap["rgb"]
+                depth_path = session_dir / cap["depth"]
 
                 color = cv2.imread(str(color_path), cv2.IMREAD_COLOR)
                 depth = cv2.imread(str(depth_path), cv2.IMREAD_UNCHANGED)
@@ -154,6 +174,10 @@ class ThreeDReconstructor(Node):
                 depth_m = depth.astype(np.float32) / DEPTH_SCALE
 
                 # === Build transformation ===
+                if "pose_tool0" not in cap:
+                    self.get_logger().warn(f"⚠️ Missing pose for frame {idx}")
+                    continue
+
                 q = cap["pose_tool0"]["orientation_xyzw"]
                 t = cap["pose_tool0"]["position"]
                 T_base_tool = np.eye(4, dtype=np.float32)
