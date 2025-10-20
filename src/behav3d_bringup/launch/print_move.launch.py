@@ -141,9 +141,13 @@ def generate_launch_description():
             "ir_width": "640",
             "ir_height": "576",
             "ir_fps": "30",
-            "ir_format": "Y16"
+            "ir_format": "Y16",
+
+            # depth registeration to color
+            "enable_depth_registration" : "true",
+
             # PointCloud
-            # "enable_point_cloud" : "false"
+            "enable_point_cloud" : "true"
             # TODO: 'enable_ldp' throws compilation error!
             # Laser Dot Projector (true for scan / false for calibration)
             # "enable_ldp": "false"

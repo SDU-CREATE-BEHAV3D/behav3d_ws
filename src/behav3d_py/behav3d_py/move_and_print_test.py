@@ -50,7 +50,7 @@ class MoveAndPrintTest(Node):
         self.mac.fibScan(
             target=target_ps,
             distance=0.44,
-            cap_rad=math.radians(28),
+            cap_rad=math.radians(36),
             samples=12,
             folder="@session/scan_1",
             settle_s=0.2,

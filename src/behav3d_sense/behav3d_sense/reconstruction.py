@@ -14,6 +14,7 @@ from rclpy.node import Node
 from behav3d_interfaces.srv import ReconstructMesh
 import yaml
 
+
 class ThreeDReconstructor(Node):
     def __init__(self):
         super().__init__('three_d_reconstructor')
@@ -65,10 +66,9 @@ class ThreeDReconstructor(Node):
             self.get_logger().warn("No capture sessions found.")
             return self.captures_root
         return max(subdirs, key=lambda d: d.stat().st_mtime)
+
     def _resolve_session_path(self, path_arg: str) -> Path:
         p = path_arg.strip() if path_arg else ""
-
-        # Case 1: starts with @session
         if p.startswith("@session"):
             active = os.environ.get("BEHAV3D_ACTIVE_SESSION", "")
             if active and Path(active).exists():
@@ -77,49 +77,47 @@ class ThreeDReconstructor(Node):
                 session_root = self._get_latest_session()
             sub = p.replace("@session", "").lstrip("/")
             return session_root / sub if sub else session_root
-
-        # Case 2: relative path -> under captures_root
         if not os.path.isabs(p):
             return (self.captures_root / p).resolve()
-
-        # Case 3: absolute path
         return Path(p).expanduser().resolve()
 
     # =====================================================================
-    # =====================================================================
     def _run_reconstruction(self, session_dir: Path):
         try:
-            import yaml  # local import to avoid global dependency errors
-
             self.get_logger().info(f"⚙️ Running full TSDF reconstruction for {session_dir}")
 
             # ===============================
-            # === CONFIG (copied exactly) ===
+            # === CONFIGURATION ===
             # ===============================
             IR_W, IR_H = 640, 576
             FX, FY, CX, CY = 505.085205078125, 505.0267028808594, 337.96063232421875, 338.32763671875
             INTR_IR = o3d.camera.PinholeCameraIntrinsic(IR_W, IR_H, FX, FY, CX, CY)
 
-            r_tool_opt = R.from_euler('xyz', [1.5836070435,0.0075223691,-3.1412784943])
+            # --- Extrinsics ---
+            r_tool_opt = R.from_euler('xyz', [1.5836070435, 0.0075223691, -3.1412784943])
             T_tool_opt = np.eye(4, dtype=np.float32)
             T_tool_opt[:3, :3] = r_tool_opt.as_matrix()
-            T_tool_opt[:3, 3] = np.array([-0.03041263,0.15675367,-0.03452134])
+            T_tool_opt[:3, 3] = np.array([-0.03041263, 0.15675367, -0.03452134])
 
-            r_tool_ir = R.from_euler('xyz', [1.4796203267,0.0010471976,-3.1372642370])
+            r_tool_ir = R.from_euler('xyz', [1.4796203267, 0.0010471976, -3.1372642370])
             T_tool_ir = np.eye(4, dtype=np.float32)
             T_tool_ir[:3, :3] = r_tool_ir.as_matrix()
-            T_tool_ir[:3, 3] = np.array([0.00180271,0.15873923,-0.03501765])
+            T_tool_ir[:3, 3] = np.array([0.00180271, 0.15873923, -0.03501765])
 
             T_ir_to_opt = np.linalg.inv(T_tool_ir) @ T_tool_opt
 
-            VOXEL_SIZE = 0.0012
-            SDF_TRUNC = 0.008
+            # --- Color camera intrinsics ---
+            COLOR_W, COLOR_H = 1920, 1080
+            FX_C, FY_C, CX_C, CY_C = 1121.1506, 1120.6919, 950.5190, 539.1617
+            DIST_COEFFS = np.array([0.07194096, -0.1016186, -0.0003443, 0.0000462, 0.04160475])
+
+            # --- Reconstruction parameters ---
+            VOXEL_SIZE = 0.0011
+            SDF_TRUNC = 0.005
             DEPTH_SCALE = 1000.0
             DEPTH_TRUNC = 0.9
             NUM_SCANS = 12
-            USE_MEDIAN_BLUR = True
-            ENABLE_PRE_CROP = True
-            CROP_BOUNDS = dict(x=(-0.3, 1.9), y=(-1.7, 0.6), z=(-2.0, 0.4))
+            USE_MEDIAN_BLUR = False
 
             # ===================================
             # === LOAD MANIFEST & CAPTURES ===
@@ -149,35 +147,33 @@ class ThreeDReconstructor(Node):
             )
 
             # ===================================================
-            # === CORE FUSION LOOP (YAML version) ===
+            # === CORE FUSION LOOP WITH TRUE ALIGNMENT ===
             # ===================================================
             for cap in subset:
                 idx = cap["index"]
-
-                # new manifest uses relative paths (rgb, depth)
                 color_path = session_dir / cap["rgb"]
                 depth_path = session_dir / cap["depth"]
 
                 color = cv2.imread(str(color_path), cv2.IMREAD_COLOR)
                 depth = cv2.imread(str(depth_path), cv2.IMREAD_UNCHANGED)
-
                 if color is None or depth is None:
                     self.get_logger().warn(f"⚠️ Missing frame {idx}")
                     continue
 
+                # Undistort color image
+                K_color = np.array([[FX_C, 0, CX_C], [0, FY_C, CY_C], [0, 0, 1]], dtype=np.float32)
+                color = cv2.undistort(color, K_color, DIST_COEFFS)
                 color = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
 
-                # === PREPROCESSING ===
+                # Depth preprocessing
                 if USE_MEDIAN_BLUR:
                     depth = cv2.medianBlur(depth, 3)
-
                 depth_m = depth.astype(np.float32) / DEPTH_SCALE
 
-                # === Build transformation ===
+                # Pose
                 if "pose_tool0" not in cap:
                     self.get_logger().warn(f"⚠️ Missing pose for frame {idx}")
                     continue
-
                 q = cap["pose_tool0"]["orientation_xyzw"]
                 t = cap["pose_tool0"]["position"]
                 T_base_tool = np.eye(4, dtype=np.float32)
@@ -185,14 +181,44 @@ class ThreeDReconstructor(Node):
                 T_base_tool[:3, 3] = np.array(t)
                 T_base_camIR = (T_base_tool @ T_tool_ir).astype(np.float32)
 
-                # === ALIGN COLOR TO IR ===
-                color_res = cv2.resize(color, (IR_W, IR_H), interpolation=cv2.INTER_AREA)
+                # === DEPTH → COLOR reprojection ===
+                h, w = depth_m.shape
+                u, v = np.meshgrid(np.arange(w), np.arange(h))
+                z = depth_m
+                x = (u - CX) * z / FX
+                y = (v - CY) * z / FY
+                pts_ir = np.stack((x, y, z, np.ones_like(z)), axis=-1).reshape(-1, 4).T
+                pts_color = (T_ir_to_opt @ pts_ir)[:3, :]
+                u_c = (FX_C * pts_color[0, :] / pts_color[2, :]) + CX_C
+                v_c = (FY_C * pts_color[1, :] / pts_color[2, :]) + CY_C
+
+                aligned_color = np.zeros((h, w, 3), dtype=np.uint8)
+                valid = (u_c >= 0) & (u_c < COLOR_W - 1) & (v_c >= 0) & (v_c < COLOR_H - 1)
+                u_c_valid = u_c[valid]
+                v_c_valid = v_c[valid]
+                u0, v0 = np.floor(u_c_valid).astype(int), np.floor(v_c_valid).astype(int)
+                du, dv = u_c_valid - u0, v_c_valid - v0
+
+                for c_idx in range(3):
+                    I00 = color[v0, u0, c_idx]
+                    I01 = color[v0, np.clip(u0 + 1, 0, COLOR_W - 1), c_idx]
+                    I10 = color[np.clip(v0 + 1, 0, COLOR_H - 1), u0, c_idx]
+                    I11 = color[np.clip(v0 + 1, 0, COLOR_H - 1), np.clip(u0 + 1, 0, COLOR_W - 1), c_idx]
+                    aligned = (
+                        I00 * (1 - du) * (1 - dv)
+                        + I01 * du * (1 - dv)
+                        + I10 * (1 - du) * dv
+                        + I11 * du * dv
+                    )
+                    aligned_color.reshape(-1, 3)[valid, c_idx] = aligned.astype(np.uint8)
+
+                # Create Open3D RGBD image
                 rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
-                    o3d.geometry.Image(color_res),
+                    o3d.geometry.Image(aligned_color),
                     o3d.geometry.Image((depth_m * DEPTH_SCALE).astype(np.uint16)),
                     depth_scale=DEPTH_SCALE,
                     depth_trunc=DEPTH_TRUNC,
-                    convert_rgb_to_intensity=False
+                    convert_rgb_to_intensity=False,
                 )
 
                 tsdf.integrate(rgbd, INTR_IR, np.linalg.inv(T_base_camIR))
