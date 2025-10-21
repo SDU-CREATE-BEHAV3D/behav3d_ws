@@ -116,9 +116,9 @@ def preprocess_ir(gray_u8: np.ndarray, invert: bool=False, use_clahe: bool=True)
         g = cv2.bitwise_not(g)
     g = cv2.medianBlur(g, 3)
     if use_clahe:
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        clahe = cv2.createCLAHE(clipLimit=4.5, tileGridSize=(3,3))
         g = clahe.apply(g)
-    blur = cv2.GaussianBlur(g, (0,0), 1.0)
+    blur = cv2.GaussianBlur(g, (0,0), 0.3)
     g = cv2.addWeighted(g, 1.5, blur, -0.5, 0)
     return g
 
@@ -432,7 +432,7 @@ def main():
             )
             # Optionally still save annotated to review failed frames
             if args.preview and img_annot is not None:
-                out_img = os.path.join(os.path.dirname(img_path), f"annot_{os.path.basename(img_path)}")
+                out_img = os.path.join(os.path.dirname(img_path), f"annot_2{os.path.basename(img_path)}")
                 try:
                     cv2.imwrite(out_img, img_annot)
                 except Exception:
@@ -448,7 +448,7 @@ def main():
         used += 1
 
         if args.preview and img_annot is not None:
-            out_img = os.path.join(os.path.dirname(img_path), f"annot_{os.path.basename(img_path)}")
+            out_img = os.path.join(os.path.dirname(img_path), f"annot_2{os.path.basename(img_path)}")
             try:
                 cv2.imwrite(out_img, img_annot)
             except Exception:
