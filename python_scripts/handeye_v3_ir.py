@@ -20,6 +20,8 @@ import math
 import argparse
 import numpy as np
 import cv2
+from scipy.spatial.transform import Rotation as R
+
 
 # ---------- Session / options ----------
 SESS_PATH = "/home/lab/behav3d_ws/captures/251020_155808/scan_1"  # set your session folder here
@@ -365,7 +367,13 @@ def _choose_intrinsics(sess_path: str, stream: str, override: str | None):
     name = "ir_intrinsics.yaml" if stream == "ir" else "color_intrinsics.yaml"
     legacy = os.path.join(sess_path, "calib", name)
     return legacy
+def euler_rpy_deg(R_3x3):
+    # Intrinsic XYZ (roll→pitch→yaw)
+    return R.from_matrix(R_3x3).as_euler('xyz', degrees=True)  # [roll, pitch, yaw]
 
+def euler_rpy_rad(R_3x3):
+    # Same sequence, in radians
+    return R.from_matrix(R_3x3).as_euler('xyz', degrees=False) # [roll, pitch, yaw]
 # ---------- Main ----------
 def main():
     parser = argparse.ArgumentParser(description="Hand–eye calibration (IR/RGB) with ChArUco.")
@@ -484,14 +492,20 @@ def main():
     R_t_c = R_cam2gripper
     t_t_c = t_cam2gripper
 
-    yaw, pitch, roll = euler_ypr(R_t_c)
+    yaw, pitch, roll = euler_ypr(R_t_c)           # your existing YPR (intrinsic ZYX)
     quat_xyzw = R_to_quat_xyzw(R_t_c)
+
+    rpy_deg = euler_rpy_deg(R_t_c)  # [roll, pitch, yaw] in deg
+    rpy_rad = euler_rpy_rad(R_t_c)  # [roll, pitch, yaw] in rad
 
     print("[ok] Hand–eye (tool0 <- cam):")
     print("  t [m]:", t_t_c.ravel())
-    print(f"  Euler YPR [deg]: [{yaw:.3f}, {pitch:.3f}, {roll:.3f}]")
+    print(f"  Euler YPR [deg]: [{yaw:.5f}, {pitch:.5f}, {roll:.5f}]")
+    print(f"  Euler RPY [deg]: [{rpy_deg[0]:.5f}, {rpy_deg[1]:.5f}, {rpy_deg[2]:.5f}]")
+    print(f"  Euler RPY [rad]: [{rpy_rad[0]:.7f} {rpy_rad[1]:.7f} {rpy_rad[2]:.7f}]")
     print("  quat_xyzw:", quat_xyzw)
     print(f"  detections used: {used} / {len(captures)}")
+
 
     # Residuals AX ≈ XB
     Ts_b_t = [RT_to_T(R_gripper2base[i], t_gripper2base[i]) for i in range(used)]

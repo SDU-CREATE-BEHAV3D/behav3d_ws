@@ -94,15 +94,15 @@ class ThreeDReconstructor(Node):
             INTR_IR = o3d.camera.PinholeCameraIntrinsic(IR_W, IR_H, FX, FY, CX, CY)
 
             # --- Extrinsics ---
-            r_tool_opt = R.from_euler('xyz', [1.5836070435, 0.0075223691, -3.1412784943])
+            r_tool_opt = R.from_euler('xyz', [1.583606, 0.007528, -3.141280])
             T_tool_opt = np.eye(4, dtype=np.float32)
             T_tool_opt[:3, :3] = r_tool_opt.as_matrix()
             T_tool_opt[:3, 3] = np.array([-0.03041263, 0.15675367, -0.03452134])
 
-            r_tool_ir = R.from_euler('xyz', [1.4796203267, 0.0010471976, -3.1372642370])
+            r_tool_ir = R.from_euler('xyz', [1.479059, 0.001322, -3.137201])
             T_tool_ir = np.eye(4, dtype=np.float32)
             T_tool_ir[:3, :3] = r_tool_ir.as_matrix()
-            T_tool_ir[:3, 3] = np.array([0.00180271, 0.15873923, -0.03501765])
+            T_tool_ir[:3, 3] = np.array([00.00203272, 0.15910973, -0.03529811])
 
             T_ir_to_opt = np.linalg.inv(T_tool_ir) @ T_tool_opt
 
