@@ -280,8 +280,8 @@ def generate_launch_description():
             ur_driver,
             moveit_stack,
             orbbec_camera,
-
             rviz_node,
+            
             motion_bridge,
             print_node,
             sense_node_call,
