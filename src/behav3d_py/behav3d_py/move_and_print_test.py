@@ -86,7 +86,7 @@ class MoveAndPrintTest(Node):
     #     self.cmd.LIN()
     #     self.cmd.goto(x=-0.0500, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
     #     self.cmd.print(secs=1.2, speed=500, on_done=self._on_move_done) 
-    #     self.cmd.goto(x=0.50, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="PTP", start_print={"secs": 1.5, "speed": 1200, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
+    #     self.cmd.goto(x=0.50, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="LIN", start_print={"secs": 1.5, "speed": 1200, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
     #     self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
         # 2) 3 Dots Sequence!!!
 

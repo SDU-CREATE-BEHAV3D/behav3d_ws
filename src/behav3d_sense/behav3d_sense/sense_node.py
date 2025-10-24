@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 import yaml
+import math
 
 import rclpy
 from rclpy.node import Node
@@ -29,10 +30,39 @@ class SenseNode(Node):
 
         self.current_capture_dir = self._create_new_session_dir()
         self.session_root_dir = self.current_capture_dir  # keep the timestamp root pinned
-        self._ensure_manifest(self.current_capture_dir)
 
         # ---------- Camera handler (all subs/sync live here) ----------
         self.cam = FemtoCapture(self)
+
+        # ---------- One-time session intrinsics write ----------
+        self._intrinsics_written = False
+
+        def _try_write_session_intrinsics():
+            if self._intrinsics_written:
+                return
+            if (self.cam.color_info is not None) or (self.cam.depth_info is not None) or (getattr(self.cam, "ir_info", None) is not None):
+                try:
+                    self.cam.save_intrinsics_yaml(self.session_root_dir)
+                    self._intrinsics_written = True
+                    self.get_logger().info("Session intrinsics saved under config/ (one-time).")
+                    self.destroy_timer(self._intrinsics_timer)
+                except Exception as e:
+                    self.get_logger().warn(f"Failed to write session intrinsics: {e}")
+
+        self._intrinsics_timer = self.create_timer(0.5, _try_write_session_intrinsics)
+
+        self._extrinsics_written = False
+        def _try_write_extrinsics():
+            if self._extrinsics_written:
+                return
+            ok = self._save_extrinsics_yaml(self.session_root_dir)
+            if ok:
+                self._extrinsics_written = True
+                self.get_logger().info("Session extrinsics saved under config/ (one-time).")
+                self.destroy_timer(self._extrinsics_timer)
+
+        self._extrinsics_timer = self.create_timer(0.5, _try_write_extrinsics)
+
 
         self.get_logger().info(
             "behav3d_sense ready.\n"
@@ -46,9 +76,16 @@ class SenseNode(Node):
         self.declare_parameter('tf_base_frame', 'ur20_base_link')
         self.declare_parameter('tf_tool_frame', 'ur20_tool0')
         self.declare_parameter('tf_timeout_sec', 0.3)
+        self.declare_parameter('tf_color_calib_frame', 'femto_color_optical_calib')
+        self.declare_parameter('tf_ir_calib_frame', 'femto_ir_optical_calib')
 
         self.tf_base = self.get_parameter('tf_base_frame').get_parameter_value().string_value
         self.tf_tool = self.get_parameter('tf_tool_frame').get_parameter_value().string_value
+
+        self.tf_color_calib = self.get_parameter('tf_color_calib_frame').get_parameter_value().string_value
+        self.tf_ir_calib    = self.get_parameter('tf_ir_calib_frame').get_parameter_value().string_value
+
+
         p = self.get_parameter('tf_timeout_sec')
         self.tf_timeout = float(p.get_parameter_value().double_value if p.type_ == 11 else p.get_parameter_value().integer_value)
 
@@ -67,8 +104,11 @@ class SenseNode(Node):
         return folder
 
     def _create_new_session_dir(self) -> Path:
+        """Create the timestamp-named session directory and an empty 'config' subfolder."""
         session_dir = self.captures_root / self._timestamp_dir()
-        return self._ensure_capture_folder(session_dir)
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / 'config').mkdir(parents=True, exist_ok=True)
+        return session_dir
 
     def _resolve_folder_arg(self, folder_arg: str) -> Path:
         """Resolve folder arg with session-aware rules:
@@ -275,6 +315,69 @@ class SenseNode(Node):
         response.success = True
         response.message = f'Captured #{idx} in {self.current_capture_dir}'
         return response
+
+    def _quat_to_rpy(self, x, y, z, w):
+        # roll (x), pitch (y), yaw (z), convención URDF (extrinsic XYZ)
+        t0 = +2.0*(w*x + y*z)
+        t1 = +1.0 - 2.0*(x*x + y*y)
+        roll = math.atan2(t0, t1)
+
+        t2 = +2.0*(w*y - z*x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch = math.asin(t2)
+
+        t3 = +2.0*(w*z + x*y)
+        t4 = +1.0 - 2.0*(y*y + z*z)
+        yaw = math.atan2(t3, t4)
+        return [roll, pitch, yaw]
+
+    def _lookup_tool0_to(self, child_frame: str):
+        parent = self.tf_tool
+        timeout = Duration(seconds=self.tf_timeout)
+        stamp = Time()  # latest
+        try:
+            if not self.tf_buffer.can_transform(parent, child_frame, stamp, timeout):
+                self.get_logger().warn(f'TF not available: {parent} -> {child_frame}')
+                return None
+            tf = self.tf_buffer.lookup_transform(parent, child_frame, stamp, timeout)
+        except Exception as e:
+            self.get_logger().warn(f'lookup_transform({parent}->{child_frame}) failed: {e}')
+            return None
+        t = tf.transform.translation
+        q = tf.transform.rotation
+        rpy = self._quat_to_rpy(q.x, q.y, q.z, q.w)
+        return {
+            'parent': parent,
+            'child': child_frame,
+            'xyz': [float(t.x), float(t.y), float(t.z)],
+            'rpy': [float(rpy[0]), float(rpy[1]), float(rpy[2])],
+            'quat_xyzw': [float(q.x), float(q.y), float(q.z), float(q.w)],
+        }
+
+    def _write_yaml_safe(self, path: Path, data: dict) -> None:
+        tmp = path.with_suffix(path.suffix + '.tmp')
+        with tmp.open('w', encoding='utf-8') as f:
+            yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True, default_flow_style=False)
+        tmp.replace(path)
+
+    def _save_extrinsics_yaml(self, session_dir: Path) -> bool:
+        """Write config/extrinsics.yaml with tool0→color/ir calib frames from TF."""
+        color = self._lookup_tool0_to(self.tf_color_calib)
+        ir    = self._lookup_tool0_to(self.tf_ir_calib)
+        if color is None or ir is None:
+            return False
+        data = {
+            'session_created_at': self._now_iso(),
+            'frames': {
+                'tool0_to_color': color,
+                'tool0_to_ir': ir,
+            }
+        }
+        out = session_dir / 'config' / 'extrinsics.yaml'
+        self._write_yaml_safe(out, data)
+        self.get_logger().info(f"Extrinsics written: {out}")
+        return True
 
 
 def main(args=None):

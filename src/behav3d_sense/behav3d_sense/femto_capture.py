@@ -35,6 +35,7 @@ class FemtoCapture:
         node.declare_parameter('ir_topic', '/camera/ir/image_raw')
         node.declare_parameter('color_info_topic', '/camera/color/camera_info')
         node.declare_parameter('depth_info_topic', '/camera/depth/camera_info')
+        node.declare_parameter('ir_info_topic', '/camera/ir/camera_info')
 
         node.declare_parameter('decimate', 1)
         node.declare_parameter('save_depth_as_npy', False)
@@ -47,6 +48,7 @@ class FemtoCapture:
         self.ir_topic = node.get_parameter('ir_topic').get_parameter_value().string_value
         self.color_info_topic = node.get_parameter('color_info_topic').get_parameter_value().string_value
         self.depth_info_topic = node.get_parameter('depth_info_topic').get_parameter_value().string_value
+        self.ir_info_topic = node.get_parameter('ir_info_topic').get_parameter_value().string_value
 
         self.decimate = max(1, int(node.get_parameter('decimate').get_parameter_value().integer_value))
         self.save_depth_as_npy = node.get_parameter('save_depth_as_npy').get_parameter_value().bool_value
@@ -98,8 +100,11 @@ class FemtoCapture:
         # CameraInfo (optional)
         self.color_info: Optional[CameraInfo] = None
         self.depth_info: Optional[CameraInfo] = None
+        self.ir_info: Optional[CameraInfo] = None
+
         node.create_subscription(CameraInfo, self.color_info_topic, self._cb_color_info, info_qos)
         node.create_subscription(CameraInfo, self.depth_info_topic, self._cb_depth_info, info_qos)
+        node.create_subscription(CameraInfo, self.ir_info_topic, self._cb_ir_info, info_qos)
 
         # State
         self.latest_pair: Optional[Tuple[Image, Image]] = None
@@ -119,6 +124,10 @@ class FemtoCapture:
 
     def _cb_depth_info(self, msg: CameraInfo):
         self.depth_info = msg
+    
+    def _cb_ir_info(self, msg: CameraInfo):
+        self.ir_info = msg
+
 
     def _cb_color_raw(self, msg: Image):
         self.latest_color_raw = msg
@@ -208,6 +217,176 @@ class FemtoCapture:
             return cv2.cvtColor(arr, cv2.COLOR_BGRA2BGR)
         raise RuntimeError(f'Unsupported color encoding: {msg.encoding}')
 
+    def _intrinsics_from_camerainfo(self, info: CameraInfo, decimate: int) -> dict:
+        """Build a dict of intrinsics, adjusting for decimation if factor > 1."""
+        K = list(info.k) if hasattr(info, "k") else list(info.K)
+        D = list(info.d) if hasattr(info, "d") else list(getattr(info, "D", []))
+        fx, fy, cx, cy = K[0], K[4], K[2], K[5]
+        if decimate > 1:
+            fx /= decimate
+            fy /= decimate
+            cx /= decimate
+            cy /= decimate
+        return {
+            "width": int(info.width // decimate if decimate > 1 else info.width),
+            "height": int(info.height // decimate if decimate > 1 else info.height),
+            "fx": float(fx),
+            "fy": float(fy),
+            "cx": float(cx),
+            "cy": float(cy),
+            "K": [float(v / decimate if i in (0, 4, 2, 5) and decimate > 1 else float(v))
+                if i in (0, 2, 4, 5) else float(v) for i, v in enumerate(K)],
+            "D": [float(v) for v in D],
+            "distortion_model": getattr(info, "distortion_model", ""),
+            "radtan": {
+                "k1": float(D[0]) if len(D) > 0 else 0.0,
+                "k2": float(D[1]) if len(D) > 1 else 0.0,
+                "p1": float(D[2]) if len(D) > 2 else 0.0,
+                "p2": float(D[3]) if len(D) > 3 else 0.0,
+                "k3": float(D[4]) if len(D) > 4 else 0.0,
+            },
+        }
+
+    def _write_yaml(self, path: Path, data: dict) -> None:
+        """Safe write YAML to disk (tmp + replace)."""
+        import yaml
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True, default_flow_style=False)
+        tmp.replace(path)
+
+    def save_intrinsics_yaml(self, session_dir: Path) -> dict:
+        """
+        Write OpenCV-style intrinsics YAMLs under session_dir/config:
+        - color_intrinsics.yaml   (from color_info, if available)
+        - depth_intrinsics.yaml   (ALWAYS borrowed from IR CameraInfo)
+        - ir_intrinsics.yaml      (from ir_info, if available)
+        """
+        out = {}
+        cfg_dir = session_dir / "config"
+        dec = self.decimate
+
+        ci = getattr(self, "color_info", None)
+        ii = getattr(self, "ir_info", None)
+
+        # --- COLOR ---
+        if ci is not None:
+            color_name = "camera_color_optical_frame"
+            color_txt  = self._opencv_intrinsics_yaml(ci, color_name, dec)
+            f_color = cfg_dir / "color_intrinsics.yaml"
+            self._write_textfile(f_color, color_txt)
+            out["color"] = str(f_color)
+            self.node.get_logger().info(f"[intrinsics] color -> {color_name} {ci.width}x{ci.height}")
+        else:
+            self.node.get_logger().warn("[intrinsics] color_info missing; NOT writing color_intrinsics.yaml.")
+
+        # --- DEPTH (borrow IR always) ---
+        if ii is not None:
+            depth_name = "camera_depth_optical_frame"
+            depth_txt  = self._opencv_intrinsics_yaml(ii, depth_name, dec)
+            f_depth = cfg_dir / "depth_intrinsics.yaml"
+            self._write_textfile(f_depth, depth_txt)
+            out["depth"] = str(f_depth)
+            self.node.get_logger().warn(f"[intrinsics] depth -> borrowed from IR ({ii.header.frame_id} {ii.width}x{ii.height})")
+        else:
+            self.node.get_logger().warn("[intrinsics] ir_info missing; cannot borrow for depth. NOT writing depth_intrinsics.yaml.")
+
+        # --- IR ---
+        if ii is not None:
+            ir_name = "camera_ir_optical_frame"
+            ir_txt  = self._opencv_intrinsics_yaml(ii, ir_name, dec)
+            f_ir = cfg_dir / "ir_intrinsics.yaml"
+            self._write_textfile(f_ir, ir_txt)
+            out["ir"] = str(f_ir)
+            self.node.get_logger().info(f"[intrinsics] ir    -> {ir_name} {ii.width}x{ii.height}")
+        else:
+            self.node.get_logger().warn("[intrinsics] ir_info missing; NOT writing ir_intrinsics.yaml.")
+
+        return out
+
+
+    def _as_opencv_matrix(self, rows: int, cols: int, data) -> str:
+        """Return an OpenCV YAML matrix block with zeros as '0.' and others in sci notation."""
+        flat = [float(x) for x in data]
+
+        def _fmt(v: float) -> str:
+            return "0." if v == 0.0 else f"{v:.16e}"
+
+        return (
+            "!!opencv-matrix\n"
+            f"   rows: {rows}\n"
+            f"   cols: {cols}\n"
+            "   dt: d\n"
+            "   data: [ " + ", ".join(_fmt(v) for v in flat) + " ]"
+        )
+
+    def _opencv_intrinsics_yaml(self, info: CameraInfo, camera_name: str, decimate: int) -> str:
+        """
+        Build the full OpenCV %YAML:1.0 intrinsics text from a CameraInfo.
+        Applies decimation to K and P (fx, fy, cx, cy) and image size.
+        """
+        # Sizes (apply decimation for outputs you save)
+        out_w = int(info.width // decimate if decimate > 1 else info.width)
+        out_h = int(info.height // decimate if decimate > 1 else info.height)
+
+        # K (3x3), D (N), R (3x3), P (3x4)
+        K = list(info.k) if hasattr(info, "k") else list(info.K)
+        D = list(info.d) if hasattr(info, "d") else list(getattr(info, "D", []))
+        R = list(info.r) if hasattr(info, "r") else [1.0,0.0,0.0, 0.0,1.0,0.0, 0.0,0.0,1.0]
+        P = list(info.p) if hasattr(info, "p") else [0.0]*12
+
+        # Apply decimation to K (fx, fy, cx, cy)
+        if decimate > 1:
+            K_adj = K[:]
+            K_adj[0] = K_adj[0] / decimate  # fx
+            K_adj[4] = K_adj[4] / decimate  # fy
+            K_adj[2] = K_adj[2] / decimate  # cx
+            K_adj[5] = K_adj[5] / decimate  # cy
+        else:
+            K_adj = K
+
+        # Apply decimation to P (fx, fy, cx, cy terms at P[0], P[5], P[2], P[6])
+        if len(P) == 12 and decimate > 1:
+            P_adj = P[:]
+            P_adj[0] = P_adj[0] / decimate  # fx'
+            P_adj[5] = P_adj[5] / decimate  # fy'
+            P_adj[2] = P_adj[2] / decimate  # cx'
+            P_adj[6] = P_adj[6] / decimate  # cy'
+        else:
+            P_adj = P
+
+        # OpenCV expects 8 coeffs; pad or trim
+        if len(D) < 8:
+            D_pad = D + [0.0]*(8 - len(D))
+        else:
+            D_pad = D[:8]
+
+        # Compose YAML
+        lines = []
+        lines.append("%YAML:1.0")
+        lines.append("---")
+        lines.append(f"image_width: {out_w}")
+        lines.append(f"image_height: {out_h}")
+        lines.append(f"camera_name: {camera_name}")
+        lines.append("camera_matrix: " + self._as_opencv_matrix(3, 3, K_adj))
+        # Use ROS distortion_model if provided, else plumb_bob
+        model = getattr(info, "distortion_model", "") or "plumb_bob"
+        lines.append(f"distortion_model: {model}")
+        lines.append("distortion_coefficients: " + self._as_opencv_matrix(1, 8, D_pad))
+        lines.append("rectification_matrix: " + self._as_opencv_matrix(3, 3, R))
+        lines.append("projection_matrix: " + self._as_opencv_matrix(3, 4, P_adj))
+        return "\n".join(lines) + "\n"
+
+    def _write_textfile(self, path: Path, text: str) -> None:
+        """Safe text write (tmp + replace)."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with tmp.open("w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        tmp.replace(path)
+
+
     def save_color(self, session_dir: Path, idx: int, color_msg: Image) -> Optional[str]:
         if self.bridge is None or color_msg is None:
             return None
@@ -276,3 +455,4 @@ class FemtoCapture:
         except Exception as e:
             self.node.get_logger().warn(f'Failed to save depth ({depth_msg.encoding}): {e}')
             return None
+
