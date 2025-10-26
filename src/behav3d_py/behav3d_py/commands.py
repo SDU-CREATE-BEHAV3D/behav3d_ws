@@ -3,6 +3,7 @@
 
 import math
 from typing import Callable, Optional, Dict, Any, List, Tuple
+import threading, sys
 
 import rclpy
 from rclpy.node import Node
@@ -63,6 +64,11 @@ class Commands:
         self._default_eef = "extruder_tcp"
         self._default_vel_scale = 0.1
         self._default_accel_scale = 0.1
+
+        # External keyboard control
+        self._paused = False
+        self._kb_thread = threading.Thread(target=self._keyboard_monitor, daemon=True)
+        self._kb_thread.start()
 
         # UR20 joint names
         self._joint_names = [
@@ -262,6 +268,23 @@ class Commands:
             "on_done": on_done
         })
 
+    def pause(self):
+        if self._paused:
+            return
+        self._paused = True
+        self.node.get_logger().warn("[FIFO] Paused.")
+
+    def resume(self):
+        if not self._paused:
+            return
+        self._paused = False
+        self.node.get_logger().info("[FIFO] Resumed.")
+        if not self._busy:
+            self._process_next()
+
+    def toggle_pause(self):
+        self.resume() if self._paused else self.pause()
+
     # ---------------- Queue core ----------------
     def _prepend(self, kind: str, payload: Dict[str, Any]):
         """Insert a queue item at the head so it runs immediately after the current one."""
@@ -273,9 +296,36 @@ class Commands:
         if not self._busy:
             self._process_next()
 
+    def _keyboard_monitor(self):
+        """
+        Press 'p' + ENTER to toggle pause/resume of the FIFO between steps.
+        This runs in a daemon thread and exits cleanly when ROS shuts down.
+        """
+        while True:
+            # Exit if ROS is shutting down (avoid orphan loops on exit)
+            try:
+                import rclpy
+                if not rclpy.ok():
+                    break
+            except Exception:
+                pass
+
+            try:
+                line = sys.stdin.readline()
+            except Exception:
+                break
+            if not line:
+                break
+
+            if line.strip().lower() == 'p':
+                self.toggle_pause()
+
     def _process_next(self):
         """Process a single queued item; called again only after completion."""
         if not self._queue:
+            self._busy = False
+            return
+        if self._paused:
             self._busy = False
             return
         self._busy = True
@@ -507,6 +557,8 @@ class Commands:
             t = self.node.create_timer(offset_s, _oneshot)
         else:
             _send_print_goal()
+
+
 
     def _do_reconstruct(self, p: Dict[str, Any]):
         """Execute 3D reconstruction via the /reconstruct_mesh service."""

@@ -137,7 +137,7 @@ class SequenceParser:
         YAML forms:
         - input
         - input: null
-        - input: "q"
+        - input: "q" NOT WORKING DUE TO YAML PARSING
         - input: { key: "q", prompt: "Type 'q' + ENTER to shutdown..." }
         """
         if val is None:
