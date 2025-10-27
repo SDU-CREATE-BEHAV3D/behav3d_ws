@@ -5,7 +5,7 @@ import yaml
 class SequenceParser:
     """
     Maps YAML items to Commands API.
-    Option A: config setters (EEF/SPD/ACC/PTP/LIN) are applied immediately (not queued).
+    TODO: CHECK IF config setters (EEF/SPD/ACC/PTP/LIN) are applied immediately (not queued).
     """
 
     def __init__(self, cmd, *, logger=None):

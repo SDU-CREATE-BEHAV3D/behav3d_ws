@@ -98,12 +98,12 @@
     <link name="clay_extruder">
       <visual>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam_v2.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam_calibrated_v2.dae"/>
         </geometry>
       </visual>
       <collision>
         <geometry>
-         <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam_v2.dae"/>
+         <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam_calibrated_v2.dae"/>
         </geometry>
       </collision>
     </link>
@@ -144,7 +144,7 @@
       <child link="extruder_tcp"/>
       <!-- Origin is tool0 -> extruder(meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
-      <origin xyz="-0.00094 0.24496 0.06159"
+      <origin xyz="-0.00233 0.25763 0.06222"
               rpy="1.5641113421 0.0 0.0"/>
     </joint>
     <!--This will create the specific robot-->

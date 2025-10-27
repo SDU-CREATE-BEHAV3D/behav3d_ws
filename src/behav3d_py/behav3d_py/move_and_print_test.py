@@ -49,9 +49,9 @@ class MoveAndPrintTest(Node):
         # Run the Fibonacci spherical-cap scan (ENTER-only prompt between captures)
         self.mac.fibScan(
             target=target_ps,
-            distance=0.44,
-            cap_rad=math.radians(36),
-            samples=12,
+            distance=0.70,
+            cap_rad=math.radians(32),
+            samples=32,
             folder="@session/scan_1",
             settle_s=0.2,
             z_jitter=0.02,
