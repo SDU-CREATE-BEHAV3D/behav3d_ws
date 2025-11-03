@@ -24,7 +24,7 @@ from scipy.spatial.transform import Rotation as R
 
 
 # ---------- Session / options ----------
-SESS_PATH = "/home/lab/behav3d_ws/captures/251020_155808/scan_1"  # set your session folder here
+SESS_PATH = "/home/lab/behav3d_ws/captures/251103_153717/scan_charuco"  # set your session folder here
 PREVIEW = True
 METHOD = "Park"         # Tsai | Park | Horaud | Andreff | Daniilidis
 STREAM_DEFAULT = "ir"   # "ir" or "color"
@@ -35,10 +35,10 @@ FIXED_INTRINSICS_IR    = "/home/lab/behav3d_ws/src/custom_workcell/ur20_workcell
 FIXED_INTRINSICS_COLOR = "/home/lab/behav3d_ws/src/custom_workcell/ur20_workcell/config/bolt_intrinsics/color_intrinsics.yaml"
 
 # ---------- Board config (unchanged) ----------
-SQUARES_X = 6
-SQUARES_Y = 5
-SQUARE_LENGTH_M = 0.055
-MARKER_LENGTH_M = 0.041
+SQUARES_X = 9
+SQUARES_Y = 7
+SQUARE_LENGTH_M = 0.08
+MARKER_LENGTH_M = 0.06
 ARUCO_DICT_NAME = "DICT_5X5_100"
 
 _ARUCO_DICTS = {
@@ -114,32 +114,58 @@ def load_ir_image(path: str):
 
 def preprocess_ir(gray_u8: np.ndarray, invert: bool=False, use_clahe: bool=True):
     g = gray_u8
+
+    # Optional inversion if black-white polarity flips
     if invert:
         g = cv2.bitwise_not(g)
-    g = cv2.medianBlur(g, 3)
+
+    # Mild denoising to reduce sensor speckle
+    g = cv2.bilateralFilter(g, d=5, sigmaColor=25, sigmaSpace=25)
+
+    # Adaptive contrast enhancement
     if use_clahe:
-        clahe = cv2.createCLAHE(clipLimit=4.5, tileGridSize=(3,3))
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
         g = clahe.apply(g)
-    blur = cv2.GaussianBlur(g, (0,0), 0.3)
-    g = cv2.addWeighted(g, 1.5, blur, -0.5, 0)
+
+    # Local sharpening to enhance edges of markers
+    g = cv2.GaussianBlur(g, (0, 0), 1.0)
+    g = cv2.addWeighted(gray_u8, 1.5, g, -0.5, 0)
+
     return g
+
 
 def make_detector_params():
     p = cv2.aruco.DetectorParameters_create()
-    p.adaptiveThreshWinSizeMin = 3
-    p.adaptiveThreshWinSizeMax = 33
-    p.adaptiveThreshWinSizeStep = 2
+
+    # Thresholding (reduce noise sensitivity)
+    p.adaptiveThreshWinSizeMin = 5
+    p.adaptiveThreshWinSizeMax = 25
+    p.adaptiveThreshWinSizeStep = 5
     p.adaptiveThreshConstant = 7
-    p.minMarkerPerimeterRate = 0.02
-    p.maxMarkerPerimeterRate = 0.40
+
+    # Stricter marker geometry limits
+    p.minMarkerPerimeterRate = 0.04     # smaller markers rejected
+    p.maxMarkerPerimeterRate = 0.3      # exclude full checker areas
+    p.minCornerDistanceRate = 0.1
+    p.minMarkerDistanceRate = 0.05
+
+    # Require strong, clean contours
+    p.polygonalApproxAccuracyRate = 0.04
+    p.minOtsuStdDev = 7.0
+    p.perspectiveRemovePixelPerCell = 8
+
+    # Refine only after valid ArUco detection
     p.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
     p.cornerRefinementWinSize = 5
-    p.cornerRefinementMaxIterations = 50
-    p.cornerRefinementMinAccuracy = 0.01
-    p.minOtsuStdDev = 5.0
-    p.perspectiveRemovePixelPerCell = 8
-    p.polygonalApproxAccuracyRate = 0.03
+    p.cornerRefinementMaxIterations = 200
+    p.cornerRefinementMinAccuracy = 0.001
+
+    # Lower tolerance for border errors
+    p.maxErroneousBitsInBorderRate = 0.2
+    p.errorCorrectionRate = 0.5
+
     return p
+
 
 # ---------- ChArUco detection ----------
 def detect_charuco_pose(image_path: str, K, D, dictionary, board, stream: str, undistort: bool, invert: bool, no_clahe: bool):
