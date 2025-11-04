@@ -130,6 +130,8 @@ class TSDFIntegrationGPU:
         # optional denoise to reduce speckle
         # dn = cv2.medianBlur(dn.astype(np.uint16), 5)
         h, w = dn.shape
+
+        ### Why resize?
         if (w, h) != (self.width, self.height):
             dn = cv2.resize(dn, (self.width, self.height), interpolation=cv2.INTER_NEAREST)
         return o3d.t.geometry.Image(o3c.Tensor(dn, o3c.Dtype.UInt16, self.device))
@@ -187,7 +189,7 @@ if __name__ == "__main__":
 
     fuser = TSDFIntegrationGPU(
         intrinsic=intrinsic,
-        voxel_size=0.008,     # try 0.006→0.010 depending on noise
+        voxel_size=0.008,     # 1.0/512, 2.0/512, etc.
         depth_scale=1000.0,   # set to 1.0 if your depth is in meters
         depth_max=1.0,
         device='CUDA:0'
