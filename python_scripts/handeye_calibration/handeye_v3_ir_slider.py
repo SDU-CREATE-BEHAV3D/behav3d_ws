@@ -114,13 +114,16 @@ def load_ir_image(path: str):
     return bgr, gray
 
 def preprocess_ir(gray_u8: np.ndarray, invert: bool=False, use_clahe: bool=True):
+    ## See: AugRobFab-HandEyeCalibration/src/camera_calibration.py: 94-97
     g = gray_u8
 
     # Optional inversion if black-white polarity flips
+    # ??
     if invert:
         g = cv2.bitwise_not(g)
 
     # Mild denoising to reduce sensor speckle
+    # ??
     g = cv2.bilateralFilter(g, d=5, sigmaColor=25, sigmaSpace=25)
 
     # Adaptive contrast enhancement
@@ -129,7 +132,9 @@ def preprocess_ir(gray_u8: np.ndarray, invert: bool=False, use_clahe: bool=True)
         g = clahe.apply(g)
 
     # Local sharpening to enhance edges of markers
+    # kernel size 0x0??
     g = cv2.GaussianBlur(g, (0, 0), 1.0)
+    # ??
     g = cv2.addWeighted(gray_u8, 1.5, g, -0.5, 0)
 
     return g
@@ -210,7 +215,7 @@ def detect_charuco_pose(image_path: str, K, D, dictionary, board, stream: str, u
         cameraMatrix=K,
         distCoeffs=D,
     )
-    # OpenCV returns (retval, corners, ids) in some versions; in others, just (corners, ids)
+    # OpenCV returns (retval, corners, ids) in some versions; in others, just (corners, ids) -> Then only adopt exact version!
     if isinstance(out, tuple) and len(out) >= 3:
         _, ch_corners, ch_ids = out
     else:
@@ -750,4 +755,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # Why system exit?
     sys.exit(main())
