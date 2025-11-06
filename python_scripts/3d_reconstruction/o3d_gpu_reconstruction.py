@@ -168,10 +168,10 @@ class TSDFIntegrationGPU:
 # -------- main --------
 if __name__ == "__main__":
     # ---- set your dataset root ----
-    base_dir = "/home/lab/behav3d_ws/captures/251103_170035"
+    base_dir = "/home/lab/behav3d_ws/captures/251105_105717"
     intrinsics_path = os.path.join(base_dir, "config/depth_intrinsics.yaml")
     extrinsics_path = os.path.join(base_dir, "config/extrinsics.yaml")
-    manifest_path   = os.path.join(base_dir, "scan_charuco/manifest.yaml")
+    manifest_path   = os.path.join(base_dir, "manual_caps/manifest.yaml")
 
     intrinsic = load_camera_intrinsics(intrinsics_path)
     T_cam_to_tool = load_camera_extrinsics(extrinsics_path, frame_key="tool0_to_ir")
@@ -189,7 +189,7 @@ if __name__ == "__main__":
         intrinsic=intrinsic,
         voxel_size=0.008,     # try 0.006→0.010 depending on noise
         depth_scale=1000.0,   # set to 1.0 if your depth is in meters
-        depth_max=1.0,
+        depth_max=2.0,
         device='CUDA:0'
     )
 

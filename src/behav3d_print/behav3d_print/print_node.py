@@ -8,7 +8,8 @@ from rclpy.action import ActionServer,CancelResponse
 from pymodbus.client import ModbusTcpClient
 from rclpy.executors import MultiThreadedExecutor
 
-from behav3d_interfaces.action import PrintTime   
+from behav3d_interfaces.action import PrintTime  
+from behav3d_interfaces.action import PrintSteps 
 from behav3d_interfaces.srv import UpdatePrintConfig
 from behav3d_interfaces.srv import GetPrintStatus
 
@@ -18,6 +19,12 @@ MODBUS_PORT    = 502
 COIL_EXTRUDE   = 10   # ON/OFF coil
 REG_SPEED      = 1    # holding register for speed
 POLL_MS        = 500  # For getting info back from the Controllino
+
+COIL_DIR        = 4     # 
+COIL_QUEUE_PUSH = 13    # rising-edge enqueue
+COIL_CANCEL_ALL = 14    # optional explicit cancel not implemented
+REG_STEPS_LO    = 3     # HR3 low 16 bits
+REG_STEPS_HI    = 4     # HR4 high 16 bits
 
 class PrintNode(Node):
     def __init__(self):
@@ -57,6 +64,17 @@ class PrintNode(Node):
             "get_print_status",
             self._on_get_status
         )
+    
+
+
+        self._steps_action = ActionServer(
+            self,
+            PrintSteps,
+            "print_steps",
+            execute_callback=self._exec_print_steps,
+            cancel_callback=self._on_cancel_steps,
+        )
+
         # Action server: time-based print
         self._print_action = ActionServer(
             self,
@@ -90,7 +108,37 @@ class PrintNode(Node):
             self.get_logger().error(f"Error writing reg {REG_SPEED}: {wr}")
             self.state = "ERROR"
         return ok
+    
+    # -------- Low-level helpers --------
+    def _write_u32(self, reg_lo: int, reg_hi: int, value: int) -> bool:
+        lo = int(value & 0xFFFF)
+        hi = int((value >> 16) & 0xFFFF)
+        wr1 = self.client.write_register(reg_lo, lo)
+        wr2 = self.client.write_register(reg_hi, hi)
+        return (not wr1.isError()) and (not wr2.isError())
 
+    def _pulse_coil(self, addr: int) -> bool:
+        # momentary pulse: 1 then 0
+        w1 = self.client.write_coil(addr, True)
+        w2 = self.client.write_coil(addr, False)
+        return (not w1.isError()) and (not w2.isError())
+
+    def enqueue_steps(self, steps: int, ensure_on: bool = True) -> bool:
+        """Queue a counted-step job at current HR1 speed."""
+        if steps <= 0:
+            self.get_logger().warn("enqueue_steps: steps<=0, ignored")
+            return False
+        if ensure_on and not self.extrude_enabled:
+            if not self.set_extrude(True):
+                return False
+        if not self._write_u32(REG_STEPS_LO, REG_STEPS_HI, int(steps)):
+            self.get_logger().error("Failed writing HR3|HR4")
+            return False
+        if not self._pulse_coil(COIL_QUEUE_PUSH):
+            self.get_logger().error("Failed pulsing QUEUE_PUSH")
+            return False
+        self.get_logger().info(f"Queued {int(steps)} steps")
+        return True
     # (placeholder) high-level API, amount/time/feedback not implemented yet
     def start_print(self, amount: int, speed: int) -> bool:
         """Skeleton: set speed and enable extrusion. (Stopped via stop_print)."""
@@ -267,7 +315,27 @@ class PrintNode(Node):
             elapsed_ms=int((t_stop - t0) * 1000),
             reason="completed"
         )
+    
+    def _on_cancel_steps(self, goal_handle):
+        # command for cancelling queued steps
+        self.get_logger().info("Cancel requested for print_steps action")
+        self.set_extrude(False)
+        return CancelResponse.ACCEPT
 
+    def _exec_print_steps(self, goal_handle):
+        goal: PrintSteps.Goal = goal_handle.request
+        # if needed, set speed
+        if not goal.use_previous_speed:
+            if not self.set_speed(int(goal.speed)):
+                goal_handle.abort()
+                return PrintSteps.Result(success=False, accepted_steps=0, reason="modbus_speed_error")
+
+        # enqueue
+        if not self.enqueue_steps(int(goal.steps), ensure_on=True):
+            goal_handle.abort()
+            return PrintSteps.Result(success=False, accepted_steps=0, reason="enqueue_failed")
+        goal_handle.succeed()
+        return PrintSteps.Result(success=True, accepted_steps=int(goal.steps), reason="enqueued")
 def main():
     rclpy.init()
     node = PrintNode()

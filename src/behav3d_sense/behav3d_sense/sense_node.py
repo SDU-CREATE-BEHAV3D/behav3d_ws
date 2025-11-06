@@ -44,7 +44,7 @@ class SenseNode(Node):
                 try:
                     self.cam.save_intrinsics_yaml(self.session_root_dir)
                     self._intrinsics_written = True
-                    self.get_logger().info("Session intrinsics saved under config/ (one-time).")
+                    self.get_logger().info("Session intrinsics saved under config/.")
                     self.destroy_timer(self._intrinsics_timer)
                 except Exception as e:
                     self.get_logger().warn(f"Failed to write session intrinsics: {e}")
@@ -58,7 +58,7 @@ class SenseNode(Node):
             ok = self._save_extrinsics_yaml(self.session_root_dir)
             if ok:
                 self._extrinsics_written = True
-                self.get_logger().info("Session extrinsics saved under config/ (one-time).")
+                self.get_logger().info("Session extrinsics saved under config/.")
                 self.destroy_timer(self._extrinsics_timer)
 
         self._extrinsics_timer = self.create_timer(0.5, _try_write_extrinsics)
@@ -215,14 +215,14 @@ class SenseNode(Node):
             'rgb': initial_fields.get('rgb', None),
             'depth': initial_fields.get('depth', None),
             'ir': initial_fields.get('ir', None),
-            'pose_tool0': initial_fields.get('pose_tool0', None),
+            'T_base_tool0': initial_fields.get('T_base_tool0', None),
         }
         data['captures'].append(entry)
         self._write_manifest(mpath, data)
         return entry
 
     # ================= TF pose =================
-    def _lookup_pose_tool0(self):
+    def _lookup_T_base_tool0(self):
         base = self.tf_base
         tool = self.tf_tool
         timeout = Duration(seconds=self.tf_timeout)
@@ -238,8 +238,8 @@ class SenseNode(Node):
         t = tf.transform.translation
         q = tf.transform.rotation
         return {
-            'child_frame_id': tool,
-            'frame_id': base,
+            'child': tool,
+            'parent': base,
             'orientation_xyzw': [float(q.x), float(q.y), float(q.z), float(q.w)],
             'position': [float(t.x), float(t.y), float(t.z)],
         }
@@ -259,7 +259,7 @@ class SenseNode(Node):
                 return response
 
         stamp_now_ns = int(self.get_clock().now().nanoseconds)
-        fields = {'rgb': None, 'depth': None, 'ir': None, 'pose_tool0': None}
+        fields = {'rgb': None, 'depth': None, 'ir': None, 'T_base_tool0': None}
         entry = self._append_capture_entry(self.current_capture_dir, stamp_now_ns, fields)
         idx = entry['index']
 
@@ -299,7 +299,7 @@ class SenseNode(Node):
                 self.get_logger().warn('No IR frame available to save.')
 
         if request.do_pose:
-            fields['pose_tool0'] = self._lookup_pose_tool0()
+            fields['T_base_tool0'] = self._lookup_T_base_tool0()
 
         # Update manifest
         mpath = self._manifest_path(self.current_capture_dir)
@@ -370,8 +370,8 @@ class SenseNode(Node):
         data = {
             'session_created_at': self._now_iso(),
             'frames': {
-                'tool0_to_color': color,
-                'tool0_to_ir': ir,
+                'T_tool0_color': color,
+                'T_tool0_ir': ir,
             }
         }
         out = session_dir / 'config' / 'extrinsics.yaml'

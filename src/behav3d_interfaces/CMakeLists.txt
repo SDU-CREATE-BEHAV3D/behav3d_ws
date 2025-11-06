@@ -14,6 +14,7 @@ find_package(moveit_msgs REQUIRED)
 set(action_files
   action/PlanAndExecute.action
   action/PrintTime.action
+  action/PrintSteps.action
 )
 
 set(srv_files

@@ -24,9 +24,9 @@ from scipy.spatial.transform import Rotation as R
 
 
 # ---------- Session / options ----------
-SESS_PATH = "/home/lab/behav3d_ws/captures/251103_150705/scan_charuco"  # set your session folder here
+SESS_PATH = "/home/lab/behav3d_ws/captures/251104_140521/manual_caps"  # set your session folder here
 PREVIEW = True
-METHOD = "Tsai"         # Tsai | Park | Horaud | Andreff | Daniilidis
+METHOD = "Daniilidis"         # Tsai | Park | Horaud | Andreff | Daniilidis
 STREAM_DEFAULT = "color"   # "ir" or "color"
 
 # ---------- Fixed intrinsics (default) ----------
@@ -35,10 +35,10 @@ FIXED_INTRINSICS_IR    = "/home/lab/behav3d_ws/src/custom_workcell/ur20_workcell
 FIXED_INTRINSICS_COLOR = "/home/lab/behav3d_ws/src/custom_workcell/ur20_workcell/config/bolt_intrinsics/color_intrinsics.yaml"
 
 # ---------- Board config (unchanged) ----------
-SQUARES_X = 12
-SQUARES_Y = 9
-SQUARE_LENGTH_M = 0.06
-MARKER_LENGTH_M = 0.045
+SQUARES_X = 6
+SQUARES_Y = 5
+SQUARE_LENGTH_M = 0.055
+MARKER_LENGTH_M = 0.041
 ARUCO_DICT_NAME = "DICT_5X5_100"
 
 _ARUCO_DICTS = {
@@ -88,6 +88,7 @@ def load_intrinsics(yaml_path: str):
         D = np.asarray(D, dtype=np.float64).ravel()
         return K, D
     finally:
+
         fs.release()
 
 # ---------- IR-aware loading + preprocessing ----------
@@ -589,6 +590,8 @@ def main():
         img_path = cap["image_path"]
         qx, qy, qz, qw = cap["q"]
         px, py, pz = cap["p"]
+                    # print K and D values for debugging
+        # print(f"[debug] Using intrinsics K:\n{K}\nD:\n{D}")
 
         if not os.path.isfile(img_path):
             print(f"[warn] Missing image file: {img_path}")
@@ -601,6 +604,9 @@ def main():
             img_path, K, D, dictionary, board,
             stream=args.stream, undistort=args.undistort,
             invert=args.invert, no_clahe=args.no_clahe
+
+        
+
         )
         if not det["ok_pose"]:
             print(
@@ -615,12 +621,23 @@ def main():
                     pass
             continue
 
+
+
         R_c_brd, t_c_brd = rvec_tvec_to_RT(det["rvec"], det["tvec"])
         R_gripper2base.append(R_b_t)
         t_gripper2base.append(t_b_t)
         R_target2cam.append(R_c_brd)
         t_target2cam.append(t_c_brd)
         used += 1
+
+        # --- Save T_cam→board for this capture ---
+        T_cam2board = RT_to_T(R_c_brd, t_c_brd)
+        if "T_cam2board_all" not in locals():
+            T_cam2board_all = []
+        T_cam2board_all.append({
+            "image_path": img_path,
+            "T_cam2board": T_cam2board.tolist()
+        })
 
         if args.preview and img_annot is not None:
             out_img = os.path.join(os.path.dirname(img_path), f"annot_2{os.path.basename(img_path)}")
@@ -722,6 +739,12 @@ def main():
     fs.write("orientation_xyzw", np.asarray(quat_xyzw, dtype=float))
     fs.release()
     print(f"[ok] Saved YAML: {yaml_path}")
+
+    if "T_cam2board_all" in locals():
+        out_cam2board = os.path.join(sess, "calib", "T_cam2board_list.json")
+        with open(out_cam2board, "w", encoding="utf-8") as f:
+            json.dump(T_cam2board_all, f, indent=2)
+        print(f"[ok] Saved T_cam→board list: {out_cam2board}")
 
     return 0
 
