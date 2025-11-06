@@ -410,11 +410,19 @@ class Commands:
                 return
             if start_print:
                 sync = (start_print.get("sync") or "accept").lower()
-                if sync == "accept":  # start at motion start
+                if sync == "accept":
                     offset_s = float(start_print.get("offset_s", 0.0))
-                    secs = float(start_print["secs"])
                     speed = int(start_print["speed"])
-                    self._start_print_concurrent(secs=secs, speed=speed, offset_s=offset_s)
+
+                    if "steps" in start_print:
+                        steps = int(start_print["steps"])
+                        self._start_print_steps_concurrent(steps=steps, speed=speed, offset_s=offset_s)
+                    elif "secs" in start_print:
+                        secs = float(start_print["secs"])
+                        self._start_print_concurrent(secs=secs, speed=speed, offset_s=offset_s)
+                    else:
+                        self.node.get_logger().warn("start_print provided without 'steps' or 'secs'; skipping")
+
             res_fut = handle.get_result_async()
             res_fut.add_done_callback(_on_result)
 
@@ -629,6 +637,49 @@ class Commands:
                             f"elapsed_ms={res.elapsed_ms} reason='{res.reason}'speed={speed}")
                     except Exception as e:
                         self.node.get_logger().error(f"PRINT(concurrent): result exception: {e}")
+                res_fut.add_done_callback(_on_res)
+
+            fut.add_done_callback(_on_goal_resp)
+
+        if offset_s > 0.0:
+            def _oneshot():
+                _send_print_goal()
+                t.cancel()
+            t = self.node.create_timer(offset_s, _oneshot)
+        else:
+            _send_print_goal()
+    def _start_print_steps_concurrent(self, *, steps: int, speed: int, offset_s: float = 0.0):
+        """Fire PrintSteps action without tocar el FIFO (corre junto a la motion)."""
+        def _send_print_goal():
+            if not self._print_steps_ac.wait_for_server(timeout_sec=1.0):
+                self.node.get_logger().warn("PRINT_STEPS(concurrent): action server not available; skipping")
+                return
+
+            goal = PrintSteps.Goal()
+            goal.steps = int(steps)
+            goal.speed = int(speed)
+            goal.use_previous_speed = False
+
+            fut = self._print_steps_ac.send_goal_async(goal)
+
+            def _on_goal_resp(gf):
+                gh = gf.result()
+                if not gh or not gh.accepted:
+                    self.node.get_logger().error("PRINT_STEPS(concurrent): goal rejected")
+                    return
+                res_fut = gh.get_result_async()
+
+                def _on_res(rf):
+                    try:
+                        wrap = rf.result()
+                        res = wrap.result
+                        self.node.get_logger().info(
+                            f"PRINT_STEPS(concurrent): done status={wrap.status} "
+                            f"accepted_steps={res.accepted_steps} reason='{res.reason}' speed={speed}"
+                        )
+                    except Exception as e:
+                        self.node.get_logger().error(f"PRINT_STEPS(concurrent): result exception: {e}")
+
                 res_fut.add_done_callback(_on_res)
 
             fut.add_done_callback(_on_goal_resp)

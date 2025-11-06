@@ -29,9 +29,11 @@ class MoveAndPrintTest(Node):
         self.cmd.setEef("femto_color_optical_calib") 
         self.cmd.setLIN()
         self.cmd.input(prompt="Press ENTER to go to target...")   
-        self.cmd.printTime(secs=2, speed=500, on_done=self._on_move_done) 
-        self.cmd.printSteps(steps=4000, speed=1000, on_done=self._on_move_done)
-        self.cmd.printSteps(steps=2000, speed=500, on_done=self._on_move_done)
+        self.cmd.goto(x=0.50, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="LIN", start_print={"secs": 1.5, "speed": 1200, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
+        self.cmd.goto(x=0.50, y=1.0, z=0.96,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="LIN", start_print={"steps": 1800, "speed": 600, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
+
+     #   self.cmd.printSteps(steps=4000, speed=1000, on_done=self._on_move_done)
+   #     self.cmd.printSteps(steps=2000, speed=500, on_done=self._on_move_done)
         self.cmd.printSteps(steps=2000, speed=500, on_done=self._on_move_done)
         self.cmd.goto(x=-0.0500, y=1.30, z=0.31,eef="extruder_tcp",vel_scale=0.5, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
 
