@@ -15,17 +15,8 @@ class Session:
         self._scan_folder = init_scan_folder
         self._config_folder = config_folder
 
-        # Load camera intrinsics
         self._camera_intrinsics_path = self._get_intrinsics_path()
-        self.camera_intrinsics_W = None
-        self.camera_intrinsics_H = None
-        self.camera_intrinsics_K = None
-        self.camera_intrinsics_D = None
-        self.load_camera_intrinsics()
-
-        # Load camera extrinsics
         self._camera_extrinsics_path = self._get_extrinsics_path()
-        # self._camera_extrinsics = self.load_camera_extrinsics() #TODO: implement loading
 
         self._manifest = None
         self._captures = []
@@ -84,44 +75,4 @@ class Session:
         if os.path.exists(intrinsics_path):
             return intrinsics_path
         return None # Raise error?
-
-    def load_camera_extrinsics(self): #TODO: check implementation and implement parsing
-        if self._camera_extrinsics_path is None:
-            raise FileNotFoundError("Camera extrinsics file not found.")
-        
-        with open(self._camera_extrinsics_path, 'r') as f:
-            extrinsics = yaml.safe_load(f)
-        
-        rotation = R.from_euler('xyz', extrinsics['rotation'], degrees=True).as_matrix()
-        translation = np.array(extrinsics['translation']).reshape((3, 1))
-        
-        T_tool0_camera = np.eye(4)
-        T_tool0_camera[:3, :3] = rotation
-        T_tool0_camera[:3, 3:] = translation
-        
-        self.T_tool0_camera = T_tool0_camera
-
-    def load_camera_intrinsics(self): #TODO: check implementation and implement parsing
-        print(f"Loading camera intrinsics from: {self._camera_intrinsics_path}...", end='')
-        if not os.path.isfile(self._camera_intrinsics_path):
-            raise FileNotFoundError(f"Intrinsics file not found: {self._camera_intrinsics_path}")
-
-        fs = cv2.FileStorage(self._camera_intrinsics_path, cv2.FILE_STORAGE_READ)
-        if not fs.isOpened():
-            raise IOError(f"Failed to open: {self._camera_intrinsics_path}")
-
-        try:
-            self.camera_intrinsics_W = int(fs.getNode("image_width").real() or 0)
-            self.camera_intrinsics_H = int(fs.getNode("image_height").real() or 0)
-            self.camera_intrinsics_K = np.asarray(fs.getNode("camera_matrix").mat(),
-                                                   dtype=np.float64).reshape(3, 3)
-            self.camera_intrinsics_D = np.asarray(fs.getNode("distortion_coefficients").mat(),
-                                                   dtype=np.float64).ravel()
-            print("Done.")
-            return self.camera_intrinsics_W,\
-                   self.camera_intrinsics_H,\
-                   self.camera_intrinsics_K,\
-                   self.camera_intrinsics_D
-        finally:
-            fs.release()
     
