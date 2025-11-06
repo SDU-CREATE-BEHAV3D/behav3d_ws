@@ -7,6 +7,7 @@ from rclpy.node import Node
 from rclpy.action import ActionServer,CancelResponse
 from pymodbus.client import ModbusTcpClient
 from rclpy.executors import MultiThreadedExecutor
+from std_msgs.msg import UInt32
 
 from behav3d_interfaces.action import PrintTime  
 from behav3d_interfaces.action import PrintSteps 
@@ -20,11 +21,13 @@ COIL_EXTRUDE   = 10   # ON/OFF coil
 REG_SPEED      = 1    # holding register for speed
 POLL_MS        = 500  # For getting info back from the Controllino
 
-COIL_DIR        = 4     # 
+# --- Modbus addresses ---
 COIL_QUEUE_PUSH = 13    # rising-edge enqueue
 COIL_CANCEL_ALL = 14    # optional explicit cancel not implemented
 REG_STEPS_LO    = 3     # HR3 low 16 bits
 REG_STEPS_HI    = 4     # HR4 high 16 bits
+IR_STEPS_LO   = 0   # input register 0: low 16 bits
+IR_STEPS_HI   = 1   # input register 1: high 16 bits
 
 class PrintNode(Node):
     def __init__(self):
@@ -37,6 +40,7 @@ class PrintNode(Node):
         self.state = "IDLE"             # IDLE | PRINTING | STOPPED | ERROR
         self._printing = False # internal handle to know if printing is active
         self._force_stop = False    
+        
         # --- Modbus client ---
         self.client = ModbusTcpClient(MODBUS_IP, port=MODBUS_PORT)
         if not self.client.connect():
@@ -49,7 +53,7 @@ class PrintNode(Node):
         self._last_coil = None
         self._last_speed = None
         self.timer = self.create_timer(POLL_MS / 1000.0, self._poll)
-
+        
         # Initial safe state: extruder OFF
         self.set_extrude(False)
 
@@ -80,7 +84,7 @@ class PrintNode(Node):
             self,
             PrintTime,
             "print",
-            execute_callback=self._exec_print,
+            execute_callback=self._exec_print_time,
             cancel_callback=self._on_cancel,
         )
 
@@ -139,21 +143,17 @@ class PrintNode(Node):
             return False
         self.get_logger().info(f"Queued {int(steps)} steps")
         return True
-    # (placeholder) high-level API, amount/time/feedback not implemented yet
-    def start_print(self, amount: int, speed: int) -> bool:
-        """Skeleton: set speed and enable extrusion. (Stopped via stop_print)."""
-        self.current_amount = int(amount)
-        if not self.set_speed(speed):
-            return False
-        if not self.set_extrude(True):
-            return False
-        self.state = "PRINTING"
-        return True
+    #-------- check steps remaining--------
 
-    def stop_print(self) -> None:
-        """Turn extrusion OFF and set state back to IDLE."""
-        self.set_extrude(False)
-        self.state = "IDLE"
+    def _read_steps_remaining_now(self) -> int:
+        """Read steps_accum from IR0..1 atomically and return uint32."""
+        ri = self.client.read_input_registers(IR_STEPS_LO, count=2)
+        if ri.isError():
+            self.get_logger().warning(f"Error reading IR0..1: {ri}")
+            return -1
+        lo = int(ri.registers[0])
+        hi = int(ri.registers[1])
+        return (hi << 16) | lo
 
     # -------- Polling (500 ms) --------
     def _poll(self):
@@ -214,7 +214,7 @@ class PrintNode(Node):
         return CancelResponse.ACCEPT
 
     # --- Action execute callback (sync) ---
-    def _exec_print(self, goal_handle):
+    def _exec_print_time(self, goal_handle):
         goal = goal_handle.request
         target_speed = self.current_speed if goal.use_previous_speed else int(goal.speed)
         target_ms = int(goal.duration.sec * 1000 + goal.duration.nanosec / 1e6)
@@ -321,21 +321,76 @@ class PrintNode(Node):
         self.get_logger().info("Cancel requested for print_steps action")
         self.set_extrude(False)
         return CancelResponse.ACCEPT
-
+    
     def _exec_print_steps(self, goal_handle):
-        goal: PrintSteps.Goal = goal_handle.request
-        # if needed, set speed
+        goal = goal_handle.request
+        target_steps = int(goal.steps)
+        if target_steps <= 0:
+            goal_handle.abort()
+            return PrintSteps.Result(success=False, accepted_steps=0, reason="invalid_steps")
+
+        # Speed setup (if requested)
         if not goal.use_previous_speed:
             if not self.set_speed(int(goal.speed)):
                 goal_handle.abort()
                 return PrintSteps.Result(success=False, accepted_steps=0, reason="modbus_speed_error")
 
-        # enqueue
-        if not self.enqueue_steps(int(goal.steps), ensure_on=True):
+        # Ensure ON
+        if not self.set_extrude(True):
+            goal_handle.abort()
+            return PrintSteps.Result(success=False, accepted_steps=0, reason="modbus_extrude_on_error")
+
+        # Reflect state for external status consumers
+        self.state = "PRINTING"
+        self._printing = True
+
+        # Read baseline steps_accum
+        baseline = self._read_steps_remaining_now()
+        if baseline < 0:
+            self.state = "IDLE"
+            self._printing = False
+            self._force_stop = False
+            goal_handle.abort()
+            return PrintSteps.Result(success=False, accepted_steps=0, reason="read_steps_error")
+
+        # Enqueue (HR3|HR4 + QUEUE_PUSH)
+        if (not self._write_u32(REG_STEPS_LO, REG_STEPS_HI, target_steps)) or (not self._pulse_coil(COIL_QUEUE_PUSH)):
+            self.state = "IDLE"
+            self._printing = False
+            self._force_stop = False
             goal_handle.abort()
             return PrintSteps.Result(success=False, accepted_steps=0, reason="enqueue_failed")
+
+        # Wait until steps_remaining <= baseline
+        FEED_DT = 0.05
+        try:
+            while True:
+                if goal_handle.is_cancel_requested:
+                    self.set_extrude(False)
+                    self.state = "IDLE"
+                    self._printing = False
+                    self._force_stop = False
+                    goal_handle.canceled()
+                    return PrintSteps.Result(success=False, accepted_steps=0, reason="canceled")
+
+                current = self._read_steps_remaining_now()
+                if current < 0:
+                    time.sleep(FEED_DT)
+                    continue
+
+                if current <= baseline:
+                    break
+
+                time.sleep(FEED_DT)
+        finally:
+            # Ensure consistent state flags even on exceptions
+            self.state = "IDLE"
+            self._printing = False
+            self._force_stop = False
+            self.set_extrude(False)
         goal_handle.succeed()
-        return PrintSteps.Result(success=True, accepted_steps=int(goal.steps), reason="enqueued")
+        return PrintSteps.Result(success=True, accepted_steps=target_steps, reason="completed")
+
 def main():
     rclpy.init()
     node = PrintNode()

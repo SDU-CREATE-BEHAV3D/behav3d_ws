@@ -17,7 +17,7 @@ from trajectory_msgs.msg import JointTrajectoryPoint, JointTrajectory
 from geometry_msgs.msg import Pose, PoseStamped
 from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin, GetLinkPose, Capture, ReconstructMesh
 
-from behav3d_interfaces.action import PrintTime
+from behav3d_interfaces.action import PrintTime, PrintSteps
 
 
 
@@ -25,11 +25,21 @@ OnMoveDone = Optional[Callable[[Dict[str, Any]], None]]
 
 class Commands:
     """
-    Minimal async command layer with a single FollowJointTrajectory executor.
+
+    Async command orchestrator managing motion, printing, sensing, and utility actions through a unified FIFO queue.
 
     Public API:
-      - home(duration_s=..., on_move_done=...)
-      - goto(x, y, z, eef=..., vel_scale=..., accel_scale=..., exec=True, on_move_done=...)
+    - home(duration_s=..., on_move_done=...)
+    - goto(x, y, z, rx=..., ry=..., rz=..., eef=..., vel_scale=..., accel_scale=..., exec=..., on_move_done=..., start_print=..., motion=...)
+    - printTime(secs=..., speed=..., use_previous_speed=..., on_done=...)
+    - printSteps(steps=..., speed=..., use_previous_speed=..., on_done=...)
+    - setPTP(), setLIN(), setEef(name), setSpd(val), setAcc(val)
+    - wait(secs=..., on_done=...)
+    - getPose(eef=..., base_frame=..., use_tf=..., on_done=...)
+    - capture(rgb=..., depth=..., ir=..., pose=..., folder=..., on_done=...)
+    - reconstruct(use_latest=..., session_path=..., on_done=...)
+    - input(key=..., prompt=..., on_done=...)
+    - pause(), resume()
 
     Queue item kinds:
       - "follow_traj": {'jt': JointTrajectory, 'on_move_done', 'kind': 'home'|'goto'}
@@ -53,8 +63,9 @@ class Commands:
         #reconstruction service
         self._reconstruct_cli = node.create_client(ReconstructMesh, "/reconstruct_mesh")
 
-        # PrintTime action client (process / extruder)
+        # PrintTime and PrintSteps action client (process / extruder)
         self._print_ac = ActionClient(node, PrintTime, "print")
+        self._print_steps_ac = ActionClient(node, PrintSteps, "print_steps")
         #TF buffer and listener
         self._tf_buffer = tf2_ros.Buffer(cache_time=Duration(seconds=10.0))
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self.node)
@@ -146,7 +157,7 @@ class Commands:
             "motion": (motion or self._motion_mode)
         })
 
-    def print(self,
+    def printTime(self,
             *,
             secs: float,
             speed: int,
@@ -163,25 +174,41 @@ class Commands:
             "on_done": on_done
         })
  
-    def PTP(self):  
+    def printSteps(self,
+            *,
+            steps: int,
+            speed: int,
+            use_previous_speed: bool = False,
+            on_done: OnMoveDone = None):
+        """
+        Enqueue a print-by-steps action using the 'print_steps' action server.
+        """
+        self._enqueue("print_steps", {
+            "steps": int(steps),
+            "speed": int(speed),
+            "use_prev": bool(use_previous_speed),
+            "on_done": on_done
+        })
+
+    def setPTP(self):  
         self._motion_mode = "PTP"
 
-    def LIN(self):
+    def setLIN(self):
         self._motion_mode = "LIN"
    
     def wait(self, secs: float, on_done: OnMoveDone = None):
         """Enqueue a time delay (secs) before the next command."""
         self._enqueue("wait", {"secs": float(secs), "on_done": on_done})
 
-    def EEF(self, name: str):
+    def setEef(self, name: str):
         """Set default end-effector for all subsequent goto() calls."""
         self._default_eef = str(name)
 
-    def SPD(self, val: float):
+    def setSpd(self, val: float):
         """Set default velocity scale (clamped 0..1)."""
         self._default_vel_scale = max(0.0, min(1.0, float(val)))
 
-    def ACC(self, val: float):
+    def setAcc(self, val: float):
         """Set default accel scale (clamped 0..1)."""
         self._default_accel_scale = max(0.0, min(1.0, float(val)))
 
@@ -337,6 +364,8 @@ class Commands:
             self._do_plan_motion(p)
         elif kind == "print_time":
             self._do_print_time(p)
+        elif kind == "print_steps":
+            self._do_print_steps(p)
         elif kind == "wait":
             self._do_wait(p)
         elif kind == "get_pose":
@@ -515,6 +544,60 @@ class Commands:
 
         fut.add_done_callback(_on_goal_response)
 
+    def _do_print_steps(self, p: Dict[str, Any]):
+        """Execute PrintSteps action (process op) in FIFO."""
+        steps = p["steps"]
+        speed = p["speed"]
+        use_prev = p["use_prev"]
+        on_done = p.get("on_done")
+
+        # Ensure server is available
+        if not self._print_steps_ac.wait_for_server(timeout_sec=2.0):
+            self._finish_move(on_done, "print_steps", ok=False, phase="exec",
+                            error="print_steps action server not available")
+            return
+
+        # Build goal
+        goal = PrintSteps.Goal()
+        goal.steps = int(steps)
+        goal.speed = int(speed)
+        goal.use_previous_speed = bool(use_prev)
+
+        self.node.get_logger().info(
+            f"PRINT_STEPS: sending goal steps={steps} speed={speed} use_prev={use_prev}"
+        )
+
+        fut = self._print_steps_ac.send_goal_async(goal)  # feedback omitted for now
+
+        def _on_goal_response(gf):
+            gh = gf.result()
+            if not gh or not gh.accepted:
+                self._finish_move(on_done, "print_steps", ok=False, phase="exec",
+                                error="print_steps goal rejected")
+                return
+            res_fut = gh.get_result_async()
+            res_fut.add_done_callback(_on_result)
+
+        def _on_result(rf):
+            try:
+                wrap = rf.result()
+                result = wrap.result
+                status = wrap.status
+                ok = bool(result.success)
+                metrics = {
+                    "status": int(status),
+                    "accepted_steps": int(result.accepted_steps),
+                    "reason": str(result.reason),
+                }
+                self._finish_move(on_done, "print_steps", ok=ok, phase="exec",
+                                metrics=metrics,
+                                error=None if ok else result.reason)
+            except Exception as e:
+                self._finish_move(on_done, "print_steps", ok=False, phase="exec",
+                                error=f"exception waiting result: {e}")
+
+        fut.add_done_callback(_on_goal_response)
+
     def _start_print_concurrent(self, *, secs: float, speed: int, offset_s: float = 0.0):
         """Fire PrintTime action without touching the FIFO (runs alongside motion)."""
         def _send_print_goal():
@@ -558,8 +641,6 @@ class Commands:
         else:
             _send_print_goal()
 
-
-
     def _do_reconstruct(self, p: Dict[str, Any]):
         """Execute 3D reconstruction via the /reconstruct_mesh service."""
         on_done: OnMoveDone = p.get("on_done")
@@ -594,7 +675,6 @@ class Commands:
                               error=None if ok else msg)
 
         fut.add_done_callback(_on_resp)
-
 
     def _do_wait(self, p: Dict[str, Any]):
         secs = float(p["secs"])

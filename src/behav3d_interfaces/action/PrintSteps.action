@@ -2,7 +2,7 @@
 uint32 steps
 bool use_previous_speed
 int32 speed
-bool keep_extrude_on_after   
+
 ---
 # Result
 bool success
