@@ -3,11 +3,11 @@
 ### Motion mode & config can be used at the start(stateful “setters”)
 
 ```yaml
-- PTP                 # set default motion planner to PTP
-- LIN                 # set default motion planner to LIN
-- EEF: extruder_tcp   # set default end-effector
-- SPD: 0.10           # default velocity_scale (0..1)
-- ACC: 0.10           # default accel_scale (0..1)
+- setPTP                 # set default motion planner to PTP
+- setLIN                 # set default motion planner to LIN
+- setEef: extruder_tcp   # set default end-effector
+- setSpd: 0.10           # default velocity_scale (0..1)
+- setAcc: 0.10           # default accel_scale (0..1)
 - TOTG: on            #TODO (placeholder if you wire a time-optimizer toggle)
 ```
 
