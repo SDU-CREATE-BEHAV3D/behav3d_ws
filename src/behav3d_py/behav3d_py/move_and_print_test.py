@@ -8,7 +8,6 @@ from .commands import Commands   # Both in the same ROS2 Python package
 from .macros import Macros     # Both in the same ROS2 Python package
 
 import math
-from geometry_msgs.msg import PoseStamped
 from scipy.spatial.transform import Rotation as R
 
 class MoveAndPrintTest(Node):
@@ -25,49 +24,20 @@ class MoveAndPrintTest(Node):
             return
         self._started = True
 
-        # Hardcoded target pose in 'world' using XYZ + RPY (radians)
-        px, py, pz = 0.00, 0.84, -0.68
-        rx, ry, rz = 0.0, 0.0, math.radians(0)
+        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
+        self.cmd.setSpd(0.2)
+        self.cmd.setEef("femto_color_optical_calib") 
+        self.cmd.setLIN()
+        self.cmd.input(prompt="Press ENTER to go to target...")   
+        self.cmd.goto(x=0.50, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="LIN", start_print={"secs": 1.5, "speed": 1200, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
+        self.cmd.goto(x=0.50, y=1.0, z=0.96,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="LIN", start_print={"steps": 1800, "speed": 600, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
 
-        target_ps = PoseStamped()
-        target_ps.header.frame_id = "world"
-        target_ps.pose.position.x = px
-        target_ps.pose.position.y = py
-        target_ps.pose.position.z = pz
+     #   self.cmd.printSteps(steps=4000, speed=1000, on_done=self._on_move_done)
+   #     self.cmd.printSteps(steps=2000, speed=500, on_done=self._on_move_done)
+        self.cmd.printSteps(steps=2000, speed=500, on_done=self._on_move_done)
+        self.cmd.goto(x=-0.0500, y=1.30, z=0.31,eef="extruder_tcp",vel_scale=0.5, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
 
-        qx, qy, qz, qw = R.from_euler("xyz", [rx, ry, rz], degrees=False).as_quat()
-        target_ps.pose.orientation.x = float(qx)
-        target_ps.pose.orientation.y = float(qy)
-        target_ps.pose.orientation.z = float(qz)
-        target_ps.pose.orientation.w = float(qw)
-
-        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
-        self.cmd.SPD(0.2)
-        self.cmd.EEF("femto_color_optical_calib") 
-        self.cmd.LIN()
-        self.cmd.input(prompt="Press ENTER to go to target...")
-        # Run the Fibonacci spherical-cap scan (ENTER-only prompt between captures)
-        self.mac.fibScan(
-            target=target_ps,
-            distance=0.9,
-            cap_rad=math.radians(25),
-            samples=32,
-            folder="@session/scan_charuco",
-            settle_s=0.2,
-            z_jitter=0.03,
-            prompt="Press ENTER to capture...",
-            debug=False,
-        )
-        self.cmd.wait(1.0)
-
-        # reconstruction scan
-        # self.cmd.reconstruct(
-        #     session_path="@session/scan_1",
-        #     use_latest=True,
-        #     on_done=lambda res: self.get_logger().info(f"Reconstruction request done: {res}"),
-        # )        
-
-        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
+        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
         self.cmd.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)

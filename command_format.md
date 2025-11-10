@@ -3,11 +3,11 @@
 ### Motion mode & config can be used at the start(stateful “setters”)
 
 ```yaml
-- PTP                 # set default motion planner to PTP
-- LIN                 # set default motion planner to LIN
-- EEF: extruder_tcp   # set default end-effector
-- SPD: 0.10           # default velocity_scale (0..1)
-- ACC: 0.10           # default accel_scale (0..1)
+- setPTP                 # set default motion planner to PTP
+- setLIN                 # set default motion planner to LIN
+- setEef: extruder_tcp   # set default end-effector
+- setSpd: 0.10           # default velocity_scale (0..1)
+- setAcc: 0.10           # default accel_scale (0..1)
 - TOTG: on            #TODO (placeholder if you wire a time-optimizer toggle)
 ```
 
@@ -23,43 +23,77 @@
 - wait: 2.5           # seconds
 ```
 
-### Print (queued in FIFO)
+### printTime (queued in FIFO)
+
+Runs a timed extrusion via the `print` action. The FIFO will only continue after the action finishes.
 
 ```yaml
-- print: {secs: 1.2, speed: 900}
+- printTime: {secs: 1.2, speed: 900}
 ```
 
-### Goto (absolute XYZ, optional RPY in radians)
+**Fields**
+
+* `secs` (float): Duration in seconds.
+* `speed` (int): Extrusion speed (implementation-specific units).
+* `use_previous_speed` (bool, optional, default: false).
+
+---
+
+### printSteps (queued in FIFO)
+
+Runs a step-count extrusion via the `print_steps` action. The FIFO will only continue after the action finishes.
+
+```yaml
+- printSteps: {steps: 6000, speed: 900}
+```
+
+**Fields**
+
+* `steps` (int): Number of steps to extrude.
+* `speed` (int): Extrusion speed (implementation-specific units).
+* `use_previous_speed` (bool, optional, default: false).
+
+---
+
+### goto (absolute XYZ, optional RPY in radians)
+
+Plans and (optionally) executes a robot motion in the `world` frame.
 
 ```yaml
 - goto: {x: -0.0500, y: 1.30, z: 0.31, exec: true}
 ```
 
-#### Goto with orientation (any subset of rx/ry/rz; others default to 0)
+#### goto with orientation (any subset of rx/ry/rz; others default to 0)
 
 ```yaml
 - goto: {x: 0.50, y: 1.50, z: 0.30, ry: 1.5708, exec: true}
 ```
 
-#### Goto overriding motion mode just for this call
+#### goto overriding motion mode for this call
 
 ```yaml
 - goto: {x: -0.0500, y: 1.00, z: 0.31, motion: LIN, exec: true}
 ```
 
-#### Goto with non-default planning scales and eef
+#### goto with non-default planning scales and eef
 
 ```yaml
 - goto: {x: 0.50, y: 1.00, z: 0.31, eef: extruder_tcp, vel_scale: 0.1, accel_scale: 0.1, exec: true}
 ```
 
-#### Goto (plan-only)
+#### goto (plan-only, does not execute)
 
 ```yaml
 - goto: {x: 0.25, y: 0.80, z: 0.40, exec: false}
 ```
 
-### Goto with inline print (starts when motion goal is accepted)
+---
+
+### goto with inline print (concurrent to motion)
+
+Starts extrusion when the motion goal is **accepted** (does not block the FIFO; runs in parallel to the trajectory). Use either **time** or **steps** inside `start_print`.
+
+**Time-based inline print**
 
 ```yaml
 - goto:
@@ -69,6 +103,26 @@
     exec: true
     start_print: {secs: 1.5, speed: 1200, offset_s: 0.0, sync: accept}
 ```
+
+**Steps-based inline print**
+
+```yaml
+- goto:
+    x: 0.50
+    y: 1.00
+    z: 0.36
+    exec: true
+    start_print: {steps: 1800, speed: 600, offset_s: 0.0, sync: accept}
+```
+
+**start_print fields**
+
+* Use **either** `secs` (float) **or** `steps` (int).
+* `speed` (int): Extrusion speed (implementation-specific units).
+* `offset_s` (float, optional, default: 0.0): Delay after goal acceptance before starting extrusion.
+* `sync` (string, optional, default: `accept`): Currently supports `accept` (trigger at motion goal acceptance).
+
+---
 
 ### Pose (queued; query EEF/link pose)
 

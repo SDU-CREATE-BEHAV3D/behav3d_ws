@@ -14,11 +14,11 @@ class SequenceParser:
 
         # Dispatch tables
         self._config_handlers: Dict[str, Callable[[Any], None]] = {
-            "EEF": lambda v: self.cmd.EEF(str(v)),
-            "SPD": lambda v: self.cmd.SPD(float(v)),
-            "ACC": lambda v: self.cmd.ACC(float(v)),
-            "PTP": lambda v=None: self.cmd.PTP(),
-            "LIN": lambda v=None: self.cmd.LIN(),
+            "setEef": lambda v: self.cmd.setEef(str(v)),
+            "setSpd": lambda v: self.cmd.setSpd(float(v)),
+            "setAcc": lambda v: self.cmd.setAcc(float(v)),
+            "setPTP": lambda v=None: self.cmd.setPTP(),
+            "setLIN": lambda v=None: self.cmd.setLIN(),
         }
 
         # --- pose parser helper ---
@@ -30,7 +30,8 @@ class SequenceParser:
         self._queue_handlers: Dict[str, Callable[[Any], None]] = {
             "home":  lambda v: self.cmd.home(**self._ensure_dict(v)),
             "goto":  lambda v: self.cmd.goto(**self._ensure_dict(v)),
-            "print": lambda v: self.cmd.print(**self._ensure_dict(v)),
+            "printTime": lambda v: self.cmd.printTime(**self._ensure_dict(v)),
+            "printSteps": lambda v: self.cmd.printSteps(**self._ensure_dict(v)),   
             "wait":  lambda v: self.cmd.wait(float(v)),
             "input":   lambda v: self._handle_input(v),
             "capture": lambda v: self._handle_capture(v),

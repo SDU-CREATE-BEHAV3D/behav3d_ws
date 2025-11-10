@@ -23,6 +23,7 @@ setup(
             'print_test = behav3d_py.print_test:main',
             'move_and_print_test = behav3d_py.move_and_print_test:main',
             'run_yaml_test = behav3d_py.run_yaml_test:main',
+            'handeye_capture_sequence = behav3d_py.handeye_capture_sequence:main',
         ],
     },
 )
