@@ -1,12 +1,9 @@
-import os
 import cv2
 import numpy as np
 import open3d as o3d
-from scipy.spatial.transform import Rotation as R
-
 
 ### load intrinsics
-def load_intrinsics(file_path, type="depth"):
+def load_intrinsics(file_path):
 
     fs = cv2.FileStorage(file_path, cv2.FILE_STORAGE_READ)
     if not fs.isOpened():

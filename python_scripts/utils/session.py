@@ -15,8 +15,9 @@ class Session:
         self._scan_folder = init_scan_folder
         self._config_folder = config_folder
 
-        self._camera_intrinsics_path = self._get_intrinsics_path()
-        self._camera_extrinsics_path = self._get_extrinsics_path()
+        self.color_intrinsics_path = self._get_intrinsics_path(optical_frame="color")
+        self.ir_intrinsics_path = self._get_intrinsics_path(optical_frame="ir")
+        self.depth_intrinsics_path = self._get_intrinsics_path(optical_frame="depth")
 
         self._manifest = None
         self._captures = []
