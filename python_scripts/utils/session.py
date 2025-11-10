@@ -32,26 +32,23 @@ class Session:
         else:
             print("No scan folder provided during initialization.")
         
-        self.T_base_tool0 = []
+       
 
 
     def load_scan_folder(self, scan_folder):
         print(f"Loading scan folder: {scan_folder}")
         self._scan_folder = scan_folder
-
-        self._manifest = self._read_manifest()
-        self._captures = self._manifest.get("captures", [])
         
         self.depth_file_paths = self._get_image_file_paths(image_type="depth")
         self.color_file_paths = self._get_image_file_paths(image_type="rgb") # TODO: replace "rgb" with "color"?
         self.ir_file_paths = self._get_image_file_paths(image_type="ir")
     
-    def _read_manifest(self):
-        print(f"Reading manifest for scan folder: {self._scan_folder}")
-        manifest_path = os.path.join(self.path, self._scan_folder, "manifest.yaml")
-        with open(manifest_path, 'r') as f:
-            manifest = yaml.safe_load(f)
-        return manifest
+    # def _read_manifest(self):
+    #     print(f"Reading manifest for scan folder: {self._scan_folder}")
+    #     manifest_path = os.path.join(self.path, self._scan_folder, "manifest.yaml")
+    #     with open(manifest_path, 'r') as f:
+    #         manifest = yaml.safe_load(f)
+    #     return manifest
     
     def _get_image_file_paths(self, image_type):
         file_paths = []

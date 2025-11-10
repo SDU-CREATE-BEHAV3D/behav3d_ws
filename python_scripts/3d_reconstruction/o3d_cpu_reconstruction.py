@@ -8,26 +8,44 @@ import cv2
 import open3d as o3d
 import open3d.core as o3c
 from scipy.spatial.transform import Rotation as R
+import math
 
 from utils.session import Session
 # import utils.session as session_module
 from utils.load_helpers import load_camera_intrinsics
+from utils.manifest import read_manifest, load_robot_poses, transform_robot_to_camera_pose
+from utils.intrinsics import load_intrinsics, intrinsics_matrix
+from utils.extrinsics import load_extrinsics
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/251105_132939"
+SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/Behav3d_ws/python_scripts/251105_132939"
+scan_folder = "manual_caps"
 
-my_session = Session(SESSION_PATH, init_scan_folder="manual_caps")
+my_session = Session(SESSION_PATH, scan_folder)
 
-print("Camera Intrinsics K:\n", load_camera_intrinsics(my_session._camera_intrinsics_path))
+# print("Camera Intrinsics K:\n", load_camera_intrinsics(my_session._camera_intrinsics_path))
 
+manifest = read_manifest(SESSION_PATH, scan_folder)
+# print ("Manifest:\n", manifest)
 
-# width, height, K, D = utils.load_helpers.load_intrinsics(SESSION_PATH, type="depth")
-# INTRINSICS = o3d.camera.PinholeCameraIntrinsic(
-#     width, height, K[0,0], K[1,1], K[0,2], K[1,2]
-# )
-# T_tool0_depth = utils.load_helpers.load_extrinsics(SESSION_PATH, frame_key="T_tool0_ir")
-# captures = utils.load_helpers.load_manifest(SESSION_PATH, scan_folder="manual_caps")
-# T_base_cam = utils.load_helpers.transform_robot_to_camera_pose(captures,T_tool0_depth ,type="T_tool0_ir")
-# IMAGES = utils.load_helpers.load_images(T_base_cam, image_type="depth", library="o3d")
+T_base_tool0_list = load_robot_poses(manifest)
+# print(f"Loaded {len(T_base_tool0)} robot poses from manifest.")
+print("T_base_tool0:\n", T_base_tool0_list)
+
+# load intrinsics
+width, height, K, D = load_intrinsics(my_session._camera_intrinsics_path, type="depth")
+# print (f"Loaded intrinsics: width={width}, height={height}, K=\n{K}, D={D}")
+
+intrinsics = intrinsics_matrix(width, height, K)
+# print intrinsics matrix
+# print("Intrinsics matrix:\n", intrinsics.intrinsic_matrix)
+
+### load extrinsics
+T_tool0_ir = load_extrinsics(my_session._camera_extrinsics_path, frame_key="T_tool0_ir")
+print("T_tool0_ir:\n", T_tool0_ir)
+
+### transform robot to camera poses
+T_base_ir_list = [T_base_tool0 @ T_tool0_ir for T_base_tool0 in T_base_tool0_list]
+print("T_base_ir:\n", T_base_ir_list)
 
 
 # ### visualize camera poses
@@ -42,10 +60,6 @@ print("Camera Intrinsics K:\n", load_camera_intrinsics(my_session._camera_intrin
 #     o3d.visualization.draw([mesh_frame, *cam_frames])
 
 # visualize_camera_poses(T_base_cam)
-
-
-
-
 
 
 
