@@ -46,3 +46,16 @@ def transform_robot_to_camera_pose(robot_poses, extrensics, type ="T_tool0_ir"):
         return T_base_color
     else:
         raise ValueError(f"Unsupported type: {type}")
+    
+
+### construct images paths from the manifest
+def construct_image_paths(manifest, image_type="rgb"):
+    captures = manifest.get("captures", [])
+    image_paths = []
+    for c in captures:
+        file_name = c.get(image_type)
+        if file_name:
+            image_paths.append(file_name)
+    return image_paths
+
+

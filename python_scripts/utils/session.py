@@ -18,6 +18,8 @@ class Session:
         self.color_intrinsics_path = self._get_intrinsics_path(optical_frame="color")
         self.ir_intrinsics_path = self._get_intrinsics_path(optical_frame="ir")
         self.depth_intrinsics_path = self._get_intrinsics_path(optical_frame="depth")
+        
+        self._camera_extrinsics_path = self._get_extrinsics_path()
 
         self._manifest = None
         self._captures = []

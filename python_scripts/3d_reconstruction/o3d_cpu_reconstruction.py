@@ -17,7 +17,7 @@ from utils.manifest import read_manifest, load_robot_poses, transform_robot_to_c
 from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
 
-SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/Behav3d_ws/python_scripts/251105_132939"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/251104_140521/"
 scan_folder = "manual_caps"
 
 my_session = Session(SESSION_PATH, scan_folder)
