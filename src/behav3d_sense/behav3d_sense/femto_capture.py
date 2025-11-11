@@ -394,7 +394,7 @@ class FemtoCapture:
             img = self._to_bgr8(color_msg)
             img = self._decimate(img, self.decimate)
             tag = self._idx_tag(idx)
-            fpath = session_dir / 'color_raw' / f'rgb_{tag}.png'
+            fpath = session_dir / 'color_raw' / f'color_{tag}.png'
             ok = cv2.imwrite(str(fpath), img)
             if not ok:
                 raise RuntimeError('cv2.imwrite returned False for color')

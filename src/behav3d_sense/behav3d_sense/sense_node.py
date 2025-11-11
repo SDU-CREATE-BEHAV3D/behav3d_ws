@@ -212,7 +212,7 @@ class SenseNode(Node):
             'index': idx,
             'stamp_ns': int(stamp_ns),
             'timestamp': self._now_iso(),
-            'rgb': initial_fields.get('rgb', None),
+            'color': initial_fields.get('color', None),
             'depth': initial_fields.get('depth', None),
             'ir': initial_fields.get('ir', None),
             'T_base_tool0': initial_fields.get('T_base_tool0', None),
@@ -259,7 +259,7 @@ class SenseNode(Node):
                 return response
 
         stamp_now_ns = int(self.get_clock().now().nanoseconds)
-        fields = {'rgb': None, 'depth': None, 'ir': None, 'T_base_tool0': None}
+        fields = {'color': None, 'depth': None, 'ir': None, 'T_base_tool0': None}
         entry = self._append_capture_entry(self.current_capture_dir, stamp_now_ns, fields)
         idx = entry['index']
 
@@ -276,10 +276,10 @@ class SenseNode(Node):
         # Save as requested
         if request.do_rgb:
             if color_msg is not None:
-                fields['rgb'] = self.cam.save_color(self.current_capture_dir, idx, color_msg)
+                fields['color'] = self.cam.save_color(self.current_capture_dir, idx, color_msg)
             elif self.cam.latest_color_raw is not None:
                 self.get_logger().warn('Using unsynced latest COLOR frame (no synced pair).')
-                fields['rgb'] = self.cam.save_color(self.current_capture_dir, idx, self.cam.latest_color_raw)
+                fields['color'] = self.cam.save_color(self.current_capture_dir, idx, self.cam.latest_color_raw)
             else:
                 self.get_logger().warn('No COLOR frame available to save.')
 

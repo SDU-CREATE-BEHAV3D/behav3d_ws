@@ -16,14 +16,19 @@ my_session = Session(SESSION_PATH, scan_folder)
 
 # 1) Resolve intrinsics paths
 ir_width, ir_height, ir_K, ir_D = load_intrinsics(my_session.ir_intrinsics_path)
+color_width, color_height, color_K, color_D = load_intrinsics(my_session.color_intrinsics_path)
+# 2) Load Manifest
+manifest = read_manifest(my_session.path, my_session._scan_folder)
+T_base_tool0_list = load_robot_poses(manifest)
 
 def main():
 
     print ("Starting hand-eye calibration process...")
     print (ir_width)
+    print (color_width)
     # 2) Load captures
-  
-    # 3) Load intrinsics
+    print(f"Loaded {len(T_base_tool0_list)} robot poses from manifest.")
+    print (T_base_tool0_list)
 
     # 4) Build dictionary and board
   
