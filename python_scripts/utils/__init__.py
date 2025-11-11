@@ -4,4 +4,5 @@ from . import manifest
 from . import intrinsics
 from . import extrinsics
 from . import image_loader
-__all__ = ["load_helpers", "session", "manifest", "intrinsics", "extrinsics", "image_loader"]
+from . import integration
+__all__ = ["load_helpers", "session", "manifest", "intrinsics", "extrinsics", "image_loader", "integration"]

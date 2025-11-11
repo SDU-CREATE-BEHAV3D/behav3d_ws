@@ -1,0 +1,257 @@
+session:
+  created_at: '2025-11-11T11:25:57.202'
+  created_ns: 1762856757202019730
+  path: /home/lab/behav3d_ws/captures/251111_112516/manual_caps
+captures:
+- index: 0
+  stamp_ns: 1762856757202631430
+  timestamp: '2025-11-11T11:25:57.203'
+  color: color_raw/color_i0.png
+  depth: depth_raw/depth_i0.png
+  ir: ir_raw/ir_i0.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - -0.05951720339389847
+    - 0.7323459382314321
+    - -0.5038117981533233
+    - 0.45420348005889133
+    position:
+    - -0.12402833171325606
+    - -1.2552164786064732
+    - 0.4911223295428657
+- index: 1
+  stamp_ns: 1762856895292923750
+  timestamp: '2025-11-11T11:28:15.294'
+  color: color_raw/color_i1.png
+  depth: depth_raw/depth_i1.png
+  ir: ir_raw/ir_i1.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - -0.6367387556807238
+    - -0.12485801793182941
+    - 0.07725444049458326
+    - 0.756971587178916
+    position:
+    - 0.07336084067883128
+    - -1.0432608075438996
+    - 0.8408730943969703
+- index: 2
+  stamp_ns: 1762856924073196029
+  timestamp: '2025-11-11T11:28:44.075'
+  color: color_raw/color_i2.png
+  depth: depth_raw/depth_i2.png
+  ir: ir_raw/ir_i2.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - -0.7451201442999279
+    - -0.13600630845074216
+    - 0.16675375288652114
+    - 0.6312617844589654
+    position:
+    - 0.08210316266537301
+    - -0.6512563649166345
+    - 0.6736087439957371
+- index: 3
+  stamp_ns: 1762856947616815560
+  timestamp: '2025-11-11T11:29:07.619'
+  color: color_raw/color_i3.png
+  depth: depth_raw/depth_i3.png
+  ir: ir_raw/ir_i3.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - 0.854388074565269
+    - 0.09137464966536243
+    - -0.20285569863626535
+    - -0.4695969090294115
+    position:
+    - 0.1020546335104683
+    - -0.35485101643095973
+    - 0.5464132776007952
+- index: 4
+  stamp_ns: 1762856976330863193
+  timestamp: '2025-11-11T11:29:36.334'
+  color: color_raw/color_i4.png
+  depth: depth_raw/depth_i4.png
+  ir: ir_raw/ir_i4.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - 0.8026336898608373
+    - 0.3987935803074743
+    - -0.09405620584868161
+    - -0.4334700339669094
+    position:
+    - -0.38381186555407565
+    - -0.6155260875103447
+    - 0.5877972769289727
+- index: 5
+  stamp_ns: 1762856994808493547
+  timestamp: '2025-11-11T11:29:54.812'
+  color: color_raw/color_i5.png
+  depth: depth_raw/depth_i5.png
+  ir: ir_raw/ir_i5.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - 0.7346467936273511
+    - 0.46901909448310825
+    - -0.2628273593181342
+    - -0.4138078742812344
+    position:
+    - -0.4173664373667978
+    - -0.5709255561177423
+    - 0.9596474242357923
+- index: 6
+  stamp_ns: 1762857063436557530
+  timestamp: '2025-11-11T11:31:03.441'
+  color: color_raw/color_i6.png
+  depth: depth_raw/depth_i6.png
+  ir: ir_raw/ir_i6.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - 0.5737062156048122
+    - 0.7103541366687887
+    - -0.3400304429202149
+    - -0.22502772402845675
+    position:
+    - -0.47396285569098157
+    - -1.1471415830951799
+    - 0.5308726004660255
+- index: 7
+  stamp_ns: 1762857109777778203
+  timestamp: '2025-11-11T11:31:49.783'
+  color: color_raw/color_i7.png
+  depth: depth_raw/depth_i7.png
+  ir: ir_raw/ir_i7.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - -0.5642061497068893
+    - -0.1722862746976605
+    - 0.4149260360995178
+    - 0.6926941928083932
+    position:
+    - 0.48027197007337247
+    - -0.907231015722313
+    - 0.746265599142819
+- index: 8
+  stamp_ns: 1762857189783288742
+  timestamp: '2025-11-11T11:33:09.789'
+  color: color_raw/color_i8.png
+  depth: depth_raw/depth_i8.png
+  ir: ir_raw/ir_i8.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - -0.11075914475688806
+    - 0.7802739632809008
+    - -0.6053980443916227
+    - -0.11134703375230642
+    position:
+    - 0.6142272241171929
+    - -1.234066189398515
+    - 0.893582897476038
+- index: 9
+  stamp_ns: 1762857322125119968
+  timestamp: '2025-11-11T11:35:22.133'
+  color: color_raw/color_i9.png
+  depth: depth_raw/depth_i9.png
+  ir: ir_raw/ir_i9.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - -0.2322671205711082
+    - 0.8212830131067362
+    - -0.520274360657871
+    - -0.029339167097419575
+    position:
+    - 0.44669294425877165
+    - -1.2785026442182836
+    - 0.5180768605530253
+- index: 10
+  stamp_ns: 1762857353432700713
+  timestamp: '2025-11-11T11:35:53.440'
+  color: color_raw/color_i10.png
+  depth: depth_raw/depth_i10.png
+  ir: ir_raw/ir_i10.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - -0.41650331158830584
+    - 0.6563860470592979
+    - -0.6278948492162867
+    - -0.037820721694601885
+    position:
+    - 0.7598085426576308
+    - -0.7579276715641906
+    - 0.5759133658715162
+- index: 11
+  stamp_ns: 1762857385948643472
+  timestamp: '2025-11-11T11:36:25.957'
+  color: color_raw/color_i11.png
+  depth: depth_raw/depth_i11.png
+  ir: ir_raw/ir_i11.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - 0.23794330476240771
+    - -0.532515219707261
+    - 0.791313311703046
+    - 0.18339511231335878
+    position:
+    - 0.5455949946842645
+    - -0.6419084849471284
+    - 0.49765526335940546
+- index: 12
+  stamp_ns: 1762857419426091009
+  timestamp: '2025-11-11T11:36:59.435'
+  color: color_raw/color_i12.png
+  depth: depth_raw/depth_i12.png
+  ir: ir_raw/ir_i12.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - -0.5007863647401978
+    - 0.6585912007058545
+    - -0.5571036861355009
+    - 0.07145719094224044
+    position:
+    - 0.6763613974524048
+    - -0.9228222216359596
+    - 0.633853222584712
+- index: 13
+  stamp_ns: 1762857483756476172
+  timestamp: '2025-11-11T11:38:03.769'
+  color: color_raw/color_i13.png
+  depth: depth_raw/depth_i13.png
+  ir: ir_raw/ir_i13.png
+  T_base_tool0:
+    child: ur20_tool0
+    parent: ur20_base_link
+    orientation_xyzw:
+    - 0.8519203873261956
+    - -0.34199297169086407
+    - 0.37681662970056695
+    - -0.1236191269712843
+    position:
+    - 0.6303764019030523
+    - -0.3841864617249495
+    - 0.4192048146183135
