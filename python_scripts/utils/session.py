@@ -43,7 +43,7 @@ class Session:
         self._scan_folder = scan_folder
         
         self.depth_file_paths = self._get_image_file_paths(image_type="depth")
-        self.color_file_paths = self._get_image_file_paths(image_type="rgb") # TODO: replace "rgb" with "color"?
+        self.color_file_paths = self._get_image_file_paths(image_type="color") # TODO: replace "rgb" with "color"?
         self.ir_file_paths = self._get_image_file_paths(image_type="ir")
     
     # def _read_manifest(self):
@@ -55,7 +55,7 @@ class Session:
     
     def _get_image_file_paths(self, image_type):
         file_paths = []
-        if image_type in ["depth", "rgb", "ir"]:
+        if image_type in ["depth", "color", "ir"]:
             for capture in self._captures:
                 file_name = capture.get(image_type)
                 if file_name:
