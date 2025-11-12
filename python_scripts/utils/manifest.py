@@ -23,7 +23,7 @@ def load_robot_poses(manifest):
         T_base_tool0[:3, 3] = translation
         c["T_base_tool0"] = T_base_tool0
 
-        # Collect all T_base_tool0 matrices
+    # Collect all T_base_tool0 matrices
     T_base_tool0 = [c["T_base_tool0"] for c in captures]
     return T_base_tool0
 

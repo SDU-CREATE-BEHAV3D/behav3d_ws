@@ -7,6 +7,7 @@ import numpy as np
 from utils.session import Session
 from utils.manifest import read_manifest, load_robot_poses_decomposed, construct_image_paths
 from utils.image_loader import load_ir_image, preprocess_ir, load_color_image
+from utils.transforms import rotmat_to_quat_xyzw, rotmat_to_rpy
 from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
 
@@ -36,7 +37,7 @@ method_map = {
     "Andreff": cv2.CALIB_HAND_EYE_ANDREFF,
     "Daniilidis": cv2.CALIB_HAND_EYE_DANIILIDIS,
 }
-method = "Daniilidis"
+method = "Tsai"
 
 # ---- Board parameters----
 SQUARES_X = 6
@@ -52,14 +53,10 @@ board = cv2.aruco.CharucoBoard.create(	SQUARES_X, SQUARES_Y, SQUARE_LENGTH_M, MA
 #Draw for debug:
 #board_img = cv2.aruco.CharucoBoard.draw(board, (LENGTH_PX, int(LENGTH_PX*(SQUARES_Y / SQUARES_X))), marginSize=MARGIN_PX)
 
-
-import cv2
-import numpy as np
-
 def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, debug=False):
     """
     Inputs:
-      img: uint8 grayscale OR color image (BGR/BGRA/RGB). No normalization inside.
+      img: uint8 grayscale OR color image (BGR/BGRA/RGB).
       K, D: intrinsics (3x3, dist vector)
       board: cv2.aruco_CharucoBoard
       dictionary: cv2.aruco_Dictionary
@@ -140,9 +137,7 @@ def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, debug=False):
         cv2.waitKey(200)
         input("Press Enter to continue...")
         cv2.destroyWindow("annot")
-
     return out
-
 
 def main():
 
@@ -159,7 +154,7 @@ def main():
 
     r_base_tool0_keep_color = []
     t_base_tool0_keep_color = []
-    
+
 # IR Execute detection and Collect ir pairs 
 
     for i, p in enumerate(ir_img_path):
@@ -177,13 +172,11 @@ def main():
             r_base_tool0_keep_ir .append(r_base_tool0[i])
             t_base_tool0_keep_ir .append(t_base_tool0[i].reshape(3,1))
            
-# Color Execute detection and Collect ir pairs 
+# Color charuco detection and Collect color pose pairs 
 
     for i, p in enumerate(color_img_path):
         img = load_color_image(p)
-       
-        charuco_res = detect_charuco(img, color_K, color_D, board, dictionary, axis_len=0.05, debug=True)
-
+        charuco_res = detect_charuco(img, color_K, color_D, board, dictionary, axis_len=0.05, debug=False)
         if charuco_res["ok_pose"] and charuco_res["rvec"] is not None and charuco_res["tvec"] is not None:
             r_cam_board, _ = cv2.Rodrigues(charuco_res["rvec"])
             t_cam_board = charuco_res["tvec"].reshape(3,1)
@@ -194,44 +187,54 @@ def main():
             r_base_tool0_keep_color .append(r_base_tool0[i])
             t_base_tool0_keep_color .append(t_base_tool0[i].reshape(3,1))
            
+#Handeye solveR
 
-
-#Handeye solve
-
-    r_tool0_from_cam, t_tool0_from_cam = cv2.calibrateHandEye(
+    r_tool0_from_cam_ir, t_tool0_from_cam_ir = cv2.calibrateHandEye(
         r_base_tool0_keep_ir , t_base_tool0_keep_ir ,
         r_cam_board_list_ir ,   t_cam_board_list_ir ,
         method=method_map[method]
     )
-  #  ir_charuco = detect_charuco(preproc_ir,ir_K, ir_D, board, dictionary,axis_len=0.05)
-  #  ir2_charuco = detect_charuco(preproc_ir,ir_K, ir_D, board, dictionary, undistort=True,axis_len=0.05)
 
-    # cv2.imshow("ir_img", ir_img[2])
-    # cv2.imshow("preir_img", preproc_ir)
-    #cv2.imshow("annot2", ir_charuco_poses[1]["annot"]);
-    #cv2.waitKey(2000)
-   # cv2.waitKey(0)
-
+    r_tool0_from_cam_color, t_tool0_from_cam_color = cv2.calibrateHandEye(
+        r_base_tool0_keep_color , t_base_tool0_keep_color ,
+        r_cam_board_list_color ,   t_cam_board_list_color ,
+        method=method_map[method]
+    )
+#Format to quat and rpy
+    ir_quat= rotmat_to_quat_xyzw(r_tool0_from_cam_ir)
+    ir_rpy =rotmat_to_rpy(r_tool0_from_cam_ir)
+    ir_rpy_deg =rotmat_to_rpy(r_tool0_from_cam_ir,degrees=True)
+    color_quat= rotmat_to_quat_xyzw(r_tool0_from_cam_color)
+    color_rpy =rotmat_to_rpy(r_tool0_from_cam_color)
+    color_rpy_deg =rotmat_to_rpy(r_tool0_from_cam_color,degrees=True)
     print ("Starting hand-eye calibration process...")
-    # 2) Load captures
+
     print(f"Loaded {len(t_base_tool0)} robot poses from manifest.")
-    print(f"Using {len(t_base_tool0_keep)} robot poses after ir detection.")
-    print(f"Using {len(t_cam_board_list_ir )} Ir camera poses from Charuco.")
-   # print(f"Charuco result {ir_charuco} robot poses from manifest.")
-    print (r_tool0_from_cam)
-    print (t_tool0_from_cam)
+
+    print ("\n------IR calibration results------\n")
+    print(f"Using {len(t_base_tool0_keep_ir)} robot poses after IR detection.")
+    print(f"Using {len(t_cam_board_list_ir )} IR camera poses from Charuco.")
+    print(f"IR rotation matrix:\n{r_tool0_from_cam_ir}")
+    print("IR quaternion:\n", *ir_quat)
+    print("IR RPY Quat:\n", *ir_rpy)
+    print("IR RPY Deg:\n", *ir_rpy_deg)
+    print("IR translation XYZ:\n", *t_tool0_from_cam_ir.flatten())
+    
+    print ("\n------Color calibration results------\n")
+    print(f"Using {len(t_base_tool0_keep_color)} robot poses after color detection.")
+    print(f"Using {len(t_cam_board_list_color)} color camera poses from Charuco.")
+    print(f"Color rotation matrix:\n{r_tool0_from_cam_color}")
+    print("Color quaternion:\n", *color_quat)
+    print("Color RPY Quat:\n", *color_rpy)
+    print("Color RPY Deg:\n", *color_rpy_deg)
+    print("Color translation XYZ:\n", *t_tool0_from_cam_color.flatten())
   #  print (color_img_path)
     print(cv2.__version__)
 
 
-  
-    # 7) Solve hand–eye
-
     # 8) Residuals AX ≈ XB
   
     # residuals = compute_residuals_AX_XB(Ts_b_t, Ts_c_b, T_t_c)
-
-    # 9) Persist outputs (J)
 
     return 0
 

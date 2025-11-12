@@ -56,7 +56,6 @@ class Session:
     def _get_image_file_paths(self, image_type):
         file_paths = []
         if image_type in ["depth", "color", "ir"]:
-        if image_type in ["depth", "color", "ir"]:
             for capture in self._captures:
                 file_name = capture.get(image_type)
                 if file_name:
