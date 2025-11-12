@@ -2,6 +2,7 @@ import os
 import cv2
 import open3d as o3d
 import numpy as np
+import copy
 
 ### load images from absolute paths
 def load_images(image_paths, image_type, library):
@@ -64,7 +65,7 @@ def load_ir_image(path: str):
         gray = img.astype(np.uint8, copy=False)
     return gray
 
-def preprocess_ir(gray, ir_threshold=None, clip=3.0, tile=(8,8), p_low=2, p_high=98, gamma=None, alpha=None, beta=0):
+def preprocess_percentile_ir(gray, ir_threshold=None, clip=3.0, tile=(8,8), p_low=2, p_high=98, gamma=None, alpha=None, beta=0):
     """
     Steps:
       1) Optional cap at ir_threshold
@@ -74,7 +75,7 @@ def preprocess_ir(gray, ir_threshold=None, clip=3.0, tile=(8,8), p_low=2, p_high
       5) CLAHE
     Returns uint8.
     """
-    g = gray
+    g = copy.deepcopy(gray)
     # Ensure single-channel
     if g.ndim == 3:
         g = cv2.cvtColor(g, cv2.COLOR_BGR2GRAY)
@@ -99,4 +100,15 @@ def preprocess_ir(gray, ir_threshold=None, clip=3.0, tile=(8,8), p_low=2, p_high
     # 5) CLAHE (smaller tiles = more local contrast; lower clip = less noise amplification)
     clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=tile)
     g = clahe.apply(g)
+    return g
+
+def preprocess_threshold_ir(gray, ir_threshold, use_clahe=False):
+    
+    g = copy.deepcopy(gray)
+    g[np.where(g > ir_threshold)] = ir_threshold
+
+    if use_clahe:
+        clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(5,5))
+        g = clahe.apply(g)
+
     return g

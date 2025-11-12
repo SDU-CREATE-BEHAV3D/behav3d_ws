@@ -3,13 +3,17 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import cv2
+import copy
 import numpy as np
 from utils.session import Session
 from utils.manifest import read_manifest, load_robot_poses_decomposed, construct_image_paths
-from utils.image_loader import load_ir_image, preprocess_ir, load_color_image
+from utils.image_loader import load_ir_image, preprocess_percentile_ir, preprocess_threshold_ir, load_color_image
 from utils.transforms import rotmat_to_quat_xyzw, rotmat_to_rpy
 from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
+
+DEBUG_IR = True
+DEBUG_COLOR = False
 
 SESSION_PATH = "/home/lab/behav3d_ws/captures/251111_112516/"
 scan_folder = "manual_caps"
@@ -37,7 +41,7 @@ method_map = {
     "Andreff": cv2.CALIB_HAND_EYE_ANDREFF,
     "Daniilidis": cv2.CALIB_HAND_EYE_DANIILIDIS,
 }
-method = "Tsai"
+method = "Daniilidis"
 
 # ---- Board parameters----
 SQUARES_X = 6
@@ -53,7 +57,7 @@ board = cv2.aruco.CharucoBoard.create(	SQUARES_X, SQUARES_Y, SQUARE_LENGTH_M, MA
 #Draw for debug:
 #board_img = cv2.aruco.CharucoBoard.draw(board, (LENGTH_PX, int(LENGTH_PX*(SQUARES_Y / SQUARES_X))), marginSize=MARGIN_PX)
 
-def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, debug=False):
+def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, refine_corners_kernel=None, debug=bool):
     """
     Inputs:
       img: uint8 grayscale OR color image (BGR/BGRA/RGB).
@@ -89,8 +93,17 @@ def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, debug=False):
         gray_u8 = img
         bgr = cv2.cvtColor(gray_u8, cv2.COLOR_GRAY2BGR)
 
+    # gray_u8 = cv2.GaussianBlur(gray_u8, (5, 5), 1)
+    
     # 1) Detect ArUco markers
     params = cv2.aruco.DetectorParameters_create()
+    # Subpixel corner refinement (Not working fine)
+    if not refine_corners_kernel is None:
+        params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+        params.cornerRefinementWinSize = refine_corners_kernel          # typical: 5–9
+        params.cornerRefinementMaxIterations = 100  # typical: 50–300
+        params.cornerRefinementMinAccuracy = 1e-3   # typical: 1e-4–1e-2
+
     corners, ids, _ = cv2.aruco.detectMarkers(gray_u8, dictionary, parameters=params)
 
     out = {"n_markers": 0 if ids is None else len(ids),
@@ -134,8 +147,8 @@ def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, debug=False):
 
     if debug:
         cv2.imshow("annot", bgr)
-        cv2.waitKey(200)
-        input("Press Enter to continue...")
+        cv2.waitKey(-1)
+        #input("Press Enter to continue...")
         cv2.destroyWindow("annot")
     return out
 
@@ -159,8 +172,9 @@ def main():
 
     for i, p in enumerate(ir_img_path):
         gray = load_ir_image(p)
-        pre = preprocess_ir(gray, clip=2.2, tile=(3,3), p_low=1, p_high=97, gamma=1.5)
-        charuco_res = detect_charuco(pre, ir_K, ir_D, board, dictionary, axis_len=0.05, debug=False)
+        # pre = preprocess_ir(gray, clip=2.2, tile=(3,3), p_low=1, p_high=97q, gamma=1.5)
+        pre = preprocess_threshold_ir(gray, 2500)
+        charuco_res = detect_charuco(pre, ir_K, ir_D, board, dictionary, axis_len=0.05, debug=DEBUG_IR)
 
         if charuco_res["ok_pose"] and charuco_res["rvec"] is not None and charuco_res["tvec"] is not None:
             r_cam_board, _ = cv2.Rodrigues(charuco_res["rvec"])
@@ -176,7 +190,7 @@ def main():
 
     for i, p in enumerate(color_img_path):
         img = load_color_image(p)
-        charuco_res = detect_charuco(img, color_K, color_D, board, dictionary, axis_len=0.05, debug=False)
+        charuco_res = detect_charuco(img, color_K, color_D, board, dictionary, axis_len=0.05, refine_corners_kernel=5, debug=DEBUG_COLOR)
         if charuco_res["ok_pose"] and charuco_res["rvec"] is not None and charuco_res["tvec"] is not None:
             r_cam_board, _ = cv2.Rodrigues(charuco_res["rvec"])
             t_cam_board = charuco_res["tvec"].reshape(3,1)
@@ -216,7 +230,7 @@ def main():
     print(f"Using {len(t_cam_board_list_ir )} IR camera poses from Charuco.")
     print(f"IR rotation matrix:\n{r_tool0_from_cam_ir}")
     print("IR quaternion:\n", *ir_quat)
-    print("IR RPY Quat:\n", *ir_rpy)
+    print("IR RPY Rad:\n", *ir_rpy)
     print("IR RPY Deg:\n", *ir_rpy_deg)
     print("IR translation XYZ:\n", *t_tool0_from_cam_ir.flatten())
     
@@ -225,7 +239,7 @@ def main():
     print(f"Using {len(t_cam_board_list_color)} color camera poses from Charuco.")
     print(f"Color rotation matrix:\n{r_tool0_from_cam_color}")
     print("Color quaternion:\n", *color_quat)
-    print("Color RPY Quat:\n", *color_rpy)
+    print("Color RPY Rad:\n", *color_rpy)
     print("Color RPY Deg:\n", *color_rpy_deg)
     print("Color translation XYZ:\n", *t_tool0_from_cam_color.flatten())
   #  print (color_img_path)
