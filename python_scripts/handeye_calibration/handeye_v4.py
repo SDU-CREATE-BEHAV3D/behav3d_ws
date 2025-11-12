@@ -6,16 +6,18 @@ import cv2
 import copy
 import numpy as np
 from utils.session import Session
-from utils.manifest import read_manifest, load_robot_poses_decomposed, construct_image_paths
+from utils.manifest import read_manifest, load_robot_poses_decomposed,load_robot_poses, construct_image_paths
 from utils.image_loader import load_ir_image, preprocess_percentile_ir, preprocess_threshold_ir, load_color_image
-from utils.transforms import rotmat_to_quat_xyzw, rotmat_to_rpy
+from utils.transforms import rotmat_to_quat_xyzw, rotmat_to_rpy,compose_T
 from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
 
-DEBUG_IR = True
+DEBUG_IR = False
 DEBUG_COLOR = False
+VALIDATION = True
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/251111_112516/"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/251112_165605/"
+
 scan_folder = "manual_caps"
 
 my_session = Session(SESSION_PATH, scan_folder)
@@ -29,6 +31,7 @@ manifest = read_manifest(my_session.path, my_session._scan_folder)
 
 #3 Load Captures Paths
 t_base_tool0,r_base_tool0  = load_robot_poses_decomposed(manifest)
+T_base_tool0_list = load_robot_poses(manifest)
 ir_img_path = construct_image_paths(manifest, my_session, image_type="ir")
 color_img_path = construct_image_paths(manifest, my_session, image_type="color")
 
@@ -41,7 +44,7 @@ method_map = {
     "Andreff": cv2.CALIB_HAND_EYE_ANDREFF,
     "Daniilidis": cv2.CALIB_HAND_EYE_DANIILIDIS,
 }
-method = "Daniilidis"
+method = "Park"
 
 # ---- Board parameters----
 SQUARES_X = 6
@@ -157,16 +160,21 @@ def main():
 #IR Handeye main ingredients
     r_cam_board_list_ir = []
     t_cam_board_list_ir = []
+    T_cam_board_list_ir = []
 
     r_base_tool0_keep_ir = []
     t_base_tool0_keep_ir = []
+    T_base_tool0_keep_ir = []
 
+    
 #Color Handeye main ingredients
     r_cam_board_list_color = []
     t_cam_board_list_color = []
+    T_cam_board_list_color = []
 
     r_base_tool0_keep_color = []
     t_base_tool0_keep_color = []
+    T_base_tool0_keep_color = []
 
 # IR Execute detection and Collect ir pairs 
 
@@ -182,10 +190,12 @@ def main():
 
             r_cam_board_list_ir .append(r_cam_board)
             t_cam_board_list_ir .append(t_cam_board)
-
+            T_cam_board = compose_T(r_cam_board,t_cam_board)
+            T_cam_board_list_ir.append(T_cam_board)
             r_base_tool0_keep_ir .append(r_base_tool0[i])
             t_base_tool0_keep_ir .append(t_base_tool0[i].reshape(3,1))
-           
+            T_base_tool0_keep_ir .append(T_base_tool0_list[i])
+
 # Color charuco detection and Collect color pose pairs 
 
     for i, p in enumerate(color_img_path):
@@ -197,30 +207,32 @@ def main():
 
             r_cam_board_list_color .append(r_cam_board)
             t_cam_board_list_color .append(t_cam_board)
-
+            T_cam_board = compose_T(r_cam_board,t_cam_board)
+            T_cam_board_list_color.append(T_cam_board)
             r_base_tool0_keep_color .append(r_base_tool0[i])
             t_base_tool0_keep_color .append(t_base_tool0[i].reshape(3,1))
+            T_base_tool0_keep_color .append(T_base_tool0_list[i])
            
 #Handeye solveR
 
-    r_tool0_from_cam_ir, t_tool0_from_cam_ir = cv2.calibrateHandEye(
+    r_tool0_cam_ir, t_tool0_cam_ir = cv2.calibrateHandEye(
         r_base_tool0_keep_ir , t_base_tool0_keep_ir ,
         r_cam_board_list_ir ,   t_cam_board_list_ir ,
         method=method_map[method]
     )
 
-    r_tool0_from_cam_color, t_tool0_from_cam_color = cv2.calibrateHandEye(
+    r_tool0_cam_color, t_tool0_cam_color = cv2.calibrateHandEye(
         r_base_tool0_keep_color , t_base_tool0_keep_color ,
         r_cam_board_list_color ,   t_cam_board_list_color ,
         method=method_map[method]
     )
 #Format to quat and rpy
-    ir_quat= rotmat_to_quat_xyzw(r_tool0_from_cam_ir)
-    ir_rpy =rotmat_to_rpy(r_tool0_from_cam_ir)
-    ir_rpy_deg =rotmat_to_rpy(r_tool0_from_cam_ir,degrees=True)
-    color_quat= rotmat_to_quat_xyzw(r_tool0_from_cam_color)
-    color_rpy =rotmat_to_rpy(r_tool0_from_cam_color)
-    color_rpy_deg =rotmat_to_rpy(r_tool0_from_cam_color,degrees=True)
+    ir_quat= rotmat_to_quat_xyzw(r_tool0_cam_ir)
+    ir_rpy =rotmat_to_rpy(r_tool0_cam_ir)
+    ir_rpy_deg =rotmat_to_rpy(r_tool0_cam_ir,degrees=True)
+    color_quat= rotmat_to_quat_xyzw(r_tool0_cam_color)
+    color_rpy =rotmat_to_rpy(r_tool0_cam_color)
+    color_rpy_deg =rotmat_to_rpy(r_tool0_cam_color,degrees=True)
     print ("Starting hand-eye calibration process...")
 
     print(f"Loaded {len(t_base_tool0)} robot poses from manifest.")
@@ -228,21 +240,54 @@ def main():
     print ("\n------IR calibration results------\n")
     print(f"Using {len(t_base_tool0_keep_ir)} robot poses after IR detection.")
     print(f"Using {len(t_cam_board_list_ir )} IR camera poses from Charuco.")
-    print(f"IR rotation matrix:\n{r_tool0_from_cam_ir}")
+    print(f"IR rotation matrix:\n{r_tool0_cam_ir}")
     print("IR quaternion:\n", *ir_quat)
     print("IR RPY Rad:\n", *ir_rpy)
     print("IR RPY Deg:\n", *ir_rpy_deg)
-    print("IR translation XYZ:\n", *t_tool0_from_cam_ir.flatten())
+    print("IR translation XYZ:\n", *t_tool0_cam_ir.flatten())
     
     print ("\n------Color calibration results------\n")
     print(f"Using {len(t_base_tool0_keep_color)} robot poses after color detection.")
     print(f"Using {len(t_cam_board_list_color)} color camera poses from Charuco.")
-    print(f"Color rotation matrix:\n{r_tool0_from_cam_color}")
+    print(f"Color rotation matrix:\n{r_tool0_cam_color}")
     print("Color quaternion:\n", *color_quat)
     print("Color RPY Rad:\n", *color_rpy)
     print("Color RPY Deg:\n", *color_rpy_deg)
-    print("Color translation XYZ:\n", *t_tool0_from_cam_color.flatten())
+    print("Color translation XYZ:\n", *t_tool0_cam_color.flatten())
   #  print (color_img_path)
+
+    # ---------- Validation loop ----------
+    if VALIDATION == True:
+        T_tool0_cam_ir = compose_T(r_tool0_cam_ir,t_tool0_cam_ir)
+        T_tool0_cam_color = compose_T(r_tool0_cam_color,t_tool0_cam_color)
+        
+        T_base_board_all = []
+        
+        for i, T_base_tool0 in enumerate(T_base_tool0_keep_color):
+
+            # Full chain
+            T_base_cam = T_base_tool0 @ T_tool0_cam_ir
+            T_base_board = T_base_cam @ T_cam_board_list_ir[i]
+            T_base_board_all.append(T_base_board)
+
+        # ---------- Check consistency ----------
+        positions = np.array([T[:3, 3] for T in T_base_board_all])
+        mean_pos = positions.mean(axis=0)
+        std_pos = positions.std(axis=0)
+
+        print("=== Validation results ===")
+        print(f"Board position mean [m]: {mean_pos}")
+        print(f"Board position std [m]:  {std_pos}")
+        print(f"Average distance spread: {np.linalg.norm(std_pos):.5f} m")
+
+        # Optional loop closure check (board as world)
+        T_board_base = np.linalg.inv(T_base_board_all[0])
+        closure = T_board_base @ T_base_board_all[-1]
+        rot_err = np.degrees(np.arccos(np.clip((np.trace(closure[:3,:3]) - 1) / 2, -1, 1)))
+        trans_err = np.linalg.norm(closure[:3,3])
+        print(f"Loop closure rotation error: {rot_err:.3f} deg")
+        print(f"Loop closure translation error: {trans_err*1000:.3f} mm")
+
     print(cv2.__version__)
 
 

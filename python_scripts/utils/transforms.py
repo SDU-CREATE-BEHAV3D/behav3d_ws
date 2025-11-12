@@ -38,7 +38,11 @@ def rotmat_to_rpy(Rm: np.ndarray, degrees: bool = False, reorthonormalize: bool 
             Rm = U @ Vt
     return R.from_matrix(Rm).as_euler('xyz', degrees=degrees)
 
-
+def compose_T(rvec, tvec):
+    T = np.eye(4)
+    T[:3, :3] = rvec
+    T[:3, 3] = tvec.reshape(3)
+    return T
 # --- Example usage ---
 # Rm = np.array([[-0.99996449, -0.00820984, -0.00190121],
 #                [-0.00201247,  0.01356393,  0.99990598],
