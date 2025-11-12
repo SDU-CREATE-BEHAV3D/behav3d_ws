@@ -69,6 +69,7 @@ def construct_image_paths(manifest, session, image_type="color"):
             image_rel = c.get(image_type, None)
             #comnstruct absolute paths
             image_abs = os.path.join(session.path, session._scan_folder, image_rel)
+            image_abs = os.path.join(session.path, session._scan_folder, image_rel)
             image_paths.append(image_abs)
     return image_paths
 
