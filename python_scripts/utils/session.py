@@ -1,9 +1,6 @@
 import os
-import yaml
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-
-import cv2
 
 class Session:
     def __init__(self, path, init_scan_folder=None, config_folder="config"):
@@ -34,9 +31,6 @@ class Session:
             self.load_scan_folder(self._scan_folder)
         else:
             print("No scan folder provided during initialization.")
-        
-       
-
 
     def load_scan_folder(self, scan_folder):
         print(f"Loading scan folder: {scan_folder}")
@@ -45,13 +39,6 @@ class Session:
         self.depth_file_paths = self._get_image_file_paths(image_type="depth")
         self.color_file_paths = self._get_image_file_paths(image_type="color") 
         self.ir_file_paths = self._get_image_file_paths(image_type="ir")
-    
-    # def _read_manifest(self):
-    #     print(f"Reading manifest for scan folder: {self._scan_folder}")
-    #     manifest_path = os.path.join(self.path, self._scan_folder, "manifest.yaml")
-    #     with open(manifest_path, 'r') as f:
-    #         manifest = yaml.safe_load(f)
-    #     return manifest
     
     def _get_image_file_paths(self, image_type):
         file_paths = []
@@ -75,4 +62,3 @@ class Session:
         if os.path.exists(intrinsics_path):
             return intrinsics_path
         return None # Raise error?
-    

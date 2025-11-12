@@ -8,10 +8,8 @@ import cv2
 import open3d as o3d
 import open3d.core as o3c
 from scipy.spatial.transform import Rotation as R
-import math
 
 from utils.session import Session
-from utils.load_helpers import load_camera_intrinsics
 from utils.manifest import read_manifest, load_robot_poses, transform_robot_to_camera_pose, construct_image_paths
 from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
@@ -21,9 +19,7 @@ from utils.integration import visualize_camera_poses
 
 SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/Behav3d_ws/python_scripts/251111_112516"
 scan_folder = "manual_caps"
-
 my_session = Session(SESSION_PATH, scan_folder)
-
 
 class TSDF_Integration():
 
@@ -37,20 +33,23 @@ class TSDF_Integration():
             depth_scale =1000.0,
             device ='CPU:0',
         ):
-        
+        # initialize session and load poses
         self.session = session
         self.manifest = read_manifest(self.session.path, self.session._scan_folder)
         self.T_base_tool0_list = load_robot_poses(self.manifest)
         self.T_tool0_ir = load_extrinsics(self.session._camera_extrinsics_path, frame_key="T_tool0_ir")
         self.T_base_ir = [T_base_tool0 @ self.T_tool0_ir for T_base_tool0 in self.T_base_tool0_list]
 
+        # load depth images
         self.image_paths = construct_image_paths(self.manifest, self.session, image_type="depth")
         self.images = load_images(self.image_paths, image_type="depth", library="cv2")
 
+        # load intrinsics
         self.device = o3c.Device(device)
         self.width, self.height, self.K, self.D = load_intrinsics(self.session.depth_intrinsics_path)
         self.pinhole_matrix = intrinsics_matrix(self.width, self.height, self.K)
 
+        # TSDF parameters
         self.voxel_size = voxel_size
         self.block_count = block_count
         self.block_resolution = block_resolution
@@ -59,6 +58,7 @@ class TSDF_Integration():
 
         self.mesh = o3d.geometry.TriangleMesh()
 
+        # initialize VoxelBlockGrid
         self.vbg = o3d.t.geometry.VoxelBlockGrid(
             attr_names=('tsdf', 'weight'),
             attr_dtypes=(o3c.float32, o3c.float32),
@@ -77,7 +77,7 @@ class TSDF_Integration():
             self.T_base_ir_tensors.append(T_tensor)
         return self.T_base_ir_tensors
 
-    
+    ### tensorize intrinsics
     def _tensorize_intrinsics(self):
         self.K_cpu = o3c.Tensor(
             np.asarray(self.pinhole_matrix.intrinsic_matrix),
@@ -85,7 +85,6 @@ class TSDF_Integration():
             self.device
         )
         return self.K_cpu
-
     
     ### tensorize depth images
     def _tensorize_depth_images(self):
@@ -95,8 +94,7 @@ class TSDF_Integration():
             self.depth_tensors.append(depth_tensor)
         return self.depth_tensors
 
-
-    ### integrate depth images into TSDF (GPU-safe, depth-only)
+    ### integrate depth images into TSDF (depth-only)
     def integrate_depths(self):
         self._tensorize_robot_poses()
         self._tensorize_intrinsics()
@@ -128,8 +126,6 @@ class TSDF_Integration():
             # color each frame differently
             color = np.random.rand(3)
             pcd.paint_uniform_color(color)
-
-            # store or display
             if i == 0:
                 self.pcds = []
             self.pcds.append(pcd)
@@ -152,13 +148,10 @@ class TSDF_Integration():
                 self.depth_scale,
                 self.depth_max
             )
-
             print(f"Integrated depth image {i+1}/{len(self.depth_tensors)}")
 
         # visualize all per-frame clouds together
         o3d.visualization.draw(self.pcds + [o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
-
-        
 
         # ---- Extract and visualize mesh ----
         self.mesh = self.vbg.extract_triangle_mesh().to_legacy()
@@ -166,12 +159,6 @@ class TSDF_Integration():
         print("Vertices:", len(self.mesh.vertices))
         print("TSDF Integration complete.")
         return self.mesh
-
-
-
-
-
-
 
 
 ### test the tsdf integration class
@@ -183,17 +170,7 @@ print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}"
 img = tsdf_integration.images[0]
 print("Depth range:", np.min(img), np.max(img))
 
-
-
 mesh = tsdf_integration.integrate_depths()
 o3d.visualization.draw([mesh, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
 # save mesh
 o3d.io.write_triangle_mesh("tsdf_mesh.stl", mesh)
-
-
-
-
-
-
-# mesh = tsdf_integration.integrate_depths()
-# o3d.visualization.draw([mesh, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
