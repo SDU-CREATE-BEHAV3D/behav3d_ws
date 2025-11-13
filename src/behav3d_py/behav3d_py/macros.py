@@ -104,9 +104,16 @@ class Macros:
             p_w = p_t + R_t.apply(p_loc)
             R_w = R_t * R_loc
 
-            # Apply Z jitter if requested
+            # Apply jitter along the ray to the target instead of world Z
             if z_jitter > 0.0:
-                p_w[2] += np.random.uniform(-z_jitter, +z_jitter)
+                # direction from viewpoint towards the target (unit vector)
+                ray_dir = p_t - p_w
+                n_ray = np.linalg.norm(ray_dir)
+                if n_ray > 1e-9:
+                    ray_dir /= n_ray
+                    delta = np.random.uniform(-z_jitter, +z_jitter)
+                    p_w = p_w + delta * ray_dir
+
 
             # Create PoseStamped
             ps_w = PoseStamped()

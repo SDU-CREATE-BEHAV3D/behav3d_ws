@@ -147,8 +147,8 @@ def generate_launch_description():
             "enable_depth_registration" : "False",
 
             # PointCloud
-            "enable_colored_point_cloud" : "False",
-            "cloud_frame_id":"femto_color_optical_calib",
+            "enable_point_cloud" : "True",
+            "cloud_frame_id":"femto_ir_optical_calib",
             # TODO: 'enable_ldp' throws compilation error!
             # Laser Dot Projector (true for scan / false for calibration)
             # "enable_ldp": "false"

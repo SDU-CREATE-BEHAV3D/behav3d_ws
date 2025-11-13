@@ -12,13 +12,13 @@ from utils.transforms import rotmat_to_quat_xyzw, rotmat_to_rpy,compose_T
 from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
 
-DEBUG_IR = False
+DEBUG_IR = True
 DEBUG_COLOR = False
 VALIDATION = True
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/251112_165605/"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/251113_151155"
 
-scan_folder = "manual_caps"
+scan_folder = "scan_fib_simple"
 
 my_session = Session(SESSION_PATH, scan_folder)
 
@@ -51,13 +51,13 @@ SQUARES_X = 6
 SQUARES_Y = 5
 SQUARE_LENGTH_M = 0.055
 MARKER_LENGTH_M = 0.041
-LENGTH_PX = 640   # total length of the page in pixels
-MARGIN_PX = 20    # size of the margin in pixels
-
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
-board = cv2.aruco.CharucoBoard.create(	SQUARES_X, SQUARES_Y, SQUARE_LENGTH_M, MARKER_LENGTH_M, dictionary	) 
+
+board = cv2.aruco.CharucoBoard.create(SQUARES_X, SQUARES_Y, SQUARE_LENGTH_M, MARKER_LENGTH_M, dictionary) 
 
 #Draw for debug:
+# LENGTH_PX = 640   # total length of the page in pixels
+# MARGIN_PX = 20    # size of the margin in pixels
 #board_img = cv2.aruco.CharucoBoard.draw(board, (LENGTH_PX, int(LENGTH_PX*(SQUARES_Y / SQUARES_X))), marginSize=MARGIN_PX)
 
 def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, refine_corners_kernel=None, debug=bool):
@@ -155,6 +155,8 @@ def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, refine_corners_ke
         cv2.destroyWindow("annot")
     return out
 
+    # TODO: Maybe implement? cv::aruco::drawDetectedCornersCharuco(imageCopy, charucoCorners, charucoIds, color); *https://docs.opencv.org/3.4/df/d4a/tutorial_charuco_detection.html*
+
 def main():
 
 #IR Handeye main ingredients
@@ -176,11 +178,15 @@ def main():
     t_base_tool0_keep_color = []
     T_base_tool0_keep_color = []
 
-# IR Execute detection and Collect ir pairs 
+    # IR Execute detection and Collect ir pairs 
+
+    skip_idx = {10,11,12,13,14,15,17}  # Index to skip
 
     for i, p in enumerate(ir_img_path):
+        if i in skip_idx:
+            continue
+
         gray = load_ir_image(p)
-        # pre = preprocess_ir(gray, clip=2.2, tile=(3,3), p_low=1, p_high=97q, gamma=1.5)
         pre = preprocess_threshold_ir(gray, 2500)
         charuco_res = detect_charuco(pre, ir_K, ir_D, board, dictionary, axis_len=0.05, debug=DEBUG_IR)
 
@@ -188,13 +194,13 @@ def main():
             r_cam_board, _ = cv2.Rodrigues(charuco_res["rvec"])
             t_cam_board = charuco_res["tvec"].reshape(3,1)
 
-            r_cam_board_list_ir .append(r_cam_board)
-            t_cam_board_list_ir .append(t_cam_board)
-            T_cam_board = compose_T(r_cam_board,t_cam_board)
+            r_cam_board_list_ir.append(r_cam_board)
+            t_cam_board_list_ir.append(t_cam_board)
+            T_cam_board = compose_T(r_cam_board, t_cam_board)
             T_cam_board_list_ir.append(T_cam_board)
-            r_base_tool0_keep_ir .append(r_base_tool0[i])
-            t_base_tool0_keep_ir .append(t_base_tool0[i].reshape(3,1))
-            T_base_tool0_keep_ir .append(T_base_tool0_list[i])
+            r_base_tool0_keep_ir.append(r_base_tool0[i])
+            t_base_tool0_keep_ir.append(t_base_tool0[i].reshape(3,1))
+            T_base_tool0_keep_ir.append(T_base_tool0_list[i])
 
 # Color charuco detection and Collect color pose pairs 
 
@@ -263,7 +269,7 @@ def main():
         
         T_base_board_all = []
         
-        for i, T_base_tool0 in enumerate(T_base_tool0_keep_color):
+        for i, T_base_tool0 in enumerate(T_base_tool0_keep_ir):
 
             # Full chain
             T_base_cam = T_base_tool0 @ T_tool0_cam_ir
@@ -289,11 +295,6 @@ def main():
         print(f"Loop closure translation error: {trans_err*1000:.3f} mm")
 
     print(cv2.__version__)
-
-
-    # 8) Residuals AX ≈ XB
-  
-    # residuals = compute_residuals_AX_XB(Ts_b_t, Ts_c_b, T_t_c)
 
     return 0
 
