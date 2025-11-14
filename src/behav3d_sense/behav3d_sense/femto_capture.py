@@ -288,7 +288,7 @@ class FemtoCapture:
             f_depth = cfg_dir / "depth_intrinsics.yaml"
             self._write_textfile(f_depth, depth_txt)
             out["depth"] = str(f_depth)
-            self.node.get_logger().warn(f"[intrinsics] depth -> borrowed from IR ({ii.header.frame_id} {ii.width}x{ii.height})") # Why borrow from IR?
+            self.node.get_logger().warn(f"[intrinsics] depth -> borrowed from IR ({ii.header.frame_id} {ii.width}x{ii.height})") # Why borrow from IR
         else:
             self.node.get_logger().warn("[intrinsics] ir_info missing; cannot borrow for depth. NOT writing depth_intrinsics.yaml.")
 
