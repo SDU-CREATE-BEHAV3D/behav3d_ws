@@ -50,7 +50,7 @@ class FemtoCapture:
         self.depth_info_topic = node.get_parameter('depth_info_topic').get_parameter_value().string_value
         self.ir_info_topic = node.get_parameter('ir_info_topic').get_parameter_value().string_value
 
-        self.decimate = max(1, int(node.get_parameter('decimate').get_parameter_value().integer_value))
+        self.decimate = max(1, int(node.get_parameter('decimate').get_parameter_value().integer_value)) # Why decimate?
         self.save_depth_as_npy = node.get_parameter('save_depth_as_npy').get_parameter_value().bool_value
         self.depth32_to_png16_mm = node.get_parameter('depth32_to_png16_mm').get_parameter_value().bool_value
         self.pair_slop_ns = int(node.get_parameter('pair_slop_ms').get_parameter_value().integer_value) * 1_000_000
@@ -288,7 +288,7 @@ class FemtoCapture:
             f_depth = cfg_dir / "depth_intrinsics.yaml"
             self._write_textfile(f_depth, depth_txt)
             out["depth"] = str(f_depth)
-            self.node.get_logger().warn(f"[intrinsics] depth -> borrowed from IR ({ii.header.frame_id} {ii.width}x{ii.height})")
+            self.node.get_logger().warn(f"[intrinsics] depth -> borrowed from IR ({ii.header.frame_id} {ii.width}x{ii.height})") # Why borrow from IR
         else:
             self.node.get_logger().warn("[intrinsics] ir_info missing; cannot borrow for depth. NOT writing depth_intrinsics.yaml.")
 
