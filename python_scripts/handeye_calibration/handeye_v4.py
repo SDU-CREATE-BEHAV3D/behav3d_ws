@@ -12,13 +12,13 @@ from utils.transforms import rotmat_to_quat_xyzw, rotmat_to_rpy,compose_T
 from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
 
-DEBUG_IR = True
-DEBUG_COLOR = False
+DEBUG_IR = False
+DEBUG_COLOR = True
 VALIDATION = True
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/251113_151155"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/260113_170839"
 
-scan_folder = "scan_fib_simple"
+scan_folder = "manual_caps"
 
 my_session = Session(SESSION_PATH, scan_folder)
 
@@ -51,6 +51,7 @@ SQUARES_X = 6
 SQUARES_Y = 5
 SQUARE_LENGTH_M = 0.055
 MARKER_LENGTH_M = 0.041
+
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
 
 board = cv2.aruco.CharucoBoard.create(SQUARES_X, SQUARES_Y, SQUARE_LENGTH_M, MARKER_LENGTH_M, dictionary) 
@@ -180,7 +181,7 @@ def main():
 
     # IR Execute detection and Collect ir pairs 
 
-    skip_idx = {10,11,12,13,14,15,17}  # Index to skip
+    skip_idx = {10}  # Index to skip
 
     for i, p in enumerate(ir_img_path):
         if i in skip_idx:

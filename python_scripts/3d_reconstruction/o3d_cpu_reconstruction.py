@@ -17,21 +17,21 @@ from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/251112_165605"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/260113_170839"
 scan_folder = "manual_caps"
 my_session = Session(SESSION_PATH, scan_folder)
 
 class TSDF_Integration():
 
     def __init__(
-            self, 
+            self,
             session,
-            voxel_size =1/512,
-            block_count =100000,
-            block_resolution =8,
-            depth_max =1.0,
-            depth_scale =1000.0,
-            device ='CPU:0',
+            voxel_size=1/1024,
+            block_count=100000,
+            block_resolution=16,
+            depth_max=1.0,
+            depth_scale=1000.0,
+            device='CPU:0',   # <-- CHANGED: CPU only
         ):
         # initialize session and load poses
         self.session = session
@@ -45,7 +45,7 @@ class TSDF_Integration():
         self.images = load_images(self.image_paths, image_type="depth", library="cv2")
 
         # load intrinsics
-        self.device = o3c.Device(device)
+        self.device = o3c.Device(device)  # <-- now CPU
         self.width, self.height, self.K, self.D = load_intrinsics(self.session.depth_intrinsics_path)
         self.pinhole_matrix = intrinsics_matrix(self.width, self.height, self.K)
 
@@ -58,7 +58,7 @@ class TSDF_Integration():
 
         self.mesh = o3d.geometry.TriangleMesh()
 
-        # initialize VoxelBlockGrid
+        # initialize VoxelBlockGrid (CPU)
         self.vbg = o3d.t.geometry.VoxelBlockGrid(
             attr_names=('tsdf', 'weight'),
             attr_dtypes=(o3c.float32, o3c.float32),
@@ -69,28 +69,29 @@ class TSDF_Integration():
             device=self.device
         )
 
-    ### tensorize robot poses
+    ### tensorize robot poses (CPU)
     def _tensorize_robot_poses(self):
+        cpu = o3c.Device("CPU:0")
         self.T_base_ir_tensors = []
         for T in self.T_base_ir:
-            T_tensor = o3c.Tensor(T, o3c.Dtype.Float64, self.device)
+            T_tensor = o3c.Tensor(T, o3c.Dtype.Float64, cpu)
             self.T_base_ir_tensors.append(T_tensor)
         return self.T_base_ir_tensors
 
-    ### tensorize intrinsics
+    ### tensorize intrinsics (CPU)
     def _tensorize_intrinsics(self):
         self.K_cpu = o3c.Tensor(
             np.asarray(self.pinhole_matrix.intrinsic_matrix),
             o3c.Dtype.Float64,
-            self.device
+            self.device   # CPU now
         )
         return self.K_cpu
-    
-    ### tensorize depth images
+
+    ### tensorize depth images (CPU)
     def _tensorize_depth_images(self):
         self.depth_tensors = []
         for img in self.images:
-            depth_tensor = o3c.Tensor(img, o3c.Dtype.UInt16, self.device)
+            depth_tensor = o3c.Tensor(img, o3c.Dtype.UInt16, self.device)  # CPU now
             self.depth_tensors.append(depth_tensor)
         return self.depth_tensors
 
@@ -101,12 +102,15 @@ class TSDF_Integration():
         self._tensorize_depth_images()
 
         for i, depth_tensor in enumerate(self.depth_tensors):
-            T_base_ir = self.T_base_ir_tensors[i]
+            # poses are CPU tensors; invert on CPU; keep on CPU
+            T_base_ir_cpu = self.T_base_ir_tensors[i]
+            Tcw_cpu = o3c.Tensor(
+                np.linalg.inv(T_base_ir_cpu.numpy()),
+                o3c.Dtype.Float64,
+                self.device  # CPU
+            )
 
-            # camera-to-world transform
-            Tcw_cpu = o3c.Tensor(np.linalg.inv(T_base_ir.numpy()), o3c.Dtype.Float64, self.device)
-
-            # ---- create per-frame point cloud for visualization ----
+            # ---- per-frame point cloud for visualization (CPU -> numpy OK) ----
             depth_o3d = o3d.geometry.Image(depth_tensor.numpy())
             intrinsic = o3d.camera.PinholeCameraIntrinsic(
                 self.width, self.height,
@@ -114,35 +118,33 @@ class TSDF_Integration():
                 self.K[0, 2], self.K[1, 2]
             )
 
-            # generate point cloud from depth
             pcd = o3d.geometry.PointCloud.create_from_depth_image(
                 depth_o3d,
                 intrinsic,
-                extrinsic=np.linalg.inv(T_base_ir.numpy()),
+                extrinsic=np.linalg.inv(T_base_ir_cpu.numpy()),
                 depth_scale=self.depth_scale,
                 depth_trunc=self.depth_max
             )
 
-            # color each frame differently
             color = np.random.rand(3)
             pcd.paint_uniform_color(color)
             if i == 0:
                 self.pcds = []
             self.pcds.append(pcd)
 
-            # compute voxel blocks (correct call)
+            # TSDF integration (CPU tensor pipeline)
+            depth_img_t = o3d.t.geometry.Image(depth_tensor)
             block_coords = self.vbg.compute_unique_block_coordinates(
-                o3d.t.geometry.Image(depth_tensor),
+                depth_img_t,
                 self.K_cpu,
                 Tcw_cpu,
                 self.depth_scale,
                 self.depth_max
             )
 
-            # integrate frame
             self.vbg.integrate(
                 block_coords,
-                o3d.t.geometry.Image(depth_tensor),
+                depth_img_t,
                 self.K_cpu,
                 Tcw_cpu,
                 self.depth_scale,
@@ -153,7 +155,7 @@ class TSDF_Integration():
         # visualize all per-frame clouds together
         o3d.visualization.draw(self.pcds + [o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
 
-        # ---- Extract and visualize mesh ----
+        # Extract and visualize mesh
         self.mesh = self.vbg.extract_triangle_mesh().to_legacy()
         self.mesh.compute_vertex_normals()
         print("Vertices:", len(self.mesh.vertices))
@@ -163,14 +165,14 @@ class TSDF_Integration():
 
 ### test the tsdf integration class
 tsdf_integration = TSDF_Integration(my_session)
-# print("TSDF Integration initialized.")
 print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
 print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}")
-#Check for NaNs or zeros
+
 img = tsdf_integration.images[0]
 print("Depth range:", np.min(img), np.max(img))
 
 mesh = tsdf_integration.integrate_depths()
 o3d.visualization.draw([mesh, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
+
 # save mesh
 o3d.io.write_triangle_mesh("/home/lab/robot/meshes/tsdf_mesh.stl", mesh)

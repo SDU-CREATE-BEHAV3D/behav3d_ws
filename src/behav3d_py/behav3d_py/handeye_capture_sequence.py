@@ -44,7 +44,7 @@ class MoveAndPrintTest(Node):
         self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
         self.cmd.setAcc(0.05)
         self.cmd.setSpd(0.05)
-        self.cmd.setEef("femto_color_optical_calib") 
+        self.cmd.setEef("femto__color_optical_frame") 
         self.cmd.setLIN()
         self.cmd.input(prompt="Press ENTER to go to target...")
         # Run the Fibonacci spherical-cap scan (ENTER-only prompt between captures)

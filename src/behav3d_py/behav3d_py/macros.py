@@ -77,7 +77,7 @@ class Macros:
         order = np.arange(samples - 1, -1, -1, dtype=int)
 
         poses_world: List[PoseStamped] = []
-        Rz_pi = R.from_rotvec([0.0, 0.0, np.pi])
+        Rz_adjust = R.from_rotvec([0.0, 0.0, -np.pi / 2])
 
         for idx in order:
             d = dirs_local[idx]
@@ -98,7 +98,7 @@ class Macros:
             y_axis = np.cross(z_axis, x_axis)
             y_axis /= max(np.linalg.norm(y_axis), 1e-12)
 
-            R_loc = R.from_matrix(np.column_stack((x_axis, y_axis, z_axis))) * Rz_pi
+            R_loc = R.from_matrix(np.column_stack((x_axis, y_axis, z_axis))) * Rz_adjust
 
             # Transform to world coordinates
             p_w = p_t + R_t.apply(p_loc)
