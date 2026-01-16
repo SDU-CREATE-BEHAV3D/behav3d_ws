@@ -110,6 +110,25 @@ namespace behav3d::trajectory_builder
 
             // Roll so +X aligns (minimally) with target +X (== local +X)
             p_local = alignTarget(p_local, Eigen::Vector3d::UnitX());
+            // rotate yaw by π about LOCAL Z (post-multiply)
+            {
+            Eigen::Quaterniond q_old(
+                p_local.pose.orientation.w,
+                p_local.pose.orientation.x,
+                p_local.pose.orientation.y,
+                p_local.pose.orientation.z);
+
+            // Explicit construction from AngleAxis
+            const Eigen::Quaterniond q_zpi( Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitZ()) );
+
+            Eigen::Quaterniond q_new = q_old * q_zpi;   // local-frame rotation
+            q_new.normalize();
+
+            p_local.pose.orientation.x = q_new.x();
+            p_local.pose.orientation.y = q_new.y();
+            p_local.pose.orientation.z = q_new.z();
+            p_local.pose.orientation.w = q_new.w();
+            }
 
             // --- 3. Express pose in the world frame of tgt.
             out.emplace_back(changeBasis(tgt, p_local));

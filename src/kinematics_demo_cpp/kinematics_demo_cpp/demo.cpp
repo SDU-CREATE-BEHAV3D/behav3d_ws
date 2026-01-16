@@ -86,6 +86,8 @@ private:
       grid_sweep();
     else if (cmd == "fibonacci_cap")
       fibonacci_cap();
+    else if (cmd == "get_pose")
+      get_pose();
     else if (cmd == "quit")
       rclcpp::shutdown();
     else
@@ -98,7 +100,7 @@ private:
   void home()
   {
     // Joint‑space “home” configuration (given in degrees)
-    const std::vector<double> home_joints_deg = {-90.0, -120.0, 120.0, -90.0, 90.0, -180.0};
+    const std::vector<double> home_joints_deg = {-90.0, -120.0, 120.0, -90.0, 90.0, -150.0};
 
     // Convert degrees to radians for MoveIt
     std::vector<double> home_joints_rad;
@@ -138,6 +140,36 @@ private:
       ctrl_->executeTrajectory(ctrl_->planTarget(center, "PTP"));
     }
     home();
+  }
+
+  void get_pose()
+  {
+    const std::string eef = ctrl_->getEefLink();           // p.ej. "femto__depth_optical_frame" o "ur20_tool0"
+    const std::string world = ctrl_->planningFrame();      // típicamente "world"
+    const std::string tool0 = "ur20_tool0";                // explícito como pediste
+
+    // 1) Pose del eef respecto a world
+    auto pose_world = ctrl_->getCurrentPose(eef, world);
+    RCLCPP_INFO(this->get_logger(),
+                "[WORLD] Pose of '%s' in '%s'\n"
+                "  pos: [%.6f, %.6f, %.6f]\n"
+                "  ori (xyzw): [%.6f, %.6f, %.6f, %.6f]",
+                eef.c_str(), world.c_str(),
+                pose_world.pose.position.x, pose_world.pose.position.y, pose_world.pose.position.z,
+                pose_world.pose.orientation.x, pose_world.pose.orientation.y,
+                pose_world.pose.orientation.z, pose_world.pose.orientation.w);
+
+    // 2) Pose del eef expresada en el frame ur20_tool0
+    //    (to_link = eef, from_link = tool0)
+    auto pose_in_tool0 = ctrl_->getRelativePose(tool0, eef);
+    RCLCPP_INFO(this->get_logger(),
+                "[%s] Pose of '%s' in '%s'\n"
+                "  pos: [%.6f, %.6f, %.6f]\n"
+                "  ori (xyzw): [%.6f, %.6f, %.6f, %.6f]",
+                tool0.c_str(), eef.c_str(), tool0.c_str(),
+                pose_in_tool0.pose.position.x, pose_in_tool0.pose.position.y, pose_in_tool0.pose.position.z,
+                pose_in_tool0.pose.orientation.x, pose_in_tool0.pose.orientation.y,
+                pose_in_tool0.pose.orientation.z, pose_in_tool0.pose.orientation.w);
   }
 
   void draw_square_seq(double side = 0.4,
@@ -250,8 +282,8 @@ private:
   }
 
   void fibonacci_cap(double radius = 0.75,
-                     double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
-                     double cap_deg = 30.0, int n_points = 32)
+                     double center_x = 0.0, double center_y = 1.00, double center_z = 0.0,
+                     double cap_deg = 30.0, int n_points = 16)
   {
     // 1. Start from home
     home();
@@ -363,6 +395,11 @@ int main(int argc, char **argv)
   auto visualizer = std::make_shared<MotionVisualizer>(visualizer_opts);
 
   auto demo = std::make_shared<PilzDemo>(controller, visualizer);
+
+  controller->set_parameters({
+    rclcpp::Parameter("max_velocity_scale", 0.2),
+    rclcpp::Parameter("max_accel_scale", 0.2),
+  });
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(controller);

@@ -117,7 +117,7 @@ namespace behav3d::camera_manager
         void writerThread();
 
         // ==== Helpers
-        static cv::Mat toBgr(const sensor_msgs::msg::Image &msg);
+        cv::Mat toBgr(const sensor_msgs::msg::Image &msg);
         static cv::Mat toGray(const sensor_msgs::msg::Image &msg);
         static cv::Mat toUint16(const sensor_msgs::msg::Image &msg);
         static std::string timeStringFromStamp(const rclcpp::Time &t);

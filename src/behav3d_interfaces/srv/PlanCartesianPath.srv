@@ -1,0 +1,24 @@
+# Request
+string group_name
+string pipeline_id            # keep for symmetry; not used by computeCartesianPath
+string eef_link
+float64 velocity_scale
+float64 accel_scale
+bool preview_only
+
+string frame_id               # waypoints frame_id
+geometry_msgs/Pose[] waypoints
+
+float64 max_step              # [m], e.g. 0.005
+float64 jump_threshold        # [rad], e.g. 2.0
+bool avoid_collisions
+
+---
+# Response
+bool success
+int32 moveit_error_code
+float64 fraction
+float64 total_time_sec
+float64 path_length
+geometry_msgs/PoseStamped final_pose
+moveit_msgs/RobotTrajectory trajectory

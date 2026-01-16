@@ -1,0 +1,15 @@
+# Goal
+builtin_interfaces/Duration duration
+int32 speed
+bool use_previous_speed
+
+---
+# Result
+bool success
+int32 elapsed_ms
+string reason
+
+---
+# Feedback
+int32 elapsed_ms
+float32 progress

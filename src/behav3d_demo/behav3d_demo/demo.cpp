@@ -25,6 +25,8 @@
 #include <rclcpp/rate.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp> 
 
 #include "behav3d_cpp/motion_controller.hpp"
 #include "behav3d_cpp/motion_visualizer.hpp"
@@ -44,6 +46,7 @@ using behav3d::target_builder::flipTargetAxes;
 using behav3d::target_builder::worldXY;
 using behav3d::target_builder::worldXZ;
 using behav3d::trajectory_builder::fibonacciSphericalCap;
+using behav3d::trajectory_builder::addJitter;
 using behav3d::trajectory_builder::sweepZigzag;
 using behav3d::util::deg2rad;
 
@@ -118,22 +121,24 @@ private:
     ctrl_->executeTrajectory(traj);
   }
 
-  void fibonacci_cap(double radius = 0.6,
-                     double center_x = 0.0, double center_y = 0.75, double center_z = 0.0,
-                     double cap_deg = 22.5, int n_points = 32)
+  void fibonacci_cap(double radius = 0.5,
+                     double center_x = 0.0, double center_y = 0.75, double center_z = -0.075,
+                     double cap_deg = 22.5, int n_points = 16)
   {
     const double cap_rad = deg2rad(cap_deg);
     const auto center = worldXY(center_x, center_y, center_z, ctrl_->getRootLink());
     auto targets = fibonacciSphericalCap(center, radius, cap_rad, n_points);
+    targets = addJitter(targets, 0.01, 2.5);
+    
     if (targets.empty())
     {
       RCLCPP_WARN(this->get_logger(), "fibonacci_cap: no targets generated!");
       return;
     }
-
+  
     behav3d::session_manager::SessionManager::Options opts;
     char tag[128];
-    std::snprintf(tag, sizeof(tag), "fibcap_r%dcm_cap%ddeg_n%d", (int)radius*100, (int)cap_deg, n_points);
+    std::snprintf(tag, sizeof(tag), "fibcap_r%dcm_cap%ddeg_n%d", (int)(radius*100), (int)cap_deg, n_points);
     opts.session_tag = tag;
     opts.motion_type = "LIN";
     opts.apply_totg = true;
@@ -148,17 +153,24 @@ private:
     const std::string session_dir = sess_->getSessionDir();
     if (!session_dir.empty())
     {
-      calib_->set_parameters({rclcpp::Parameter("session_dir", session_dir)});
+      // Push every hand-eye parameter here (types must match what the node declares)
+      calib_->set_parameters({
+        rclcpp::Parameter("handeye_session_dir", session_dir),
+      });
+
       if (!calib_->run())
       {
-        RCLCPP_WARN(this->get_logger(), "HandEyeCalibration run() reported failure for session: %s", session_dir.c_str());
+        RCLCPP_WARN(this->get_logger(),
+                    "HandEyeCalibration run() reported failure for session: %s",
+                    session_dir.c_str());
       }
     }
     else
     {
-      RCLCPP_WARN(this->get_logger(), "Session directory is empty; skipping HandEyeCalibration.");
+      RCLCPP_WARN(this->get_logger(),
+                  "Session directory is empty; skipping HandEyeCalibration.");
     }
-  }
+    }
 };
   // ---------------------------------------------------------------------------
   //                                   main()

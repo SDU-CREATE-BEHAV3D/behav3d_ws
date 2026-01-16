@@ -6,22 +6,44 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(behav3d_cpp REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(behav3d_interfaces REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
-add_executable(demo behav3d_demo/demo.cpp)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
-target_link_libraries(demo
-  rclcpp::rclcpp
-)
+# --- executables ---
+add_executable(demo   behav3d_demo/demo.cpp)
+add_executable(mancap behav3d_demo/mancap.cpp)
 
+# Usa ament_target_dependencies para propagar includes/libs de ROS2
 ament_target_dependencies(demo
   rclcpp
   std_msgs
   geometry_msgs
   behav3d_cpp
+  tf2 tf2_ros tf2_geometry_msgs
 )
 
+ament_target_dependencies(mancap
+  rclcpp
+  std_msgs
+  geometry_msgs
+  behav3d_cpp
+  tf2 tf2_ros tf2_geometry_msgs
+  nlohmann_json
+  behav3d_interfaces
+  ament_index_cpp
+)
 
-install(TARGETS demo
+# (no necesitas target_link_libraries(rclcpp::rclcpp) si usas ament_target_dependencies)
+
+# --- install ---
+install(TARGETS
+  demo
+  mancap
   DESTINATION lib/${PROJECT_NAME}
 )
 
