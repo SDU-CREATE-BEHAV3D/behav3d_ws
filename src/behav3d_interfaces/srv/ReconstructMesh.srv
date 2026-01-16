@@ -1,0 +1,8 @@
+# Request
+bool use_latest  # if true, reconstruct from the latest available capture folder
+string session_path  # optional manual path (overrides if provided)
+---
+# Response
+bool success
+string message
+string mesh_path

@@ -36,6 +36,7 @@ def generate_launch_description():
     # -------------------------------------------------------------------------
     # 1) User‑overridable CLI arguments
     # -------------------------------------------------------------------------
+    # MoveIt Params
     robot_ip_arg = DeclareLaunchArgument(
         "robot_ip",
         default_value="127.0.0.1",
@@ -47,6 +48,7 @@ def generate_launch_description():
         description="true = simulation/mock, false = real hardware",
     )
 
+    # MotionController Params
     group_arg = DeclareLaunchArgument(
         "group",
         default_value="ur_arm",
@@ -83,12 +85,18 @@ def generate_launch_description():
         description="Max acceleration scale [0..1]"
     )
 
+    home_joints_deg_arg = DeclareLaunchArgument(
+        "home_joints_deg",
+        default_value="[-90.0, -120.0, 120.0, -90.0, 90.0, -150.0]",
+        description="Home joint positions in degrees (list)"
+    )
+    # Misc
+    
     debug_arg = DeclareLaunchArgument(
         "debug",
-        default_value="false",
+        default_value="true",
         description="Enable debug logging"
     )
-
     # -------------------------------------------------------------------------
     # 2) Common paths
     # -------------------------------------------------------------------------

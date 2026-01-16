@@ -38,7 +38,7 @@
     <joint name="base_to_robot_mount" type="fixed">
       <parent link="robot_base"/>
       <child link="robot_mount"/>
-      <origin xyz="0.0 0.0 0.0" rpy="0 0 3.1415" />
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 3.1415926" />
     </joint>
 
     <link name="handrail">
@@ -94,49 +94,59 @@
       <child link="table"/>
       <origin xyz="-0.15 0.5 -0.08" rpy="0 0 0" />
     </joint>
-    <!-- Desktop (table) -->
-    <link name="desktop">
-      <visual>
-        <origin xyz="0 0 0"/>
-        <geometry>
-          <box size="2.0 1.2 0.90"/>
-        </geometry>
-        <material name="DesktopGrey">
-          <color rgba="0.6 0.6 0.6 1.0"/>
-        </material>
-      </visual>
-      <collision>
-        <origin xyz="0 0 0"/>
-        <geometry>
-          <box size="2.0 1.2 0.90"/>
-        </geometry>
-      </collision>
-    </link>
 
-    <joint name="base_to_desktop" type="fixed">
-      <parent link="robot_base"/>
-      <child link="desktop"/>
-      <origin xyz="1.7 0 -0.48" rpy="0 0 0"/>
-    </joint>
-
-    <link name="femto_mount">
+    <link name="clay_extruder">
       <visual>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/ur20_bolt_mount_v2.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam_calibrated_v4.dae"/>
         </geometry>
       </visual>
       <collision>
         <geometry>
-         <mesh filename="package://ur20_workcell/meshes/ur20_bolt_mount_v2.dae"/>
+         <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam_calibrated_v4.dae"/>
         </geometry>
       </collision>
     </link>
     <joint name="base_to_tool0" type="fixed">
       <parent link="${ur_type}_tool0"/>
-      <child link="femto_mount"/>
-      <origin xyz="0 0 0" rpy="0 0 -0.5235"/>
+      <child link="clay_extruder"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
-    
+        
+    <!-- Fixed frame for calibrated camera pose relative to tool0 -->
+    <link name="femto_color_optical_calib"/>
+
+    <joint name="tool0_to_femto_color_optical_calib" type="fixed">
+      <parent link="${ur_type}_tool0"/>
+      <child link="femto_color_optical_calib"/>
+      <!-- Origin is tool0 -> camera (meters, radians). 
+          RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
+      <origin xyz="-0.05996046861797611 0.1776607683506138 0.09264273877852516" 
+               rpy="0.6799468880371341 -1.5573071040676396 -2.241519026643666"/>
+    </joint>
+
+    <!-- Fixed frame for calibrated camera pose relative to tool0 -->
+    <link name="femto_ir_optical_calib"/>
+
+    <joint name="tool0_to_femto_ir_optical_calib" type="fixed">
+      <parent link="${ur_type}_tool0"/>
+      <child link="femto_ir_optical_calib"/>
+      <!-- Origin is tool0 -> camera (meters, radians). 
+          RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
+      <origin xyz="-0.06064789409656456 0.180481984883551 0.06164066350253106" 
+               rpy="0.4304040763127037 -1.5584296812405685 -2.09948979178602"/>
+    </joint>
+    <!-- Fixed frame for calibrated Extruder tcp pose relative to tool0 -->
+    <link name="extruder_tcp"/>
+
+    <joint name="tool0_to_extruder_tcp" type="fixed">
+      <parent link="${ur_type}_tool0"/>
+      <child link="extruder_tcp"/>
+      <!-- Origin is tool0 -> extruder(meters, radians). 
+          RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
+      <origin xyz="0.0469 0.28199 0.06276"
+              rpy="1.5641113421 0.0 0.0"/>
+    </joint>
     <!--This will create the specific robot-->
     <xacro:ur_robot
       name="${ur_type}"
@@ -155,7 +165,7 @@
       parent="${ur_type}_tool0"
       use_nominal_extrinsics="true"
     >
-      <origin xyz="0.027 0.048 0.0103" rpy="0 0 1.0472" />
+      <origin xyz="-0.03816 0.1486 0.062017" rpy="-1.5707964 0 1.5707964" />
     </xacro:femto_bolt>
 
   </xacro:macro>

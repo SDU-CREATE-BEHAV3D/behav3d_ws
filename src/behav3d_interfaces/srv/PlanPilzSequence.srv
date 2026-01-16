@@ -1,0 +1,12 @@
+# Request
+string group_name
+geometry_msgs/Pose[] targets
+float64[] blend_radii
+float64 velocity_scale
+float64 accel_scale
+string eef_link
+bool preview_only
+---
+# Response
+trajectory_msgs/JointTrajectory trajectory
+bool success

@@ -1,0 +1,25 @@
+# Goal
+string frame_id
+string group_name
+string eef_link
+string pipeline_id
+float32 velocity_scale
+float32 accel_scale
+bool preview_only
+# Targets (provide one of the following)
+string named_target
+geometry_msgs/PoseStamped pose
+geometry_msgs/PoseStamped[] waypoints
+string planning_pipeline
+---
+# Result
+bool success
+int32 moveit_error_code
+float32 total_time_sec
+float32 path_length
+geometry_msgs/PoseStamped final_pose
+---
+# Feedback
+string phase
+float32 percent_complete
+geometry_msgs/PoseStamped current_pose
