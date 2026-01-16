@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>world_visualizer</name>
+  <version>0.0.1</version>
+  <description>Mesh visualization node for reconstructed scans in RViz.</description>
+
+  <maintainer email="lab@sdu.dk">lab</maintainer>
+  <license>MIT</license>
+
+  <!-- Core build tools -->
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Runtime dependencies -->
+  <depend>rclpy</depend>
+  <depend>visualization_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <!-- Optional: watchdog for filesystem monitoring -->
+  <exec_depend>python3-watchdog</exec_depend>
+
+  <!-- Testing (optional) -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

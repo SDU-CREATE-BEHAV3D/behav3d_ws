@@ -1,0 +1,13 @@
+move_group:
+  ros__parameters:
+    default_planning_pipeline: ompl
+    planning_pipelines:
+      pipeline_names: ['ompl']
+    ompl:
+      planning_plugin: 'ompl_interface/OMPLPlanner'
+      request_adapters:
+        - default_planning_request_adapters/ResolveConstraintFrames
+        - default_planning_request_adapters/ValidateWorkspaceBounds
+        - default_planning_request_adapters/CheckStartStateBounds
+        - default_planning_request_adapters/CheckStartStateCollision
+      start_state_max_bounds_error: 0.1

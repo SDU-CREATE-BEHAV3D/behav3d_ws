@@ -1,0 +1,16 @@
+# PlanPilzLin.srv
+string group_name
+string eef_link
+string pipeline_id
+string planner_id
+float64 velocity_scale
+float64 accel_scale
+bool preview_only
+geometry_msgs/PoseStamped target
+---
+bool success
+int32 moveit_error_code
+float64 total_time_sec
+float64 path_length
+geometry_msgs/PoseStamped final_pose
+moveit_msgs/RobotTrajectory trajectory

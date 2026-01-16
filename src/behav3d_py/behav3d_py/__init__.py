@@ -1,11 +1,5 @@
-from .motion_controller import PilzMotionController
-from .motion_visualizer import MotionVisualizer
-# from .scan_trajectories import *
-# from .target_helpers import *
-
-__all__ = [
-    "PilzMotionController",
-    "MotionVisualizer",
-    # "scan_trajectories",
-    # "target_helpers",
-]
+# __init__.py (minimal)
+__version__ = "0.0.1"
+from .commands import Commands
+from .yaml_parser import SequenceParser
+__all__ = ["Commands", "SequenceParser"]

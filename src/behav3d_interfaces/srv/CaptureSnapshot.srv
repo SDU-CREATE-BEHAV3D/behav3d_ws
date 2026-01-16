@@ -1,0 +1,17 @@
+bool color
+bool depth
+bool ir
+bool aligned_d2c
+bool aligned_c2d
+float32 timeout_sec
+---
+bool ok
+string reason
+string color_path
+string depth_path
+string ir_path
+string aligned_d2c_path
+string aligned_c2d_path
+sensor_msgs/CameraInfo color_info
+sensor_msgs/CameraInfo depth_info
+sensor_msgs/CameraInfo ir_info

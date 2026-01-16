@@ -84,8 +84,54 @@ sudo ufw allow in proto udp to 224.0.0.0/4
 sudo ufw allow in proto udp from 224.0.0.0/4
 sudo ufw reload
 ```
-
+## 3.5 \. Binary Install from UR drivers and moveit2 and Python libraries
 -----
+
+The UR ROS 2 driver and MoveIt2 are also distributed as binary packages in ROS Jazzy.  
+This provides a faster way to get started without compiling from source.
+
+### Install UR ROS 2 Driver
+
+Run the following command to install the Universal Robots driver:
+
+```bash
+sudo apt update && sudo apt install -y ros-jazzy-ur
+```
+### Install Moveit
+```bash
+sudo apt install -y ros-jazzy-moveit
+```
+### Verify
+
+```bash
+ros2 pkg list | grep ur_robot_driver
+ros2 pkg list | grep moveit
+```
+
+### Install Open3D
+Download version CPython 3.12manylinux: glibc 2.31+ x86-64 from:
+[Open3D files on PyPI](https://pypi.org/project/open3d/#files)
+
+Then install using (adjust directory):
+
+```bash
+python3 -m pip install --user --no-cache-dir ~/Downloads/open3d-0.19.0-cp312-cp312-manylinux_2_31_x86_64.whl --break-system-packages
+```
+Test install:
+```bash
+python3 -c "import open3d as o3d; print(o3d.__version__)"
+```
+
+### Install Pymodbus
+We use this library for communicating with the extruder so far in v 3.11.2:
+
+```bash
+python3 -m pip install --user --no-cache-dir pymodbus==3.11.2 --break-system-packages
+```
+Test install:
+```bash
+python3 -c "import pymodbus; print(pymodbus.__version__)"
+```
 
 ## 4\. Install External Repositories
 

@@ -1,0 +1,5 @@
+# Request (empty)
+---
+int32  speed
+bool   extrude_on
+string state   # "IDLE" | "PRINTING" | "ERROR" | "STOPPED"
