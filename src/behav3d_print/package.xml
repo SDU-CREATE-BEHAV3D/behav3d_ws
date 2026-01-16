@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>behav3d_print</name>
+  <version>0.0.1</version>
+  <description>Printing control node for BEHAV3D.</description>
+
+  <maintainer email="ozca@iti.sdu.dk">Ozguc Bertug Capunaman</maintainer>
+  <maintainer email="jomi@iti.sdu.dk">Joseph Milad Wadie Naguib</maintainer>
+  <maintainer email="luh@iti.sdu.dk">Lucas Jose Helle</maintainer>
+
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Runtime dependencies -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>action_msgs</exec_depend>
+  <exec_depend>behav3d_interfaces</exec_depend>
+  
+  <!-- Test / lint -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>pytest</test_depend>
+  
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

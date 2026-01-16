@@ -1,11 +1,11 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 package_name = 'behav3d_py'
 
 setup(
     name=package_name,
     version='0.0.1',
-    packages=[package_name],
+    packages=find_packages(include=[package_name, f'{package_name}.*']),
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Özgüç Bertuğ Çapunaman',
@@ -17,4 +17,13 @@ setup(
          ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
+    entry_points={
+        'console_scripts': [
+            'modbus_test = behav3d_py.modbus_test:main',
+            'print_test = behav3d_py.print_test:main',
+            'move_and_print_test = behav3d_py.move_and_print_test:main',
+            'run_yaml_test = behav3d_py.run_yaml_test:main',
+            'handeye_capture_sequence = behav3d_py.handeye_capture_sequence:main',
+        ],
+    },
 )
