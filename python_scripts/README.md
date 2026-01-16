@@ -6,7 +6,6 @@ Standalone calibration, capture, and reconstruction scripts. These are not insta
 - `3d_reconstruction/`: TSDF integration experiments (CPU and legacy GPU flows).
 - `handeye_calibration/`: hand-eye calibration utilities (RGB/IR Charuco).
 - `utils/`: shared helpers (session, manifest, intrinsics, extrinsics, transforms, loading).
-- `validate_chain.py`: transform-chain validator for a capture session.
 
 ## 3d_reconstruction
 
@@ -51,35 +50,6 @@ Legacy GPU TSDF integration pipeline.
 
 ## handeye_calibration
 
-### `handeye_calibration/handeye_v3.py`
-RGB Charuco hand-eye calibration (eye-in-hand). Reads YAML/JSON manifest and writes results under `calib/`.
-- `get_dict(name)`: resolve OpenCV ArUco dictionary constant.
-- `make_board(dictionary)`: build a Charuco board with the configured geometry.
-- `load_intrinsics(yaml_path)`: read camera matrix + distortion.
-- `detect_charuco_pose(image_path, K, D, dictionary, board)`: detect markers, estimate pose, return rvec/tvec + annotated image.
-- `quat_xyzw_to_R`, `R_to_quat_xyzw`: quaternion/matrix conversions.
-- `rvec_tvec_to_RT`, `RT_to_T`: pose conversions.
-- `euler_ypr`: yaw/pitch/roll in degrees (intrinsic ZYX).
-- `_manifest_yaml_path()`, `_manifest_json_path()`: resolve manifest paths.
-- `_load_captures_from_yaml()`, `_load_captures_from_json()`: parse manifests into image+pose entries.
-- `main()`: runs calibration, prints residuals, writes `handeye_result.json` and `tool0_from_cam.yaml`.
-
-### `handeye_calibration/handeye_v3_ir.py`
-IR/RGB Charuco hand-eye calibration with IR-aware preprocessing and CLI options.
-- `load_ir_image(path)`: load IR image as BGR + grayscale for detection.
-- `preprocess_ir(gray_u8, invert=False, use_clahe=True)`: denoise, CLAHE, sharpen.
-- `make_detector_params()`: tuned ArUco detector parameters for IR.
-- `detect_charuco_pose(...)`: stream-aware pose estimation (IR or color).
-- Geometry helpers: `quat_xyzw_to_R`, `R_to_quat_xyzw`, `rvec_tvec_to_RT`, `RT_to_T`, `euler_ypr`, `euler_rpy_deg`, `euler_rpy_rad`.
-- Manifest helpers: `_manifest_yaml_path`, `_manifest_json_path`, `_load_captures_from_yaml`, `_load_captures_from_json`, `_choose_intrinsics`.
-- `main()`: CLI entry point, writes JSON/YAML results.
-
-### `handeye_calibration/handeye_v3_ir_slider.py`
-Interactive-tuning variant of v3_ir with OpenCV trackbars.
-- Same helpers as `handeye_v3_ir.py`.
-- `interactive_tune_first_image(...)`: interactive UI to tune preprocess + detector params.
-- `main()`: runs calibration with tuned preprocessing, writes `T_cam2board_list.json` when available.
-
 ### `handeye_calibration/handeye_v4.py`
 Session-driven hand-eye calibration that uses `python_scripts/utils` helpers.
 - `detect_charuco(img, K, D, board, dictionary, axis_len=0.1, refine_corners_kernel=None, debug=False)`: detect Charuco, optionally visualize.
@@ -122,12 +92,6 @@ Session-driven hand-eye calibration that uses `python_scripts/utils` helpers.
 ### `utils/integration.py`
 - `visualize_camera_poses(T_base_tool0_list, T_base_ir_list)`: draw coordinate frames in Open3D.
 
-## `validate_chain.py`
-Validates the transform chain `T_base->cam = T_base->tool0 * T_tool0->cam` and `T_base->board = T_base->cam * T_cam->board`.
-- `RT_to_T(R, t)`
-- `quat_xyzw_to_R(qx, qy, qz, qw)`
-- `load_tool0_from_cam(path)`
-- `load_manifest()`
 
 ## Notes
 - Dependencies: `numpy`, `opencv-python`, `open3d`, `scipy`, `pyyaml`.

@@ -97,19 +97,9 @@ Capture pipeline and reconstruction service.
 - `ThreeDReconstructor` (`behav3d_sense/reconstruction.py`):
   - `handle_request(...)`, `_resolve_session_path(...)`, `_run_reconstruction(...)`
 
-### `behav3d_vision`
-Vision utilities and motion-sequence runner.
-- `PoseSequenceRunner` (`behav3d_vision/pose_sequence_runner.py`):
-  - `run()` and service helpers `_send_named(...)`, `_send_cartesian(...)`, `_send_pilz_ptp(...)`,
-    `_send_pilz_lin(...)`, `_send_pilz_sequence(...)`, `_send_pilz_sequence_from_points(...)`.
-- `ImageProcessor` (`behav3d_vision/image_processor.py`):
-  - `_store(...)`, `_closest_pair(...)`, `_save_depth(...)`, `_capture_cb(...)`.
-- `RGBDCapture` (`behav3d_vision/rgbd_capture.py`):
-  - Partial stub showing message_filters sync + `cb_images(...)`.
-
 ### `custom_workcell`
-UR10e/UR20 workcell URDFs, meshes, calibration YAMLs, and MoveIt configurations.
-- `i40_workcell/` and `ur20_workcell/` for robot descriptions.
+UR20 workcell URDFs, meshes, calibration YAMLs, and MoveIt configurations.
+- `ur20_workcell/` for robot descriptions.
 - `*_moveit_config/` for MoveIt configs, planners, and launch.
 
 ### `kinematics_demo_cpp`
@@ -135,7 +125,6 @@ Publishes a mesh marker for RViz.
 - Standardize package naming and node names across Python and C++ stacks (avoid one-off demos).
 - Consolidate repeated capture/session logic between `behav3d_sense` and `behav3d_cpp`.
 - Move hard-coded parameters into ROS params or YAML configs (paths, IPs, frames).
-- Deprecate or complete partial stubs (for example, `behav3d_vision/rgbd_capture.py`).
 - Split core vs demo packages (e.g., `behav3d_core/*`, `behav3d_demos/*`) for clarity.
 - Add a top-level `ARCHITECTURE.md` with system diagram, data flow, and dependency map.
 - Define a common message/manifest schema document under `docs/` and link to it.
