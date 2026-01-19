@@ -274,6 +274,45 @@ class TSDFIntegration:
             raise RuntimeError("No mesh to save. Run integrate() first.")
         o3d.io.write_triangle_mesh(out_path, self.mesh)
 
+    # mesh refinement
+    def refine_mesh_high_res(
+        self,
+        mesh: o3d.geometry.TriangleMesh,
+        keep_largest_component: bool = True,
+        taubin_iters: int = 15,
+        laplacian_iters: int = 0,
+    ):
+        # 1) cleanup (no resolution loss)
+        mesh.remove_degenerate_triangles()
+        mesh.remove_duplicated_triangles()
+        mesh.remove_duplicated_vertices()
+        mesh.remove_unreferenced_vertices()
+
+        # 2) remove floaters (noise blobs)
+        if keep_largest_component:
+            tri_clusters, cluster_n_triangles, _ = mesh.cluster_connected_triangles()
+            tri_clusters = np.asarray(tri_clusters)
+            cluster_n_triangles = np.asarray(cluster_n_triangles)
+
+            if cluster_n_triangles.size > 0:
+                keep_id = int(np.argmax(cluster_n_triangles))
+                remove_mask = tri_clusters != keep_id
+                mesh.remove_triangles_by_mask(remove_mask)
+                mesh.remove_unreferenced_vertices()
+
+        # 3) smoothing for flat surfaces
+        # Taubin reduces noise with less shrinkage than Laplacian.
+        if taubin_iters and taubin_iters > 0:
+            mesh = mesh.filter_smooth_taubin(number_of_iterations=int(taubin_iters))
+
+        # Optional extra smoothing (stronger, more shrink risk)
+        if laplacian_iters and laplacian_iters > 0:
+            mesh = mesh.filter_smooth_laplacian(number_of_iterations=int(laplacian_iters))
+
+        mesh.compute_vertex_normals()
+        return mesh
+
+
 
 if __name__ == "__main__":
     # Choose mode: "cpu" or "cuda"
@@ -294,6 +333,15 @@ if __name__ == "__main__":
 
     mesh = tsdf.integrate()
     o3d.visualization.draw([mesh, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
+    
+    # refine mesh
+    # mesh = tsdf.refine_mesh_high_res(
+    #     mesh,
+    #     keep_largest_component=True,
+    #     taubin_iters=15,
+    #     laplacian_iters=0,
+    # )
+    # o3d.visualization.draw([mesh, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
 
     # save mesh
     tsdf.save_mesh("/home/lab/robot/meshes/tsdf_mesh.stl")
