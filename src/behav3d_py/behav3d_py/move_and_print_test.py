@@ -7,6 +7,7 @@ from rclpy.node import Node
 from .commands import Commands   # Both in the same ROS2 Python package
 from .macros import Macros     # Both in the same ROS2 Python package
 
+
 import math
 from scipy.spatial.transform import Rotation as R
 
