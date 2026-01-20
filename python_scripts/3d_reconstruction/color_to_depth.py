@@ -277,4 +277,12 @@ if __name__ == "__main__":
     print(f"Color frames: {len(aligner.color_images)}")
     print(f"Robot poses:  {len(aligner.T_base_tool0_list)}")
 
-    aligner.test_one_frame(frame_idx=0, visualize=True)
+# aligne all frames
+for idx in range(len(aligner.depth_images)):
+    aligner.test_one_frame(frame_idx=idx, visualize=False)
+    print(f"Processed frame {idx+1}/{len(aligner.depth_images)}")
+
+    
+
+
+
