@@ -17,9 +17,9 @@ from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
 
-SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260114_112631"
+SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260113_170839"
 scan_folder = "manual_caps"
-output_folder = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260114_112631"
+output_folder = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260113_170839"
 my_session = Session(SESSION_PATH, scan_folder)
 
 class TSDF_Integration():
