@@ -26,6 +26,7 @@ class Command:
         error: Optional[str] = None,
         metrics: Optional[Dict[str, Any]] = None,
         planned_only: bool = False,
+        extra: Optional[Dict[str, Any]] = None,
     ) -> None:
         res = {
             "ok": ok,
@@ -35,6 +36,8 @@ class Command:
             "error": error,
             "metrics": metrics or {},
         }
+        if extra:
+            res.update(extra)
 
         try:
             if self.on_done:

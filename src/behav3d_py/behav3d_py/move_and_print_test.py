@@ -4,42 +4,71 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from .commands import Commands   # Both in the same ROS2 Python package
-from .macros import Macros     # Both in the same ROS2 Python package
-
-
-import math
-from scipy.spatial.transform import Rotation as R
+import behav3d_commands
 
 class MoveAndPrintTest(Node):
     """Demo: HOME → GOTO(plan+exec). Single on_move_done callback for all moves."""
     def __init__(self):
         super().__init__('move_and_print_test')
-        self.cmd = Commands(self)
+        self.session = behav3d_commands.PrintSession(self)
         self._started = False
         self.create_timer(0.25, self._run_once)
-        self.mac = Macros(self.cmd)
 
     def _run_once(self):
         if self._started:
             return
         self._started = True
 
-        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
-        self.cmd.setSpd(0.2)
-        self.cmd.setEef("femto_color_optical_calib") 
-        self.cmd.setLIN()
-        self.cmd.input(prompt="Press ENTER to go to target...")   
-        self.cmd.goto(x=0.50, y=1.0, z=0.31,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="LIN", start_print={"secs": 1.5, "speed": 1200, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
-        self.cmd.goto(x=0.50, y=1.0, z=0.96,eef="extruder_tcp",vel_scale=0.1, accel_scale=0.1,exec=True, motion="LIN", start_print={"steps": 1800, "speed": 600, "offset_s": 0, "sync": "accept"}, on_move_done=self._on_move_done)
+        self.session.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.setSpd(0.2)
+        self.session.setEef("femto_color_optical_calib")
+        self.session.setLIN()
+        self.session.input(prompt="Press ENTER to go to target...")
+        self.session.goto_with_print_time(
+            x=0.50,
+            y=1.0,
+            z=0.31,
+            eef="extruder_tcp",
+            vel_scale=0.1,
+            accel_scale=0.1,
+            exec=True,
+            motion="LIN",
+            secs=1.5,
+            speed=1200,
+            offset_s=0.0,
+            on_move_done=self._on_move_done,
+        )
+        self.session.goto_with_print_steps(
+            x=0.50,
+            y=1.0,
+            z=0.96,
+            eef="extruder_tcp",
+            vel_scale=0.1,
+            accel_scale=0.1,
+            exec=True,
+            motion="LIN",
+            steps=1800,
+            speed=600,
+            offset_s=0.0,
+            on_move_done=self._on_move_done,
+        )
 
      #   self.cmd.printSteps(steps=4000, speed=1000, on_done=self._on_move_done)
    #     self.cmd.printSteps(steps=2000, speed=500, on_done=self._on_move_done)
-        self.cmd.printSteps(steps=2000, speed=500, on_done=self._on_move_done)
-        self.cmd.goto(x=-0.0500, y=1.30, z=0.31,eef="extruder_tcp",vel_scale=0.5, accel_scale=0.1,exec=True,on_move_done=self._on_move_done)
+        self.session.print_steps(steps=2000, speed=500, on_done=self._on_move_done)
+        self.session.goto(
+            x=-0.0500,
+            y=1.30,
+            z=0.31,
+            eef="extruder_tcp",
+            vel_scale=0.5,
+            accel_scale=0.1,
+            exec=True,
+            on_done=self._on_move_done,
+        )
 
-        self.cmd.home(duration_s=1.0, on_move_done=self._on_move_done)
-        self.cmd.input(key="q",
+        self.session.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)
 
@@ -136,7 +165,7 @@ class MoveAndPrintTest(Node):
         else:
             self.get_logger().warning("Expected 'q'. Ignoring input; not shutting down.")
             # Re-enqueue another input step so the FIFO waits again:
-            self.cmd.input(
+            self.session.input(
                 key="q",
                 prompt="Type 'q' + ENTER to shutdown...",
                 on_done=self._on_quit

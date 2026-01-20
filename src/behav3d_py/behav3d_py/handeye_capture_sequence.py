@@ -4,8 +4,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from .commands import Commands   # Both in the same ROS2 Python package
-from .macros import Macros     # Both in the same ROS2 Python package
+import behav3d_commands
 
 import math
 from geometry_msgs.msg import PoseStamped
@@ -15,10 +14,9 @@ class MoveAndPrintTest(Node):
     """Demo: HOME → GOTO(plan+exec). Single on_move_done callback for all moves."""
     def __init__(self):
         super().__init__('move_and_print_test')
-        self.cmd = Commands(self)
+        self.session = behav3d_commands.ScanSession(self)
         self._started = False
         self.create_timer(0.25, self._run_once)
-        self.mac = Macros(self.cmd)
 
     def _run_once(self):
         if self._started:
@@ -41,25 +39,24 @@ class MoveAndPrintTest(Node):
         target_ps.pose.orientation.z = float(qz)
         target_ps.pose.orientation.w = float(qw)
 
-        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
-        self.cmd.setAcc(0.05)
-        self.cmd.setSpd(0.05)
-        self.cmd.setEef("femto__color_optical_frame") 
-        self.cmd.setLIN()
-        self.cmd.input(prompt="Press ENTER to go to target...")
-        # Run the Fibonacci spherical-cap scan (ENTER-only prompt between captures)
-        self.mac.fibScan(
+        self.session.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.setAcc(0.35)
+        self.session.setSpd(0.35)
+        self.session.setEef("femto__color_optical_frame")
+        self.session.setLIN()
+        self.session.input(prompt="Press ENTER to go to target...")
+        self.session.fib_scan(
             target=target_ps,
             distance=0.58,
-            cap_rad=math.radians(32),
-            samples=32,
+            cap_rad=math.radians(45),
+            samples=16,
             folder="@session/scan_fib_simple",
             settle_s=0.2,
             z_jitter=0.20,
             prompt="Press ENTER to capture...",
             debug=False,
         )
-        self.cmd.wait(1.0)
+        self.session.wait(1.0)
 
         # reconstruction scan
         # self.cmd.reconstruct(
@@ -68,8 +65,8 @@ class MoveAndPrintTest(Node):
         #     on_done=lambda res: self.get_logger().info(f"Reconstruction request done: {res}"),
         # )        
 
-        self.cmd.home(duration_s=10.0, on_move_done=self._on_move_done)
-        self.cmd.input(key="q",
+        self.session.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)
 
@@ -102,7 +99,7 @@ class MoveAndPrintTest(Node):
         else:
             self.get_logger().warning("Expected 'q'. Ignoring input; not shutting down.")
             # Re-enqueue another input step so the FIFO waits again:
-            self.cmd.input(
+            self.session.input(
                 key="q",
                 prompt="Type 'q' + ENTER to shutdown...",
                 on_done=self._on_quit
