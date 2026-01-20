@@ -17,8 +17,9 @@ from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/260113_170839"
+SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260114_112631"
 scan_folder = "manual_caps"
+output_folder = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260114_112631"
 my_session = Session(SESSION_PATH, scan_folder)
 
 class TSDF_Integration():
@@ -26,9 +27,9 @@ class TSDF_Integration():
     def __init__(
             self,
             session,
-            voxel_size=1/1024,
-            block_count=100000,
-            block_resolution=16,
+            voxel_size=1/512,
+            block_count=10000,
+            block_resolution=12,
             depth_max=1.0,
             depth_scale=1000.0,
             device='CPU:0',   # <-- CHANGED: CPU only
@@ -175,4 +176,4 @@ mesh = tsdf_integration.integrate_depths()
 o3d.visualization.draw([mesh, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
 
 # save mesh
-o3d.io.write_triangle_mesh("/home/lab/robot/meshes/tsdf_mesh.stl", mesh)
+o3d.io.write_triangle_mesh(output_folder + "tsdf_mesh.stl", mesh)
