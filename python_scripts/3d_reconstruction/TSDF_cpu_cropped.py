@@ -1,11 +1,18 @@
-# ADD-ON: cropping box + outlier filtering parameters for the final TSDF surface point cloud
-# This is your last script with two extra controllable stages:
-#   1) Crop by axis-aligned bounding box in WORLD coordinates
-#   2) Remove outliers (statistical or radius) with tunable parameters
+# TSDF -> high-confidence surface point cloud with RGB
+# PLUS confidence visualization using a conventional colormap gradient (TURBO)
 #
-# Where to change parameters:
-#   CROP_ENABLE, CROP_MIN, CROP_MAX
-#   OUTLIER_METHOD, OUTLIER_* params
+# Adds:
+# - Per-point confidence = number of valid observations (obs count)
+# - Confidence gradient visualization (TURBO) as a separate point cloud
+# - Cropping and outlier filtering that also keeps confidence aligned
+#
+# Outputs:
+# - tsdf_surface_rgb_colored.ply
+# - tsdf_surface_confidence_colored.ply
+#
+# Notes:
+# - Confidence here is an observation-count proxy (robust and practical).
+# - Colormap is OpenCV COLORMAP_TURBO (conventional, perceptually strong).
 
 # set src path for utils import
 import sys
@@ -25,10 +32,10 @@ from utils.extrinsics import load_extrinsics
 from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
-
-SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260113_170839"
+session_folder = "260113_170839"
+SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/" + session_folder
 scan_folder = "manual_caps"
-output_folder = Path("C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260113_170839")
+output_folder = Path("C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/" + session_folder)
 my_session = Session(SESSION_PATH, scan_folder)
 
 # Folder containing your color_in_depth outputs
@@ -36,7 +43,7 @@ C2D_DIR = output_folder / "alignment_test"
 C2D_GLOB = "color_in_depth*.png"
 
 # ----------------------------
-# NEW: Final output filtering parameters
+# Final output filtering parameters
 # ----------------------------
 
 # Crop box in WORLD coordinates (base frame)
@@ -55,6 +62,10 @@ OUTLIER_STD_RATIO = 1.5
 OUTLIER_NB_POINTS = 12
 OUTLIER_RADIUS = 0.02  # meters
 
+# Confidence visualization params
+CONF_CLIP_PERCENTILE = 100  # clip very high obs counts for better contrast
+CONF_COLORMAP = cv2.COLORMAP_TURBO  # conventional gradient for confidence
+
 
 class TSDF_Integration():
 
@@ -72,8 +83,10 @@ class TSDF_Integration():
         self.session = session
         self.manifest = read_manifest(self.session.path, self.session._scan_folder)
         self.T_base_tool0_list = load_robot_poses(self.manifest)
-        self.T_tool0_ir = np.asarray(load_extrinsics(self.session._camera_extrinsics_path, frame_key="T_tool0_ir"),
-                                     dtype=np.float64)
+        self.T_tool0_ir = np.asarray(
+            load_extrinsics(self.session._camera_extrinsics_path, frame_key="T_tool0_ir"),
+            dtype=np.float64
+        )
         self.T_base_ir = [T_base_tool0 @ self.T_tool0_ir for T_base_tool0 in self.T_base_tool0_list]
 
         # load depth images
@@ -105,7 +118,6 @@ class TSDF_Integration():
 
         # load all color_in_depth images found in folder
         self.color_in_depth, self.color_in_depth_paths = self._load_color_in_depth_images()
-
         if len(self.color_in_depth) == 0:
             raise FileNotFoundError(f"No {C2D_GLOB} found in {C2D_DIR}")
 
@@ -242,8 +254,9 @@ class TSDF_Integration():
             accum[ok] += rgb
             obs[ok] += 1
 
-        colors = np.zeros((N, 3), dtype=np.float64)
         keep = obs >= int(min_obs)
+
+        colors = np.zeros((N, 3), dtype=np.float64)
         colors[keep] = accum[keep] / obs[keep][:, None]
 
         pcd_out = o3d.geometry.PointCloud()
@@ -253,37 +266,74 @@ class TSDF_Integration():
             pcd_out.normals = o3d.utility.Vector3dVector(nrm[keep])
         pcd_out.colors = o3d.utility.Vector3dVector(colors[keep])
 
+        conf = obs[keep].astype(np.float64)
+
         print(f"High-confidence points kept: {np.count_nonzero(keep)} / {N}  (min_obs={min_obs})")
-        return pcd_out
+        return pcd_out, conf
 
     # ----------------------------
-    # NEW: crop + outlier filtering helpers
+    # Crop + outlier filtering that preserves confidence alignment
     # ----------------------------
-    def crop_pcd_aabb(self, pcd, aabb_min, aabb_max):
-        aabb = o3d.geometry.AxisAlignedBoundingBox(aabb_min, aabb_max)
-        return pcd.crop(aabb)
+    def crop_pcd_aabb_with_conf(self, pcd, conf, aabb_min, aabb_max):
+        pts = np.asarray(pcd.points, dtype=np.float64)
+        m = (
+            (pts[:, 0] >= aabb_min[0]) & (pts[:, 0] <= aabb_max[0]) &
+            (pts[:, 1] >= aabb_min[1]) & (pts[:, 1] <= aabb_max[1]) &
+            (pts[:, 2] >= aabb_min[2]) & (pts[:, 2] <= aabb_max[2])
+        )
+        ind = np.where(m)[0].astype(np.int64)
+        pcd2 = pcd.select_by_index(ind)
+        conf2 = conf[ind]
+        return pcd2, conf2
 
-    def filter_outliers(self, pcd,
-                        method="statistical",
-                        nb_neighbors=30,
-                        std_ratio=1.5,
-                        nb_points=12,
-                        radius=0.02):
+    def filter_outliers_with_conf(self, pcd, conf,
+                                  method="statistical",
+                                  nb_neighbors=30,
+                                  std_ratio=1.5,
+                                  nb_points=12,
+                                  radius=0.02):
         method = (method or "none").lower().strip()
         if method == "none":
-            return pcd
+            return pcd, conf
 
         if method == "statistical":
-            cl, ind = pcd.remove_statistical_outlier(nb_neighbors=int(nb_neighbors),
-                                                     std_ratio=float(std_ratio))
-            return pcd.select_by_index(ind)
+            _, ind = pcd.remove_statistical_outlier(
+                nb_neighbors=int(nb_neighbors),
+                std_ratio=float(std_ratio)
+            )
+            ind = np.asarray(ind, dtype=np.int64)
+            return pcd.select_by_index(ind), conf[ind]
 
         if method == "radius":
-            cl, ind = pcd.remove_radius_outlier(nb_points=int(nb_points),
-                                                radius=float(radius))
-            return pcd.select_by_index(ind)
+            _, ind = pcd.remove_radius_outlier(
+                nb_points=int(nb_points),
+                radius=float(radius)
+            )
+            ind = np.asarray(ind, dtype=np.int64)
+            return pcd.select_by_index(ind), conf[ind]
 
         raise ValueError(f"Unknown OUTLIER_METHOD: {method}")
+
+    # ----------------------------
+    # Confidence gradient visualization (TURBO colormap)
+    # ----------------------------
+    def make_confidence_colored_pcd(self, pcd, conf, clip_percentile=95, cv_colormap=cv2.COLORMAP_TURBO):
+        conf = conf.astype(np.float64)
+        vmax = float(np.percentile(conf, clip_percentile))
+        vmax = max(vmax, 1.0)
+
+        norm = np.clip(conf / vmax, 0.0, 1.0)
+        img = (norm * 255.0).astype(np.uint8).reshape(-1, 1)  # (N,1)
+
+        bgr = cv2.applyColorMap(img, cv_colormap).reshape(-1, 3).astype(np.float64) / 255.0
+        rgb = bgr[:, ::-1]
+
+        pcd_conf = o3d.geometry.PointCloud()
+        pcd_conf.points = pcd.points
+        if pcd.has_normals():
+            pcd_conf.normals = pcd.normals
+        pcd_conf.colors = o3d.utility.Vector3dVector(rgb)
+        return pcd_conf
 
 
 # ---- RUN ----
@@ -301,37 +351,53 @@ tsdf_integration.integrate_depths()
 # 2) Extract TSDF surface as point cloud
 pcd_surface = tsdf_integration.extract_tsdf_surface_point_cloud()
 
-# 3) Color + confidence filter
-pcd_surface_colored = tsdf_integration.colorize_tsdf_surface_points(
+# 3) RGB color + confidence (obs count)
+pcd_rgb, conf = tsdf_integration.colorize_tsdf_surface_points(
     pcd_surface,
     sample_step=1,
     z_band_m=0.02,
     min_obs=3
 )
 
-# 4) Crop in WORLD frame (optional)
+# 4) Crop in WORLD frame (optional), keeps conf aligned
 if CROP_ENABLE:
-    pcd_surface_colored = tsdf_integration.crop_pcd_aabb(pcd_surface_colored, CROP_MIN, CROP_MAX)
-    print(f"After crop: {len(pcd_surface_colored.points)} points")
+    pcd_rgb, conf = tsdf_integration.crop_pcd_aabb_with_conf(pcd_rgb, conf, CROP_MIN, CROP_MAX)
+    print(f"After crop: {len(pcd_rgb.points)} points")
 
-# 5) Outlier removal (optional)
-pcd_surface_colored = tsdf_integration.filter_outliers(
-    pcd_surface_colored,
+# 5) Outlier removal (optional), keeps conf aligned
+pcd_rgb, conf = tsdf_integration.filter_outliers_with_conf(
+    pcd_rgb, conf,
     method=OUTLIER_METHOD,
     nb_neighbors=OUTLIER_NB_NEIGHBORS,
     std_ratio=OUTLIER_STD_RATIO,
     nb_points=OUTLIER_NB_POINTS,
     radius=OUTLIER_RADIUS
 )
-print(f"After outlier filter ({OUTLIER_METHOD}): {len(pcd_surface_colored.points)} points")
+print(f"After outlier filter ({OUTLIER_METHOD}): {len(pcd_rgb.points)} points")
 
-# 6) Visualize + save
+# 6) Build confidence-colored visualization point cloud
+pcd_conf = tsdf_integration.make_confidence_colored_pcd(
+    pcd_rgb, conf,
+    clip_percentile=CONF_CLIP_PERCENTILE,
+    cv_colormap=CONF_COLORMAP
+)
+
+# 7) Visualize
 axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-o3d.visualization.draw([pcd_surface_colored, axes])
 
-out_ply = output_folder / "tsdf_surface_colored_highconf_cropped_filtered.ply"
-o3d.io.write_point_cloud(str(out_ply), pcd_surface_colored)
-print("Saved:", out_ply)
+print("Visualizing RGB-colored TSDF surface point cloud")
+o3d.visualization.draw([pcd_rgb, axes])
+
+print("Visualizing CONFIDENCE gradient (TURBO) for TSDF surface point cloud")
+o3d.visualization.draw([pcd_conf, axes])
+
+# 8) Save outputs
+out_rgb = output_folder / "tsdf_surface_rgb_colored.ply"
+out_conf = output_folder / "tsdf_surface_confidence_colored.ply"
+o3d.io.write_point_cloud(str(out_rgb), pcd_rgb)
+# o3d.io.write_point_cloud(str(out_conf), pcd_conf)
+print("Saved:", out_rgb)
+# print("Saved:", out_conf)
 
 # mesh part intentionally commented out
 # mesh = tsdf_integration.vbg.extract_triangle_mesh().to_legacy()
