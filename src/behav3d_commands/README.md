@@ -80,3 +80,7 @@ To add a new subsystem:
 Example nodes that use them live in `behav3d_py`:
 - `move_and_print_test`
 - `handeye_capture_sequence`
+
+## Related packages
+`behav3d_utils` contains geometry helpers (Python port of `target_builder.cpp`).
+Import from `behav3d_utils.target_builder` when you need pose/transform helpers.

@@ -26,6 +26,7 @@ setup(
             'run_yaml_test = behav3d_py.run_yaml_test:main',
             'handeye_capture_sequence = behav3d_py.handeye_capture_sequence:main',
             'orchestrator_test = behav3d_py.orchestrator_test:main',
+            'session_sync_demo = behav3d_py.session_sync_demo:main',
 
         ],
     },

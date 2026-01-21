@@ -40,7 +40,11 @@ class SenseNode(Node):
         def _try_write_session_intrinsics():
             if self._intrinsics_written:
                 return
-            if (self.cam.color_info is not None) or (self.cam.depth_info is not None) or (getattr(self.cam, "ir_info", None) is not None):
+            if (
+                (self.cam.color_info is not None)
+                and (self.cam.depth_info is not None)
+                and (getattr(self.cam, "ir_info", None) is not None)
+            ):
                 try:
                     self.cam.save_intrinsics_yaml(self.session_root_dir)
                     self._intrinsics_written = True

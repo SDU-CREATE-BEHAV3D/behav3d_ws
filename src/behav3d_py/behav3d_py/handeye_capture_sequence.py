@@ -10,10 +10,10 @@ import math
 from geometry_msgs.msg import PoseStamped
 from scipy.spatial.transform import Rotation as R
 
-class MoveAndPrintTest(Node):
+class HandeyeCaptureSeq(Node):
     """Demo: HOME → GOTO(plan+exec). Single on_move_done callback for all moves."""
     def __init__(self):
-        super().__init__('move_and_print_test')
+        super().__init__('handeye_capture_sequence')
         self.session = behav3d_examples.ScanSession(self)
         self._started = False
         self.create_timer(0.25, self._run_once)
@@ -42,13 +42,13 @@ class MoveAndPrintTest(Node):
         self.session.motion.home(duration_s=1.0, on_done=self._on_move_done)
         self.session.motion.setAcc(0.35)
         self.session.motion.setSpd(0.35)
-        self.session.motion.setEef("femto__color_optical_frame")
+        self.session.motion.setEef("femto_color_optical_calib")
         self.session.motion.setLIN()
         self.session.util.input(prompt="Press ENTER to go to target...")
         self.session.fib_scan(
             target=target_ps,
-            distance=0.58,
-            cap_rad=math.radians(45),
+            distance=0.42,
+            cap_rad=math.radians(24),
             samples=16,
             folder="@session/scan_fib_simple",
             settle_s=0.2,
@@ -107,7 +107,7 @@ class MoveAndPrintTest(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    rclpy.spin(MoveAndPrintTest())
+    rclpy.spin(HandeyeCaptureSeq())
 
 
 if __name__ == '__main__':
