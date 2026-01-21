@@ -1,4 +1,4 @@
-from .scan_session import ScanSession
-from .print_session import PrintSession
+from .src.scan_session import ScanSession
+from .src.print_session import PrintSession
 
 __all__ = ["ScanSession", "PrintSession"]

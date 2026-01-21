@@ -51,18 +51,7 @@ Helper functions:
 - `_any_orthonormal(v)`: return an arbitrary orthonormal vector.
 
 ## Demo nodes
-
-### `handeye_capture_sequence.py`
-`MoveAndPrintTest` drives a fib-scan capture sequence.
-- `_run_once()`: builds the scan sequence.
-- `_on_move_done(res)`: unified move callback.
-- `_on_pose(res)`: pose print helper.
-- `_on_quit(res)`: shutdown handler.
-
-### `move_and_print_test.py`
-`MoveAndPrintTest` demo for motion + printing.
-- `_run_once()`: enqueues sample moves and print actions.
-- `_on_move_done(res)`, `_on_pose(res)`, `_on_quit(res)`.
+Note: `handeye_capture_sequence.py` and `move_and_print_test.py` moved to `behav3d_examples`.
 
 ### `run_yaml_test.py`
 `RunYamlTest` loads and executes a YAML command file.

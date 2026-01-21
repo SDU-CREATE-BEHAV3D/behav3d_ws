@@ -3,8 +3,6 @@
 High-level Python API and demo nodes for motion, printing, and capture workflows. This package is the ROS 2 entry point; the Python modules live in `src/behav3d_py/behav3d_py/`.
 
 ## Entry points (nodes)
-- `move_and_print_test`: demo motion + print sequence using `Commands`.
-- `handeye_capture_sequence`: demo scan sequence (fib-scan capture).
 - `run_yaml_test`: execute a YAML command list via `SequenceParser`.
 - `print_test`: interactive print action test (keyboard control).
 - `modbus_test`: low-level Modbus coil/register test node.
@@ -20,6 +18,8 @@ ros2 run behav3d_py <node_name>
 - `behav3d_py/macros.py`: higher-level scanning macros (fib-scan).
 
 For function-level documentation, see `src/behav3d_py/behav3d_py/README.md`.
+
+Note: `move_and_print_test` and `handeye_capture_sequence` moved to `behav3d_examples`.
 
 ## Actionable improvements
 - Convert demo scripts into launchable examples with ROS params instead of in-file constants.

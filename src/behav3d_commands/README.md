@@ -77,7 +77,7 @@ To add a new subsystem:
 
 ## Examples
 `ScanSession` and `PrintSession` are example subclasses in `behav3d_examples`.
-Example nodes that use them live in `behav3d_py`:
+Example nodes that use them live in `behav3d_examples`:
 - `move_and_print_test`
 - `handeye_capture_sequence`
 
