@@ -8,17 +8,78 @@ from typing import Any, Callable, Dict, Optional
 
 from rclpy.node import Node
 
-from behav3d_commands.command import Command
+from behav3d_commands.command import Command, OnCommandDone
+from behav3d_commands.queue import QueueItem, SessionQueue
 
 
 class UtilCommands:
-    def __init__(self, node: Node):
+    def __init__(self, node: Node, *, queue: Optional[SessionQueue] = None):
+        self._queue = queue
         self._node = node
 
     def register(self, router) -> None:
         router.register("wait", self._handle_wait)
         router.register("wait_input", self._handle_wait_input)
         router.register("wait_until", self._handle_wait_until)
+
+    def _queue_or_item(self, item: QueueItem, *, enqueue: bool):
+        if enqueue:
+            if self._queue is None:
+                raise RuntimeError("UtilCommands requires a SessionQueue to enqueue items.")
+            self._queue.enqueue(item)
+            return None
+        return item
+
+    def wait(
+        self,
+        secs: float,
+        *,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "wait",
+            {"secs": float(secs)},
+            cmd_kind="wait",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def wait_until(
+        self,
+        *,
+        predicate: Callable[[], bool],
+        period_s: float = 0.1,
+        timeout_s: Optional[float] = None,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "wait_until",
+            {"predicate": predicate, "period_s": float(period_s), "timeout_s": timeout_s},
+            cmd_kind="wait_until",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def input(
+        self,
+        *,
+        key: Optional[str] = None,
+        prompt: Optional[str] = None,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "wait_input",
+            {
+                "key": (None if key is None else str(key)),
+                "prompt": prompt,
+            },
+            cmd_kind="input",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
 
     def _handle_wait(self, payload: Dict[str, Any], cmd: Command) -> None:
         secs = float(payload.get("secs", 0.0))

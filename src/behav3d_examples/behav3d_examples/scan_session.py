@@ -7,7 +7,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from geometry_msgs.msg import PoseStamped
 
-from .session import Session
+from behav3d_commands.session import Session
 
 
 TOOL_PLUS_Z_POINTS_OUTWARD = False
@@ -142,6 +142,7 @@ class ScanSession(Session):
             poses_world.append(ps_w)
 
         first = True
+
         def _prepend_goto_for_index(i: int, cb):
             ps = poses_world[i]
             rpy = R.from_quat([
@@ -151,15 +152,14 @@ class ScanSession(Session):
                 ps.pose.orientation.w,
             ]).as_euler("xyz", degrees=False)
 
-            self.prepend(
-                "goto",
-                {
-                    "pose": ps,
-                    "exec": (not debug),
-                },
-                cmd_kind="goto",
+            _ = rpy  # kept for parity if RPY is needed later
+            item = self.motion.goto(
+                pose=ps,
+                exec=(not debug),
                 on_done=cb,
+                enqueue=False,
             )
+            self.queue.prepend(item)
 
         def _after_goto(i: int):
             def _cb(res):
@@ -178,32 +178,27 @@ class ScanSession(Session):
                 if debug:
                     return
 
-                self.prepend(
-                    "capture",
-                    {
-                        "rgb": True,
-                        "depth": True,
-                        "ir": True,
-                        "pose": True,
-                        "folder": (folder if first else None),
-                    },
-                    cmd_kind="capture",
+                capture_item = self.camera.capture(
+                    rgb=True,
+                    depth=True,
+                    ir=True,
+                    pose=True,
+                    folder=(folder if first else None),
                     on_done=None,
+                    enqueue=False,
                 )
+                self.queue.prepend(capture_item)
                 if prompt:
-                    self.prepend(
-                        "wait_input",
-                        {"key": None, "prompt": prompt},
-                        cmd_kind="input",
+                    input_item = self.util.input(
+                        key=None,
+                        prompt=prompt,
                         on_done=None,
+                        enqueue=False,
                     )
+                    self.queue.prepend(input_item)
                 if settle_s > 0.0:
-                    self.prepend(
-                        "wait",
-                        {"secs": float(settle_s)},
-                        cmd_kind="wait",
-                        on_done=None,
-                    )
+                    wait_item = self.util.wait(float(settle_s), on_done=None, enqueue=False)
+                    self.queue.prepend(wait_item)
 
                 first = False
 
@@ -219,7 +214,7 @@ class ScanSession(Session):
                 ps0.pose.orientation.w,
             ]).as_euler("xyz", degrees=False)
 
-            self.goto(
+            self.motion.goto(
                 x=ps0.pose.position.x,
                 y=ps0.pose.position.y,
                 z=ps0.pose.position.z,
@@ -230,7 +225,7 @@ class ScanSession(Session):
                 on_done=_after_goto(i0),
             )
 
-        self.wait(0.2)
+        self.util.wait(0.2)
 
         return {
             "ok": True,

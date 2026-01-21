@@ -12,11 +12,13 @@ from geometry_msgs.msg import PoseStamped
 
 from behav3d_interfaces.srv import Capture, GetLinkPose, ReconstructMesh
 
-from behav3d_commands.command import Command
+from behav3d_commands.command import Command, OnCommandDone
+from behav3d_commands.queue import QueueItem, SessionQueue
 
 
 class CameraCommands:
-    def __init__(self, node: Node):
+    def __init__(self, node: Node, *, queue: Optional[SessionQueue] = None):
+        self._queue = queue
         self._node = node
         self._capture_cli = node.create_client(Capture, "/capture")
         self._pose_cli = node.create_client(GetLinkPose, "/behav3d/get_link_pose")
@@ -29,6 +31,76 @@ class CameraCommands:
         router.register("capture", self._handle_capture)
         router.register("get_pose", self._handle_get_pose)
         router.register("reconstruct", self._handle_reconstruct)
+
+    def _queue_or_item(self, item: QueueItem, *, enqueue: bool):
+        if enqueue:
+            if self._queue is None:
+                raise RuntimeError("CameraCommands requires a SessionQueue to enqueue items.")
+            self._queue.enqueue(item)
+            return None
+        return item
+
+    def capture(
+        self,
+        *,
+        rgb: bool = False,
+        depth: bool = False,
+        ir: bool = False,
+        pose: bool = False,
+        folder: Optional[str] = None,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "capture",
+            {
+                "rgb": bool(rgb),
+                "depth": bool(depth),
+                "ir": bool(ir),
+                "pose": bool(pose),
+                "folder": folder,
+            },
+            cmd_kind="capture",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def get_pose(
+        self,
+        eef: str,
+        base_frame: Optional[str] = "world",
+        *,
+        use_tf: bool = False,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "get_pose",
+            {
+                "link": str(eef),
+                "base_frame": ("" if base_frame is None else str(base_frame)),
+                "use_tf": bool(use_tf),
+            },
+            cmd_kind="get_pose",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def reconstruct(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: Optional[str] = "",
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "reconstruct",
+            {"use_latest": bool(use_latest), "session_path": (session_path or "")},
+            cmd_kind="reconstruct",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
 
     def _handle_capture(self, payload: Dict[str, Any], cmd: Command) -> None:
         if not self._capture_cli.wait_for_service(timeout_sec=2.0):

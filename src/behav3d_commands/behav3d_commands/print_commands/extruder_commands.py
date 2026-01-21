@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from rclpy.node import Node
 from rclpy.action import ActionClient
 
 from behav3d_interfaces.action import PrintTime, PrintSteps
 
-from behav3d_commands.command import Command
+from behav3d_commands.command import Command, OnCommandDone
+from behav3d_commands.queue import QueueItem, SessionQueue
 
 
 class ExtruderCommands:
-    def __init__(self, node: Node):
+    def __init__(self, node: Node, *, queue: Optional[SessionQueue] = None):
+        self._queue = queue
         self._node = node
         self._print_ac = ActionClient(node, PrintTime, "print")
         self._print_steps_ac = ActionClient(node, PrintSteps, "print_steps")
@@ -22,6 +24,62 @@ class ExtruderCommands:
         router.register("print_steps", self._handle_print_steps)
         router.register("print_time_delayed", self._handle_print_time_delayed)
         router.register("print_steps_delayed", self._handle_print_steps_delayed)
+
+    def _queue_or_item(self, item: QueueItem, *, enqueue: bool):
+        if enqueue:
+            if self._queue is None:
+                raise RuntimeError("ExtruderCommands requires a SessionQueue to enqueue items.")
+            self._queue.enqueue(item)
+            return None
+        return item
+
+    def print_time(
+        self,
+        *,
+        secs: float,
+        speed: int,
+        offset_s: float = 0.0,
+        use_previous_speed: bool = False,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        kind = "print_time_delayed" if float(offset_s) > 0.0 else "print_time"
+        item = QueueItem(
+            kind,
+            {
+                "secs": float(secs),
+                "speed": int(speed),
+                "use_prev": bool(use_previous_speed),
+                "offset_s": float(offset_s),
+            },
+            cmd_kind="print",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def print_steps(
+        self,
+        *,
+        steps: int,
+        speed: int,
+        offset_s: float = 0.0,
+        use_previous_speed: bool = False,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        kind = "print_steps_delayed" if float(offset_s) > 0.0 else "print_steps"
+        item = QueueItem(
+            kind,
+            {
+                "steps": int(steps),
+                "speed": int(speed),
+                "use_prev": bool(use_previous_speed),
+                "offset_s": float(offset_s),
+            },
+            cmd_kind="print_steps",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
 
     def _handle_print_time(self, payload: Dict[str, Any], cmd: Command) -> None:
         secs = float(payload.get("secs", 0.0))

@@ -4,13 +4,13 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-import behav3d_commands
+import behav3d_examples
 
 class MoveAndPrintTest(Node):
     """Demo: HOME → GOTO(plan+exec). Single on_move_done callback for all moves."""
     def __init__(self):
         super().__init__('move_and_print_test')
-        self.session = behav3d_commands.PrintSession(self)
+        self.session = behav3d_examples.PrintSession(self)
         self._started = False
         self.create_timer(0.25, self._run_once)
 
@@ -19,11 +19,11 @@ class MoveAndPrintTest(Node):
             return
         self._started = True
 
-        self.session.home(duration_s=1.0, on_done=self._on_move_done)
-        self.session.setSpd(0.2)
-        self.session.setEef("femto_color_optical_calib")
-        self.session.setLIN()
-        self.session.input(prompt="Press ENTER to go to target...")
+        self.session.motion.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.motion.setSpd(0.2)
+        self.session.motion.setEef("femto_color_optical_calib")
+        self.session.motion.setLIN()
+        self.session.util.input(prompt="Press ENTER to go to target...")
         self.session.goto_with_print_time(
             x=0.50,
             y=1.0,
@@ -55,8 +55,8 @@ class MoveAndPrintTest(Node):
 
      #   self.cmd.printSteps(steps=4000, speed=1000, on_done=self._on_move_done)
    #     self.cmd.printSteps(steps=2000, speed=500, on_done=self._on_move_done)
-        self.session.print_steps(steps=2000, speed=500, on_done=self._on_move_done)
-        self.session.goto(
+        self.session.extruder.print_steps(steps=2000, speed=500, on_done=self._on_move_done)
+        self.session.motion.goto(
             x=-0.0500,
             y=1.30,
             z=0.31,
@@ -67,8 +67,8 @@ class MoveAndPrintTest(Node):
             on_done=self._on_move_done,
         )
 
-        self.session.home(duration_s=1.0, on_done=self._on_move_done)
-        self.session.input(key="q",
+        self.session.motion.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.util.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)
 
@@ -165,7 +165,7 @@ class MoveAndPrintTest(Node):
         else:
             self.get_logger().warning("Expected 'q'. Ignoring input; not shutting down.")
             # Re-enqueue another input step so the FIFO waits again:
-            self.session.input(
+            self.session.util.input(
                 key="q",
                 prompt="Type 'q' + ENTER to shutdown...",
                 on_done=self._on_quit

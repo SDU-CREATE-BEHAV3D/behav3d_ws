@@ -4,7 +4,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-import behav3d_commands
+import behav3d_examples
 
 import math
 from geometry_msgs.msg import PoseStamped
@@ -14,7 +14,7 @@ class MoveAndPrintTest(Node):
     """Demo: HOME → GOTO(plan+exec). Single on_move_done callback for all moves."""
     def __init__(self):
         super().__init__('move_and_print_test')
-        self.session = behav3d_commands.ScanSession(self)
+        self.session = behav3d_examples.ScanSession(self)
         self._started = False
         self.create_timer(0.25, self._run_once)
 
@@ -39,12 +39,12 @@ class MoveAndPrintTest(Node):
         target_ps.pose.orientation.z = float(qz)
         target_ps.pose.orientation.w = float(qw)
 
-        self.session.home(duration_s=1.0, on_done=self._on_move_done)
-        self.session.setAcc(0.35)
-        self.session.setSpd(0.35)
-        self.session.setEef("femto__color_optical_frame")
-        self.session.setLIN()
-        self.session.input(prompt="Press ENTER to go to target...")
+        self.session.motion.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.motion.setAcc(0.35)
+        self.session.motion.setSpd(0.35)
+        self.session.motion.setEef("femto__color_optical_frame")
+        self.session.motion.setLIN()
+        self.session.util.input(prompt="Press ENTER to go to target...")
         self.session.fib_scan(
             target=target_ps,
             distance=0.58,
@@ -56,7 +56,7 @@ class MoveAndPrintTest(Node):
             prompt="Press ENTER to capture...",
             debug=False,
         )
-        self.session.wait(1.0)
+        self.session.util.wait(1.0)
 
         # reconstruction scan
         # self.cmd.reconstruct(
@@ -65,8 +65,8 @@ class MoveAndPrintTest(Node):
         #     on_done=lambda res: self.get_logger().info(f"Reconstruction request done: {res}"),
         # )        
 
-        self.session.home(duration_s=1.0, on_done=self._on_move_done)
-        self.session.input(key="q",
+        self.session.motion.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.util.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)
 
@@ -99,7 +99,7 @@ class MoveAndPrintTest(Node):
         else:
             self.get_logger().warning("Expected 'q'. Ignoring input; not shutting down.")
             # Re-enqueue another input step so the FIFO waits again:
-            self.session.input(
+            self.session.util.input(
                 key="q",
                 prompt="Type 'q' + ENTER to shutdown...",
                 on_done=self._on_quit

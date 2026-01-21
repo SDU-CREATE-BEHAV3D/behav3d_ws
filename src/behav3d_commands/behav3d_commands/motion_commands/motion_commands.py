@@ -13,7 +13,8 @@ from geometry_msgs.msg import PoseStamped
 
 from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin
 
-from behav3d_commands.command import Command
+from behav3d_commands.command import Command, OnCommandDone
+from behav3d_commands.queue import QueueItem, SessionQueue
 
 OnPlanned = Callable[[JointTrajectory, Dict[str, Any]], None]
 
@@ -23,8 +24,10 @@ class MotionCommands:
         self,
         node: Node,
         *,
+        queue: Optional[SessionQueue] = None,
         controller_action: str = "/scaled_joint_trajectory_controller/follow_joint_trajectory",
     ):
+        self._queue = queue
         self._node = node
         self._ctrl = ActionClient(node, FollowJointTrajectory, controller_action)
 
@@ -76,6 +79,186 @@ class MotionCommands:
         router.register("set_eef", self._handle_set_eef)
         router.register("set_spd", self._handle_set_spd)
         router.register("set_acc", self._handle_set_acc)
+
+    def _queue_or_item(self, item: QueueItem, *, enqueue: bool):
+        if enqueue:
+            if self._queue is None:
+                raise RuntimeError("MotionCommands requires a SessionQueue to enqueue items.")
+            self._queue.enqueue(item)
+            return None
+        return item
+
+    def home(
+        self,
+        *,
+        duration_s: float = 10.0,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "home",
+            {"duration_s": float(duration_s)},
+            cmd_kind="home",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def goto(
+        self,
+        *,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+        z: Optional[float] = None,
+        pose: Any = None,
+        rx: Optional[float] = None,
+        ry: Optional[float] = None,
+        rz: Optional[float] = None,
+        eef: Optional[str] = None,
+        vel_scale: Optional[float] = None,
+        accel_scale: Optional[float] = None,
+        exec: bool = True,
+        motion: Optional[str] = None,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "goto",
+            {
+                "pose": pose,
+                "x": x,
+                "y": y,
+                "z": z,
+                "rx": rx,
+                "ry": ry,
+                "rz": rz,
+                "eef": eef,
+                "vel_scale": vel_scale,
+                "accel_scale": accel_scale,
+                "exec": bool(exec),
+                "motion": motion,
+            },
+            cmd_kind="goto",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def plan(
+        self,
+        *,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+        z: Optional[float] = None,
+        pose: Any = None,
+        eef: Optional[str] = None,
+        vel_scale: Optional[float] = None,
+        accel_scale: Optional[float] = None,
+        motion: Optional[str] = None,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "plan_motion",
+            {
+                "pose": pose,
+                "x": x,
+                "y": y,
+                "z": z,
+                "eef": eef,
+                "vel_scale": vel_scale,
+                "accel_scale": accel_scale,
+                "motion": motion,
+            },
+            cmd_kind="plan_motion",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def exec(
+        self,
+        *,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "exec_motion",
+            {},
+            cmd_kind="exec_motion",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def setPTP(
+        self,
+        *,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "set_motion_mode",
+            {"mode": "PTP"},
+            cmd_kind="setPTP",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def setLIN(
+        self,
+        *,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "set_motion_mode",
+            {"mode": "LIN"},
+            cmd_kind="setLIN",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def setEef(
+        self,
+        name: str,
+        *,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "set_eef",
+            {"eef": str(name)},
+            cmd_kind="setEef",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def setSpd(
+        self,
+        val: float,
+        *,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "set_spd",
+            {"vel_scale": float(val)},
+            cmd_kind="setSpd",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def setAcc(
+        self,
+        val: float,
+        *,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "set_acc",
+            {"accel_scale": float(val)},
+            cmd_kind="setAcc",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
 
     def build_home_trajectory(self, *, duration_s: float) -> JointTrajectory:
         jt = JointTrajectory()
