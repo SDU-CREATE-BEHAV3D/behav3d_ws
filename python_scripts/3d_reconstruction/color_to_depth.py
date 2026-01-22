@@ -36,9 +36,9 @@ from utils.extrinsics import load_extrinsics
 from utils.image_loader import load_images
 
 
-SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260113_170839"
+SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260114_112631"
 scan_folder = "manual_caps"
-output_folder = Path("/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260113_170839")
+output_folder = Path("/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260114_112631")
 my_session = Session(SESSION_PATH, scan_folder)
 
 

@@ -72,7 +72,7 @@ CONF_COLORMAP = cv2.COLORMAP_TURBO  # conventional gradient for confidence
 # ----------------------------
 # "table": horizontal surface workflow (fit/load plane + optional slicing)
 # "environment": full scene (no plane generation)
-RUN_MODE = "environment"  # "table" or "environment"
+RUN_MODE = "table"  # "table" or "environment"
 
 # Table mode options
 TABLE_MODE_PLANE = "fit"  # "fit" to save plane, "load" to reuse
