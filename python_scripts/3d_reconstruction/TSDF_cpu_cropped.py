@@ -33,9 +33,9 @@ from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
 session_folder = "260113_170839"
-SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/" + session_folder
+SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/" + session_folder
 scan_folder = "manual_caps"
-output_folder = Path("C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/" + session_folder)
+output_folder = Path("/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/" + session_folder)
 my_session = Session(SESSION_PATH, scan_folder)
 
 # Folder containing your color_in_depth outputs
@@ -385,11 +385,18 @@ pcd_conf = tsdf_integration.make_confidence_colored_pcd(
 # 7) Visualize
 axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
 
+def _draw_geoms(geoms):
+    # Open3D < 0.18 lacks visualization.draw
+    if hasattr(o3d.visualization, "draw"):
+        o3d.visualization.draw(geoms)
+    else:
+        o3d.visualization.draw_geometries(geoms)
+
 print("Visualizing RGB-colored TSDF surface point cloud")
-o3d.visualization.draw([pcd_rgb, axes])
+_draw_geoms([pcd_rgb, axes])
 
 print("Visualizing CONFIDENCE gradient (TURBO) for TSDF surface point cloud")
-o3d.visualization.draw([pcd_conf, axes])
+_draw_geoms([pcd_conf, axes])
 
 # 8) Save outputs
 out_rgb = output_folder / "tsdf_surface_rgb_colored.ply"

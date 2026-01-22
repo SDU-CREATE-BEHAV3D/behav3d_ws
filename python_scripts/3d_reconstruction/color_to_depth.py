@@ -36,9 +36,9 @@ from utils.extrinsics import load_extrinsics
 from utils.image_loader import load_images
 
 
-SESSION_PATH = "C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260113_170839"
+SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260113_170839"
 scan_folder = "manual_caps"
-output_folder = Path("C:/Users/jomi/Desktop/PhD/BEAM-Resources/captures/260113_170839")
+output_folder = Path("/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260113_170839")
 my_session = Session(SESSION_PATH, scan_folder)
 
 
@@ -281,7 +281,6 @@ if __name__ == "__main__":
 for idx in range(len(aligner.depth_images)):
     aligner.test_one_frame(frame_idx=idx, visualize=False)
     print(f"Processed frame {idx+1}/{len(aligner.depth_images)}")
-
 
 
 
