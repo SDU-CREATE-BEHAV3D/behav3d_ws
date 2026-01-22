@@ -68,6 +68,18 @@ CONF_CLIP_PERCENTILE = 100  # clip very high obs counts for better contrast
 CONF_COLORMAP = cv2.COLORMAP_TURBO  # conventional gradient for confidence
 
 # ----------------------------
+# Run mode
+# ----------------------------
+# "table": horizontal surface workflow (fit/load plane + optional slicing)
+# "environment": full scene (no plane generation)
+RUN_MODE = "environment"  # "table" or "environment"
+
+# Table mode options
+TABLE_MODE_PLANE = "fit"  # "fit" to save plane, "load" to reuse
+TABLE_MODE_SLICE = False  # slice using table plane
+TABLE_MODE_VIS = True
+
+# ----------------------------
 # Table plane extraction + slicing (for removing the horizontal table)
 # ----------------------------
 
@@ -98,6 +110,17 @@ TABLE_PLANE_VIS_GRID = 25 # number of inner grid lines per axis
 TABLE_PLANE_NORMAL_COLOR = (1.0, 0.2, 0.2)
 TABLE_PLANE_NORMAL_SCALE = 0.25
 TABLE_PLANE_NORMAL_RADIUS = 0.002  # meters; 0 uses a thin line
+
+if RUN_MODE == "table":
+    TABLE_PLANE_MODE = TABLE_MODE_PLANE
+    TABLE_SLICE_ENABLE = TABLE_MODE_SLICE
+    TABLE_PLANE_VIS_ENABLE = TABLE_MODE_VIS
+elif RUN_MODE == "environment":
+    TABLE_PLANE_MODE = "off"
+    TABLE_SLICE_ENABLE = False
+    TABLE_PLANE_VIS_ENABLE = False
+else:
+    raise ValueError(f"Unknown RUN_MODE: {RUN_MODE}")
 
 
 class TSDF_Integration():
