@@ -16,6 +16,7 @@
 
 # set src path for utils import
 import sys
+import json
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -65,6 +66,38 @@ OUTLIER_RADIUS = 0.02  # meters
 # Confidence visualization params
 CONF_CLIP_PERCENTILE = 100  # clip very high obs counts for better contrast
 CONF_COLORMAP = cv2.COLORMAP_TURBO  # conventional gradient for confidence
+
+# ----------------------------
+# Table plane extraction + slicing (for removing the horizontal table)
+# ----------------------------
+
+# Plane mode: "fit" (estimate + save), "load" (reuse), "off"
+TABLE_PLANE_MODE = "fit"
+TABLE_PLANE_FILE = output_folder / "table_plane.json"
+
+# RANSAC params for plane fitting
+TABLE_PLANE_DOWNSAMPLE = 0.005  # meters, 0 to disable
+TABLE_PLANE_RANSAC_THRESH = 0.004
+TABLE_PLANE_RANSAC_N = 3
+TABLE_PLANE_RANSAC_ITERS = 2000
+
+# Orientation hint (used to keep "above" consistent)
+TABLE_PLANE_UP_AXIS = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+TABLE_PLANE_MAX_TILT_DEG = 25.0  # warn if plane is far from up
+
+# Slice points relative to the plane (leave False to keep all TSDF points)
+TABLE_SLICE_ENABLE = False
+TABLE_SLICE_KEEP_SIDE = "above"  # "above" or "below"
+TABLE_SLICE_MARGIN = 0.005  # meters
+
+# Plane visualization
+TABLE_PLANE_VIS_ENABLE = True
+TABLE_PLANE_VIS_COLOR = (0.2, 0.4, 1.0)
+TABLE_PLANE_VIS_SCALE = 1.2
+TABLE_PLANE_VIS_GRID = 25 # number of inner grid lines per axis
+TABLE_PLANE_NORMAL_COLOR = (1.0, 0.2, 0.2)
+TABLE_PLANE_NORMAL_SCALE = 0.25
+TABLE_PLANE_NORMAL_RADIUS = 0.002  # meters; 0 uses a thin line
 
 
 class TSDF_Integration():
@@ -318,6 +351,8 @@ class TSDF_Integration():
     # Confidence gradient visualization (TURBO colormap)
     # ----------------------------
     def make_confidence_colored_pcd(self, pcd, conf, clip_percentile=95, cv_colormap=cv2.COLORMAP_TURBO):
+        if conf is None or len(conf) == 0 or len(pcd.points) == 0:
+            return pcd
         conf = conf.astype(np.float64)
         vmax = float(np.percentile(conf, clip_percentile))
         vmax = max(vmax, 1.0)
@@ -334,6 +369,178 @@ class TSDF_Integration():
             pcd_conf.normals = pcd.normals
         pcd_conf.colors = o3d.utility.Vector3dVector(rgb)
         return pcd_conf
+
+
+def _normalize_plane(plane_model):
+    plane_model = np.asarray(plane_model, dtype=np.float64).reshape(4)
+    n = plane_model[:3]
+    norm = np.linalg.norm(n)
+    if norm == 0:
+        raise ValueError("Plane normal is zero")
+    return plane_model / norm
+
+
+def _fit_table_plane(pcd, distance_threshold, ransac_n, num_iterations,
+                     downsample=0.0, up_axis=None, max_tilt_deg=None):
+    pcd_fit = pcd
+    if downsample and downsample > 0:
+        pcd_fit = pcd.voxel_down_sample(float(downsample))
+
+    plane_model, inliers = pcd_fit.segment_plane(
+        distance_threshold=float(distance_threshold),
+        ransac_n=int(ransac_n),
+        num_iterations=int(num_iterations)
+    )
+    plane_model = _normalize_plane(plane_model)
+
+    n = plane_model[:3]
+    if up_axis is not None:
+        up_axis = np.asarray(up_axis, dtype=np.float64)
+        up_norm = np.linalg.norm(up_axis)
+        if up_norm > 0:
+            up_axis = up_axis / up_norm
+            if np.dot(n, up_axis) < 0:
+                plane_model = -plane_model
+                n = -n
+            if max_tilt_deg is not None:
+                ang = np.degrees(np.arccos(np.clip(np.dot(n, up_axis), -1.0, 1.0)))
+                if ang > float(max_tilt_deg):
+                    print(f"Warning: plane tilt {ang:.1f} deg exceeds {max_tilt_deg} deg")
+
+    print(f"Table plane model (a,b,c,d): {plane_model.tolist()}")
+    print(f"Table plane inliers: {len(inliers)} / {len(pcd_fit.points)}")
+    return plane_model
+
+
+def _save_plane(path, plane_model):
+    payload = {"plane_model": plane_model.tolist()}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2))
+
+
+def _load_plane(path):
+    data = json.loads(path.read_text())
+    plane = np.asarray(data["plane_model"], dtype=np.float64)
+    return _normalize_plane(plane)
+
+
+def _slice_pcd_by_plane(pcd, conf, plane_model, keep_side="above", margin=0.0):
+    plane_model = _normalize_plane(plane_model)
+    n = plane_model[:3]
+    d = plane_model[3]
+
+    pts = np.asarray(pcd.points, dtype=np.float64)
+    dist = pts @ n + d
+
+    keep_side = (keep_side or "above").lower().strip()
+    margin = float(margin)
+    if keep_side == "above":
+        m = dist > margin
+    elif keep_side == "below":
+        m = dist < -margin
+    else:
+        raise ValueError(f"Unknown TABLE_SLICE_KEEP_SIDE: {keep_side}")
+
+    ind = np.where(m)[0].astype(np.int64)
+    pcd2 = pcd.select_by_index(ind)
+    conf2 = conf[ind] if conf is not None else None
+    return pcd2, conf2
+
+
+def _make_plane_line_set(plane_model, pcd_ref, color=(0.85, 0.85, 0.85), scale=1.2,
+                         normal_color=(1.0, 0.2, 0.2), normal_scale=0.25,
+                         normal_radius=0.0, grid_lines=0):
+    plane_model = _normalize_plane(plane_model)
+    n = plane_model[:3]
+    d = plane_model[3]
+
+    bbox = pcd_ref.get_axis_aligned_bounding_box()
+    center = np.asarray(bbox.get_center(), dtype=np.float64)
+    center = center - (np.dot(n, center) + d) * n
+
+    ext = np.asarray(bbox.get_extent(), dtype=np.float64)
+    size = float(np.max(ext)) * float(scale)
+
+    ref = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    if abs(np.dot(n, ref)) > 0.9:
+        ref = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+
+    t1 = np.cross(n, ref)
+    t1 = t1 / max(np.linalg.norm(t1), 1e-9)
+    t2 = np.cross(n, t1)
+    t2 = t2 / max(np.linalg.norm(t2), 1e-9)
+
+    half = 0.5 * size
+    corners = np.array([
+        center + ( t1 * half) + ( t2 * half),
+        center + (-t1 * half) + ( t2 * half),
+        center + (-t1 * half) + (-t2 * half),
+        center + ( t1 * half) + (-t2 * half),
+    ], dtype=np.float64)
+
+    points = [c for c in corners]
+    lines = [[0, 1], [1, 2], [2, 3], [3, 0]]
+
+    grid_lines = int(max(0, grid_lines))
+    if grid_lines > 0:
+        for i in range(1, grid_lines + 1):
+            offset = -half + (2.0 * half) * (i / (grid_lines + 1))
+
+            p_a = center + (t1 * offset) + (t2 * half)
+            p_b = center + (t1 * offset) - (t2 * half)
+            idx = len(points)
+            points.extend([p_a, p_b])
+            lines.append([idx, idx + 1])
+
+            p_c = center + (t2 * offset) + (t1 * half)
+            p_d = center + (t2 * offset) - (t1 * half)
+            idx = len(points)
+            points.extend([p_c, p_d])
+            lines.append([idx, idx + 1])
+
+    line_set = o3d.geometry.LineSet()
+    line_set.points = o3d.utility.Vector3dVector(np.vstack(points))
+    line_set.lines = o3d.utility.Vector2iVector(np.asarray(lines, dtype=np.int32))
+    line_set.colors = o3d.utility.Vector3dVector(
+        np.tile(np.array(color, dtype=np.float64), (len(lines), 1))
+    )
+
+    normal_len = size * float(normal_scale)
+    if float(normal_radius) > 0:
+        # Cylinder along +Z, centered at origin; rotate to normal and translate.
+        cyl = o3d.geometry.TriangleMesh.create_cylinder(
+            radius=float(normal_radius),
+            height=float(normal_len),
+            resolution=20,
+            split=4
+        )
+        cyl.paint_uniform_color(normal_color)
+        z = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        dot = float(np.clip(np.dot(z, n), -1.0, 1.0))
+        if dot < 0.999999:
+            if dot > -0.999999:
+                axis = np.cross(z, n)
+                axis = axis / max(np.linalg.norm(axis), 1e-9)
+                angle = float(np.arccos(dot))
+                R = o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
+                cyl.rotate(R, center=(0.0, 0.0, 0.0))
+            else:
+                R = o3d.geometry.get_rotation_matrix_from_axis_angle(
+                    np.array([1.0, 0.0, 0.0]) * np.pi
+                )
+                cyl.rotate(R, center=(0.0, 0.0, 0.0))
+        cyl.translate(center + n * (0.5 * normal_len))
+        return [line_set, cyl]
+
+    p0 = center
+    p1 = center + n * normal_len
+    normal = o3d.geometry.LineSet()
+    normal.points = o3d.utility.Vector3dVector(np.vstack([p0, p1]))
+    normal.lines = o3d.utility.Vector2iVector(np.array([[0, 1]], dtype=np.int32))
+    normal.colors = o3d.utility.Vector3dVector(
+        np.array([normal_color], dtype=np.float64)
+    )
+    return [line_set, normal]
 
 
 # ---- RUN ----
@@ -364,6 +571,51 @@ if CROP_ENABLE:
     pcd_rgb, conf = tsdf_integration.crop_pcd_aabb_with_conf(pcd_rgb, conf, CROP_MIN, CROP_MAX)
     print(f"After crop: {len(pcd_rgb.points)} points")
 
+# 4.5) Fit/load table plane using cropped points
+plane_model = None
+plane_vis = None
+if TABLE_PLANE_MODE != "off":
+    mode = TABLE_PLANE_MODE.lower().strip()
+    if mode == "fit":
+        plane_model = _fit_table_plane(
+            pcd_rgb,
+            distance_threshold=TABLE_PLANE_RANSAC_THRESH,
+            ransac_n=TABLE_PLANE_RANSAC_N,
+            num_iterations=TABLE_PLANE_RANSAC_ITERS,
+            downsample=TABLE_PLANE_DOWNSAMPLE,
+            up_axis=TABLE_PLANE_UP_AXIS,
+            max_tilt_deg=TABLE_PLANE_MAX_TILT_DEG
+        )
+        _save_plane(TABLE_PLANE_FILE, plane_model)
+        print(f"Saved table plane: {TABLE_PLANE_FILE}")
+    elif mode == "load":
+        if not TABLE_PLANE_FILE.exists():
+            raise FileNotFoundError(f"Table plane file not found: {TABLE_PLANE_FILE}")
+        plane_model = _load_plane(TABLE_PLANE_FILE)
+        print(f"Loaded table plane: {TABLE_PLANE_FILE}")
+    else:
+        raise ValueError(f"Unknown TABLE_PLANE_MODE: {TABLE_PLANE_MODE}")
+
+    if TABLE_PLANE_VIS_ENABLE:
+        plane_vis = _make_plane_line_set(
+            plane_model,
+            pcd_rgb,
+            color=TABLE_PLANE_VIS_COLOR,
+            scale=TABLE_PLANE_VIS_SCALE,
+            normal_color=TABLE_PLANE_NORMAL_COLOR,
+            normal_scale=TABLE_PLANE_NORMAL_SCALE,
+            normal_radius=TABLE_PLANE_NORMAL_RADIUS,
+            grid_lines=TABLE_PLANE_VIS_GRID
+        )
+
+    if TABLE_SLICE_ENABLE:
+        pcd_rgb, conf = _slice_pcd_by_plane(
+            pcd_rgb, conf, plane_model,
+            keep_side=TABLE_SLICE_KEEP_SIDE,
+            margin=TABLE_SLICE_MARGIN
+        )
+        print(f"After table slice ({TABLE_SLICE_KEEP_SIDE}): {len(pcd_rgb.points)} points")
+
 # 5) Outlier removal (optional), keeps conf aligned
 pcd_rgb, conf = tsdf_integration.filter_outliers_with_conf(
     pcd_rgb, conf,
@@ -393,10 +645,16 @@ def _draw_geoms(geoms):
         o3d.visualization.draw_geometries(geoms)
 
 print("Visualizing RGB-colored TSDF surface point cloud")
-_draw_geoms([pcd_rgb, axes])
+geoms_rgb = [pcd_rgb, axes]
+if plane_vis is not None:
+    geoms_rgb.extend(plane_vis)
+_draw_geoms(geoms_rgb)
 
 print("Visualizing CONFIDENCE gradient (TURBO) for TSDF surface point cloud")
-_draw_geoms([pcd_conf, axes])
+geoms_conf = [pcd_conf, axes]
+if plane_vis is not None:
+    geoms_conf.extend(plane_vis)
+_draw_geoms(geoms_conf)
 
 # 8) Save outputs
 out_rgb = output_folder / "tsdf_surface_rgb_colored.ply"
