@@ -1,7 +1,7 @@
 # behav3d_print/print_node.py
 
 import time
-
+import threading
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer,CancelResponse
@@ -42,20 +42,25 @@ class PrintNode(Node):
         self._force_stop = False    
         
         # --- Modbus client ---
-        self.client = ModbusTcpClient(MODBUS_IP, port=MODBUS_PORT)
-        if not self.client.connect():
+        self._mb_lock = threading.Lock()
+        self.client = ModbusTcpClient(MODBUS_IP, port=MODBUS_PORT, timeout=2.0)
+
+        if not self._mb_connect():
             self.state = "ERROR"
             self.get_logger().error(f"Failed to connect to {MODBUS_IP}:{MODBUS_PORT}")
             raise SystemExit(1)
+
         self.get_logger().info(f"Connected to Modbus TCP {MODBUS_IP}:{MODBUS_PORT}")
 
         # --- Polling timer (500 ms) ---
         self._last_coil = None
         self._last_speed = None
         self.timer = self.create_timer(POLL_MS / 1000.0, self._poll)
-        
-        # Initial safe state: extruder OFF
-        self.set_extrude(False)
+
+        # Initial safe state: extruder OFF (delay to avoid early reset during bringup)
+        self._init_safe_done = False
+        self._init_timer = self.create_timer(1.0, self._init_safe_state_once)
+
 
         # Service: update print configuration
         self.srv_update = self.create_service(
@@ -88,11 +93,64 @@ class PrintNode(Node):
             cancel_callback=self._on_cancel,
         )
 
+    # -------- Modbus resilience helpers --------
+    def _mb_connect(self) -> bool:
+        """Connect with a couple retries. Call under lock."""
+        with self._mb_lock:
+            for _ in range(3):
+                try:
+                    if self.client.connect():
+                        return True
+                except Exception as e:
+                    self.get_logger().warning(f"Modbus connect exception: {type(e).__name__}")
+                time.sleep(0.3)
+            return False
+
+    def _mb_call(self, fn, *args, **kwargs):
+        """
+        Serialize Modbus calls and auto-reconnect once on broken socket/reset.
+        Returns fn(...) result or None if it failed hard.
+        """
+        with self._mb_lock:
+            try:
+                return fn(*args, **kwargs)
+            except (ConnectionResetError, BrokenPipeError, OSError) as e:
+                # socket died -> reconnect and retry once
+                self.get_logger().warning(f"Modbus socket error: {type(e).__name__}. Reconnecting...")
+                try:
+                    self.client.close()
+                except Exception:
+                    pass
+                if not self.client.connect():
+                    self.state = "ERROR"
+                    return None
+                try:
+                    return fn(*args, **kwargs)
+                except Exception as e2:
+                    self.get_logger().error(f"Modbus retry failed: {type(e2).__name__}")
+                    self.state = "ERROR"
+                    return None
+            except Exception as e:
+                self.get_logger().error(f"Modbus call exception: {type(e).__name__}")
+                self.state = "ERROR"
+                return None
+
+    def _init_safe_state_once(self):
+        if self._init_safe_done:
+            return
+        self._init_safe_done = True
+        try:
+            self._init_timer.cancel()
+        except Exception:
+            pass
+        # Best-effort OFF (won't crash node if server is still waking up)
+        self.set_extrude(False)
+
     # -------- Minimal Modbus interface --------
     def set_extrude(self, on: bool) -> bool:
         """Turn extrusion ON/OFF via coil."""
-        rr = self.client.write_coil(COIL_EXTRUDE, bool(on))
-        ok = (not rr.isError())
+        rr = self._mb_call(self.client.write_coil, COIL_EXTRUDE, bool(on))
+        ok = (rr is not None) and (not rr.isError())
         if ok:
             self.extrude_enabled = bool(on)
             self.get_logger().info(f"coil[{COIL_EXTRUDE}] <- {on}")
@@ -103,8 +161,8 @@ class PrintNode(Node):
 
     def set_speed(self, value: int) -> bool:
         """Set speed in holding register (apply scaling if firmware requires)."""
-        wr = self.client.write_register(REG_SPEED, int(value))
-        ok = (not wr.isError())
+        wr = self._mb_call(self.client.write_register, REG_SPEED, int(value))
+        ok = (wr is not None) and (not wr.isError())
         if ok:
             self.current_speed = int(value)
             self.get_logger().info(f"reg[{REG_SPEED}] <- {value}")
@@ -117,15 +175,16 @@ class PrintNode(Node):
     def _write_u32(self, reg_lo: int, reg_hi: int, value: int) -> bool:
         lo = int(value & 0xFFFF)
         hi = int((value >> 16) & 0xFFFF)
-        wr1 = self.client.write_register(reg_lo, lo)
-        wr2 = self.client.write_register(reg_hi, hi)
-        return (not wr1.isError()) and (not wr2.isError())
+        wr1 = self._mb_call(self.client.write_register, reg_lo, lo)
+        wr2 = self._mb_call(self.client.write_register, reg_hi, hi)
+        return (wr1 is not None) and (wr2 is not None) and (not wr1.isError()) and (not wr2.isError())
 
     def _pulse_coil(self, addr: int) -> bool:
         # momentary pulse: 1 then 0
-        w1 = self.client.write_coil(addr, True)
-        w2 = self.client.write_coil(addr, False)
-        return (not w1.isError()) and (not w2.isError())
+        w1 = self._mb_call(self.client.write_coil, addr, True)
+        w2 = self._mb_call(self.client.write_coil, addr, False)
+        return (w1 is not None) and (w2 is not None) and (not w1.isError()) and (not w2.isError())
+
 
     def enqueue_steps(self, steps: int, ensure_on: bool = True) -> bool:
         """Queue a counted-step job at current HR1 speed."""
@@ -147,7 +206,9 @@ class PrintNode(Node):
 
     def _read_steps_remaining_now(self) -> int:
         """Read steps_accum from IR0..1 atomically and return uint32."""
-        ri = self.client.read_input_registers(IR_STEPS_LO, count=2)
+        ri = self._mb_call(self.client.read_input_registers, IR_STEPS_LO, count=2)
+        if ri is None:
+            return -1
         if ri.isError():
             self.get_logger().warning(f"Error reading IR0..1: {ri}")
             return -1
@@ -158,7 +219,9 @@ class PrintNode(Node):
     # -------- Polling (500 ms) --------
     def _poll(self):
         # Read coil (extrusion ON/OFF)
-        rr = self.client.read_coils(COIL_EXTRUDE, count=1)
+        rr = self._mb_call(self.client.read_coils, COIL_EXTRUDE, count=1)
+        if rr is None:
+            return
         if not rr.isError():
             coil = bool(rr.bits[0])
             if coil != self._last_coil:
@@ -169,7 +232,9 @@ class PrintNode(Node):
             self.get_logger().warning(f"Error reading coil {COIL_EXTRUDE}: {rr}")
 
         # Read speed (holding register)
-        rs = self.client.read_holding_registers(REG_SPEED, count=1)
+        rs = self._mb_call(self.client.read_holding_registers, REG_SPEED, count=1)
+        if rs is None:
+            return
         if not rs.isError():
             speed_val = int(rs.registers[0])
             if speed_val != self._last_speed:
