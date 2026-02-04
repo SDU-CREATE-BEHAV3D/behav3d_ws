@@ -7,8 +7,8 @@ import behav3d_commands
 class MySession(behav3d_commands.Session):
     def run_scan_session(self, targets):
         self.run_sync(self.motion.home(enqueue=False))
-        self.run_sync(self.motion.setSpd(0.2, enqueue=False))
-        self.run_sync(self.motion.setAcc(0.2, enqueue=False))
+        self.run_sync(self.motion.setSpd(0.1, enqueue=False))
+        self.run_sync(self.motion.setAcc(0.1, enqueue=False))
         self.run_sync(self.motion.setEef("extruder_tcp", enqueue=False))
         self.run_sync(self.motion.setLIN(enqueue=False))
         for t in targets:

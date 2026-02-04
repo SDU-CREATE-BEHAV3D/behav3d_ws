@@ -28,8 +28,8 @@ class CustomSequenceDemo(Node):
 
     def _run(self):
         targets = [
-            Target(0.50, 1.00, 0.31),
-            Target(0.50, 1.00, 0.96),
+            Target(0.20, 0.80, 0.31),
+            Target(0.20, 0.80, 0.7),
         ]
 
         self.session.run_scan_session(targets)
@@ -37,6 +37,9 @@ class CustomSequenceDemo(Node):
             self.session.util.input(prompt="Press ENTER to start print demo...", enqueue=False)
         )
         self.session.run_disc_print_session(targets)
+        self.session.run_sync(
+            self.session.motion.home(enqueue=False)
+        )
         self.session.run_sync(
             self.session.util.input(key="q", prompt="Type 'q' + ENTER to shutdown...", enqueue=False)
         )
