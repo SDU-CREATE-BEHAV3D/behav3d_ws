@@ -1,6 +1,30 @@
-**YAML snippets** (one per command/config) matching current API and behaviors. Keep as **list items** under a sequence.
+**YAML snippets** (one per command/config) matching current API and behaviors for the **behav3d_py `SequenceParser`**. Keep as **list items** under a sequence.
+**Companion context:** `agent_prompt.md` (system overview + command surface).
+**Important:** YAML keys are **case-sensitive**. Use the exact keys shown below (`setPTP`, `setLIN`, `setEef`, `setSpd`, `setAcc`, etc.).
+**TODO:** Update the YAML parsing system to reflect the newer `behav3d_commands.Session` dynamics (`run_sync`, `run_group`, queued items) instead of the legacy FIFO-only parser.
 
-### Motion mode & config can be used at the start(stateful “setters”)
+---
+
+## Execution Model (Read This First)
+
+There are **two orchestration layers** in this workspace:
+
+1. **YAML runner (`behav3d_py.SequenceParser`)**  
+   This file documents that YAML format. YAML commands are parsed into calls on `behav3d_py.Commands`, which uses a **single FIFO queue**.  
+   - **Queued commands** (`home`, `goto`, `printTime`, `printSteps`, `wait`, `pose/getPose`, `capture`, `input`, `reconstruct`) run strictly in order.  
+   - **Setters** (`setPTP`, `setLIN`, `setEef`, `setSpd`, `setAcc`) apply **immediately** and affect subsequent commands.  
+   - **There is no explicit `exec` command in YAML.** Planning and execution are controlled by `goto.exec`.
+
+2. **Session API (`behav3d_commands.Session`)**  
+   Used by `custom_session.py` / `custom_sequence.py`. This layer supports **`run_sync` and `run_group`** and is **not** used by YAML.  
+   - Use `run_sync(...)` when you need **deterministic blocking** (plan → exec → capture).  
+   - Use `run_group([...])` when you need **parallel actions** (e.g., move + extrude).  
+   - Use `enqueue=False` to build items for `run_group` or for blocking `run_sync`.
+
+If you are writing YAML, focus on the **FIFO behavior** and `goto.exec`.  
+If you are writing Python sessions, use **`run_sync`/`run_group`** to control blocking and concurrency.
+
+### Motion mode & config (immediate setters, not queued)
 
 ```yaml
 - setPTP                 # set default motion planner to PTP
@@ -8,13 +32,14 @@
 - setEef: extruder_tcp   # set default end-effector
 - setSpd: 0.10           # default velocity_scale (0..1)
 - setAcc: 0.10           # default accel_scale (0..1)
-- TOTG: on            #TODO (placeholder if you wire a time-optimizer toggle)
 ```
 
 ### Home
 
 ```yaml
 - home: {duration_s: 10.0}
+# or:
+- home
 ```
 
 ### Wait (queue delay)
@@ -63,6 +88,10 @@ Plans and (optionally) executes a robot motion in the `world` frame.
 - goto: {x: -0.0500, y: 1.30, z: 0.31, exec: true}
 ```
 
+**When to use `exec: false`**  
+`exec: false` is **plan-only**. The motion is planned and reported, but **not executed**.  
+Because YAML does not expose an explicit `exec` command, `exec: false` is mainly for **validation/testing**; it will not later execute unless another `goto` with `exec: true` is issued.
+
 #### goto with orientation (any subset of rx/ry/rz; others default to 0)
 
 ```yaml
@@ -91,7 +120,11 @@ Plans and (optionally) executes a robot motion in the `world` frame.
 
 ### goto with inline print (concurrent to motion)
 
-Starts extrusion when the motion goal is **accepted** (does not block the FIFO; runs in parallel to the trajectory). Use either **time** or **steps** inside `start_print`.
+Starts extrusion when the motion goal is **accepted** (does not add extra FIFO blocking; runs in parallel to the trajectory). Use either **time** or **steps** inside `start_print`.
+
+**When to use `start_print` vs. `printTime`/`printSteps`**  
+- Use **`start_print`** for **concurrent** extrusion that begins at motion goal acceptance.  
+- Use **`printTime`/`printSteps`** for **serialized** extrusion that must fully finish before the next command.
 
 **Time-based inline print**
 
@@ -120,11 +153,13 @@ Starts extrusion when the motion goal is **accepted** (does not block the FIFO; 
 * Use **either** `secs` (float) **or** `steps` (int).
 * `speed` (int): Extrusion speed (implementation-specific units).
 * `offset_s` (float, optional, default: 0.0): Delay after goal acceptance before starting extrusion.
-* `sync` (string, optional, default: `accept`): Currently supports `accept` (trigger at motion goal acceptance).
+* `sync` (string, optional, default: `accept`): Only `accept` is supported today (trigger at motion goal acceptance).
 
 ---
 
-### Pose (queued; query EEF/link pose)
+### Pose / getPose (queued; query EEF/link pose)
+
+`pose` and `getPose` are aliases (same behavior).
 
 ```yaml
 - pose: extruder_tcp
@@ -164,7 +199,7 @@ Starts extrusion when the motion goal is **accepted** (does not block the FIFO; 
 * **Keys:**
 
   * Scalar form: `- pose: extruder_tcp` is shorthand for `{ eef: extruder_tcp, base: world, tf: false }`.
-  * Mapping form supports: `eef` (or `link`), `base`, and `tf`.
+  * Mapping form supports: `eef` (or `link`), `base`, and `tf`. If `base` is omitted, MoveIt uses the planning frame; TF uses `'world'`.
 * **Result:** your callback receives a payload with `pose` (PoseStamped), `base_frame`, `link`, and `metrics.source` (`moveit` or `tf`).
 * **Common uses:** sanity checks after a move, logging end effector drift, verifying tool offsets.
 
@@ -173,10 +208,10 @@ Starts extrusion when the motion goal is **accepted** (does not block the FIFO; 
 ## Example mini-sequence with `pose`
 
 ```yaml
-- LIN
-- EEF: extruder_tcp
-- SPD: 0.10
-- ACC: 0.10
+- setLIN
+- setEef: extruder_tcp
+- setSpd: 0.10
+- setAcc: 0.10
 
 - home: {duration_s: 2.0}
 
@@ -209,6 +244,13 @@ Starts extrusion when the motion goal is **accepted** (does not block the FIFO; 
 # Displays the given message, then waits for ENTER.
 ```
 
+#### Input with key gating (recommended form)
+
+```yaml
+- input: { key: "q", prompt: "Type 'q' + ENTER to shutdown..." }
+# Waits until the user types the given key (then ENTER).
+```
+
 ---
 
 ### Capture (image or data acquisition)
@@ -238,19 +280,18 @@ Starts extrusion when the motion goal is **accepted** (does not block the FIFO; 
 
 ### Notes
 
-* `input` pauses the FIFO until ENTER is pressed (no key mapping).
+* `input` pauses the FIFO until ENTER (or a specific key if provided) is received.
 * `capture` calls the capture service; omitted keys default to `false`.
+* `capture.folder`: omit the field to keep the current folder; set `""` to clear/reset; set a path to change.
 
 ---
 
 
 ## Notes / defaults
 
-* `goto` units: meters for XYZ; **radians** for `rx/ry/rz` (unless `degrees: true` is present).
+* `goto` units: meters for XYZ; **radians** for `rx/ry/rz`.
 * If `rx/ry/rz` are omitted → identity orientation (`w=1`).
-* `motion` accepts `PTP` or `LIN`. If omitted, current mode set by `- PTP` / `- LIN` is used.
-* `EEF/SPD/ACC/TOTG` lines set persistent defaults for subsequent `goto` calls (can be overridden per-call).
-* `print` outside `goto` is queued in the FIFO; `start_print` inside `goto` runs **concurrently** at motion start.
+* `motion` accepts `PTP` or `LIN`. If omitted, current mode set by `- setPTP` / `- setLIN` is used.
+* `setEef/setSpd/setAcc` set persistent defaults for subsequent `goto` calls (can be overridden per-call).
+* `printTime` / `printSteps` are queued in the FIFO; `start_print` inside `goto` runs **concurrently** at motion start.
 * `wait` is one-shot and holds the FIFO before the next command.
-
-
