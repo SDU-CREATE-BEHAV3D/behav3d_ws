@@ -45,9 +45,11 @@ class MySession(behav3d_commands.Session):
             else:
                 group = [
                     self.motion.exec(enqueue=False),
-                    self.extruder.print_steps(steps=2000, speed=500, enqueue=False),
+                    self.extruder.setExtruder(True, speed=600, enqueue=False)
                 ]
                 self.run_group(group)
+                self.run_sync(self.util.wait(0.01, enqueue=False))
+                self.run_sync(self.extruder.setExtruder(False, enqueue=False))
 
         # Barrier: wait for the last group to finish before returning.
         self.run_sync(self.util.wait(0.01, enqueue=False))

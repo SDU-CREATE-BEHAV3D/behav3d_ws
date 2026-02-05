@@ -7,6 +7,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 
 from behav3d_interfaces.action import PrintTime, PrintSteps
+from behav3d_interfaces.srv import UpdatePrintConfig
 
 from behav3d_commands.command import Command, OnCommandDone
 from behav3d_commands.queue import QueueItem, SessionQueue
@@ -18,12 +19,14 @@ class ExtruderCommands:
         self._node = node
         self._print_ac = ActionClient(node, PrintTime, "print")
         self._print_steps_ac = ActionClient(node, PrintSteps, "print_steps")
+        self._update_cfg_cli = node.create_client(UpdatePrintConfig, "update_print_config")
 
     def register(self, router) -> None:
         router.register("print_time", self._handle_print_time)
         router.register("print_steps", self._handle_print_steps)
         router.register("print_time_delayed", self._handle_print_time_delayed)
         router.register("print_steps_delayed", self._handle_print_steps_delayed)
+        router.register("set_extruder", self._handle_set_extruder)
 
     def _queue_or_item(self, item: QueueItem, *, enqueue: bool):
         if enqueue:
@@ -77,6 +80,25 @@ class ExtruderCommands:
                 "offset_s": float(offset_s),
             },
             cmd_kind="print_steps",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def setExtruder(
+        self,
+        on: bool,
+        *,
+        speed: Optional[int] = None,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "set_extruder",
+            {
+                "on": bool(on),
+                "speed": (None if speed is None else int(speed)),
+            },
+            cmd_kind="set_extruder",
             on_done=on_done,
         )
         return self._queue_or_item(item, enqueue=enqueue)
@@ -215,3 +237,46 @@ class ExtruderCommands:
 
         self._node.get_logger().info(f"PRINT_STEPS: delaying {offset_s:.2f} s before start")
         t = self._node.create_timer(offset_s, _start)
+
+    def _handle_set_extruder(self, payload: Dict[str, Any], cmd: Command) -> None:
+        on = bool(payload.get("on", False))
+        speed = payload.get("speed", None)
+
+        if not self._update_cfg_cli.wait_for_service(timeout_sec=2.0):
+            cmd.finish_flag(ok=False, phase="exec", error="update_print_config service not available")
+            return
+
+        req = UpdatePrintConfig.Request()
+        req.set_extrude = True
+        req.extrude_on = bool(on)
+
+        if speed is None:
+            req.set_speed = False
+            req.speed = 0
+        else:
+            req.set_speed = True
+            req.speed = int(speed)
+
+        self._node.get_logger().info(
+            f"SET_EXTRUDER: on={req.extrude_on} set_speed={req.set_speed} speed={req.speed}"
+        )
+
+        fut = self._update_cfg_cli.call_async(req)
+
+        def _on_resp(fr):
+            try:
+                resp = fr.result()
+            except Exception as exc:
+                cmd.finish_flag(ok=False, phase="exec", error=f"exception: {exc}")
+                return
+
+            ok = bool(getattr(resp, "success", False))
+            msg = getattr(resp, "message", "")
+            cmd.finish_flag(
+                ok=ok,
+                phase="exec",
+                metrics={"message": msg},
+                error=None if ok else msg,
+            )
+
+        fut.add_done_callback(_on_resp)

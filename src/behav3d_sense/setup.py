@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'sense_node = behav3d_sense.sense_node:main',
             'reconstruction_service = behav3d_sense.reconstruction:main',
+            'world_node = behav3d_sense.world_node:main',
         ],
     },
 )

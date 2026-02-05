@@ -227,6 +227,14 @@ def generate_launch_description():
     )
     sense_node_call = TimerAction(period=2.0, actions=[sense_node])
 
+    world_node = Node(
+        name="behav3d_world",
+        package="behav3d_sense",
+        executable="world_node",
+        output="screen",
+    )
+    world_node_call = TimerAction(period=2.0, actions=[world_node])
+
     #world_visualizer node
     world_visualizer = Node(
         package='world_visualizer',
@@ -285,6 +293,7 @@ def generate_launch_description():
             motion_bridge,
             print_node,
             sense_node_call,
+            world_node_call,
             delayed_visualizer,
        #    node_demo
         ]

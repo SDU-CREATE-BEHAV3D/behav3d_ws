@@ -97,6 +97,7 @@ Extruder commands:
 | --- | --- | --- | --- |
 | `print_time()` | Extrude for a time duration. | `secs`, `speed`, `offset_s`, `use_previous_speed` | If `offset_s>0`, delays start using a timer. |
 | `print_steps()` | Extrude a fixed number of steps. | `steps`, `speed`, `offset_s`, `use_previous_speed` | If `offset_s>0`, delays start using a timer. |
+| `setExtruder()` | Turn extrusion ON/OFF indefinitely (optionally set speed). | `on`, `speed` (optional) | Uses `update_print_config` service; if `speed` omitted, keeps current speed. |
 
 The actions are implemented by `behav3d_print`:
 - `PrintTime` uses a timed loop and controls Modbus registers/coils.
