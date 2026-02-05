@@ -10,7 +10,7 @@ import rclpy
 from rclpy.node import Node
 
 from .src.custom_session import MySession
-
+from .src.grid_sweep_session import GridSweepSession
 
 @dataclass(frozen=True)
 class Target:
@@ -23,6 +23,7 @@ class CustomSequenceDemo(Node):
     def __init__(self):
         super().__init__("session_sync_demo")
         self.session = MySession(self)
+        self.grid_session = GridSweepSession(self)
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
 
@@ -32,7 +33,21 @@ class CustomSequenceDemo(Node):
             Target(0.20, 0.80, 0.7),
         ]
 
-        self.session.run_scan_session(targets)
+      #  self.session.run_scan_session(targets)
+        self.grid_session.run_grid_sweep(
+            width=0.8,
+            height=0.5,
+            center_x=0.0,
+            center_y=0.75,
+            center_z=0.0,
+            z_off=0.75,
+            nx=4,
+            ny=3,
+            row_major=False,
+            debug=True,
+            capture_folder="@session/grid_sweep",
+        )
+
         self.session.run_sync(
             self.session.util.input(prompt="Press ENTER to start print demo...", enqueue=False)
         )
