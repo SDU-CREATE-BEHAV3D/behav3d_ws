@@ -23,6 +23,7 @@ setup(
             'move_and_print_test = behav3d_examples.move_and_print_test:main',
             'handeye_capture_sequence = behav3d_examples.handeye_capture_sequence:main',
             'custom_sequence = behav3d_examples.custom_sequence:main',
+            'loop0_sequence = behav3d_examples.loop0_sequence:main',
         ],
     },
 )
