@@ -32,8 +32,8 @@ from .utils.extrinsics import load_extrinsics
 from .utils.image_loader import load_images
 
 
-DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260114_112631"
-DEFAULT_SCAN_FOLDER = "manual_caps"
+DEFAULT_SESSION_PATH = "/home/lab/behav3d_ws/captures/260206_171134"
+DEFAULT_SCAN_FOLDER = "grid_sweep"
 
 
 class ColorToDepthAligner:

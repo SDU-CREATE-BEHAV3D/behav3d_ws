@@ -154,6 +154,11 @@ class GridSweepSession(Session):
                 timeout_s=timeout_s,
             )
 
+            self.run_sync(
+                self.util.wait(0.5, enqueue=False),
+                timeout_s=timeout_s,
+            )
+
         if publish_markers:
             try:
                 self.run_sync(self.util.delete_markers(enqueue=False), timeout_s=timeout_s)
