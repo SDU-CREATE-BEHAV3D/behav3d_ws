@@ -9,7 +9,14 @@ from typing import Any, Callable, Dict, Optional, Sequence
 from rclpy.node import Node
 
 from geometry_msgs.msg import PoseStamped
-from behav3d_interfaces.srv import PublishTargets, DeleteMarkers
+
+try:
+    from behav3d_interfaces.srv import PublishTargets, DeleteMarkers
+except ImportError:
+    # Some merged/partial installs may generate the srv modules but not re-export
+    # them in behav3d_interfaces.srv.__init__.py yet.
+    from behav3d_interfaces.srv._publish_targets import PublishTargets
+    from behav3d_interfaces.srv._delete_markers import DeleteMarkers
 
 from behav3d_commands.command import Command, OnCommandDone
 from behav3d_commands.queue import QueueItem, SessionQueue
