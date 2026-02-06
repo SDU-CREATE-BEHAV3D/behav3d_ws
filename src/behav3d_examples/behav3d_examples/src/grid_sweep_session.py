@@ -21,6 +21,7 @@ class GridSweepSession(Session):
     def run_grid_sweep(
         self,
         *,
+        target: Optional[PoseStamped] = None,
         width: float = 1.0,
         height: float = 0.5,
         center_x: float = 0.0,
@@ -31,7 +32,7 @@ class GridSweepSession(Session):
         ny: int = 5,
         row_major: bool = False,
         frame_id: str = "world",
-        eef_link: Optional[str] = "femto_ir_optical_calib",
+        eef_link: Optional[str] = "femto_color_optical_calib",
         use_tf_orientation: bool = True,
         debug: bool = False,
         capture_folder: Optional[str] = "@session/grid_sweep",
@@ -54,8 +55,16 @@ class GridSweepSession(Session):
         if eef_link:
             self.run_sync(self.motion.setEef(eef_link, enqueue=False))
 
-        center = tb.worldXY(center_x, center_y, center_z, frame_id)
-        if use_tf_orientation and eef_link:
+        if target is not None:
+            if not isinstance(target, PoseStamped):
+                raise TypeError("target must be geometry_msgs.msg.PoseStamped")
+            if target.header.frame_id not in (frame_id, "", None):
+                log.warn("[grid_sweep] target frame_id differs; using target as-is.")
+            center = target
+        else:
+            center = tb.worldXY(center_x, center_y, center_z, frame_id)
+
+        if target is None and use_tf_orientation and eef_link:
             try:
                 pose_res = self.run_sync(
                     self.camera.get_pose(
@@ -141,19 +150,35 @@ class GridSweepSession(Session):
     ) -> List[PoseStamped]:
         out: List[PoseStamped] = []
 
-        # Canonical local pose (mirrors C++ flipTargetAxes(worldXY(...), false, true))
-        p_base_local = tb.flipTargetAxes(tb.worldXY(0.0, 0.0, 0.0, center.header.frame_id), False, True)
-
         dx = width / float(nx - 1)
         dy = height / float(ny - 1)
+
+        cx = float(center.pose.position.x)
+        cy = float(center.pose.position.y)
+        cz = float(center.pose.position.z)
+        qx = float(center.pose.orientation.x)
+        qy = float(center.pose.orientation.y)
+        qz = float(center.pose.orientation.z)
+        qw = float(center.pose.orientation.w)
 
         for j in range(ny):
             row: List[PoseStamped] = []
             for i in range(nx):
                 x = -0.5 * width + i * dx
                 y = -0.5 * height + j * dy
-                p_local = tb.translate(p_base_local, [x, y, -float(z_off)])
-                row.append(tb.changeBasis(center, p_local))
+                # Keep XYZ in world frame; keep orientation from the EEF.
+                row.append(
+                    tb.poseStamped(
+                        cx + x,
+                        cy + y,
+                        cz + float(z_off),
+                        qx,
+                        qy,
+                        qz,
+                        qw,
+                        center.header.frame_id,
+                    )
+                )
 
             if not row_major and (j % 2 == 1):
                 row.reverse()

@@ -32,7 +32,7 @@ class CustomSequenceDemo(Node):
             Target(0.20, 0.80, 0.31),
             Target(0.20, 0.80, 0.7),
         ]
-
+       
       #  self.session.run_scan_session(targets)
         self.grid_session.run_grid_sweep(
             width=0.8,
@@ -43,9 +43,10 @@ class CustomSequenceDemo(Node):
             z_off=0.75,
             nx=4,
             ny=3,
-            row_major=False,
             debug=True,
             capture_folder="@session/grid_sweep",
+            eef_link="femto_color_optical_calib",
+            use_tf_orientation=True,
         )
 
         self.session.run_sync(
