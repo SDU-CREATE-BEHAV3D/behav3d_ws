@@ -22,6 +22,9 @@ setup(
         'console_scripts': [
             'sense_node = behav3d_sense.sense_node:main',
             'reconstruction_service = behav3d_sense.reconstruction:main',
+            'color_to_depth_service = behav3d_sense.reconstruct.reconstruct_services:main_color_to_depth',
+            'tsdf_cropped_service = behav3d_sense.reconstruct.reconstruct_services:main_tsdf_cropped',
+            'tsdf_object_extract_service = behav3d_sense.reconstruct.reconstruct_services:main_tsdf_object_extract',
             'world_node = behav3d_sense.world_node:main',
         ],
     },
