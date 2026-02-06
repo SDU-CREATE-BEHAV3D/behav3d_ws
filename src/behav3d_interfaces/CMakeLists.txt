@@ -30,6 +30,9 @@ set(srv_files
   srv/PlanPilzSequence.srv
   srv/GetLinkPose.srv
   srv/ReconstructMesh.srv
+  srv/ColorToDepth.srv
+  srv/TsdfCropped.srv
+  srv/TsdfObjectExtract.srv
 )
 
 # Generate interfaces
