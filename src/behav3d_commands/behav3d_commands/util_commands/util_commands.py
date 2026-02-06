@@ -9,7 +9,12 @@ from typing import Any, Callable, Dict, Optional, Sequence
 from rclpy.node import Node
 
 from geometry_msgs.msg import PoseStamped
-from behav3d_interfaces.srv import PublishTargets, DeleteMarkers
+try:
+    from behav3d_interfaces.srv import DeleteMarkers, PublishTargets
+except ImportError:
+    # Fallback for stale rosidl __init__.py exports in incremental workspaces.
+    from behav3d_interfaces.srv._delete_markers import DeleteMarkers
+    from behav3d_interfaces.srv._publish_targets import PublishTargets
 
 from behav3d_commands.command import Command, OnCommandDone
 from behav3d_commands.queue import QueueItem, SessionQueue

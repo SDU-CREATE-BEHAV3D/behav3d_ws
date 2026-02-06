@@ -35,12 +35,12 @@ class CustomSequenceDemo(Node):
        
       #  self.session.run_scan_session(targets)
         self.grid_session.run_grid_sweep(
-            width=0.8,
-            height=0.5,
+            width=0.6,
+            height=0.4,
             center_x=0.0,
-            center_y=0.75,
+            center_y=0.8,
             center_z=0.0,
-            z_off=0.75,
+            z_off=0.6,
             nx=3,
             ny=2,
             debug=True,
