@@ -14,10 +14,12 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 #include <moveit/robot_state/conversions.hpp>
 #include <moveit/robot_trajectory/robot_trajectory.hpp>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <Eigen/Geometry>
 
 #include <moveit/move_group_interface/move_group_interface.hpp>
 #include <moveit_msgs/msg/display_trajectory.hpp>
@@ -36,6 +38,8 @@
 #include "behav3d_interfaces/srv/plan_pilz_ptp.hpp"
 #include "behav3d_interfaces/srv/plan_pilz_sequence.hpp"
 #include "behav3d_interfaces/srv/get_link_pose.hpp"
+#include "behav3d_interfaces/srv/publish_targets.hpp"
+#include "behav3d_interfaces/srv/delete_markers.hpp"
 
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -71,6 +75,8 @@ public:
         "/behav3d/last_plan", latched);
     marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>(
         "/behav3d/markers/eef_path", latched);
+    targets_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
+        "/behav3d/markers/targets", latched);
 
     // Services
     
@@ -107,6 +113,15 @@ public:
         "/behav3d/get_link_pose",
         std::bind(&MotionBridge::getLinkPoseCallback, this, _1, _2));
 
+    // Publish target markers (axes) and clear markers
+    publish_targets_srv_ = this->create_service<behav3d_interfaces::srv::PublishTargets>(
+        "/behav3d/publish_targets",
+        std::bind(&MotionBridge::publishTargetsCallback, this, _1, _2));
+
+    delete_markers_srv_ = this->create_service<behav3d_interfaces::srv::DeleteMarkers>(
+        "/behav3d/delete_markers",
+        std::bind(&MotionBridge::deleteMarkersCallback, this, _1, _2));
+
     // Joint state subscription
     joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
         "/joint_states", rclcpp::QoS(100),
@@ -119,6 +134,7 @@ public:
     RCLCPP_INFO(this->get_logger(),
                 "Motion bridge ready: /behav3d/plan_with_moveit, /behav3d/plan_cartesian_path, "
                 "/behav3d/plan_pilz_lin, /behav3d/plan_pilz_ptp, /behav3d/plan_pilz_sequence "
+                "/behav3d/get_link_pose, /behav3d/publish_targets, /behav3d/delete_markers "
                 "(exec_mode=%s, controller_action=%s, flange_link=%s)",
                 exec_mode_.c_str(), controller_action_name_.c_str(), flange_link_.c_str());
   }
@@ -242,6 +258,14 @@ private:
     res->message = "OK";
     res->pose = out;
   }
+
+  void publishTargetsCallback(
+    const std::shared_ptr<behav3d_interfaces::srv::PublishTargets::Request> req,
+    std::shared_ptr<behav3d_interfaces::srv::PublishTargets::Response> res);
+
+  void deleteMarkersCallback(
+    const std::shared_ptr<behav3d_interfaces::srv::DeleteMarkers::Request> req,
+    std::shared_ptr<behav3d_interfaces::srv::DeleteMarkers::Response> res);
 
 
   // --- PlanWithMoveIt callback ---
@@ -742,6 +766,7 @@ private:
   rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>::SharedPtr display_pub_;
   rclcpp::Publisher<moveit_msgs::msg::RobotTrajectory>::SharedPtr last_plan_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr targets_pub_;
 
   rclcpp::Service<behav3d_interfaces::srv::PlanWithMoveIt>::SharedPtr service_;
   rclcpp::Service<behav3d_interfaces::srv::PlanCartesianPath>::SharedPtr cartesian_srv_;
@@ -749,6 +774,8 @@ private:
   rclcpp::Service<behav3d_interfaces::srv::PlanPilzPtp>::SharedPtr pilz_ptp_srv_;
   rclcpp::Service<behav3d_interfaces::srv::PlanPilzSequence>::SharedPtr pilz_seq_srv_;
   rclcpp::Service<behav3d_interfaces::srv::GetLinkPose>::SharedPtr get_link_pose_srv_;
+  rclcpp::Service<behav3d_interfaces::srv::PublishTargets>::SharedPtr publish_targets_srv_;
+  rclcpp::Service<behav3d_interfaces::srv::DeleteMarkers>::SharedPtr delete_markers_srv_;
 
   rclcpp_action::Client<FJT>::SharedPtr fjt_client_;
 
@@ -760,6 +787,120 @@ private:
   sensor_msgs::msg::JointState last_joint_state_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 };
+
+void MotionBridge::publishTargetsCallback(
+  const std::shared_ptr<behav3d_interfaces::srv::PublishTargets::Request> req,
+  std::shared_ptr<behav3d_interfaces::srv::PublishTargets::Response> res)
+{
+  const auto &targets = req->targets;
+  if (req->clear_before) {
+    visualization_msgs::msg::MarkerArray clear_arr;
+    visualization_msgs::msg::Marker clear_m;
+    clear_m.action = visualization_msgs::msg::Marker::DELETEALL;
+    clear_arr.markers.push_back(clear_m);
+    targets_pub_->publish(clear_arr);
+  }
+
+  if (targets.empty()) {
+    res->success = true;
+    res->message = "No targets provided.";
+    return;
+  }
+
+  const std::string frame_id = targets.front().header.frame_id.empty() ? "world" : targets.front().header.frame_id;
+  const float axis_len = (req->axis_length > 0.0f) ? req->axis_length : 0.05f;
+  const float axis_rad = (req->axis_radius > 0.0f) ? req->axis_radius : 0.003f;
+
+  visualization_msgs::msg::Marker mx;
+  visualization_msgs::msg::Marker my;
+  visualization_msgs::msg::Marker mz;
+
+  auto init_marker = [&](visualization_msgs::msg::Marker &m, const std::string &ns, float r, float g, float b)
+  {
+    m.header.frame_id = frame_id;
+    m.header.stamp = this->now();
+    m.ns = ns;
+    m.id = 0;
+    m.type = visualization_msgs::msg::Marker::LINE_LIST;
+    m.action = visualization_msgs::msg::Marker::ADD;
+    m.scale.x = axis_rad;
+    m.color.r = r;
+    m.color.g = g;
+    m.color.b = b;
+    m.color.a = 1.0f;
+    m.points.clear();
+    m.points.reserve(targets.size() * 2);
+  };
+
+  init_marker(mx, "targets_x", 1.0f, 0.1f, 0.1f);
+  init_marker(my, "targets_y", 0.1f, 1.0f, 0.1f);
+  init_marker(mz, "targets_z", 0.1f, 0.1f, 1.0f);
+
+  for (const auto &ps : targets)
+  {
+    const auto &p = ps.pose.position;
+    const auto &q = ps.pose.orientation;
+
+    Eigen::Quaterniond qe(q.w, q.x, q.y, q.z);
+    if (qe.norm() < 1e-9) {
+      qe = Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0);
+    } else {
+      qe.normalize();
+    }
+    Eigen::Matrix3d R = qe.toRotationMatrix();
+    Eigen::Vector3d ex = R.col(0);
+    Eigen::Vector3d ey = R.col(1);
+    Eigen::Vector3d ez = R.col(2);
+
+    geometry_msgs::msg::Point start;
+    start.x = p.x; start.y = p.y; start.z = p.z;
+
+    geometry_msgs::msg::Point endx = start;
+    endx.x += axis_len * ex.x();
+    endx.y += axis_len * ex.y();
+    endx.z += axis_len * ex.z();
+
+    geometry_msgs::msg::Point endy = start;
+    endy.x += axis_len * ey.x();
+    endy.y += axis_len * ey.y();
+    endy.z += axis_len * ey.z();
+
+    geometry_msgs::msg::Point endz = start;
+    endz.x += axis_len * ez.x();
+    endz.y += axis_len * ez.y();
+    endz.z += axis_len * ez.z();
+
+    mx.points.push_back(start);
+    mx.points.push_back(endx);
+    my.points.push_back(start);
+    my.points.push_back(endy);
+    mz.points.push_back(start);
+    mz.points.push_back(endz);
+  }
+
+  visualization_msgs::msg::MarkerArray arr;
+  arr.markers.push_back(mx);
+  arr.markers.push_back(my);
+  arr.markers.push_back(mz);
+  targets_pub_->publish(arr);
+
+  res->success = true;
+  res->message = "Published target axes.";
+}
+
+void MotionBridge::deleteMarkersCallback(
+  const std::shared_ptr<behav3d_interfaces::srv::DeleteMarkers::Request> req,
+  std::shared_ptr<behav3d_interfaces::srv::DeleteMarkers::Response> res)
+{
+  (void)req;
+  visualization_msgs::msg::MarkerArray arr;
+  visualization_msgs::msg::Marker clear_m;
+  clear_m.action = visualization_msgs::msg::Marker::DELETEALL;
+  arr.markers.push_back(clear_m);
+  targets_pub_->publish(arr);
+  res->success = true;
+  res->message = "Deleted all target markers.";
+}
 
 int main(int argc, char **argv)
 {

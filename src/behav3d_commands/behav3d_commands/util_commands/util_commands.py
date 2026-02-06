@@ -4,9 +4,12 @@ from __future__ import annotations
 import sys
 import threading
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Sequence
 
 from rclpy.node import Node
+
+from geometry_msgs.msg import PoseStamped
+from behav3d_interfaces.srv import PublishTargets, DeleteMarkers
 
 from behav3d_commands.command import Command, OnCommandDone
 from behav3d_commands.queue import QueueItem, SessionQueue
@@ -16,11 +19,15 @@ class UtilCommands:
     def __init__(self, node: Node, *, queue: Optional[SessionQueue] = None):
         self._queue = queue
         self._node = node
+        self._publish_targets_cli = node.create_client(PublishTargets, "/behav3d/publish_targets")
+        self._delete_markers_cli = node.create_client(DeleteMarkers, "/behav3d/delete_markers")
 
     def register(self, router) -> None:
         router.register("wait", self._handle_wait)
         router.register("wait_input", self._handle_wait_input)
         router.register("wait_until", self._handle_wait_until)
+        router.register("publish_targets", self._handle_publish_targets)
+        router.register("delete_markers", self._handle_delete_markers)
 
     def _queue_or_item(self, item: QueueItem, *, enqueue: bool):
         if enqueue:
@@ -77,6 +84,43 @@ class UtilCommands:
                 "prompt": prompt,
             },
             cmd_kind="input",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def publish_targets(
+        self,
+        targets: Sequence[PoseStamped],
+        *,
+        axis_length: float = 0.05,
+        axis_radius: float = 0.003,
+        clear_before: bool = True,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "publish_targets",
+            {
+                "targets": list(targets),
+                "axis_length": float(axis_length),
+                "axis_radius": float(axis_radius),
+                "clear_before": bool(clear_before),
+            },
+            cmd_kind="publish_targets",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def delete_markers(
+        self,
+        *,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "delete_markers",
+            {},
+            cmd_kind="delete_markers",
             on_done=on_done,
         )
         return self._queue_or_item(item, enqueue=enqueue)
@@ -173,3 +217,71 @@ class UtilCommands:
 
         t = threading.Thread(target=_reader, daemon=True)
         t.start()
+
+    def _handle_publish_targets(self, payload: Dict[str, Any], cmd: Command) -> None:
+        if not self._publish_targets_cli.wait_for_service(timeout_sec=2.0):
+            cmd.finish_flag(ok=False, phase="exec", error="publish_targets service not available")
+            return
+
+        targets = payload.get("targets", [])
+        axis_length = float(payload.get("axis_length", 0.05))
+        axis_radius = float(payload.get("axis_radius", 0.003))
+        clear_before = bool(payload.get("clear_before", True))
+
+        req = PublishTargets.Request()
+        req.targets = list(targets)
+        req.axis_length = float(axis_length)
+        req.axis_radius = float(axis_radius)
+        req.clear_before = bool(clear_before)
+
+        self._node.get_logger().info(
+            f"PUBLISH_TARGETS: count={len(req.targets)} clear_before={req.clear_before} "
+            f"axis_length={req.axis_length:.3f} axis_radius={req.axis_radius:.3f}"
+        )
+
+        fut = self._publish_targets_cli.call_async(req)
+
+        def _on_resp(fr):
+            try:
+                resp = fr.result()
+            except Exception as exc:
+                cmd.finish_flag(ok=False, phase="exec", error=f"exception: {exc}")
+                return
+
+            ok = bool(getattr(resp, "success", False))
+            msg = getattr(resp, "message", "")
+            cmd.finish_flag(
+                ok=ok,
+                phase="exec",
+                metrics={"message": msg},
+                error=None if ok else msg,
+            )
+
+        fut.add_done_callback(_on_resp)
+
+    def _handle_delete_markers(self, payload: Dict[str, Any], cmd: Command) -> None:
+        _ = payload
+        if not self._delete_markers_cli.wait_for_service(timeout_sec=2.0):
+            cmd.finish_flag(ok=False, phase="exec", error="delete_markers service not available")
+            return
+
+        req = DeleteMarkers.Request()
+        fut = self._delete_markers_cli.call_async(req)
+
+        def _on_resp(fr):
+            try:
+                resp = fr.result()
+            except Exception as exc:
+                cmd.finish_flag(ok=False, phase="exec", error=f"exception: {exc}")
+                return
+
+            ok = bool(getattr(resp, "success", False))
+            msg = getattr(resp, "message", "")
+            cmd.finish_flag(
+                ok=ok,
+                phase="exec",
+                metrics={"message": msg},
+                error=None if ok else msg,
+            )
+
+        fut.add_done_callback(_on_resp)

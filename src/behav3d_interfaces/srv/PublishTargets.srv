@@ -1,0 +1,7 @@
+geometry_msgs/PoseStamped[] targets
+float32 axis_length
+float32 axis_radius
+bool clear_before
+---
+bool success
+string message

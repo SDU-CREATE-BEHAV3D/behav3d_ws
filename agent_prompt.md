@@ -155,6 +155,10 @@ Utility commands:
 | `wait()` | Delay execution. | `secs` | Uses a ROS timer. |
 | `wait_until()` | Poll a predicate until it becomes true. | `predicate`, `period_s`, `timeout_s` | Fails on timeout or predicate exception. |
 | `input()` | Wait for user input. | `key`, `prompt` | If no TTY, auto-continues. |
+| `publish_targets()` | Publish RViz target markers (axes). | `targets`, `axis_length`, `axis_radius`, `clear_before` | Calls `/behav3d/publish_targets`. |
+| `delete_markers()` | Delete all published target markers. | none | Calls `/behav3d/delete_markers`. |
+
+**RViz note:** add a `MarkerArray` display subscribing to `/behav3d/markers/targets` and set the Fixed Frame to match the target `frame_id` (typically `world`).
 
 ---
 
@@ -173,6 +177,8 @@ Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 - `/reconstruct_mesh` (`ReconstructMesh`) via `behav3d_sense/reconstruction`
 - `update_print_config` (`UpdatePrintConfig`) via `behav3d_print`
 - `get_print_status` (`GetPrintStatus`) via `behav3d_print`
+- `/behav3d/publish_targets` (`PublishTargets`) via `behav3d_motion_bridge`
+- `/behav3d/delete_markers` (`DeleteMarkers`) via `behav3d_motion_bridge`
 
 Implementation references:
 - `src/behav3d_motion_bridge/src/motion_bridge_node.cpp`

@@ -40,6 +40,10 @@ class GridSweepSession(Session):
         vel_scale: Optional[float] = None,
         accel_scale: Optional[float] = None,
         timeout_s: Optional[float] = None,
+        publish_markers: bool = True,
+        axis_length: float = 0.05,
+        axis_radius: float = 0.003,
+        clear_markers_before: bool = True,
     ) -> List[PoseStamped]:
         log = self.node.get_logger()
 
@@ -95,6 +99,21 @@ class GridSweepSession(Session):
             log.warn("[grid_sweep] No targets generated.")
             return []
 
+        if publish_markers:
+            try:
+                self.run_sync(
+                    self.util.publish_targets(
+                        targets,
+                        axis_length=axis_length,
+                        axis_radius=axis_radius,
+                        clear_before=clear_markers_before,
+                        enqueue=False,
+                    ),
+                    timeout_s=timeout_s,
+                )
+            except TimeoutError:
+                log.warn("[grid_sweep] publish_targets timed out; continuing without markers.")
+
         for i, ps in enumerate(targets):
             plan_res = self.run_sync(
                 self.motion.plan(
@@ -134,6 +153,12 @@ class GridSweepSession(Session):
                 ),
                 timeout_s=timeout_s,
             )
+
+        if publish_markers:
+            try:
+                self.run_sync(self.util.delete_markers(enqueue=False), timeout_s=timeout_s)
+            except TimeoutError:
+                log.warn("[grid_sweep] delete_markers timed out.")
 
         return targets
 

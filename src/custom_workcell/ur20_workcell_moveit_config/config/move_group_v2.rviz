@@ -217,13 +217,15 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        {}
+        targets_x: true
+        targets_y: true
+        targets_z: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /rviz_visual_tools
+        Value: /behav3d/markers/targets
       Value: true
     - Class: moveit_rviz_plugin/Trajectory
       Color Enabled: false
@@ -394,6 +396,13 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /visualization_marker
       Value: true
+    - Class: rviz_default_plugins/Axes
+      Enabled: false
+      Length: 1
+      Name: Axes
+      Radius: 0.10000000149011612
+      Reference Frame: <Fixed Frame>
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -440,7 +449,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 3.8475613594055176
+      Distance: 2.9573559761047363
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -455,10 +464,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6453974843025208
+      Pitch: 0.6603978276252747
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.18539753556251526
+      Yaw: 0.450396865606308
     Saved: ~
 Window Geometry:
   Displays:

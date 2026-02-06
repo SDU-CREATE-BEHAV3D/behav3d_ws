@@ -30,6 +30,8 @@ set(srv_files
   srv/PlanPilzSequence.srv
   srv/GetLinkPose.srv
   srv/ReconstructMesh.srv
+  srv/PublishTargets.srv
+  srv/DeleteMarkers.srv
 )
 
 # Generate interfaces
