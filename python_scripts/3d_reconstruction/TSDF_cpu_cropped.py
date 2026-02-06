@@ -34,9 +34,9 @@ from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
 session_folder = "260113_170839"
-SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/" + session_folder
+SESSION_PATH = "/home/lab/behav3d_ws/captures/" + session_folder
 scan_folder = "manual_caps"
-output_folder = Path("/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/" + session_folder)
+output_folder = Path("/home/lab/behav3d_ws/captures/" + session_folder)
 my_session = Session(SESSION_PATH, scan_folder)
 
 # Folder containing your color_in_depth outputs
