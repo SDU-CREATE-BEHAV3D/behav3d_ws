@@ -1,0 +1,10 @@
+# Request
+bool use_latest
+string session_path
+string scan_folder
+bool visualize
+---
+# Response
+bool success
+string message
+string output_path
