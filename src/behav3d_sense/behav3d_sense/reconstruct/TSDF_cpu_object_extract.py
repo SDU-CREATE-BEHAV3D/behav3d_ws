@@ -1,8 +1,7 @@
 # TSDF -> cropped + plane-filtered surface point cloud
 # Focus: crop and remove points below a known table plane (with offset).
 
-# set python_scripts path for utils import
-import sys
+# local utils
 import json
 from pathlib import Path
 
@@ -11,15 +10,11 @@ import cv2
 import open3d as o3d
 import open3d.core as o3c
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-PY_SCRIPTS = REPO_ROOT / "python_scripts"
-sys.path.append(str(PY_SCRIPTS))
-
-from utils.session import Session
-from utils.manifest import read_manifest, load_robot_poses, construct_image_paths
-from utils.intrinsics import load_intrinsics, intrinsics_matrix
-from utils.extrinsics import load_extrinsics
-from utils.image_loader import load_images
+from .utils.session import Session
+from .utils.manifest import read_manifest, load_robot_poses, construct_image_paths
+from .utils.intrinsics import load_intrinsics, intrinsics_matrix
+from .utils.extrinsics import load_extrinsics
+from .utils.image_loader import load_images
 
 DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260114_112631"
 DEFAULT_SCAN_FOLDER = "manual_caps"
@@ -48,6 +43,34 @@ TABLE_PLANE_KEEP_SIDE = "above"  # keep points above the plane
 TABLE_PLANE_MARGIN = 0.0
 
 # Visualization
+
+
+def _normalize_device(device: str) -> str:
+    if not device:
+        return "CPU:0"
+    d = device.strip()
+    if not d:
+        return "CPU:0"
+    d_lower = d.lower()
+    if d_lower in ("cpu", "cpu:0"):
+        return "CPU:0"
+    if d_lower in ("gpu", "cuda", "cuda:0", "gpu:0"):
+        return "CUDA:0"
+    return d
+
+
+def _validate_device(device: str) -> str:
+    d_lower = device.lower()
+    if d_lower.startswith("cuda"):
+        if not o3c.cuda.is_available():
+            print("Warning: Open3D CUDA is not available. Falling back to CPU:0")
+            return "CPU:0"
+    try:
+        _ = o3c.Device(device)
+        return device
+    except Exception as exc:
+        print(f"Warning: failed to use device '{device}': {exc}. Falling back to CPU:0")
+        return "CPU:0"
 PLANE_VIS_ENABLE = True
 PLANE_VIS_COLOR = (0.2, 0.4, 1.0)
 PLANE_VIS_SCALE = 1.2
@@ -448,7 +471,7 @@ def _draw_geoms(geoms):
         o3d.visualization.draw_geometries(geoms)
 
 
-def run(session_path=None, scan_folder_override=None, visualize=True):
+def run(session_path=None, scan_folder_override=None, visualize=True, device=None):
     global SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE
 
     SESSION_PATH = session_path or DEFAULT_SESSION_PATH
@@ -458,7 +481,9 @@ def run(session_path=None, scan_folder_override=None, visualize=True):
     TABLE_PLANE_FILE = output_folder / "table_plane.json"
 
     session = Session(SESSION_PATH, scan_folder)
-    tsdf_integration = TSDF_Integration(session)
+    device = _validate_device(_normalize_device(device))
+    print(f"Using device: {device}")
+    tsdf_integration = TSDF_Integration(session, device=device)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
     print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}")
     print(f"Number of color images loaded: {len(tsdf_integration.color_images)}")
@@ -548,12 +573,14 @@ def main():
     parser.add_argument("--session-path", default=DEFAULT_SESSION_PATH)
     parser.add_argument("--scan-folder", default=DEFAULT_SCAN_FOLDER)
     parser.add_argument("--no-vis", action="store_true")
+    parser.add_argument("--device", default="CPU:0", help='Open3D device, e.g. "CPU:0" or "CUDA:0"')
     args = parser.parse_args()
 
     run(
         session_path=args.session_path,
         scan_folder_override=args.scan_folder,
-        visualize=not args.no_vis
+        visualize=not args.no_vis,
+        device=args.device
     )
 
 

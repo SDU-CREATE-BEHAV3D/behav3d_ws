@@ -19,23 +19,17 @@
 #   - OpenCV windows: depth, original color, color_in_depth, overlay
 #   - Open3D: colored point cloud in world frame
 
-import sys
 from pathlib import Path
 
 import numpy as np
 import cv2
 import open3d as o3d
 
-# set python_scripts path for utils import
-REPO_ROOT = Path(__file__).resolve().parents[4]
-PY_SCRIPTS = REPO_ROOT / "python_scripts"
-sys.path.append(str(PY_SCRIPTS))
-
-from utils.session import Session
-from utils.manifest import read_manifest, load_robot_poses, construct_image_paths
-from utils.intrinsics import load_intrinsics
-from utils.extrinsics import load_extrinsics
-from utils.image_loader import load_images
+from .utils.session import Session
+from .utils.manifest import read_manifest, load_robot_poses, construct_image_paths
+from .utils.intrinsics import load_intrinsics
+from .utils.extrinsics import load_extrinsics
+from .utils.image_loader import load_images
 
 
 DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260114_112631"
@@ -271,7 +265,7 @@ class ColorToDepthAligner:
             o3d.visualization.draw([pcd_world, axes])
 
 
-def run(session_path=None, scan_folder=None, visualize=False):
+def run(session_path=None, scan_folder=None, visualize=False, device=None):
     session_path = session_path or DEFAULT_SESSION_PATH
     scan_folder = scan_folder or DEFAULT_SCAN_FOLDER
     output_folder = Path(session_path)
@@ -306,4 +300,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

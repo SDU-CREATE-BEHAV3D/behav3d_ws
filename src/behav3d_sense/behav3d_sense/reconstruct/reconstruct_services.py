@@ -11,27 +11,30 @@ from . import TSDF_cpu_object_extract
 from .service_utils import get_captures_root, resolve_session_path
 
 
-def _run_color_to_depth(session_dir: Path, scan_folder: str, visualize: bool):
+def _run_color_to_depth(session_dir: Path, scan_folder: str, visualize: bool, device: str = None):
     return color_to_depth.run(
         session_path=str(session_dir),
         scan_folder=scan_folder,
-        visualize=visualize
+        visualize=visualize,
+        device=device
     )
 
 
-def _run_tsdf_cropped(session_dir: Path, scan_folder: str, visualize: bool):
+def _run_tsdf_cropped(session_dir: Path, scan_folder: str, visualize: bool, device: str = None):
     return TSDF_cpu_cropped.run(
         session_path=str(session_dir),
         scan_folder_override=scan_folder,
-        visualize=visualize
+        visualize=visualize,
+        device=device
     )
 
 
-def _run_tsdf_object_extract(session_dir: Path, scan_folder: str, visualize: bool):
+def _run_tsdf_object_extract(session_dir: Path, scan_folder: str, visualize: bool, device: str = None):
     return TSDF_cpu_object_extract.run(
         session_path=str(session_dir),
         scan_folder_override=scan_folder,
-        visualize=visualize
+        visualize=visualize,
+        device=device
     )
 
 
@@ -45,10 +48,12 @@ class _BaseReconstructService(Node):
 
         self.scan_folder = self.declare_parameter('scan_folder', 'manual_caps').value
         self.visualize = self.declare_parameter('visualize', False).value
+        self.device = self.declare_parameter('device', 'CPU:0').value
 
         self.srv = self.create_service(srv_type, service_name, self.handle_request)
         self.get_logger().info(f"Service active: {service_name}")
         self.get_logger().info(f"Capture root: {self._captures_root}")
+        self.get_logger().info(f"Default device: {self.device}")
 
     def handle_request(self, request, response):
         if self._running:
@@ -66,11 +71,16 @@ class _BaseReconstructService(Node):
         scan_folder = request.scan_folder.strip() if request.scan_folder else self.scan_folder
         visualize = bool(request.visualize) if hasattr(request, "visualize") else bool(self.visualize)
 
+        device = self.device
+        if hasattr(request, "device"):
+            device = request.device.strip() if request.device else device
+
         self.get_logger().info(
             "Reconstruct request: "
             f"session_dir={session_dir}, "
             f"scan_folder={scan_folder}, "
             f"visualize={visualize}, "
+            f"device={device}, "
             f"use_latest={request.use_latest}"
         )
 
@@ -84,7 +94,7 @@ class _BaseReconstructService(Node):
         self._running = True
         thread = threading.Thread(
             target=self._run_thread,
-            args=(session_dir, scan_folder, visualize),
+            args=(session_dir, scan_folder, visualize, device),
             daemon=True
         )
         thread.start()
@@ -94,10 +104,10 @@ class _BaseReconstructService(Node):
         response.output_path = str(expected) if expected is not None else ''
         return response
 
-    def _run_thread(self, session_dir: Path, scan_folder: str, visualize: bool):
+    def _run_thread(self, session_dir: Path, scan_folder: str, visualize: bool, device: str):
         try:
             self.get_logger().info(f"Running reconstruction for {session_dir}")
-            self._runner(session_dir, scan_folder, visualize)
+            self._runner(session_dir, scan_folder, visualize, device)
         except Exception as exc:
             self.get_logger().error(f"Reconstruction failed: {exc}")
         finally:

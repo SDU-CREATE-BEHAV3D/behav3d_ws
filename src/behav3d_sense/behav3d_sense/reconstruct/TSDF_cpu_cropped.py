@@ -9,18 +9,15 @@
 # Outputs:
 # - tsdf_surface_rgb_colored.ply
 # - tsdf_surface_confidence_colored.ply
+# - tsdf_surface_mesh.ply
 #
 # Notes:
 # - Confidence here is an observation-count proxy (robust and practical).
 # - Colormap is OpenCV COLORMAP_TURBO (conventional, perceptually strong).
 
-# set python_scripts path for utils import
-import sys
+# local utils
 import json
 from pathlib import Path
-REPO_ROOT = Path(__file__).resolve().parents[4]
-PY_SCRIPTS = REPO_ROOT / "python_scripts"
-sys.path.append(str(PY_SCRIPTS))
 
 import numpy as np
 import cv2
@@ -28,12 +25,12 @@ import open3d as o3d
 import open3d.core as o3c
 from scipy.spatial.transform import Rotation as R
 
-from utils.session import Session
-from utils.manifest import read_manifest, load_robot_poses, transform_robot_to_camera_pose, construct_image_paths
-from utils.intrinsics import load_intrinsics, intrinsics_matrix
-from utils.extrinsics import load_extrinsics
-from utils.image_loader import load_images
-from utils.integration import visualize_camera_poses
+from .utils.session import Session
+from .utils.manifest import read_manifest, load_robot_poses, transform_robot_to_camera_pose, construct_image_paths
+from .utils.intrinsics import load_intrinsics, intrinsics_matrix
+from .utils.extrinsics import load_extrinsics
+from .utils.image_loader import load_images
+from .utils.integration import visualize_camera_poses
 
 DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260113_170839"
 DEFAULT_SCAN_FOLDER = "manual_caps"
@@ -84,6 +81,34 @@ TABLE_MODE_VIS = True
 # ----------------------------
 # Table plane extraction + slicing (for removing the horizontal table)
 # ----------------------------
+
+
+def _normalize_device(device: str) -> str:
+    if not device:
+        return "CPU:0"
+    d = device.strip()
+    if not d:
+        return "CPU:0"
+    d_lower = d.lower()
+    if d_lower in ("cpu", "cpu:0"):
+        return "CPU:0"
+    if d_lower in ("gpu", "cuda", "cuda:0", "gpu:0"):
+        return "CUDA:0"
+    return d
+
+
+def _validate_device(device: str) -> str:
+    d_lower = device.lower()
+    if d_lower.startswith("cuda"):
+        if not o3c.cuda.is_available():
+            print("Warning: Open3D CUDA is not available. Falling back to CPU:0")
+            return "CPU:0"
+    try:
+        _ = o3c.Device(device)
+        return device
+    except Exception as exc:
+        print(f"Warning: failed to use device '{device}': {exc}. Falling back to CPU:0")
+        return "CPU:0"
 
 # Plane mode: "fit" (estimate + save), "load" (reuse), "off"
 TABLE_PLANE_MODE = "fit"
@@ -250,7 +275,7 @@ class TSDF_Integration():
         print("TSDF Integration complete.")
         return True
 
-    def extract_tsdf_surface_point_cloud(self):
+    def extract_tsdf_surface_mesh_and_pcd(self):
         mesh = self.vbg.extract_triangle_mesh().to_legacy()
         mesh.compute_vertex_normals()
 
@@ -260,6 +285,10 @@ class TSDF_Integration():
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pts)
         pcd.normals = o3d.utility.Vector3dVector(nrm)
+        return mesh, pcd
+
+    def extract_tsdf_surface_point_cloud(self):
+        _, pcd = self.extract_tsdf_surface_mesh_and_pcd()
         return pcd
 
     def colorize_tsdf_surface_points(self, pcd, sample_step=1, z_band_m=0.02, min_obs=3):
@@ -568,7 +597,7 @@ def _make_plane_line_set(plane_model, pcd_ref, color=(0.85, 0.85, 0.85), scale=1
     return [line_set, normal]
 
 
-def run(session_path=None, scan_folder_override=None, visualize=True):
+def run(session_path=None, scan_folder_override=None, visualize=True, device=None):
     global SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE
 
     SESSION_PATH = session_path or DEFAULT_SESSION_PATH
@@ -578,7 +607,9 @@ def run(session_path=None, scan_folder_override=None, visualize=True):
     TABLE_PLANE_FILE = output_folder / "table_plane.json"
 
     session = Session(SESSION_PATH, scan_folder)
-    tsdf_integration = TSDF_Integration(session)
+    device = _validate_device(_normalize_device(device))
+    print(f"Using device: {device}")
+    tsdf_integration = TSDF_Integration(session, device=device)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
     print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}")
     print(f"Number of color_in_depth loaded: {len(tsdf_integration.color_in_depth)}")
@@ -588,7 +619,7 @@ def run(session_path=None, scan_folder_override=None, visualize=True):
 
     tsdf_integration.integrate_depths()
 
-    pcd_surface = tsdf_integration.extract_tsdf_surface_point_cloud()
+    mesh, pcd_surface = tsdf_integration.extract_tsdf_surface_mesh_and_pcd()
     pcd_rgb, conf = tsdf_integration.colorize_tsdf_surface_points(
         pcd_surface,
         sample_step=1,
@@ -681,6 +712,15 @@ def run(session_path=None, scan_folder_override=None, visualize=True):
             geoms_conf.extend(plane_vis)
         _draw_geoms(geoms_conf)
 
+    out_mesh = output_folder / "tsdf_surface_mesh.stl"
+    mesh_out = mesh
+    if CROP_ENABLE:
+        aabb = o3d.geometry.AxisAlignedBoundingBox(CROP_MIN, CROP_MAX)
+        mesh_out = mesh.crop(aabb)
+        mesh_out.compute_vertex_normals()
+    o3d.io.write_triangle_mesh(str(out_mesh), mesh_out)
+    print("Saved:", out_mesh)
+
     out_rgb = output_folder / "tsdf_surface_rgb_colored.ply"
     out_conf = output_folder / "tsdf_surface_confidence_colored.ply"
     o3d.io.write_point_cloud(str(out_rgb), pcd_rgb)
@@ -695,12 +735,14 @@ def main():
     parser.add_argument("--session-path", default=DEFAULT_SESSION_PATH)
     parser.add_argument("--scan-folder", default=DEFAULT_SCAN_FOLDER)
     parser.add_argument("--no-vis", action="store_true")
+    parser.add_argument("--device", default="CPU:0", help='Open3D device, e.g. "CPU:0" or "CUDA:0"')
     args = parser.parse_args()
 
     run(
         session_path=args.session_path,
         scan_folder_override=args.scan_folder,
-        visualize=not args.no_vis
+        visualize=not args.no_vis,
+        device=args.device
     )
 
 

@@ -3,6 +3,7 @@ bool use_latest
 string session_path
 string scan_folder
 bool visualize
+string device  # e.g. "CPU:0" or "CUDA:0" (empty => default)
 ---
 # Response
 bool success
