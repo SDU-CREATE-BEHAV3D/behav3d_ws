@@ -72,20 +72,13 @@ class Loop0Session(Session):
             log.error(f"[Loop0] Capture failed: {res.get('error') if res else 'no response'}")
             return False
 
-        # 3) Reconstruct / wait for geometry
-        log.info("[Loop0] Waiting for reconstruction")
-        try:
-            res = self.run_sync(
-                self.camera.reconstruct(use_latest=True, session_path="", enqueue=False),
-                timeout_s=reconstruct_timeout_s,
-            )
-        except TimeoutError:
-            log.error(f"[Loop0] Reconstruct timed out after {reconstruct_timeout_s:.1f}s")
-            res = None
-        if res and res.get("ok", False):
-            log.info("[Loop0] Geometry received")
-        else:
-            log.warn("[Loop0] Geometry not available; continuing with placeholder.")
+        # 3) TODO: include reconstruction pipeline
+        # Expected flow: color_to_depth -> tsdf_cropped -> update_world_mesh.
+        log.warn(
+            "[Loop0] TODO: include reconstruction pipeline "
+            f"(color_to_depth -> tsdf_cropped -> update_world_mesh), "
+            f"reserved timeout={reconstruct_timeout_s:.1f}s."
+        )
 
         # 4) Select candidate deposition point (random in bbox, near ground)
         x, y, z_ground = self._select_point(bbox_min, bbox_max, ground_offset_m)

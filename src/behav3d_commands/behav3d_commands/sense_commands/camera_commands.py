@@ -14,7 +14,6 @@ from behav3d_interfaces.srv import (
     Capture,
     ColorToDepth,
     GetLinkPose,
-    ReconstructMesh,
     TsdfCropped,
     UpdateWorldMesh,
 )
@@ -30,7 +29,6 @@ class CameraCommands:
         self._capture_cli = node.create_client(Capture, "/capture")
         self._color_to_depth_cli = node.create_client(ColorToDepth, "/reconstruct/color_to_depth")
         self._pose_cli = node.create_client(GetLinkPose, "/behav3d/get_link_pose")
-        self._reconstruct_cli = node.create_client(ReconstructMesh, "/reconstruct_mesh")
         self._tsdf_cropped_cli = node.create_client(TsdfCropped, "/reconstruct/tsdf_cropped")
         self._world_mesh_cli = node.create_client(UpdateWorldMesh, "/behav3d/update_world_mesh")
 
@@ -42,7 +40,6 @@ class CameraCommands:
         router.register("reconstruct_color_to_depth", self._handle_reconstruct_color_to_depth)
         router.register("reconstruct_color_to_depth_grid_sweep", self._handle_reconstruct_color_to_depth_grid_sweep)
         router.register("get_pose", self._handle_get_pose)
-        router.register("reconstruct", self._handle_reconstruct)
         router.register("reconstruct_tsdf_cropped", self._handle_reconstruct_tsdf_cropped)
         router.register("reconstruct_tsdf_grid_sweep", self._handle_reconstruct_tsdf_grid_sweep)
         router.register("update_world_mesh", self._handle_update_world_mesh)
@@ -97,22 +94,6 @@ class CameraCommands:
                 "use_tf": bool(use_tf),
             },
             cmd_kind="get_pose",
-            on_done=on_done,
-        )
-        return self._queue_or_item(item, enqueue=enqueue)
-
-    def reconstruct(
-        self,
-        *,
-        use_latest: bool = True,
-        session_path: Optional[str] = "",
-        on_done: OnCommandDone = None,
-        enqueue: bool = True,
-    ):
-        item = QueueItem(
-            "reconstruct",
-            {"use_latest": bool(use_latest), "session_path": (session_path or "")},
-            cmd_kind="reconstruct",
             on_done=on_done,
         )
         return self._queue_or_item(item, enqueue=enqueue)
@@ -382,39 +363,6 @@ class CameraCommands:
                 phase="exec",
                 metrics={"source": "moveit"},
                 extra={"pose": resp.pose, "base_frame": req.base_frame, "link": req.link},
-            )
-
-        fut.add_done_callback(_on_resp)
-
-    def _handle_reconstruct(self, payload: Dict[str, Any], cmd: Command) -> None:
-        if not self._reconstruct_cli.wait_for_service(timeout_sec=3.0):
-            cmd.finish_flag(ok=False, phase="exec", error="reconstruct service not available")
-            return
-
-        req = ReconstructMesh.Request()
-        req.use_latest = bool(payload.get("use_latest", True))
-        req.session_path = str(payload.get("session_path", ""))
-
-        self._node.get_logger().info(
-            f"RECONSTRUCT: use_latest={req.use_latest} session_path='{req.session_path}'"
-        )
-
-        fut = self._reconstruct_cli.call_async(req)
-
-        def _on_resp(fr):
-            try:
-                resp = fr.result()
-            except Exception as exc:
-                cmd.finish_flag(ok=False, phase="exec", error=f"exception: {exc}")
-                return
-
-            ok = bool(getattr(resp, "success", False))
-            msg = getattr(resp, "message", "")
-            cmd.finish_flag(
-                ok=ok,
-                phase="exec",
-                metrics={"message": msg},
-                error=None if ok else msg,
             )
 
         fut.add_done_callback(_on_resp)

@@ -15,7 +15,7 @@ import tf2_ros
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint, JointTrajectory
 from geometry_msgs.msg import Pose, PoseStamped
-from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin, GetLinkPose, Capture, ReconstructMesh
+from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin, GetLinkPose, Capture
 
 from behav3d_interfaces.action import PrintTime, PrintSteps
 
@@ -37,7 +37,6 @@ class Commands:
     - wait(secs=..., on_done=...)
     - getPose(eef=..., base_frame=..., use_tf=..., on_done=...)
     - capture(rgb=..., depth=..., ir=..., pose=..., folder=..., on_done=...)
-    - reconstruct(use_latest=..., session_path=..., on_done=...)
     - input(key=..., prompt=..., on_done=...)
     - pause(), resume()
 
@@ -59,9 +58,6 @@ class Commands:
         self._lin_cli = node.create_client(PlanPilzLin, "/behav3d/plan_pilz_lin") 
         self._pose_cli = node.create_client(GetLinkPose, "/behav3d/get_link_pose")
         self._capture_cli = node.create_client(Capture, "/capture") 
-
-        #reconstruction service
-        self._reconstruct_cli = node.create_client(ReconstructMesh, "/reconstruct_mesh")
 
         # PrintTime and PrintSteps action client (process / extruder)
         self._print_ac = ActionClient(node, PrintTime, "print")
@@ -260,22 +256,6 @@ class Commands:
             "on_done": on_done
         })
 
-    def reconstruct(self,
-                    *,
-                    use_latest: bool = True,
-                    session_path: Optional[str] = "",
-                    on_done: OnMoveDone = None):
-        """
-        Enqueue a reconstruction request to the reconstruction service.
-        - use_latest: if True, reconstructs the most recent capture session.
-        - session_path: optional absolute or relative path to a session directory.
-        """
-        self._enqueue("reconstruct", {
-            "use_latest": bool(use_latest),
-            "session_path": (session_path or ""),
-            "on_done": on_done
-        })
-
     def input(self,
             *,
             key: Optional[str] = None,
@@ -372,8 +352,6 @@ class Commands:
             self._do_get_pose(p)
         elif kind == "capture":
             self._do_capture(p)
-        elif kind == "reconstruct":
-            self._do_reconstruct(p)
         elif kind == "wait_input":
             self._do_wait_input(p)
 
@@ -691,41 +669,6 @@ class Commands:
             t = self.node.create_timer(offset_s, _oneshot)
         else:
             _send_print_goal()
-
-    def _do_reconstruct(self, p: Dict[str, Any]):
-        """Execute 3D reconstruction via the /reconstruct_mesh service."""
-        on_done: OnMoveDone = p.get("on_done")
-
-        if not self._reconstruct_cli.wait_for_service(timeout_sec=3.0):
-            self._finish_move(on_done, "reconstruct", ok=False, phase="exec",
-                              error="reconstruct service not available")
-            return
-
-        req = ReconstructMesh.Request()
-        req.use_latest = bool(p.get("use_latest", True))
-        req.session_path = str(p.get("session_path", ""))
-
-        self.node.get_logger().info(
-            f"RECONSTRUCT: use_latest={req.use_latest} session_path='{req.session_path}'"
-        )
-
-        fut = self._reconstruct_cli.call_async(req)
-
-        def _on_resp(fr):
-            try:
-                resp = fr.result()
-            except Exception as e:
-                self._finish_move(on_done, "reconstruct", ok=False, phase="exec",
-                                  error=f"exception: {e}")
-                return
-
-            ok = bool(getattr(resp, "success", False))
-            msg = getattr(resp, "message", "")
-            self._finish_move(on_done, "reconstruct", ok=ok, phase="exec",
-                              metrics={"message": msg},
-                              error=None if ok else msg)
-
-        fut.add_done_callback(_on_resp)
 
     def _do_wait(self, p: Dict[str, Any]):
         secs = float(p["secs"])
