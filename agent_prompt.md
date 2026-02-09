@@ -22,6 +22,10 @@ The launch file brings up these runtime roles:
 - Orbbec camera driver (Femto Bolt).
 - `behav3d_print` (extrusion actions + print services).
 - `behav3d_sense` (capture service and session storage).
+- Reconstruction services via `behav3d_sense/launch/reconstruct_services.launch.py`:
+  - `color_to_depth_service`
+  - `tsdf_cropped_service`
+  - `tsdf_object_extract_service`
 - `world_visualizer` (mesh display).
 
 ---
@@ -119,6 +123,9 @@ Underlying ROS interfaces:
 - Service `/capture` (`Capture`)
 - Service `/behav3d/get_link_pose` (`GetLinkPose`)
 - Service `/reconstruct_mesh` (`ReconstructMesh`)
+- Service `/reconstruct/color_to_depth` (`ColorToDepth`)
+- Service `/reconstruct/tsdf_cropped` (`TsdfCropped`)
+- Service `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`)
 
 Camera commands:
 
@@ -127,6 +134,16 @@ Camera commands:
 | `capture()` | Capture RGB/Depth/IR (+ optional pose). | `rgb`, `depth`, `ir`, `pose`, `folder` | If `folder` is provided, `set_folder=True`. |
 | `get_pose()` | Get link pose in a base frame. | `eef`, `base_frame`, `use_tf` | If `use_tf=True`, bypasses MoveIt and reads TF. |
 | `reconstruct()` | Run TSDF reconstruction. | `use_latest`, `session_path` | Starts a background reconstruction job. |
+| `reconstruct_color_to_depth()` | Run color-to-depth alignment stage. | `use_latest`, `session_path`, `scan_folder`, `visualize` | Calls `/reconstruct/color_to_depth`. |
+| `reconstruct_color_to_depth_grid_sweep()` | Color-to-depth for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize` | Default `scan_folder="grid_sweep"`. |
+| `reconstruct_tsdf_cropped()` | Run TSDF cropped stage. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Calls `/reconstruct/tsdf_cropped`. |
+| `reconstruct_tsdf_grid_sweep()` | TSDF cropped for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Default `scan_folder="grid_sweep"`. |
+
+Reconstruction command usage notes:
+- Stage order for mesh flow: `reconstruct_color_to_depth*` first, then `reconstruct_tsdf_*`.
+- If `session_path` is non-empty, command layer forces `use_latest=False` (explicit path wins).
+- If `session_path` is empty, `use_latest=True` resolves the latest session under captures root.
+- Reconstruction services return quickly and continue processing in a background thread; watch node logs for completion.
 
 Capture folder semantics (as implemented in `behav3d_sense`):
 - `""` or `"."` uses current capture directory.
@@ -140,7 +157,7 @@ Capture session root:
 - Default is `~/behav3d_ws/captures`.
 - Override with `BEHAV3D_CAPTURES_ROOT`.
 
-Implementation: `src/behav3d_sense/behav3d_sense/sense_node.py` and `src/behav3d_sense/behav3d_sense/reconstruction.py`
+Implementation: `src/behav3d_sense/behav3d_sense/sense_node.py`, `src/behav3d_sense/behav3d_sense/reconstruction.py`, and `src/behav3d_sense/behav3d_sense/reconstruct/reconstruct_services.py`
 
 ---
 
@@ -175,6 +192,9 @@ Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 - `/behav3d/get_link_pose` (`GetLinkPose`) via `behav3d_motion_bridge`
 - `/capture` (`Capture`) via `behav3d_sense`
 - `/reconstruct_mesh` (`ReconstructMesh`) via `behav3d_sense/reconstruction`
+- `/reconstruct/color_to_depth` (`ColorToDepth`) via `behav3d_sense/reconstruct/reconstruct_services.py`
+- `/reconstruct/tsdf_cropped` (`TsdfCropped`) via `behav3d_sense/reconstruct/reconstruct_services.py`
+- `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `update_print_config` (`UpdatePrintConfig`) via `behav3d_print`
 - `get_print_status` (`GetPrintStatus`) via `behav3d_print`
 - `/behav3d/publish_targets` (`PublishTargets`) via `behav3d_motion_bridge`
