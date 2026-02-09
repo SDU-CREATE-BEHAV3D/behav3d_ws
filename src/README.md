@@ -96,6 +96,9 @@ Capture pipeline and reconstruction service.
   - Intrinsics export: `save_intrinsics_yaml(...)`
 - `ThreeDReconstructor` (`behav3d_sense/reconstruction.py`):
   - `handle_request(...)`, `_resolve_session_path(...)`, `_run_reconstruction(...)`
+- `WorldNode` (`behav3d_sense/world_node.py`):
+  - World-state interfaces: `/behav3d/world_state`, `/behav3d/get_world_state`
+  - Mesh visualization service: `/behav3d/update_world_mesh` (publishes marker on `/visualization_marker`)
 
 ### `custom_workcell`
 UR20 workcell URDFs, meshes, calibration YAMLs, and MoveIt configurations.
@@ -115,6 +118,7 @@ Python demo node built on `behav3d_py`.
 Publishes a mesh marker for RViz.
 - `MeshVisualizer` (`world_visualizer/mesh_visualizer.py`):
   - `publish_latest_mesh(...)` and file-watcher callbacks in `MeshUpdateHandler`.
+- Status: deprecated in bringup; `behav3d_sense/world_node.py` is now the primary mesh visualization interface.
 
 ## Related docs
 - `python_scripts/README.md` for standalone scripts.

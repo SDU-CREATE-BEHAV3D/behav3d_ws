@@ -10,7 +10,14 @@ import tf2_ros
 
 from geometry_msgs.msg import PoseStamped
 
-from behav3d_interfaces.srv import Capture, ColorToDepth, GetLinkPose, ReconstructMesh, TsdfCropped
+from behav3d_interfaces.srv import (
+    Capture,
+    ColorToDepth,
+    GetLinkPose,
+    ReconstructMesh,
+    TsdfCropped,
+    UpdateWorldMesh,
+)
 
 from behav3d_commands.command import Command, OnCommandDone
 from behav3d_commands.queue import QueueItem, SessionQueue
@@ -25,6 +32,7 @@ class CameraCommands:
         self._pose_cli = node.create_client(GetLinkPose, "/behav3d/get_link_pose")
         self._reconstruct_cli = node.create_client(ReconstructMesh, "/reconstruct_mesh")
         self._tsdf_cropped_cli = node.create_client(TsdfCropped, "/reconstruct/tsdf_cropped")
+        self._world_mesh_cli = node.create_client(UpdateWorldMesh, "/behav3d/update_world_mesh")
 
         self._tf_buffer = tf2_ros.Buffer(cache_time=Duration(seconds=10.0))
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, node)
@@ -37,6 +45,7 @@ class CameraCommands:
         router.register("reconstruct", self._handle_reconstruct)
         router.register("reconstruct_tsdf_cropped", self._handle_reconstruct_tsdf_cropped)
         router.register("reconstruct_tsdf_grid_sweep", self._handle_reconstruct_tsdf_grid_sweep)
+        router.register("update_world_mesh", self._handle_update_world_mesh)
 
     def _queue_or_item(self, item: QueueItem, *, enqueue: bool):
         if enqueue:
@@ -200,6 +209,33 @@ class CameraCommands:
                 "device": str(device),
             },
             cmd_kind="reconstruct_tsdf_grid_sweep",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def update_world_mesh(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: Optional[str] = "",
+        mesh_path: Optional[str] = "",
+        ply_path: Optional[str] = "",
+        prefer: str = "mesh",
+        wait_timeout_s: float = 30.0,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "update_world_mesh",
+            {
+                "use_latest": bool(use_latest),
+                "session_path": (session_path or ""),
+                "mesh_path": (mesh_path or ""),
+                "ply_path": (ply_path or ""),
+                "prefer": str(prefer),
+                "wait_timeout_s": float(wait_timeout_s),
+            },
+            cmd_kind="update_world_mesh",
             on_done=on_done,
         )
         return self._queue_or_item(item, enqueue=enqueue)
@@ -511,14 +547,78 @@ class CameraCommands:
             ok = bool(getattr(resp, "success", False))
             msg = getattr(resp, "message", "")
             output_path = str(getattr(resp, "output_path", ""))
+            mesh_path = str(getattr(resp, "mesh_path", ""))
+            rgb_ply_path = str(getattr(resp, "rgb_ply_path", ""))
+            confidence_ply_path = str(getattr(resp, "confidence_ply_path", ""))
             cmd.finish_flag(
                 ok=ok,
                 phase="exec",
                 metrics={
                     "message": msg,
                     "output_path": output_path,
+                    "mesh_path": mesh_path,
+                    "rgb_ply_path": rgb_ply_path,
+                    "confidence_ply_path": confidence_ply_path,
                     "scan_folder": req.scan_folder,
                     "device": req.device,
+                },
+                error=None if ok else msg,
+            )
+
+        fut.add_done_callback(_on_resp)
+
+    def _handle_update_world_mesh(self, payload: Dict[str, Any], cmd: Command) -> None:
+        if not self._world_mesh_cli.wait_for_service(timeout_sec=3.0):
+            cmd.finish_flag(ok=False, phase="exec", error="update_world_mesh service not available")
+            return
+
+        req = UpdateWorldMesh.Request()
+        req.session_path = str(payload.get("session_path", "")).strip()
+        req.use_latest = bool(payload.get("use_latest", True))
+        if req.session_path:
+            req.use_latest = False
+
+        req.mesh_path = str(payload.get("mesh_path", "")).strip()
+        req.ply_path = str(payload.get("ply_path", "")).strip()
+
+        prefer = str(payload.get("prefer", "mesh")).strip().lower()
+        req.prefer = prefer if prefer in ("mesh", "ply") else "mesh"
+
+        try:
+            req.wait_timeout_s = float(payload.get("wait_timeout_s", 30.0))
+        except (TypeError, ValueError):
+            req.wait_timeout_s = 30.0
+        if req.wait_timeout_s < 0.0:
+            req.wait_timeout_s = 0.0
+
+        self._node.get_logger().info(
+            f"UPDATE_WORLD_MESH: use_latest={req.use_latest} session_path='{req.session_path}' "
+            f"mesh_path='{req.mesh_path}' ply_path='{req.ply_path}' prefer='{req.prefer}' "
+            f"wait_timeout_s={req.wait_timeout_s:.2f}"
+        )
+
+        fut = self._world_mesh_cli.call_async(req)
+
+        def _on_resp(fr):
+            try:
+                resp = fr.result()
+            except Exception as exc:
+                cmd.finish_flag(ok=False, phase="exec", error=f"exception: {exc}")
+                return
+
+            ok = bool(getattr(resp, "success", False))
+            msg = str(getattr(resp, "message", ""))
+            cmd.finish_flag(
+                ok=ok,
+                phase="exec",
+                metrics={
+                    "message": msg,
+                    "session_dir": str(getattr(resp, "session_dir", "")),
+                    "resolved_mesh_path": str(getattr(resp, "resolved_mesh_path", "")),
+                    "resolved_ply_path": str(getattr(resp, "resolved_ply_path", "")),
+                    "published_path": str(getattr(resp, "published_path", "")),
+                    "published_kind": str(getattr(resp, "published_kind", "")),
+                    "prefer": req.prefer,
                 },
                 error=None if ok else msg,
             )

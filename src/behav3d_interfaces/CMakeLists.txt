@@ -33,6 +33,7 @@ set(srv_files
   srv/ColorToDepth.srv
   srv/TsdfCropped.srv
   srv/TsdfObjectExtract.srv
+  srv/UpdateWorldMesh.srv
   srv/PublishTargets.srv
   srv/DeleteMarkers.srv
 )

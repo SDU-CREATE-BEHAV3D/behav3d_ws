@@ -9,3 +9,6 @@ string device  # e.g. "CPU:0" or "CUDA:0" (empty => default)
 bool success
 string message
 string output_path
+string mesh_path
+string rgb_ply_path
+string confidence_ply_path

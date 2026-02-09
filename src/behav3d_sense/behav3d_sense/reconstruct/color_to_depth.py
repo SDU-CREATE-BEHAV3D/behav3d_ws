@@ -36,12 +36,18 @@ DEFAULT_SESSION_PATH = "/home/lab/behav3d_ws/captures/260206_171134"
 DEFAULT_SCAN_FOLDER = "grid_sweep"
 
 
+def _resolve_reconstruct_scan_dir(session_path: str, scan_folder: str) -> Path:
+    scan = str(scan_folder or "").strip() or DEFAULT_SCAN_FOLDER
+    return (Path(session_path).expanduser().resolve() / scan / "reconstruct").resolve()
+
+
 class ColorToDepthAligner:
-    def __init__(self, session, output_dir, depth_max=1.0, depth_scale=1000.0):
+    def __init__(self, session, output_dir, depth_max=1.0, depth_scale=1000.0, save_debug_outputs=False):
         self.session = session
         self.output_dir = Path(output_dir)
         self.depth_max = float(depth_max)
         self.depth_scale = float(depth_scale)
+        self.save_debug_outputs = bool(save_debug_outputs)
 
         self.manifest = read_manifest(self.session.path, self.session._scan_folder)
         self.T_base_tool0_list = load_robot_poses(self.manifest)
@@ -211,7 +217,7 @@ class ColorToDepthAligner:
         return pcd_world
 
     def test_one_frame(self, frame_idx=0, visualize=True):
-        out_dir = self.output_dir / "alignment_test"
+        out_dir = self.output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
 
         depth0 = self.depth_images[frame_idx]
@@ -222,12 +228,22 @@ class ColorToDepthAligner:
 
         # --- Remap (confirmed correct) ---
         color_in_depth, valid_map = self._align_color_to_depth(depth0, color0)
+        color_in_depth_path = out_dir / f"color_in_depth_{frame_idx:04d}.png"
+        cv2.imwrite(str(color_in_depth_path), color_in_depth)
+        print("Saved:")
+        print(color_in_depth_path)
+
+        need_debug = self.save_debug_outputs or bool(visualize)
+        if not need_debug:
+            return
+
         overlay = self._depth_edges_overlay(depth0, color_in_depth, valid_map)
+        if self.save_debug_outputs:
+            overlay_path = out_dir / f"overlay_edges_{frame_idx:04d}.png"
+            cv2.imwrite(str(overlay_path), overlay)
+            print(overlay_path)
 
-        cv2.imwrite(str(out_dir / f"color_in_depth_{frame_idx:04d}.png"), color_in_depth)
-        cv2.imwrite(str(out_dir / f"Kd_depth_intrinsics__invTcxTi_overlay_{frame_idx:04d}.png"), overlay)
-
-        # --- Build WORLD point cloud exactly like your TSDF visualization path ---
+        # Optional heavy diagnostics (PLY) only for debug/visualization workflows.
         T_base_tool0 = self.T_base_tool0_list[frame_idx]
         T_base_ir = T_base_tool0 @ self.T_tool0_ir
 
@@ -246,18 +262,12 @@ class ColorToDepthAligner:
             depth_trunc=self.depth_max,
             project_valid_depth_only=True
         )
-
-        # --- Color the WORLD point cloud by projecting into the ORIGINAL COLOR image ---
-        # This guarantees correct correspondence without relying on any pixel-mask ordering.
         pcd_world = self._color_world_pcd_by_projection(pcd_world, color0, T_base_ir, T_base_tool0)
 
-        ply_path = out_dir / f"colored_world_pcd_{frame_idx:04d}.ply"
-        o3d.io.write_point_cloud(str(ply_path), pcd_world)
-
-        print("Saved:")
-        print(out_dir / f"color_in_depth_{frame_idx:04d}.png")
-        print(out_dir / f"Kd_depth_intrinsics__invTcxTi_overlay_{frame_idx:04d}.png")
-        print(ply_path)
+        if self.save_debug_outputs:
+            ply_path = out_dir / f"colored_world_pcd_{frame_idx:04d}.ply"
+            o3d.io.write_point_cloud(str(ply_path), pcd_world)
+            print(ply_path)
 
         if visualize:
             self._visualize_images(depth0, color0, color_in_depth, overlay)
@@ -265,13 +275,20 @@ class ColorToDepthAligner:
             o3d.visualization.draw([pcd_world, axes])
 
 
-def run(session_path=None, scan_folder=None, visualize=False, device=None):
+def run(session_path=None, scan_folder=None, visualize=False, device=None, save_debug_outputs=False):
     session_path = session_path or DEFAULT_SESSION_PATH
     scan_folder = scan_folder or DEFAULT_SCAN_FOLDER
-    output_folder = Path(session_path)
+    output_folder = _resolve_reconstruct_scan_dir(session_path, scan_folder)
+    color_in_depth_dir = output_folder / "color_in_depth"
     session = Session(session_path, scan_folder)
 
-    aligner = ColorToDepthAligner(session, output_folder, depth_max=1.0, depth_scale=1000.0)
+    aligner = ColorToDepthAligner(
+        session,
+        color_in_depth_dir,
+        depth_max=1.0,
+        depth_scale=1000.0,
+        save_debug_outputs=bool(save_debug_outputs),
+    )
     print(f"Depth frames: {len(aligner.depth_images)}")
     print(f"Color frames: {len(aligner.color_images)}")
     print(f"Robot poses:  {len(aligner.T_base_tool0_list)}")
@@ -279,7 +296,7 @@ def run(session_path=None, scan_folder=None, visualize=False, device=None):
     for idx in range(len(aligner.depth_images)):
         aligner.test_one_frame(frame_idx=idx, visualize=bool(visualize))
         print(f"Processed frame {idx+1}/{len(aligner.depth_images)}")
-    return output_folder / "alignment_test"
+    return color_in_depth_dir
 
 
 def main():
@@ -289,12 +306,14 @@ def main():
     parser.add_argument("--session-path", default=DEFAULT_SESSION_PATH)
     parser.add_argument("--scan-folder", default=DEFAULT_SCAN_FOLDER)
     parser.add_argument("--visualize", action="store_true")
+    parser.add_argument("--save-debug-outputs", action="store_true")
     args = parser.parse_args()
 
     run(
         session_path=args.session_path,
         scan_folder=args.scan_folder,
-        visualize=args.visualize
+        visualize=args.visualize,
+        save_debug_outputs=args.save_debug_outputs,
     )
 
 

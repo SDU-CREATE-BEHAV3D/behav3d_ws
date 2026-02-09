@@ -36,10 +36,17 @@ DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/2601
 DEFAULT_SCAN_FOLDER = "manual_caps"
 SESSION_PATH = DEFAULT_SESSION_PATH
 scan_folder = DEFAULT_SCAN_FOLDER
-output_folder = Path(SESSION_PATH)
+
+
+def _resolve_reconstruct_scan_dir(session_path: str, scan_folder_name: str) -> Path:
+    scan = str(scan_folder_name or "").strip() or DEFAULT_SCAN_FOLDER
+    return (Path(session_path).expanduser().resolve() / scan / "reconstruct").resolve()
+
+
+output_folder = _resolve_reconstruct_scan_dir(SESSION_PATH, scan_folder)
 
 # Folder containing your color_in_depth outputs
-C2D_DIR = output_folder / "alignment_test"
+C2D_DIR = output_folder / "color_in_depth"
 C2D_GLOB = "color_in_depth*.png"
 
 # ----------------------------
@@ -602,8 +609,9 @@ def run(session_path=None, scan_folder_override=None, visualize=True, device=Non
 
     SESSION_PATH = session_path or DEFAULT_SESSION_PATH
     scan_folder = scan_folder_override or DEFAULT_SCAN_FOLDER
-    output_folder = Path(SESSION_PATH)
-    C2D_DIR = output_folder / "alignment_test"
+    output_folder = _resolve_reconstruct_scan_dir(SESSION_PATH, scan_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    C2D_DIR = output_folder / "color_in_depth"
     TABLE_PLANE_FILE = output_folder / "table_plane.json"
 
     session = Session(SESSION_PATH, scan_folder)
