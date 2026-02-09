@@ -56,6 +56,26 @@ def generate_launch_description():
         default_value="true",
         description="Start Orbbec camera (orbbec_camera/femto_bolt.launch.py)",
     )
+    reconstruct_services_enable_arg = DeclareLaunchArgument(
+        "enable_reconstruct_services",
+        default_value="true",
+        description="Start reconstruction service nodes (color_to_depth, tsdf_cropped, tsdf_object_extract)",
+    )
+    reconstruct_scan_folder_arg = DeclareLaunchArgument(
+        "reconstruct_scan_folder",
+        default_value="manual_caps",
+        description="Default scan folder for reconstruction services",
+    )
+    reconstruct_visualize_arg = DeclareLaunchArgument(
+        "reconstruct_visualize",
+        default_value="false",
+        description="Default visualize flag for reconstruction services",
+    )
+    reconstruct_device_arg = DeclareLaunchArgument(
+        "reconstruct_device",
+        default_value="CPU:0",
+        description='Default Open3D device for TSDF services, e.g. "CPU:0" or "CUDA:0"',
+    )
     # MotionController Params
     group_arg = DeclareLaunchArgument(
         "group",
@@ -118,6 +138,9 @@ def generate_launch_description():
     orbbec_launch_dir = os.path.join(
         get_package_share_directory("orbbec_camera"), "launch"
     )
+    reconstruct_launch_dir = os.path.join(
+        get_package_share_directory("behav3d_sense"), "launch"
+    )
 
     orbbec_camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
@@ -152,6 +175,21 @@ def generate_launch_description():
             # TODO: 'enable_ldp' throws compilation error!
             # Laser Dot Projector (true for scan / false for calibration)
             # "enable_ldp": "false"
+        }.items(),
+    )
+
+    reconstruct_services = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(reconstruct_launch_dir, "reconstruct_services.launch.py")
+        ),
+        condition=IfCondition(LaunchConfiguration("enable_reconstruct_services")),
+        launch_arguments={
+            "scan_folder": LaunchConfiguration("reconstruct_scan_folder"),
+            "visualize": LaunchConfiguration("reconstruct_visualize"),
+            "device": LaunchConfiguration("reconstruct_device"),
+            "enable_color_to_depth": "true",
+            "enable_tsdf_cropped": "true",
+            "enable_tsdf_object_extract": "true",
         }.items(),
     )
     # -------------------------------------------------------------------------
@@ -284,6 +322,10 @@ def generate_launch_description():
             max_accel_scale_arg,
             debug_arg,
             orbbec_enable_arg,
+            reconstruct_services_enable_arg,
+            reconstruct_scan_folder_arg,
+            reconstruct_visualize_arg,
+            reconstruct_device_arg,
             
             ur_driver,
             moveit_stack,
@@ -293,6 +335,7 @@ def generate_launch_description():
             motion_bridge,
             print_node,
             sense_node_call,
+            reconstruct_services,
             world_node_call,
             delayed_visualizer,
        #    node_demo

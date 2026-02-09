@@ -47,7 +47,7 @@ C2D_GLOB = "color_in_depth*.png"
 # ----------------------------
 
 # Crop box in WORLD coordinates (base frame)
-CROP_ENABLE = True
+CROP_ENABLE = False
 CROP_MIN = np.array([-0.25, -1.1, -1.0], dtype=np.float64)  # meters
 CROP_MAX = np.array([ 0.3,  -0.65,  0.5], dtype=np.float64)  # meters
 

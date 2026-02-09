@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import time
+from pathlib import Path
+from typing import Optional
+
 import behav3d_commands
 
 
@@ -53,3 +57,132 @@ class MySession(behav3d_commands.Session):
 
         # Barrier: wait for the last group to finish before returning.
         self.run_sync(self.util.wait(0.01, enqueue=False))
+
+    def run_tsdf_cropped_reconstruct(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: str = "",
+        scan_folder: str = "manual_caps",
+        visualize: bool = False,
+        device: str = "CPU:0",
+        timeout_s: Optional[float] = None,
+    ):
+        return self.run_sync(
+            self.camera.reconstruct_tsdf_cropped(
+                use_latest=use_latest,
+                session_path=session_path,
+                scan_folder=scan_folder,
+                visualize=visualize,
+                device=device,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+
+    def run_color_to_depth_reconstruct(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: str = "",
+        scan_folder: str = "manual_caps",
+        visualize: bool = False,
+        timeout_s: Optional[float] = None,
+        wait_for_outputs: bool = False,
+        wait_timeout_s: float = 30.0,
+    ):
+        start_ts = time.time()
+        res = self.run_sync(
+            self.camera.reconstruct_color_to_depth(
+                use_latest=use_latest,
+                session_path=session_path,
+                scan_folder=scan_folder,
+                visualize=visualize,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+        if not wait_for_outputs or not res.get("ok", False):
+            return res
+
+        output_path = str(res.get("metrics", {}).get("output_path", ""))
+        if output_path:
+            self._wait_for_fresh_alignment_output(
+                output_path=output_path,
+                start_ts=start_ts,
+                timeout_s=float(wait_timeout_s),
+            )
+        return res
+
+    def run_color_to_depth_grid_sweep_reconstruct(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: str = "",
+        scan_folder: str = "grid_sweep",
+        visualize: bool = False,
+        timeout_s: Optional[float] = None,
+        wait_for_outputs: bool = False,
+        wait_timeout_s: float = 30.0,
+    ):
+        return self.run_color_to_depth_reconstruct(
+            use_latest=use_latest,
+            session_path=session_path,
+            scan_folder=scan_folder,
+            visualize=visualize,
+            timeout_s=timeout_s,
+            wait_for_outputs=wait_for_outputs,
+            wait_timeout_s=wait_timeout_s,
+        )
+
+    def run_tsdf_grid_sweep_reconstruct(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: str = "",
+        scan_folder: str = "grid_sweep",
+        visualize: bool = False,
+        device: str = "CPU:0",
+        timeout_s: Optional[float] = None,
+    ):
+        return self.run_sync(
+            self.camera.reconstruct_tsdf_grid_sweep(
+                use_latest=use_latest,
+                session_path=session_path,
+                scan_folder=scan_folder,
+                visualize=visualize,
+                device=device,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+
+    def _wait_for_fresh_alignment_output(
+        self,
+        *,
+        output_path: str,
+        start_ts: float,
+        timeout_s: float,
+    ):
+        out_dir = Path(output_path)
+
+        def _fresh_alignment_exists() -> bool:
+            if not out_dir.exists() or not out_dir.is_dir():
+                return False
+            for path in out_dir.glob("color_in_depth*.png"):
+                try:
+                    if path.stat().st_mtime >= (start_ts - 0.25):
+                        return True
+                except OSError:
+                    continue
+            return False
+
+        return self.run_sync(
+            self.util.wait_until(
+                predicate=_fresh_alignment_exists,
+                period_s=0.5,
+                timeout_s=timeout_s,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s + 1.0,
+        )
