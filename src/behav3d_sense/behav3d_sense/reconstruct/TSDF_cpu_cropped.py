@@ -162,7 +162,7 @@ class TSDF_Integration():
     def __init__(
             self,
             session,
-            voxel_size=1/512,
+            voxel_size=1/256,
             block_count=10000,
             block_resolution=12,
             depth_max=1.0,

@@ -35,12 +35,12 @@ class CustomSequenceDemo(Node):
 
             log.info(f"[cycle {cycle}] Running capture folder: {capture_folder}")
             sweep_targets = self.grid_session.run_grid_sweep(
-                width=0.6,
-                height=0.4,
+                width=0.7,
+                height=0.45,
                 center_x=0.0,
                 center_y=0.8,
                 center_z=0.0,
-                z_off=0.5,
+                z_off=0.6,
                 nx=4,
                 ny=3,
                 debug=False,
