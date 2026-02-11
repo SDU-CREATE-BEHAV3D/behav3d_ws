@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+#Run with ros2: run behav3d_orchestrator yaml_target_sequence --ros-args -p yaml_path:=/home/lab/behav3d_ws/yaml/lamine_2.yaml -p debug:=true
+
 from __future__ import annotations
 
 import threading
