@@ -43,6 +43,8 @@ class YamlSession(behav3d_commands.Session):
         log = self.node.get_logger()
 
         self.run_sync(self.motion.home(enqueue=False), timeout_s=timeout_s)
+        # Give mock/planning state a brief moment to settle after home.
+        self.run_sync(self.util.wait(0.5, enqueue=False), timeout_s=timeout_s)
 
         targets = self.parse_yaml_targets(yaml_path=yaml_path, frame_id=frame_id)
         if not targets:
@@ -88,19 +90,33 @@ class YamlSession(behav3d_commands.Session):
                     log.warn("[yaml_sequence] User requested stop. Ending sequence early.")
                     break
 
-            plan_res = self.run_sync(
-                self.motion.plan(
-                    pose=ps,
-                    motion=mode,
-                    enqueue=False,
-                ),
-                timeout_s=timeout_s,
-            )
+            plan_attempts = 2 if seq_idx == 0 else 1
+            plan_res = None
+            for attempt in range(plan_attempts):
+                plan_res = self.run_sync(
+                    self.motion.plan(
+                        pose=ps,
+                        motion=mode,
+                        enqueue=False,
+                    ),
+                    timeout_s=timeout_s,
+                )
+                if plan_res.get("ok", False):
+                    break
+                if seq_idx == 0 and attempt == 0:
+                    err = str(plan_res.get("error", "unknown")).strip()
+                    log.warn(
+                        "[yaml_sequence] First target plan failed once "
+                        f"('{err}'). Waiting 0.5s and retrying."
+                    )
+                    self.run_sync(self.util.wait(0.5, enqueue=False), timeout_s=timeout_s)
+
             if not plan_res.get("ok", False):
+                err = str(plan_res.get("error", "unknown")).strip()
                 log.warn(
                     f"[yaml_sequence] Plan failed at target {seq_idx} "
                     f"({ps.pose.position.x:.3f}, {ps.pose.position.y:.3f}, {ps.pose.position.z:.3f}). "
-                    "Skipping exec."
+                    f"Error='{err}'. Skipping exec."
                 )
                 continue
 

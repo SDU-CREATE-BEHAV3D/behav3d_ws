@@ -165,7 +165,7 @@ class TSDF_Integration():
             voxel_size=1/256,
             block_count=10000,
             block_resolution=12,
-            depth_max=1.0,
+            depth_max=0.7,
             depth_scale=1000.0,
             device='CPU:0',
         ):
