@@ -18,7 +18,6 @@ class YamlTargetSequenceNode(Node):
 
         self.declare_parameter("yaml_path", "yaml/lamine_2.yaml")
         self.declare_parameter("frame_id", "world")
-        self.declare_parameter("motion_mode", "LIN")
         self.declare_parameter("debug", False)
         self.declare_parameter("vel_scale", 0.05)
         self.declare_parameter("accel_scale", 0.05)
@@ -37,7 +36,6 @@ class YamlTargetSequenceNode(Node):
 
         yaml_path = str(self.get_parameter("yaml_path").value).strip()
         frame_id = str(self.get_parameter("frame_id").value).strip() or "world"
-        motion_mode = str(self.get_parameter("motion_mode").value).strip() or "LIN"
         debug = bool(self.get_parameter("debug").value)
         vel_scale = float(self.get_parameter("vel_scale").value)
         accel_scale = float(self.get_parameter("accel_scale").value)
@@ -54,7 +52,7 @@ class YamlTargetSequenceNode(Node):
 
         log.info(
             "Starting YAML target sequence: "
-            f"path='{yaml_path}', frame='{frame_id}', mode={motion_mode}, "
+            f"path='{yaml_path}', frame='{frame_id}', "
             f"v={vel_scale:.3f}, a={accel_scale:.3f}, debug={debug}"
         )
 
@@ -63,7 +61,6 @@ class YamlTargetSequenceNode(Node):
                 yaml_path=yaml_path,
                 frame_id=frame_id,
                 debug=debug,
-                motion_mode=motion_mode,
                 vel_scale=vel_scale,
                 accel_scale=accel_scale,
                 timeout_s=timeout_s,
@@ -82,6 +79,13 @@ class YamlTargetSequenceNode(Node):
             return
 
         log.info(f"YAML target sequence complete. Loaded targets: {len(targets)}")
+        try:
+            self.session.run_sync(
+                self.session.motion.home(enqueue=False),
+                timeout_s=timeout_s,
+            )
+        except TimeoutError:
+            log.error("Final home move timed out.")
         rclpy.shutdown()
 
     def _param_optional_float(self, name: str) -> Optional[float]:

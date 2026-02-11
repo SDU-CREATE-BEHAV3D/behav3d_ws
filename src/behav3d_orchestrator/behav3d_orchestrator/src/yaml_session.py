@@ -24,7 +24,6 @@ class YamlSession(behav3d_commands.Session):
         yaml_path: str,
         frame_id: str = "world",
         debug: bool = False,
-        motion_mode: str = "LIN",
         vel_scale: float = 0.05,
         accel_scale: float = 0.05,
         timeout_s: Optional[float] = None,
@@ -50,16 +49,9 @@ class YamlSession(behav3d_commands.Session):
         if not targets:
             raise ValueError(f"No valid targets found in YAML: {yaml_path}")
 
-        mode = str(motion_mode or "LIN").strip().upper()
-        if mode not in ("LIN", "PTP"):
-            raise ValueError(f"Unsupported motion_mode '{motion_mode}'. Use LIN or PTP.")
-
         self.run_sync(self.motion.setSpd(float(vel_scale), enqueue=False), timeout_s=timeout_s)
         self.run_sync(self.motion.setAcc(float(accel_scale), enqueue=False), timeout_s=timeout_s)
-        if mode == "LIN":
-            self.run_sync(self.motion.setLIN(enqueue=False), timeout_s=timeout_s)
-        else:
-            self.run_sync(self.motion.setPTP(enqueue=False), timeout_s=timeout_s)
+        self.run_sync(self.motion.setLIN(enqueue=False), timeout_s=timeout_s)
 
         if publish_markers:
             self.run_sync(
@@ -90,26 +82,52 @@ class YamlSession(behav3d_commands.Session):
                     log.warn("[yaml_sequence] User requested stop. Ending sequence early.")
                     break
 
-            plan_attempts = 2 if seq_idx == 0 else 1
-            plan_res = None
-            for attempt in range(plan_attempts):
-                plan_res = self.run_sync(
+            # Safety approach only for the first target: same XY, 40 cm above target Z.
+            if seq_idx == 0:
+                approach_ps = PoseStamped()
+                approach_ps.header.frame_id = ps.header.frame_id
+                approach_ps.header.stamp = ps.header.stamp
+                approach_ps.pose.position.x = float(ps.pose.position.x)
+                approach_ps.pose.position.y = float(ps.pose.position.y)
+                approach_ps.pose.position.z = float(ps.pose.position.z)
+                approach_ps.pose.orientation.x = float(ps.pose.orientation.x)
+                approach_ps.pose.orientation.y = float(ps.pose.orientation.y)
+                approach_ps.pose.orientation.z = float(ps.pose.orientation.z)
+                approach_ps.pose.orientation.w = float(ps.pose.orientation.w)
+                approach_ps.pose.position.z = float(ps.pose.position.z) + 0.40
+
+                approach_plan_res = self.run_sync(
                     self.motion.plan(
-                        pose=ps,
-                        motion=mode,
+                        pose=approach_ps,
                         enqueue=False,
                     ),
                     timeout_s=timeout_s,
                 )
-                if plan_res.get("ok", False):
-                    break
-                if seq_idx == 0 and attempt == 0:
-                    err = str(plan_res.get("error", "unknown")).strip()
+                if not approach_plan_res.get("ok", False):
+                    err = str(approach_plan_res.get("error", "unknown")).strip()
                     log.warn(
-                        "[yaml_sequence] First target plan failed once "
-                        f"('{err}'). Waiting 0.5s and retrying."
+                        f"[yaml_sequence] Approach plan failed at target {seq_idx} "
+                        f"({approach_ps.pose.position.x:.3f}, {approach_ps.pose.position.y:.3f}, {approach_ps.pose.position.z:.3f}). "
+                        f"Error='{err}'. Skipping target."
                     )
-                    self.run_sync(self.util.wait(0.5, enqueue=False), timeout_s=timeout_s)
+                    continue
+
+                approach_exec_res = self.run_sync(self.motion.exec(enqueue=False), timeout_s=timeout_s)
+                if not approach_exec_res.get("ok", False):
+                    err = str(approach_exec_res.get("error", "unknown")).strip()
+                    log.warn(
+                        f"[yaml_sequence] Approach exec failed at target {seq_idx}. "
+                        f"Error='{err}'. Skipping target."
+                    )
+                    continue
+
+            plan_res = self.run_sync(
+                self.motion.plan(
+                    pose=ps,
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
+            )
 
             if not plan_res.get("ok", False):
                 err = str(plan_res.get("error", "unknown")).strip()
