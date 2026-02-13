@@ -1,5 +1,5 @@
-from .scan_session import ScanSession
+from .fib_cap_session import FibCapSession, ScanSession
 from .print_session import PrintSession
 from .custom_session import MySession
 
-__all__ = ["ScanSession", "PrintSession", "MySession"]
+__all__ = ["FibCapSession", "ScanSession", "PrintSession", "MySession"]

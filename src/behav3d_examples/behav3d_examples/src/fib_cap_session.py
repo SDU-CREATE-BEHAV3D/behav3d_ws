@@ -13,7 +13,7 @@ from behav3d_commands.session import Session
 TOOL_PLUS_Z_POINTS_OUTWARD = False
 
 
-class ScanSession(Session):
+class FibCapSession(Session):
     """
     Session extension with scan-specific orchestration helpers.
     """
@@ -270,3 +270,7 @@ def _any_orthonormal(v: np.ndarray) -> np.ndarray:
     u = basis - np.dot(basis, v) * v
     n = np.linalg.norm(u)
     return u / (n if n > 1e-12 else 1.0)
+
+
+# Backward compatibility alias.
+ScanSession = FibCapSession

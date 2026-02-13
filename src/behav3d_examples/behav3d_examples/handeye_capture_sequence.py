@@ -10,11 +10,11 @@ import math
 from geometry_msgs.msg import PoseStamped
 from scipy.spatial.transform import Rotation as R
 
-class HandeyeCaptureSeq(Node):
+class FibCapSequence(Node):
     """Demo: HOME → GOTO(plan+exec). Single on_move_done callback for all moves."""
     def __init__(self):
-        super().__init__('handeye_capture_sequence')
-        self.session = behav3d_examples.ScanSession(self)
+        super().__init__('fib_cap_sequence')
+        self.session = behav3d_examples.FibCapSession(self)
         self._started = False
         self.create_timer(0.25, self._run_once)
 
@@ -105,9 +105,13 @@ class HandeyeCaptureSeq(Node):
                 on_done=self._on_quit
             )
 
+
+# Backward compatibility alias.
+HandeyeCaptureSeq = FibCapSequence
+
 def main(args=None):
     rclpy.init(args=args)
-    rclpy.spin(HandeyeCaptureSeq())
+    rclpy.spin(FibCapSequence())
 
 
 if __name__ == '__main__':
