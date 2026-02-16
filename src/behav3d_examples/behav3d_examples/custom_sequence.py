@@ -35,14 +35,14 @@ class CustomSequenceDemo(Node):
 
             log.info(f"[cycle {cycle}] Running capture folder: {capture_folder}")
             sweep_targets = self.grid_session.run_grid_sweep(
-                width=0.7,
-                height=0.45,
+                width=0.9,
+                height=0.60,
                 center_x=0.0,
                 center_y=0.8,
                 center_z=0.0,
                 z_off=0.6,
-                nx=5,
-                ny=4,
+                nx=9,
+                ny=6,
                 debug=False,
                 capture_folder=capture_folder,
                 eef_link="femto_color_optical_calib",
