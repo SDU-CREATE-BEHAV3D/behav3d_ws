@@ -260,7 +260,7 @@ class FemtoCapture:
         """
         Write OpenCV-style intrinsics YAMLs under session_dir/config:
         - color_intrinsics.yaml   (from color_info, if available)
-        - depth_intrinsics.yaml   (ALWAYS borrowed from IR CameraInfo)
+        - depth_intrinsics.yaml   (from depth_info, if available)
         - ir_intrinsics.yaml      (from ir_info, if available)
         """
         out = {}
@@ -268,6 +268,7 @@ class FemtoCapture:
         dec = self.decimate
 
         ci = getattr(self, "color_info", None)
+        di = getattr(self, "depth_info", None)
         ii = getattr(self, "ir_info", None)
 
         # --- COLOR ---
@@ -281,16 +282,18 @@ class FemtoCapture:
         else:
             self.node.get_logger().warn("[intrinsics] color_info missing; NOT writing color_intrinsics.yaml.")
 
-        # --- DEPTH (borrow IR always) ---
-        if ii is not None:
+        # --- DEPTH ---
+        if di is not None:
             depth_name = "camera_depth_optical_frame"
-            depth_txt  = self._opencv_intrinsics_yaml(ii, depth_name, dec)
+            depth_txt  = self._opencv_intrinsics_yaml(di, depth_name, dec)
             f_depth = cfg_dir / "depth_intrinsics.yaml"
             self._write_textfile(f_depth, depth_txt)
             out["depth"] = str(f_depth)
-            self.node.get_logger().warn(f"[intrinsics] depth -> borrowed from IR ({ii.header.frame_id} {ii.width}x{ii.height})") # Why borrow from IR
+            self.node.get_logger().info(
+                f"[intrinsics] depth -> {depth_name} ({di.header.frame_id} {di.width}x{di.height})"
+            )
         else:
-            self.node.get_logger().warn("[intrinsics] ir_info missing; cannot borrow for depth. NOT writing depth_intrinsics.yaml.")
+            self.node.get_logger().warn("[intrinsics] depth_info missing; NOT writing depth_intrinsics.yaml.")
 
         # --- IR ---
         if ii is not None:
@@ -455,4 +458,3 @@ class FemtoCapture:
         except Exception as e:
             self.node.get_logger().warn(f'Failed to save depth ({depth_msg.encoding}): {e}')
             return None
-

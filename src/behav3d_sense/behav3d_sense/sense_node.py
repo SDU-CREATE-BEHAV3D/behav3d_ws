@@ -43,7 +43,6 @@ class SenseNode(Node):
             if (
                 (self.cam.color_info is not None)
                 and (self.cam.depth_info is not None)
-                and (getattr(self.cam, "ir_info", None) is not None)
             ):
                 try:
                     self.cam.save_intrinsics_yaml(self.session_root_dir)
