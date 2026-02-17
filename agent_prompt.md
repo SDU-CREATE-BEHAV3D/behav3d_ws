@@ -157,6 +157,7 @@ Reconstruction command usage notes:
 - No reconstruction history snapshot duplication is used; outputs are kept in the active scan-folder reconstruction path.
 - For `update_world_mesh`, if explicit `mesh_path`/`ply_path` is provided, use those; do not rely on fallback discovery unless necessary.
 - `tsdf_object_extract` is currently exposed as a ROS service only (`/reconstruct/tsdf_object_extract`); it is launched in bringup but not wrapped as a `CameraCommands` method yet.
+- TSDF depth bias correction is currently applied internally in `src/behav3d_sense/behav3d_sense/reconstruct/TSDF_cpu_cropped.py` via `DEPTH_BIAS_MM` (current tuned value: `-5.1` mm). This bias is not part of the `/reconstruct/tsdf_cropped` service request contract.
 
 Reconstruction + world-mesh protocol (current):
 1. Choose a scan folder per cycle (recommended incremental naming: `grid_sweep_00`, `grid_sweep_01`, ...).
@@ -297,6 +298,22 @@ Fib-cap capture flow in `behav3d_examples`:
   - `ros2 run behav3d_examples handeye_capture_sequence`
   - `ros2 run behav3d_examples fib_cap_sequence` (alias to same node)
 - `fib_scan(...)` handles Fibonacci-cap viewpoint generation, ordered motion/capture chaining, optional debug gating, and folder-scoped captures.
+
+Depth-bias calibration flow:
+- Capture entry point: `ros2 run behav3d_orchestrator depth_bias_capture_sequence`
+- Session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/depth_bias_session.py`
+- Capture sequence parameters:
+  - `first_height_offset_m`: first capture height above measured center point.
+  - `height_step_m`: step between heights.
+  - `num_steps`: number of height levels (`h1..hN`).
+  - `captures_per_height`: repeated captures per level.
+- Height folder naming is incremental (`h1`, `h2`, ..., `hN`) under `@session/depth_bias` (or configured folder root).
+- Analysis entry point: `python3 python_scripts/3d_reconstruction/depth_bias_analysis.py --session-path <captures/session>`
+- Analysis behavior:
+  - `--folders auto` (default) auto-discovers valid height folders under `<session>/depth_bias`.
+  - Error definition is `error_mm = z_depth_world - z_gt_mesh`.
+  - `pLow/pHigh` correspond to trim quantiles (`--trim-low-q`, `--trim-high-q`) used for robust stats.
+  - Linear model output is `error_mm = a + b * range_m` where `range_m` is in meters; `R2` reports fit quality.
 
 ---
 
