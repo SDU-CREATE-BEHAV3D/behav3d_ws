@@ -63,6 +63,9 @@ C2D_CENTER_CROP_APPLY_TO_DEPTH = True
 # If enabled, only count an observation when the projected color_in_depth pixel is still valid.
 # This makes erosion affect point retention (not just point color).
 C2D_REQUIRE_VALID_MASK_FOR_OBS = True
+# Fixed additive depth correction applied before TSDF integration.
+# Note: this is in camera-depth units. Negative pulls points closer to camera.
+DEPTH_BIAS_MM = -5.1
 
 # ----------------------------
 # Final output filtering parameters
@@ -182,6 +185,7 @@ class TSDF_Integration():
             block_resolution=12,
             depth_max=0.9,
             depth_scale=1000.0,
+            depth_bias_m=0.0,
             device='CPU:0',
         ):
         # initialize session and load poses
@@ -210,6 +214,9 @@ class TSDF_Integration():
         self.block_resolution = block_resolution
         self.depth_max = float(depth_max)
         self.depth_scale = float(depth_scale)
+        self.depth_bias_m = float(depth_bias_m)
+
+        self._apply_depth_bias_in_place()
 
         # initialize VoxelBlockGrid (CPU)
         self.vbg = o3d.t.geometry.VoxelBlockGrid(
@@ -226,6 +233,46 @@ class TSDF_Integration():
         self.color_in_depth, self.color_in_depth_paths = self._load_color_in_depth_images()
         if len(self.color_in_depth) == 0:
             raise FileNotFoundError(f"No {C2D_GLOB} found in {C2D_DIR}")
+
+    def _apply_depth_bias_in_place(self):
+        """
+        Apply additive depth bias to raw depth images before TSDF integration.
+        Positive bias increases depth values (pushes points farther from camera).
+        """
+        if abs(self.depth_bias_m) < 1e-12:
+            return
+
+        changed = 0
+        for i, img in enumerate(self.images):
+            if img is None:
+                continue
+
+            if img.dtype == np.uint16:
+                delta = int(round(self.depth_bias_m * self.depth_scale))
+                if delta == 0:
+                    continue
+                arr = img.astype(np.int32, copy=False)
+                mask = arr > 0
+                if not np.any(mask):
+                    continue
+                arr[mask] = np.clip(arr[mask] + delta, 1, 65535)
+                self.images[i] = arr.astype(np.uint16)
+                changed += 1
+                continue
+
+            arr = img.astype(np.float32, copy=False)
+            mask = arr > 0.0
+            if not np.any(mask):
+                continue
+            arr[mask] = np.maximum(arr[mask] + float(self.depth_bias_m), 0.0)
+            self.images[i] = arr
+            changed += 1
+
+        if changed > 0:
+            print(
+                f"Applied depth bias before TSDF integration: depth_bias_m={self.depth_bias_m:.6f} "
+                f"(~{self.depth_bias_m * 1000.0:.3f} mm) on {changed}/{len(self.images)} depth frames"
+            )
 
     def _load_color_in_depth_images(self):
         if not C2D_DIR.exists():
@@ -773,6 +820,8 @@ def run(session_path=None, scan_folder_override=None, visualize=True, device=Non
     session = Session(SESSION_PATH, scan_folder)
     device = _validate_device(_normalize_device(device))
     print(f"Using device: {device}")
+    depth_bias_m = float(DEPTH_BIAS_MM) / 1000.0
+    print(f"Depth bias correction: {depth_bias_m * 1000.0:.3f} mm")
     print(
         "Color-in-depth postprocess: "
         f"center_crop={C2D_CENTER_CROP_ENABLE} (w={C2D_CENTER_CROP_WIDTH}, h={C2D_CENTER_CROP_HEIGHT}, "
@@ -780,7 +829,7 @@ def run(session_path=None, scan_folder_override=None, visualize=True, device=Non
         f"erode={C2D_ERODE_ENABLE} (shape={C2D_ERODE_SHAPE}, "
         f"kernel={C2D_ERODE_KERNEL_SIZE}, iters={C2D_ERODE_ITERATIONS})"
     )
-    tsdf_integration = TSDF_Integration(session, device=device)
+    tsdf_integration = TSDF_Integration(session, device=device, depth_bias_m=depth_bias_m)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
     print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}")
     print(f"Number of color_in_depth loaded: {len(tsdf_integration.color_in_depth)}")
@@ -913,7 +962,7 @@ def main():
         session_path=args.session_path,
         scan_folder_override=args.scan_folder,
         visualize=not args.no_vis,
-        device=args.device
+        device=args.device,
     )
 
 
