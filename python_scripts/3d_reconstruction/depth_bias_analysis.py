@@ -4,7 +4,7 @@ Depth bias analysis against a measured ground-truth surface (mesh from sparse po
 
 What this script does
 1) Builds a piecewise-linear 2.5D mesh z=f(x,y) from measured TCP points (ground truth).
-2) Reads depth captures from a Behav3D session (h1/h2/h3 style folders + manifest.yaml).
+2) Reads depth captures from a Behav3D session (h1..hN style folders + manifest.yaml).
 3) Back-projects each depth pixel to 3D in camera IR frame using depth intrinsics.
 4) Transforms points to world using:
    - T_base_tool0 from each capture manifest entry
@@ -22,7 +22,8 @@ python3 python_scripts/3d_reconstruction/depth_bias_analysis.py \
   --session-path captures/260217_132316
 
 Optional arguments
-- --folders h1,h2,h3              Folders under <session>/depth_bias to analyze.
+- --folders auto                  Auto-discover folders under <session>/depth_bias (default).
+- --folders h1,h2,h3              Explicit folder list under <session>/depth_bias.
 - --points-mm \"x,y,z;...\"         Ground-truth points in mm (world). Defaults to your 9 points.
 - --base-to-world-yaw-deg 180      Rotation used to map base coordinates to world.
 - --base-to-world-xyz-m 0,0,0      Translation used to map base coordinates to world.
@@ -40,6 +41,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
@@ -154,10 +156,38 @@ def robust_stats(values_m: np.ndarray, q_low: float, q_high: float) -> Dict[str,
     }
 
 
+def _folder_sort_key(path: Path) -> Tuple[int, int, str]:
+    """
+    Natural ordering for names like h1, h2, ..., h10.
+    Non-matching names are ordered lexicographically after numeric ones.
+    """
+    name = path.name
+    m = re.match(r"^([A-Za-z_]*?)(\d+)$", name)
+    if m:
+        prefix = m.group(1)
+        idx = int(m.group(2))
+        return (0, idx, prefix.lower())
+    return (1, 0, name.lower())
+
+
 def iter_folders(session_path: Path, subdir: str, folders_csv: str) -> Iterable[Path]:
+    base = session_path / subdir
+    if not base.is_dir():
+        return
+
+    mode = str(folders_csv or "").strip().lower()
+    if mode in ("", "auto"):
+        candidates = [
+            p for p in base.iterdir()
+            if p.is_dir() and (p / "manifest.yaml").is_file()
+        ]
+        for folder in sorted(candidates, key=_folder_sort_key):
+            yield folder
+        return
+
     names = [x.strip() for x in str(folders_csv).split(",") if x.strip()]
     for name in names:
-        folder = session_path / subdir / name
+        folder = base / name
         if folder.is_dir():
             yield folder
 
@@ -170,7 +200,11 @@ def main() -> int:
         help="Session root, e.g. captures/260217_132316",
     )
     parser.add_argument("--subdir", default="depth_bias", help="Subfolder under session path.")
-    parser.add_argument("--folders", default="h1,h2,h3", help="Comma-separated folder list.")
+    parser.add_argument(
+        "--folders",
+        default="auto",
+        help="Comma-separated folder list (e.g. h1,h2,h3) or 'auto' to discover all.",
+    )
     parser.add_argument(
         "--points-mm",
         default="",

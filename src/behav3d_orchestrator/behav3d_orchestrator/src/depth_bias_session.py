@@ -20,6 +20,7 @@ class DepthBiasSession(behav3d_commands.Session):
         center_z_mm: float,
         first_height_offset_m: float = 0.50,
         height_step_m: float = 0.30,
+        num_steps: int = 3,
         captures_per_height: int = 15,
         folder_root: str = "@session/depth_bias",
         eef_link: str = "femto_ir_optical_calib",
@@ -36,15 +37,16 @@ class DepthBiasSession(behav3d_commands.Session):
         log = self.node.get_logger()
         if int(captures_per_height) <= 0:
             raise ValueError("captures_per_height must be > 0")
+        if int(num_steps) <= 0:
+            raise ValueError("num_steps must be > 0")
 
         cx = float(center_x_mm) / 1000.0
         cy = float(center_y_mm) / 1000.0
         cz = float(center_z_mm) / 1000.0
 
         heights_m = [
-            cz + float(first_height_offset_m),
-            cz + float(first_height_offset_m) + float(height_step_m),
-            cz + float(first_height_offset_m) + 2.0 * float(height_step_m),
+            cz + float(first_height_offset_m) + float(i) * float(height_step_m)
+            for i in range(int(num_steps))
         ]
 
         if home_before:
@@ -148,6 +150,7 @@ class DepthBiasSession(behav3d_commands.Session):
             "center_xyz_m": [float(cx), float(cy), float(cz)],
             "first_height_offset_m": float(first_height_offset_m),
             "height_step_m": float(height_step_m),
+            "num_steps": int(num_steps),
             "captures_per_height": int(captures_per_height),
             "heights": per_height,
             "captures_ok": int(total_ok),

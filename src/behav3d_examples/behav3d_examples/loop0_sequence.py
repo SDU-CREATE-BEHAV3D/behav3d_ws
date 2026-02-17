@@ -27,14 +27,14 @@ class Loop0Node(Node):
         self.declare_parameter("bbox_min", [-0.30, 0.45, -0.05])
         self.declare_parameter("bbox_max", [0.30, 1.10, 0.60])
         self.declare_parameter("ground_offset_m", 0.000)   # m above ground
-        self.declare_parameter("safety_offset_mm", 15.0)    # safety Z offset in mm
+        self.declare_parameter("safety_offset_mm", 5.0)    # safety Z offset in mm
         self.declare_parameter("vel_scale", 0.05)
         self.declare_parameter("accel_scale", 0.05)
         self.declare_parameter("motion_timeout_s", 15.0)
         self.declare_parameter("capture_timeout_s", 10.0)
         self.declare_parameter("reconstruct_timeout_s", 5.0)
         self.declare_parameter("print_timeout_s", 10.0)
-        self.declare_parameter("print_steps", 1500)
+        self.declare_parameter("print_steps", 1800)
         self.declare_parameter("print_speed", 600)
         self.declare_parameter("reconstruct_points_frame", "ur20_base_link")
 

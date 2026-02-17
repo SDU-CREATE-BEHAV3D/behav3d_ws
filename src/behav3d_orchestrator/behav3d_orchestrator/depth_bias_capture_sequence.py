@@ -29,7 +29,8 @@ class DepthBiasCaptureSequenceNode(Node):
         self.declare_parameter("folder_root", "@session/depth_bias")
 
         self.declare_parameter("first_height_offset_m", 0.50)
-        self.declare_parameter("height_step_m", 0.30)
+        self.declare_parameter("height_step_m", 0.08)
+        self.declare_parameter("num_steps", 7)
         self.declare_parameter("captures_per_height", 15)
 
         self.declare_parameter("vel_scale", 0.05)
@@ -58,6 +59,7 @@ class DepthBiasCaptureSequenceNode(Node):
         folder_root = str(self.get_parameter("folder_root").value).strip() or "@session/depth_bias"
         first_height_offset_m = float(self.get_parameter("first_height_offset_m").value)
         height_step_m = float(self.get_parameter("height_step_m").value)
+        num_steps = int(self.get_parameter("num_steps").value)
         captures_per_height = int(self.get_parameter("captures_per_height").value)
         vel_scale = float(self.get_parameter("vel_scale").value)
         accel_scale = float(self.get_parameter("accel_scale").value)
@@ -72,6 +74,7 @@ class DepthBiasCaptureSequenceNode(Node):
             "Starting depth-bias capture sequence: "
             f"center_mm=({center_x_mm:.1f}, {center_y_mm:.1f}, {center_z_mm:.1f}), "
             f"offset0={first_height_offset_m:.3f}m, step={height_step_m:.3f}m, "
+            f"num_steps={num_steps}, "
             f"captures_per_height={captures_per_height}, eef='{eef_link}', folder_root='{folder_root}'"
         )
 
@@ -82,6 +85,7 @@ class DepthBiasCaptureSequenceNode(Node):
                 center_z_mm=center_z_mm,
                 first_height_offset_m=first_height_offset_m,
                 height_step_m=height_step_m,
+                num_steps=num_steps,
                 captures_per_height=captures_per_height,
                 folder_root=folder_root,
                 eef_link=eef_link,
