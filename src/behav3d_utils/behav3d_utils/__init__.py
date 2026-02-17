@@ -24,6 +24,11 @@ from .target_builder import (
     flip_target_axes,
     swap_target_axes,
 )
+from .target_transforms import (
+    pose_from_xyz_and_z_axis,
+    quat_from_z_axis,
+    quat_from_rotmat,
+)
 
 __all__ = [
     "pose_stamped",
@@ -50,4 +55,7 @@ __all__ = [
     "set_target_origin",
     "flip_target_axes",
     "swap_target_axes",
+    "pose_from_xyz_and_z_axis",
+    "quat_from_z_axis",
+    "quat_from_rotmat",
 ]

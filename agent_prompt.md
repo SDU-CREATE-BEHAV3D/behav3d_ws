@@ -271,6 +271,35 @@ Why this pattern is ideal:
 
 ---
 
+**Additional Orchestration Patterns (Current)**
+
+YAML-driven orchestration in `behav3d_orchestrator`:
+- Entry points:
+  - `ros2 run behav3d_orchestrator yaml_target_sequence`
+  - `ros2 run behav3d_orchestrator print_path_sequence`
+- Session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
+- `parse_yaml_targets(...)` supports:
+  - `{index: N, xyz: [x, y, z]}`
+  - `{index: N, x: ..., y: ..., z: ...}`
+  - `{index: N, plane: "O(x,y,z) Z(i,j,k)"}` where `O` is in mm and `Z` is the orientation normal
+  - `[x, y, z]`
+- Ordering rule: targets are sorted by `index` (fallback: file position).
+- `run_yaml_target_sequence(...)` behavior:
+  - home, short settle wait, set `setSpd/setAcc/setLIN`, optional marker publishing, optional operator gate (`util.input`) per target.
+  - First target uses a safety approach (+0.40 m in Z) before final move.
+- `run_yaml_print_path(...)` behavior:
+  - Parse ordered targets, approach above first target, go to first target, turn extruder ON, plan+exec LIN through all remaining targets, turn extruder OFF, clear markers.
+
+Fib-cap capture flow in `behav3d_examples`:
+- Main session class: `FibCapSession` in `src/behav3d_examples/behav3d_examples/src/fib_cap_session.py`
+- Backward-compatibility alias still exported: `ScanSession = FibCapSession`
+- Sequence entry points:
+  - `ros2 run behav3d_examples handeye_capture_sequence`
+  - `ros2 run behav3d_examples fib_cap_sequence` (alias to same node)
+- `fib_scan(...)` handles Fibonacci-cap viewpoint generation, ordered motion/capture chaining, optional debug gating, and folder-scoped captures.
+
+---
+
 **Guidance for AI Agents**
 
 Do:
@@ -279,11 +308,14 @@ Do:
 - Check service/action availability (commands already do this and return an error in `on_done`).
 - Prefer `plan()` + `exec()` for explicit control; use `goto(exec=True)` for simpler flows.
 - Use `capture(folder=...)` for session organization; use `"@session/..."` when you want consistent session roots.
+- Prefer shared geometry/orientation helpers from `behav3d_utils` instead of local duplicates.
+- For plane-normal to pose conversion, use `behav3d_utils.target_transforms` (`pose_from_xyz_and_z_axis`, `quat_from_z_axis`, `quat_from_rotmat`).
 
 Avoid:
 - Calling `run_sync` directly inside ROS callbacks.
 - Scheduling conflicting hardware actions in the same `run_group`.
 - Assuming resource locks exist; `SessionQueue` does not enforce them.
+- Re-implementing pose/quaternion helper logic inside sessions when equivalent utilities already exist in `behav3d_utils`.
 
 ---
 
