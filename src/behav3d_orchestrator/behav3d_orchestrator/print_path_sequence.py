@@ -7,7 +7,6 @@ ros2 run behav3d_orchestrator print_path_sequence --ros-args -p yaml_path:=/home
 from __future__ import annotations
 
 import threading
-from typing import Optional
 
 import rclpy
 from rclpy.node import Node
@@ -26,7 +25,7 @@ class PrintPathSequenceNode(Node):
         self.declare_parameter("approach_vel_scale", 0.10)
         self.declare_parameter("approach_z_offset_m", 0.40)
         self.declare_parameter("print_speed", 1000)
-        self.declare_parameter("timeout_s", 60.0)
+        self.declare_parameter("timeout_s", 0.0)
         self.declare_parameter("publish_markers", True)
         self.declare_parameter("axis_length", 0.05)
         self.declare_parameter("axis_radius", 0.003)
@@ -46,7 +45,7 @@ class PrintPathSequenceNode(Node):
         approach_vel_scale = float(self.get_parameter("approach_vel_scale").value)
         approach_z_offset_m = float(self.get_parameter("approach_z_offset_m").value)
         print_speed = int(self.get_parameter("print_speed").value)
-        timeout_s = self._param_optional_float("timeout_s")
+        timeout_s = None
         publish_markers = bool(self.get_parameter("publish_markers").value)
         axis_length = float(self.get_parameter("axis_length").value)
         axis_radius = float(self.get_parameter("axis_radius").value)
@@ -92,16 +91,10 @@ class PrintPathSequenceNode(Node):
                 log.info(f"[print_path_sequence] Print path completed over {res.get('targets')} targets.")
 
             self.session.run_sync(self.session.motion.home(enqueue=False), timeout_s=timeout_s)
-        except TimeoutError:
-            log.error("[print_path_sequence] Sequence timed out.")
+        except Exception as exc:
+            log.error(f"[print_path_sequence] Sequence failed: {exc}")
         finally:
             rclpy.shutdown()
-
-    def _param_optional_float(self, name: str) -> Optional[float]:
-        val = float(self.get_parameter(name).value)
-        if val <= 0.0:
-            return None
-        return val
 
 
 def main(args=None):
@@ -117,4 +110,3 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
-

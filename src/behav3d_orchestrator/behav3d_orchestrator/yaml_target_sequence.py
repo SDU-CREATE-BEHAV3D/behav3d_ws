@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import threading
-from typing import Optional
 
 import rclpy
 from rclpy.node import Node
@@ -21,7 +20,7 @@ class YamlTargetSequenceNode(Node):
         self.declare_parameter("debug", False)
         self.declare_parameter("vel_scale", 0.05)
         self.declare_parameter("accel_scale", 0.05)
-        self.declare_parameter("timeout_s", 20.0)
+        self.declare_parameter("timeout_s", 0.0)
         self.declare_parameter("publish_markers", True)
         self.declare_parameter("axis_length", 0.05)
         self.declare_parameter("axis_radius", 0.003)
@@ -39,7 +38,7 @@ class YamlTargetSequenceNode(Node):
         debug = bool(self.get_parameter("debug").value)
         vel_scale = float(self.get_parameter("vel_scale").value)
         accel_scale = float(self.get_parameter("accel_scale").value)
-        timeout_s = self._param_optional_float("timeout_s")
+        timeout_s = None
         publish_markers = bool(self.get_parameter("publish_markers").value)
         axis_length = float(self.get_parameter("axis_length").value)
         axis_radius = float(self.get_parameter("axis_radius").value)
@@ -69,10 +68,6 @@ class YamlTargetSequenceNode(Node):
                 axis_radius=axis_radius,
                 clear_markers_before=clear_markers_before,
             )
-        except TimeoutError:
-            log.error("YAML target sequence timed out.")
-            rclpy.shutdown()
-            return
         except Exception as exc:
             log.error(f"YAML target sequence failed: {exc}")
             rclpy.shutdown()
@@ -84,15 +79,9 @@ class YamlTargetSequenceNode(Node):
                 self.session.motion.home(enqueue=False),
                 timeout_s=timeout_s,
             )
-        except TimeoutError:
-            log.error("Final home move timed out.")
+        except Exception as exc:
+            log.error(f"Final home move failed: {exc}")
         rclpy.shutdown()
-
-    def _param_optional_float(self, name: str) -> Optional[float]:
-        val = float(self.get_parameter(name).value)
-        if val <= 0.0:
-            return None
-        return val
 
 
 def main(args=None):
