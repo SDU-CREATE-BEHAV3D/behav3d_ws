@@ -24,7 +24,7 @@ class PrintDotsSequenceNode(Node):
         self.declare_parameter("frame_id", "world")
         self.declare_parameter("accel_scale", 0.05)
         self.declare_parameter("pre_dot_vel_scale", 0.10)
-        self.declare_parameter("dot_vel_scale", 0.002)
+        self.declare_parameter("dot_vel_scale", 0.02)
         self.declare_parameter("approach_z_offset_m", 0.40)
         self.declare_parameter("dot_z_offset_m", 0.04)
         self.declare_parameter("dot_steps", 5000)

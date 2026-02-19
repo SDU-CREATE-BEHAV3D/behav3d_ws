@@ -24,7 +24,7 @@ class FibCapSequence(Node):
         self._started = True
 
         # Hardcoded target pose in 'world' using XYZ + RPY (radians)
-        px, py, pz = 0.00, 0.83, -0.05
+        px, py, pz = 0.00, 0.80, 0.15
         rx, ry, rz = 0.0, 0.0, math.radians(0)
 
         target_ps = PoseStamped()
@@ -40,15 +40,15 @@ class FibCapSequence(Node):
         target_ps.pose.orientation.w = float(qw)
 
         self.session.motion.home(duration_s=8.0, on_done=self._on_move_done)
-        self.session.motion.setAcc(0.1)
-        self.session.motion.setSpd(0.1)
+        self.session.motion.setAcc(0.05)
+        self.session.motion.setSpd(0.05)
         self.session.motion.setEef("femto_color_optical_calib")
         self.session.motion.setLIN()
         self.session.util.input(prompt="Press ENTER to go to target...")
         self.session.fib_scan(
             target=target_ps,
-            distance=0.45,
-            cap_rad=math.radians(24),
+            distance=0.55,
+            cap_rad=math.radians(28),
             samples=16,
             folder="@session/scan_fib_simple",
             settle_s=0.3,
@@ -66,7 +66,7 @@ class FibCapSequence(Node):
         #     on_done=lambda res: self.get_logger().info(f"Reconstruction request done: {res}"),
         # )        
 
-        self.session.motion.home(duration_s=1.0, on_done=self._on_move_done)
+        self.session.motion.home(duration_s=9.0, on_done=self._on_move_done)
         self.session.util.input(key="q",
                      prompt="Type 'q' + ENTER to shutdown...",
                      on_done=self._on_quit)

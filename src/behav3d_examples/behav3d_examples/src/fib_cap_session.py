@@ -218,8 +218,10 @@ class FibCapSession(Session):
 
         if poses_world:
             if publish_targets:
+                # Execution order is poses_world[len-1] -> ... -> poses_world[0].
+                # Publish in that same order so RViz target indices match robot motion.
                 self.util.publish_targets(
-                    poses_world,
+                    list(reversed(poses_world)),
                     axis_length=float(axis_length),
                     axis_radius=float(axis_radius),
                     clear_before=bool(clear_markers_before),
@@ -227,20 +229,8 @@ class FibCapSession(Session):
 
             i0 = len(poses_world) - 1
             ps0 = poses_world[i0]
-            rpy0 = R.from_quat([
-                ps0.pose.orientation.x,
-                ps0.pose.orientation.y,
-                ps0.pose.orientation.z,
-                ps0.pose.orientation.w,
-            ]).as_euler("xyz", degrees=False)
-
             self.motion.goto(
-                x=ps0.pose.position.x,
-                y=ps0.pose.position.y,
-                z=ps0.pose.position.z,
-                rx=float(rpy0[0]),
-                ry=float(rpy0[1]),
-                rz=float(rpy0[2]),
+                pose=ps0,
                 exec=(not debug),
                 on_done=_after_goto(i0),
             )
