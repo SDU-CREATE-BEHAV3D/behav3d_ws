@@ -30,6 +30,10 @@ class FibCapSession(Session):
         settle_s: float = 0.2,
         debug: bool = False,
         z_jitter: float = 0.0,
+        publish_targets: bool = False,
+        axis_length: float = 0.05,
+        axis_radius: float = 0.003,
+        clear_markers_before: bool = True,
     ) -> Dict[str, Any]:
         return self.fib_scan(
             target=target,
@@ -41,6 +45,10 @@ class FibCapSession(Session):
             settle_s=settle_s,
             debug=debug,
             z_jitter=z_jitter,
+            publish_targets=publish_targets,
+            axis_length=axis_length,
+            axis_radius=axis_radius,
+            clear_markers_before=clear_markers_before,
         )
 
     def fib_scan(
@@ -55,6 +63,10 @@ class FibCapSession(Session):
         settle_s: float = 0.2,
         debug: bool = False,
         z_jitter: float = 0.0,
+        publish_targets: bool = False,
+        axis_length: float = 0.05,
+        axis_radius: float = 0.003,
+        clear_markers_before: bool = True,
     ) -> Dict[str, Any]:
         if not isinstance(target, PoseStamped):
             raise TypeError("target must be geometry_msgs.msg.PoseStamped in 'world'.")
@@ -205,6 +217,14 @@ class FibCapSession(Session):
             return _cb
 
         if poses_world:
+            if publish_targets:
+                self.util.publish_targets(
+                    poses_world,
+                    axis_length=float(axis_length),
+                    axis_radius=float(axis_radius),
+                    clear_before=bool(clear_markers_before),
+                )
+
             i0 = len(poses_world) - 1
             ps0 = poses_world[i0]
             rpy0 = R.from_quat([
@@ -236,6 +256,7 @@ class FibCapSession(Session):
                 "samples": samples,
                 "settle_s": settle_s,
                 "debug": debug,
+                "publish_targets": publish_targets,
             },
             "folder": folder,
         }
