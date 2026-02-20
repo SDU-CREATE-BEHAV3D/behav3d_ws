@@ -20,6 +20,10 @@ setup(
     entry_points={
         'console_scripts': [
             'orchestrator_node = behav3d_orchestrator.orchestrator_node:main',
+            'yaml_target_sequence = behav3d_orchestrator.yaml_target_sequence:main',
+            'print_path_sequence = behav3d_orchestrator.print_path_sequence:main',
+            'print_dots_sequence = behav3d_orchestrator.print_dots_sequence:main',
+            'depth_bias_capture_sequence = behav3d_orchestrator.depth_bias_capture_sequence:main',
         ],
     },
 )

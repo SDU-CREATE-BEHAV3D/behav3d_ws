@@ -1,0 +1,16 @@
+# Request
+bool use_latest
+string session_path
+string mesh_path
+string ply_path
+string prefer  # "mesh" or "ply"
+float32 wait_timeout_s
+---
+# Response
+bool success
+string message
+string session_dir
+string resolved_mesh_path
+string resolved_ply_path
+string published_path
+string published_kind

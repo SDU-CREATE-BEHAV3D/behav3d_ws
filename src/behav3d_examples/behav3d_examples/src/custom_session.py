@@ -67,8 +67,11 @@ class MySession(behav3d_commands.Session):
         visualize: bool = False,
         device: str = "CPU:0",
         timeout_s: Optional[float] = None,
+        wait_for_outputs: bool = False,
+        wait_timeout_s: float = 180.0,
     ):
-        return self.run_sync(
+        start_ts = time.time()
+        res = self.run_sync(
             self.camera.reconstruct_tsdf_cropped(
                 use_latest=use_latest,
                 session_path=session_path,
@@ -79,6 +82,20 @@ class MySession(behav3d_commands.Session):
             ),
             timeout_s=timeout_s,
         )
+        if not wait_for_outputs or not res.get("ok", False):
+            return res
+
+        metrics = res.get("metrics", {})
+        output_path = str(metrics.get("mesh_path", "")).strip()
+        if not output_path:
+            output_path = str(metrics.get("output_path", "")).strip()
+        if output_path:
+            self._wait_for_fresh_file_output(
+                output_path=output_path,
+                start_ts=start_ts,
+                timeout_s=float(wait_timeout_s),
+            )
+        return res
 
     def run_color_to_depth_reconstruct(
         self,
@@ -144,14 +161,39 @@ class MySession(behav3d_commands.Session):
         visualize: bool = False,
         device: str = "CPU:0",
         timeout_s: Optional[float] = None,
+        wait_for_outputs: bool = False,
+        wait_timeout_s: float = 180.0,
+    ):
+        return self.run_tsdf_cropped_reconstruct(
+            use_latest=use_latest,
+            session_path=session_path,
+            scan_folder=scan_folder,
+            visualize=visualize,
+            device=device,
+            timeout_s=timeout_s,
+            wait_for_outputs=wait_for_outputs,
+            wait_timeout_s=wait_timeout_s,
+        )
+
+    def run_update_world_mesh(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: str = "",
+        mesh_path: str = "",
+        ply_path: str = "",
+        prefer: str = "mesh",
+        wait_timeout_s: float = 60.0,
+        timeout_s: Optional[float] = None,
     ):
         return self.run_sync(
-            self.camera.reconstruct_tsdf_grid_sweep(
+            self.camera.update_world_mesh(
                 use_latest=use_latest,
                 session_path=session_path,
-                scan_folder=scan_folder,
-                visualize=visualize,
-                device=device,
+                mesh_path=mesh_path,
+                ply_path=ply_path,
+                prefer=prefer,
+                wait_timeout_s=wait_timeout_s,
                 enqueue=False,
             ),
             timeout_s=timeout_s,
@@ -180,6 +222,36 @@ class MySession(behav3d_commands.Session):
         return self.run_sync(
             self.util.wait_until(
                 predicate=_fresh_alignment_exists,
+                period_s=0.5,
+                timeout_s=timeout_s,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s + 1.0,
+        )
+
+    def _wait_for_fresh_file_output(
+        self,
+        *,
+        output_path: str,
+        start_ts: float,
+        timeout_s: float,
+    ):
+        out_path = Path(output_path)
+
+        def _fresh_file_exists() -> bool:
+            try:
+                if not out_path.exists() or not out_path.is_file():
+                    return False
+                st = out_path.stat()
+                if st.st_size <= 0:
+                    return False
+                return st.st_mtime >= (start_ts - 0.25)
+            except OSError:
+                return False
+
+        return self.run_sync(
+            self.util.wait_until(
+                predicate=_fresh_file_exists,
                 period_s=0.5,
                 timeout_s=timeout_s,
                 enqueue=False,

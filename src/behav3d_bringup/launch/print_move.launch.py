@@ -16,7 +16,6 @@
 # Date: 2025-07
 # =============================================================================
 
-from pathlib import Path
 import os
 
 from launch import LaunchDescription
@@ -75,6 +74,11 @@ def generate_launch_description():
         "reconstruct_device",
         default_value="CPU:0",
         description='Default Open3D device for TSDF services, e.g. "CPU:0" or "CUDA:0"',
+    )
+    world_mesh_frame_arg = DeclareLaunchArgument(
+        "world_mesh_frame_id",
+        default_value="ur20_base_link",
+        description="Frame for published reconstructed mesh marker",
     )
     # MotionController Params
     group_arg = DeclareLaunchArgument(
@@ -270,22 +274,11 @@ def generate_launch_description():
         package="behav3d_sense",
         executable="world_node",
         output="screen",
+        parameters=[
+            {"mesh_frame_id": LaunchConfiguration("world_mesh_frame_id")},
+        ],
     )
     world_node_call = TimerAction(period=2.0, actions=[world_node])
-
-    #world_visualizer node
-    world_visualizer = Node(
-        package='world_visualizer',
-        executable='mesh_visualizer',
-        name='mesh_visualizer',
-        output='screen',
-        parameters=[
-            {'mesh_dir': str(Path.home() / 'robot/meshes')},
-            {'frame_id': 'ur20_base_link'}
-        ]
-    )   
-    delayed_visualizer = TimerAction(period=2.0, actions=[world_visualizer]
-)
 
     node_demo = Node(
         name="behav3d_demo",
@@ -326,6 +319,7 @@ def generate_launch_description():
             reconstruct_scan_folder_arg,
             reconstruct_visualize_arg,
             reconstruct_device_arg,
+            world_mesh_frame_arg,
             
             ur_driver,
             moveit_stack,
@@ -337,7 +331,6 @@ def generate_launch_description():
             sense_node_call,
             reconstruct_services,
             world_node_call,
-            delayed_visualizer,
        #    node_demo
         ]
     )

@@ -26,7 +26,10 @@ The launch file brings up these runtime roles:
   - `color_to_depth_service`
   - `tsdf_cropped_service`
   - `tsdf_object_extract_service`
-- `world_visualizer` (mesh display).
+- `behav3d_world` (`behav3d_sense/world_node.py`) for:
+  - world-state publishing (`/behav3d/world_state`, `/behav3d/get_world_state`)
+  - mesh update service (`/behav3d/update_world_mesh`)
+  - RViz mesh marker publication (`/visualization_marker`)
 
 ---
 
@@ -126,6 +129,7 @@ Underlying ROS interfaces:
 - Service `/reconstruct/color_to_depth` (`ColorToDepth`)
 - Service `/reconstruct/tsdf_cropped` (`TsdfCropped`)
 - Service `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`)
+- Service `/behav3d/update_world_mesh` (`UpdateWorldMesh`)
 
 Camera commands:
 
@@ -138,12 +142,30 @@ Camera commands:
 | `reconstruct_color_to_depth_grid_sweep()` | Color-to-depth for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize` | Default `scan_folder="grid_sweep"`. |
 | `reconstruct_tsdf_cropped()` | Run TSDF cropped stage. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Calls `/reconstruct/tsdf_cropped`. |
 | `reconstruct_tsdf_grid_sweep()` | TSDF cropped for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Default `scan_folder="grid_sweep"`. |
+| `update_world_mesh()` | Update RViz mesh marker from explicit or inferred reconstruction outputs. | `use_latest`, `session_path`, `mesh_path`, `ply_path`, `prefer`, `wait_timeout_s` | Calls `/behav3d/update_world_mesh`. Prefer explicit `mesh_path`/`ply_path` from TSDF response. |
 
 Reconstruction command usage notes:
 - Stage order for mesh flow: `reconstruct_color_to_depth*` first, then `reconstruct_tsdf_*`.
 - If `session_path` is non-empty, command layer forces `use_latest=False` (explicit path wins).
 - If `session_path` is empty, `use_latest=True` resolves the latest session under captures root.
 - Reconstruction services return quickly and continue processing in a background thread; watch node logs for completion.
+- Outputs are scoped by scan folder under the capture folder:
+  - `@session/<scan_folder>/reconstruct/color_in_depth/`
+  - `@session/<scan_folder>/reconstruct/tsdf_surface_mesh.stl`
+  - `@session/<scan_folder>/reconstruct/tsdf_surface_rgb_colored.ply`
+- Current protocol stores only `color_in_depth_*.png` for alignment (heavy debug files are not saved by default).
+- No reconstruction history snapshot duplication is used; outputs are kept in the active scan-folder reconstruction path.
+- For `update_world_mesh`, if explicit `mesh_path`/`ply_path` is provided, use those; do not rely on fallback discovery unless necessary.
+- `tsdf_object_extract` is currently exposed as a ROS service only (`/reconstruct/tsdf_object_extract`); it is launched in bringup but not wrapped as a `CameraCommands` method yet.
+- TSDF depth bias correction is currently applied internally in `src/behav3d_sense/behav3d_sense/reconstruct/TSDF_cpu_cropped.py` via `DEPTH_BIAS_MM` (current tuned value: `-5.1` mm). This bias is not part of the `/reconstruct/tsdf_cropped` service request contract.
+
+Reconstruction + world-mesh protocol (current):
+1. Choose a scan folder per cycle (recommended incremental naming: `grid_sweep_00`, `grid_sweep_01`, ...).
+2. Capture into that folder (`@session/<scan_folder>`), so each cycle is isolated.
+3. Run `reconstruct_color_to_depth*` with the same `scan_folder` and wait for fresh `color_in_depth` outputs.
+4. Run `reconstruct_tsdf_*` with the same `scan_folder` and read returned `mesh_path` and `rgb_ply_path`.
+5. Call `update_world_mesh` using explicit `mesh_path`/`ply_path` and `prefer` (`mesh` or `ply`).
+6. World node stages a timestamped mesh copy in `/tmp/behav3d_world_mesh_cache` before publish, which avoids RViz stale-resource caching on repeated updates.
 
 Capture folder semantics (as implemented in `behav3d_sense`):
 - `""` or `"."` uses current capture directory.
@@ -195,6 +217,7 @@ Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 - `/reconstruct/color_to_depth` (`ColorToDepth`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/reconstruct/tsdf_cropped` (`TsdfCropped`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`) via `behav3d_sense/reconstruct/reconstruct_services.py`
+- `/behav3d/update_world_mesh` (`UpdateWorldMesh`) via `behav3d_sense/world_node.py`
 - `update_print_config` (`UpdatePrintConfig`) via `behav3d_print`
 - `get_print_status` (`GetPrintStatus`) via `behav3d_print`
 - `/behav3d/publish_targets` (`PublishTargets`) via `behav3d_motion_bridge`
@@ -223,10 +246,12 @@ Execution flow in `custom_sequence.py`:
 1. Start ROS and spin a node (`CustomSequenceDemo`).
 2. Create `MySession` instance in the node.
 3. Run a worker thread (not the ROS executor thread).
-4. Call `run_scan_session(targets)` for scanning.
-5. Wait for user input.
-6. Call `run_disc_print_session(targets)` for combined motion + extrusion.
-7. Send robot home and wait for shutdown input.
+4. Run a reconstruction cycle with incremented capture folder naming (`grid_sweep_00`, `grid_sweep_01`, ...):
+   - grid sweep capture to `@session/<scan_folder>`
+   - `color_to_depth` with `scan_folder=<scan_folder>`
+   - `tsdf_cropped` with `scan_folder=<scan_folder>`
+   - `update_world_mesh` using returned TSDF output paths
+5. Prompt operator: type `c` to capture another cycle, otherwise shutdown.
 
 Orchestration details in `custom_session.py`:
 - `run_scan_session`:
@@ -247,6 +272,51 @@ Why this pattern is ideal:
 
 ---
 
+**Additional Orchestration Patterns (Current)**
+
+YAML-driven orchestration in `behav3d_orchestrator`:
+- Entry points:
+  - `ros2 run behav3d_orchestrator yaml_target_sequence`
+  - `ros2 run behav3d_orchestrator print_path_sequence`
+- Session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
+- `parse_yaml_targets(...)` supports:
+  - `{index: N, xyz: [x, y, z]}`
+  - `{index: N, x: ..., y: ..., z: ...}`
+  - `{index: N, plane: "O(x,y,z) Z(i,j,k)"}` where `O` is in mm and `Z` is the orientation normal
+  - `[x, y, z]`
+- Ordering rule: targets are sorted by `index` (fallback: file position).
+- `run_yaml_target_sequence(...)` behavior:
+  - home, short settle wait, set `setSpd/setAcc/setLIN`, optional marker publishing, optional operator gate (`util.input`) per target.
+  - First target uses a safety approach (+0.40 m in Z) before final move.
+- `run_yaml_print_path(...)` behavior:
+  - Parse ordered targets, approach above first target, go to first target, turn extruder ON, plan+exec LIN through all remaining targets, turn extruder OFF, clear markers.
+
+Fib-cap capture flow in `behav3d_examples`:
+- Main session class: `FibCapSession` in `src/behav3d_examples/behav3d_examples/src/fib_cap_session.py`
+- Backward-compatibility alias still exported: `ScanSession = FibCapSession`
+- Sequence entry points:
+  - `ros2 run behav3d_examples handeye_capture_sequence`
+  - `ros2 run behav3d_examples fib_cap_sequence` (alias to same node)
+- `fib_scan(...)` handles Fibonacci-cap viewpoint generation, ordered motion/capture chaining, optional debug gating, and folder-scoped captures.
+
+Depth-bias calibration flow:
+- Capture entry point: `ros2 run behav3d_orchestrator depth_bias_capture_sequence`
+- Session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/depth_bias_session.py`
+- Capture sequence parameters:
+  - `first_height_offset_m`: first capture height above measured center point.
+  - `height_step_m`: step between heights.
+  - `num_steps`: number of height levels (`h1..hN`).
+  - `captures_per_height`: repeated captures per level.
+- Height folder naming is incremental (`h1`, `h2`, ..., `hN`) under `@session/depth_bias` (or configured folder root).
+- Analysis entry point: `python3 python_scripts/3d_reconstruction/depth_bias_analysis.py --session-path <captures/session>`
+- Analysis behavior:
+  - `--folders auto` (default) auto-discovers valid height folders under `<session>/depth_bias`.
+  - Error definition is `error_mm = z_depth_world - z_gt_mesh`.
+  - `pLow/pHigh` correspond to trim quantiles (`--trim-low-q`, `--trim-high-q`) used for robust stats.
+  - Linear model output is `error_mm = a + b * range_m` where `range_m` is in meters; `R2` reports fit quality.
+
+---
+
 **Guidance for AI Agents**
 
 Do:
@@ -255,11 +325,14 @@ Do:
 - Check service/action availability (commands already do this and return an error in `on_done`).
 - Prefer `plan()` + `exec()` for explicit control; use `goto(exec=True)` for simpler flows.
 - Use `capture(folder=...)` for session organization; use `"@session/..."` when you want consistent session roots.
+- Prefer shared geometry/orientation helpers from `behav3d_utils` instead of local duplicates.
+- For plane-normal to pose conversion, use `behav3d_utils.target_transforms` (`pose_from_xyz_and_z_axis`, `quat_from_z_axis`, `quat_from_rotmat`).
 
 Avoid:
 - Calling `run_sync` directly inside ROS callbacks.
 - Scheduling conflicting hardware actions in the same `run_group`.
 - Assuming resource locks exist; `SessionQueue` does not enforce them.
+- Re-implementing pose/quaternion helper logic inside sessions when equivalent utilities already exist in `behav3d_utils`.
 
 ---
 

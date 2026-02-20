@@ -17,6 +17,7 @@
 
 # local utils
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -36,11 +37,35 @@ DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/2601
 DEFAULT_SCAN_FOLDER = "manual_caps"
 SESSION_PATH = DEFAULT_SESSION_PATH
 scan_folder = DEFAULT_SCAN_FOLDER
-output_folder = Path(SESSION_PATH)
 
-# Folder containing your color_in_depth outputs
-C2D_DIR = output_folder / "alignment_test"
+
+def _resolve_reconstruct_scan_dir(session_path: str, scan_folder_name: str) -> Path:
+    scan = str(scan_folder_name or "").strip() or DEFAULT_SCAN_FOLDER
+    return (Path(session_path).expanduser().resolve() / scan / "reconstruct").resolve()
+
+
+output_folder = _resolve_reconstruct_scan_dir(SESSION_PATH, scan_folder)
+C2D_DIR = output_folder / "color_in_depth"
 C2D_GLOB = "color_in_depth*.png"
+
+# Optional post-processing on color_in_depth images before colorization.
+# This erodes the non-zero valid mask and zeroes out edge pixels.
+C2D_ERODE_ENABLE = False
+C2D_ERODE_KERNEL_SIZE = 500
+C2D_ERODE_ITERATIONS = 3
+C2D_ERODE_SHAPE = "cross"  # "ellipse", "rect", "cross"
+# Optional center crop on color_in_depth images. Outside region is zeroed.
+C2D_CENTER_CROP_ENABLE = True
+C2D_CENTER_CROP_WIDTH = 270   # pixels, None keeps full width
+C2D_CENTER_CROP_HEIGHT = 290  # pixels, None keeps full height
+# If True, the same center crop mask is also applied to depth images before TSDF integration.
+C2D_CENTER_CROP_APPLY_TO_DEPTH = True
+# If enabled, only count an observation when the projected color_in_depth pixel is still valid.
+# This makes erosion affect point retention (not just point color).
+C2D_REQUIRE_VALID_MASK_FOR_OBS = True
+# Fixed additive depth correction applied before TSDF integration.
+# Note: this is in camera-depth units. Negative pulls points closer to camera.
+DEPTH_BIAS_MM = -5.1
 
 # ----------------------------
 # Final output filtering parameters
@@ -158,8 +183,9 @@ class TSDF_Integration():
             voxel_size=1/512,
             block_count=10000,
             block_resolution=12,
-            depth_max=1.0,
+            depth_max=0.9,
             depth_scale=1000.0,
+            depth_bias_m=0.0,
             device='CPU:0',
         ):
         # initialize session and load poses
@@ -175,6 +201,7 @@ class TSDF_Integration():
         # load depth images
         self.image_paths = construct_image_paths(self.manifest, self.session, image_type="depth")
         self.images = load_images(self.image_paths, image_type="depth", library="cv2")
+        self._postprocess_depth_images_in_place()
 
         # load intrinsics
         self.device = o3c.Device(device)
@@ -187,6 +214,9 @@ class TSDF_Integration():
         self.block_resolution = block_resolution
         self.depth_max = float(depth_max)
         self.depth_scale = float(depth_scale)
+        self.depth_bias_m = float(depth_bias_m)
+
+        self._apply_depth_bias_in_place()
 
         # initialize VoxelBlockGrid (CPU)
         self.vbg = o3d.t.geometry.VoxelBlockGrid(
@@ -204,20 +234,188 @@ class TSDF_Integration():
         if len(self.color_in_depth) == 0:
             raise FileNotFoundError(f"No {C2D_GLOB} found in {C2D_DIR}")
 
+    def _apply_depth_bias_in_place(self):
+        """
+        Apply additive depth bias to raw depth images before TSDF integration.
+        Positive bias increases depth values (pushes points farther from camera).
+        """
+        if abs(self.depth_bias_m) < 1e-12:
+            return
+
+        changed = 0
+        for i, img in enumerate(self.images):
+            if img is None:
+                continue
+
+            if img.dtype == np.uint16:
+                delta = int(round(self.depth_bias_m * self.depth_scale))
+                if delta == 0:
+                    continue
+                arr = img.astype(np.int32, copy=False)
+                mask = arr > 0
+                if not np.any(mask):
+                    continue
+                arr[mask] = np.clip(arr[mask] + delta, 1, 65535)
+                self.images[i] = arr.astype(np.uint16)
+                changed += 1
+                continue
+
+            arr = img.astype(np.float32, copy=False)
+            mask = arr > 0.0
+            if not np.any(mask):
+                continue
+            arr[mask] = np.maximum(arr[mask] + float(self.depth_bias_m), 0.0)
+            self.images[i] = arr
+            changed += 1
+
+        if changed > 0:
+            print(
+                f"Applied depth bias before TSDF integration: depth_bias_m={self.depth_bias_m:.6f} "
+                f"(~{self.depth_bias_m * 1000.0:.3f} mm) on {changed}/{len(self.images)} depth frames"
+            )
+
     def _load_color_in_depth_images(self):
         if not C2D_DIR.exists():
             raise FileNotFoundError(f"color_in_depth folder not found: {C2D_DIR}")
 
-        paths = sorted(C2D_DIR.glob(C2D_GLOB))
+        paths = list(C2D_DIR.glob(C2D_GLOB))
+        if len(paths) == 0:
+            raise FileNotFoundError(f"No files matching '{C2D_GLOB}' found in {C2D_DIR}")
+
+        indexed = []
+        for p in paths:
+            match = re.search(r"(\d+)$", p.stem)
+            idx = int(match.group(1)) if match else None
+            indexed.append((idx, p))
+
+        # Prefer index-aligned ordering when filenames end with frame ids.
+        if all(idx is not None for idx, _ in indexed):
+            idx_to_path = {}
+            duplicate_ids = []
+            for idx, p in indexed:
+                if idx in idx_to_path:
+                    duplicate_ids.append(idx)
+                idx_to_path[idx] = p
+
+            expected_count = len(self.images)
+            if len(duplicate_ids) == 0 and all(i in idx_to_path for i in range(expected_count)):
+                paths = [idx_to_path[i] for i in range(expected_count)]
+            else:
+                paths = [p for _, p in sorted(indexed, key=lambda item: (item[0], item[1].name))]
+                if len(duplicate_ids) > 0:
+                    print(f"Warning: duplicate color_in_depth frame ids detected: {sorted(set(duplicate_ids))}")
+                missing = [i for i in range(expected_count) if i not in idx_to_path]
+                if len(missing) > 0:
+                    print(f"Warning: missing color_in_depth frame ids for depth frames: {missing}")
+        else:
+            paths = sorted(paths, key=lambda p: p.name)
+
+        if len(paths) != len(self.images):
+            print(
+                "Warning: frame-count mismatch "
+                f"(depth={len(self.images)}, color_in_depth={len(paths)}). "
+                f"Using first {min(len(self.images), len(paths))} frames."
+            )
+
         imgs = []
+        valid_pixels_before = 0
+        valid_pixels_after = 0
         for p in paths:
             im = cv2.imread(str(p), cv2.IMREAD_COLOR)
             if im is None:
                 raise RuntimeError(f"Failed reading: {p}")
+            valid_pixels_before += int(np.count_nonzero(np.any(im > 0, axis=2)))
+            im = self._postprocess_color_in_depth(im)
+            valid_pixels_after += int(np.count_nonzero(np.any(im > 0, axis=2)))
             imgs.append(im)
 
         print(f"Loaded {len(imgs)} color_in_depth frames from {C2D_DIR}")
+        if C2D_CENTER_CROP_ENABLE or C2D_ERODE_ENABLE:
+            removed = valid_pixels_before - valid_pixels_after
+            print(
+                "Applied color_in_depth postprocess "
+                f"(center_crop={C2D_CENTER_CROP_ENABLE}, "
+                f"crop_w={C2D_CENTER_CROP_WIDTH}, crop_h={C2D_CENTER_CROP_HEIGHT}, "
+                f"erode={C2D_ERODE_ENABLE}, shape={C2D_ERODE_SHAPE}, "
+                f"kernel={C2D_ERODE_KERNEL_SIZE}, iters={C2D_ERODE_ITERATIONS}) "
+                f"valid_before={valid_pixels_before}, valid_after={valid_pixels_after}, removed_valid_pixels={removed}"
+            )
         return imgs, paths
+
+    @staticmethod
+    def _center_crop_bounds(h, w):
+        crop_w = w if C2D_CENTER_CROP_WIDTH is None else int(C2D_CENTER_CROP_WIDTH)
+        crop_h = h if C2D_CENTER_CROP_HEIGHT is None else int(C2D_CENTER_CROP_HEIGHT)
+        crop_w = max(1, min(crop_w, w))
+        crop_h = max(1, min(crop_h, h))
+
+        x0 = (w - crop_w) // 2
+        y0 = (h - crop_h) // 2
+        x1 = x0 + crop_w
+        y1 = y0 + crop_h
+        return x0, y0, x1, y1
+
+    @staticmethod
+    def _apply_center_crop_mask(img):
+        if not C2D_CENTER_CROP_ENABLE:
+            return img
+
+        h, w = img.shape[:2]
+        x0, y0, x1, y1 = TSDF_Integration._center_crop_bounds(h, w)
+        out = np.zeros_like(img)
+        out[y0:y1, x0:x1] = img[y0:y1, x0:x1]
+        return out
+
+    def _postprocess_depth_images_in_place(self):
+        if not (C2D_CENTER_CROP_ENABLE and C2D_CENTER_CROP_APPLY_TO_DEPTH):
+            return
+        if len(self.images) == 0:
+            return
+
+        nonzero_before = 0
+        nonzero_after = 0
+        for i, depth_u16 in enumerate(self.images):
+            if depth_u16 is None:
+                continue
+            nonzero_before += int(np.count_nonzero(depth_u16))
+            cropped = self._apply_center_crop_mask(depth_u16)
+            nonzero_after += int(np.count_nonzero(cropped))
+            self.images[i] = cropped
+
+        sample_h, sample_w = self.images[0].shape[:2]
+        x0, y0, x1, y1 = self._center_crop_bounds(sample_h, sample_w)
+        removed = nonzero_before - nonzero_after
+        print(
+            "Applied center crop to depth images before TSDF integration "
+            f"(x0={x0}, y0={y0}, x1={x1}, y1={y1}, "
+            f"crop_w={x1 - x0}, crop_h={y1 - y0}) "
+            f"nonzero_before={nonzero_before}, nonzero_after={nonzero_after}, removed_nonzero={removed}"
+        )
+
+    @staticmethod
+    def _postprocess_color_in_depth(color_bgr):
+        out = TSDF_Integration._apply_center_crop_mask(color_bgr)
+        if not C2D_ERODE_ENABLE:
+            return out
+
+        k = max(1, int(C2D_ERODE_KERNEL_SIZE))
+        iters = max(1, int(C2D_ERODE_ITERATIONS))
+        shape_name = str(C2D_ERODE_SHAPE).lower().strip()
+        shape_map = {
+            "ellipse": cv2.MORPH_ELLIPSE,
+            "rect": cv2.MORPH_RECT,
+            "cross": cv2.MORPH_CROSS,
+        }
+        if shape_name not in shape_map:
+            raise ValueError(f"Unknown C2D_ERODE_SHAPE: {C2D_ERODE_SHAPE}")
+
+        valid = np.any(out > 0, axis=2).astype(np.uint8) * 255
+        kernel = cv2.getStructuringElement(shape_map[shape_name], (k, k))
+        eroded = cv2.erode(valid, kernel, iterations=iters)
+
+        out_eroded = out.copy()
+        out_eroded[eroded == 0] = 0
+        return out_eroded
 
     def _tensorize_robot_poses(self):
         cpu = o3c.Device("CPU:0")
@@ -304,6 +502,7 @@ class TSDF_Integration():
 
         accum = np.zeros((N, 3), dtype=np.float64)
         obs = np.zeros((N,), dtype=np.int32)
+        rejected_by_c2d_mask = 0
 
         for i in range(0, n_frames, sample_step):
             T_base_ir = self.T_base_ir[i]
@@ -335,6 +534,15 @@ class TSDF_Integration():
             if not np.any(ok):
                 continue
 
+            if C2D_REQUIRE_VALID_MASK_FOR_OBS:
+                valid_color_mask = np.any(self.color_in_depth[i] > 0, axis=2)
+                c2d_ok = np.zeros_like(ok, dtype=bool)
+                c2d_ok[ok] = valid_color_mask[vi[ok], ui[ok]]
+                rejected_by_c2d_mask += int(np.count_nonzero(ok & ~c2d_ok))
+                ok = c2d_ok
+                if not np.any(ok):
+                    continue
+
             bgr = self.color_in_depth[i][vi[ok], ui[ok], :].astype(np.float64) / 255.0
             rgb = bgr[:, ::-1]
 
@@ -355,6 +563,8 @@ class TSDF_Integration():
 
         conf = obs[keep].astype(np.float64)
 
+        if C2D_REQUIRE_VALID_MASK_FOR_OBS:
+            print(f"Rejected projected observations by color_in_depth valid mask: {rejected_by_c2d_mask}")
         print(f"High-confidence points kept: {np.count_nonzero(keep)} / {N}  (min_obs={min_obs})")
         return pcd_out, conf
 
@@ -602,14 +812,24 @@ def run(session_path=None, scan_folder_override=None, visualize=True, device=Non
 
     SESSION_PATH = session_path or DEFAULT_SESSION_PATH
     scan_folder = scan_folder_override or DEFAULT_SCAN_FOLDER
-    output_folder = Path(SESSION_PATH)
-    C2D_DIR = output_folder / "alignment_test"
+    output_folder = _resolve_reconstruct_scan_dir(SESSION_PATH, scan_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    C2D_DIR = output_folder / "color_in_depth"
     TABLE_PLANE_FILE = output_folder / "table_plane.json"
 
     session = Session(SESSION_PATH, scan_folder)
     device = _validate_device(_normalize_device(device))
     print(f"Using device: {device}")
-    tsdf_integration = TSDF_Integration(session, device=device)
+    depth_bias_m = float(DEPTH_BIAS_MM) / 1000.0
+    print(f"Depth bias correction: {depth_bias_m * 1000.0:.3f} mm")
+    print(
+        "Color-in-depth postprocess: "
+        f"center_crop={C2D_CENTER_CROP_ENABLE} (w={C2D_CENTER_CROP_WIDTH}, h={C2D_CENTER_CROP_HEIGHT}, "
+        f"apply_to_depth={C2D_CENTER_CROP_APPLY_TO_DEPTH}), "
+        f"erode={C2D_ERODE_ENABLE} (shape={C2D_ERODE_SHAPE}, "
+        f"kernel={C2D_ERODE_KERNEL_SIZE}, iters={C2D_ERODE_ITERATIONS})"
+    )
+    tsdf_integration = TSDF_Integration(session, device=device, depth_bias_m=depth_bias_m)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
     print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}")
     print(f"Number of color_in_depth loaded: {len(tsdf_integration.color_in_depth)}")
@@ -742,7 +962,7 @@ def main():
         session_path=args.session_path,
         scan_folder_override=args.scan_folder,
         visualize=not args.no_vis,
-        device=args.device
+        device=args.device,
     )
 
 

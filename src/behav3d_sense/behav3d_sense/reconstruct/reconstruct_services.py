@@ -1,5 +1,6 @@
 import threading
 from pathlib import Path
+from typing import Any, Dict
 
 import rclpy
 from rclpy.node import Node
@@ -9,6 +10,18 @@ from . import color_to_depth
 from . import TSDF_cpu_cropped
 from . import TSDF_cpu_object_extract
 from .service_utils import get_captures_root, resolve_session_path
+
+
+_OUTPUT_FIELDS = ("output_path", "mesh_path", "rgb_ply_path", "confidence_ply_path")
+
+
+def _normalized_scan_folder(scan_folder: str, default: str = "manual_caps") -> str:
+    name = str(scan_folder or "").strip()
+    return name if name else default
+
+
+def _resolve_reconstruct_scan_dir(session_dir: Path, scan_folder: str) -> Path:
+    return (session_dir / _normalized_scan_folder(scan_folder) / "reconstruct").resolve()
 
 
 def _run_color_to_depth(session_dir: Path, scan_folder: str, visualize: bool, device: str = None):
@@ -38,6 +51,35 @@ def _run_tsdf_object_extract(session_dir: Path, scan_folder: str, visualize: boo
     )
 
 
+def _resolve_color_to_depth_outputs(session_dir: Path, scan_folder: str) -> Dict[str, Any]:
+    run_dir = _resolve_reconstruct_scan_dir(session_dir, scan_folder)
+    return {
+        "output_path": run_dir / "color_in_depth",
+    }
+
+
+def _resolve_tsdf_cropped_outputs(session_dir: Path, scan_folder: str) -> Dict[str, Any]:
+    run_dir = _resolve_reconstruct_scan_dir(session_dir, scan_folder)
+    return {
+        # Keep legacy output_path mapped to RGB PLY for backward compatibility.
+        "output_path": run_dir / "tsdf_surface_rgb_colored.ply",
+        "mesh_path": run_dir / "tsdf_surface_mesh.stl",
+        "rgb_ply_path": run_dir / "tsdf_surface_rgb_colored.ply",
+        "confidence_ply_path": run_dir / "tsdf_surface_confidence_colored.ply",
+    }
+
+
+def _resolve_tsdf_object_extract_outputs(session_dir: Path, scan_folder: str) -> Dict[str, Any]:
+    run_dir = _resolve_reconstruct_scan_dir(session_dir, scan_folder)
+    return {
+        # Legacy output_path remains the primary RGB point cloud output.
+        "output_path": run_dir / "tsdf_surface_rgb_colored.ply",
+        "mesh_path": "",
+        "rgb_ply_path": run_dir / "tsdf_surface_rgb_colored.ply",
+        "confidence_ply_path": run_dir / "tsdf_surface_confidence_colored.ply",
+    }
+
+
 class _BaseReconstructService(Node):
     def __init__(self, node_name, service_name, runner, output_resolver, srv_type):
         super().__init__(node_name)
@@ -55,11 +97,29 @@ class _BaseReconstructService(Node):
         self.get_logger().info(f"Capture root: {self._captures_root}")
         self.get_logger().info(f"Default device: {self.device}")
 
+    @staticmethod
+    def _apply_output_fields(response, outputs: Dict[str, Any]) -> None:
+        for field in _OUTPUT_FIELDS:
+            if not hasattr(response, field):
+                continue
+            value = outputs.get(field, "")
+            if isinstance(value, Path):
+                value = str(value)
+            elif value is None:
+                value = ""
+            else:
+                value = str(value)
+            setattr(response, field, value)
+
+    @staticmethod
+    def _clear_output_fields(response) -> None:
+        _BaseReconstructService._apply_output_fields(response, {})
+
     def handle_request(self, request, response):
         if self._running:
             response.success = False
             response.message = 'Reconstruction already running.'
-            response.output_path = ''
+            self._clear_output_fields(response)
             return response
 
         session_dir = resolve_session_path(
@@ -87,10 +147,10 @@ class _BaseReconstructService(Node):
         if not session_dir.exists():
             response.success = False
             response.message = f"Session directory not found: {session_dir}"
-            response.output_path = ''
+            self._clear_output_fields(response)
             return response
 
-        expected = self._output_resolver(session_dir)
+        expected = self._output_resolver(session_dir, scan_folder) or {}
         self._running = True
         thread = threading.Thread(
             target=self._run_thread,
@@ -101,13 +161,15 @@ class _BaseReconstructService(Node):
 
         response.success = True
         response.message = f"Started reconstruction for {session_dir}"
-        response.output_path = str(expected) if expected is not None else ''
+        self._apply_output_fields(response, expected)
         return response
 
     def _run_thread(self, session_dir: Path, scan_folder: str, visualize: bool, device: str):
         try:
             self.get_logger().info(f"Running reconstruction for {session_dir}")
-            self._runner(session_dir, scan_folder, visualize, device)
+            output = self._runner(session_dir, scan_folder, visualize, device)
+            if output is not None:
+                self.get_logger().info(f"Reconstruction output: {output}")
         except Exception as exc:
             self.get_logger().error(f"Reconstruction failed: {exc}")
         finally:
@@ -120,7 +182,7 @@ class ColorToDepthService(_BaseReconstructService):
             node_name='color_to_depth_service',
             service_name='/reconstruct/color_to_depth',
             runner=_run_color_to_depth,
-            output_resolver=lambda session: session / 'alignment_test',
+            output_resolver=_resolve_color_to_depth_outputs,
             srv_type=ColorToDepth
         )
 
@@ -131,8 +193,8 @@ class TSDFCroppedService(_BaseReconstructService):
             node_name='tsdf_cropped_service',
             service_name='/reconstruct/tsdf_cropped',
             runner=_run_tsdf_cropped,
-            output_resolver=lambda session: session / 'tsdf_surface_rgb_colored.ply',
-            srv_type=TsdfCropped
+            output_resolver=_resolve_tsdf_cropped_outputs,
+            srv_type=TsdfCropped,
         )
 
 
@@ -142,8 +204,8 @@ class TSDFObjectExtractService(_BaseReconstructService):
             node_name='tsdf_object_extract_service',
             service_name='/reconstruct/tsdf_object_extract',
             runner=_run_tsdf_object_extract,
-            output_resolver=lambda session: session / 'tsdf_surface_rgb_colored.ply',
-            srv_type=TsdfObjectExtract
+            output_resolver=_resolve_tsdf_object_extract_outputs,
+            srv_type=TsdfObjectExtract,
         )
 
 
