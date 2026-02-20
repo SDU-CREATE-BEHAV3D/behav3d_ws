@@ -325,8 +325,18 @@ class MotionCommands:
 
         def _on_planned(fr):
             resp = fr.result()
-            if resp is None or not resp.success:
-                cmd.finish_flag(ok=False, phase="plan", error="planning failed")
+            if resp is None:
+                cmd.finish_flag(ok=False, phase="plan", error="planning failed (no response)")
+                return
+
+            if not resp.success:
+                moveit_error_code = int(getattr(resp, "moveit_error_code", 0))
+                cmd.finish_flag(
+                    ok=False,
+                    phase="plan",
+                    error=f"planning failed (moveit_error_code={moveit_error_code})",
+                    metrics={"moveit_error_code": moveit_error_code},
+                )
                 return
 
             jt: JointTrajectory = resp.trajectory.joint_trajectory
