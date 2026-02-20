@@ -36,6 +36,7 @@ class FibReconstructSession(MySession):
         cap_rad: float,
         samples: int,
         capture_folder: Optional[str],
+        order_start_xyz: Optional[List[float]] = None,
         settle_s: float = 0.2,
         prompt: Optional[str] = None,
         debug: bool = False,
@@ -63,6 +64,10 @@ class FibReconstructSession(MySession):
             cap_rad=float(cap_rad),
             samples=int(samples),
             z_jitter=float(z_jitter),
+        )
+        targets = self._order_targets_by_nearest_neighbor(
+            targets=targets,
+            order_start_xyz=order_start_xyz,
         )
         if not targets:
             return {
@@ -271,6 +276,46 @@ class FibReconstructSession(MySession):
 
         return poses_world
 
+    @staticmethod
+    def _order_targets_by_nearest_neighbor(
+        *,
+        targets: List[PoseStamped],
+        order_start_xyz: Optional[List[float]] = None,
+    ) -> List[PoseStamped]:
+        if len(targets) <= 2:
+            return targets
+
+        points = np.array(
+            [
+                [ps.pose.position.x, ps.pose.position.y, ps.pose.position.z]
+                for ps in targets
+            ],
+            dtype=float,
+        )
+        remaining = set(range(len(targets)))
+        ordered_indices: List[int] = []
+
+        if order_start_xyz is not None and len(order_start_xyz) == 3:
+            start = np.asarray(order_start_xyz, dtype=float).reshape(3)
+            d2 = np.sum((points - start) ** 2, axis=1)
+            current_idx = int(np.argmin(d2))
+        else:
+            current_idx = 0
+
+        ordered_indices.append(current_idx)
+        remaining.remove(current_idx)
+        current = points[current_idx]
+
+        while remaining:
+            rem_idx = np.array(sorted(remaining), dtype=int)
+            d2 = np.sum((points[rem_idx] - current) ** 2, axis=1)
+            next_idx = int(rem_idx[int(np.argmin(d2))])
+            ordered_indices.append(next_idx)
+            remaining.remove(next_idx)
+            current = points[next_idx]
+
+        return [targets[i] for i in ordered_indices]
+
 
 class FibScanSequenceDemo(Node):
     def __init__(self):
@@ -398,6 +443,12 @@ class FibScanSequenceDemo(Node):
                 except TimeoutError:
                     log.warn(f"[cycle {cycle}] TF orientation lookup timed out; using target_rpy_deg.")
 
+            order_start_xyz = self._maybe_current_eef_xyz(timeout_s=scan_step_timeout_s)
+            if order_start_xyz is not None:
+                log.info(
+                    f"[cycle {cycle}] Nearest-neighbor ordering start xyz(m)={order_start_xyz}"
+                )
+
             capture_prompt = str(self.get_parameter("capture_prompt").value).strip() or None
 
             log.info(f"[cycle {cycle}] Running Fibonacci scan in folder: {capture_folder}")
@@ -413,6 +464,7 @@ class FibScanSequenceDemo(Node):
                 cap_rad=math.radians(float(self.get_parameter("cap_rad_deg").value)),
                 samples=int(self.get_parameter("samples").value),
                 capture_folder=capture_folder,
+                order_start_xyz=order_start_xyz,
                 settle_s=float(self.get_parameter("settle_s").value),
                 prompt=capture_prompt,
                 debug=bool(self.get_parameter("debug").value),
@@ -626,6 +678,30 @@ class FibScanSequenceDemo(Node):
         if not subdirs:
             return None
         return max(subdirs, key=lambda d: d.stat().st_mtime).resolve()
+
+    def _maybe_current_eef_xyz(self, *, timeout_s: Optional[float]) -> Optional[List[float]]:
+        try:
+            pose_res = self.session.run_sync(
+                self.session.camera.get_pose(
+                    eef=str(self.get_parameter("eef_link").value),
+                    base_frame="world",
+                    use_tf=True,
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
+            )
+        except TimeoutError:
+            return None
+
+        if not pose_res.get("ok", False) or "pose" not in pose_res:
+            return None
+
+        ps: PoseStamped = pose_res["pose"]
+        return [
+            float(ps.pose.position.x),
+            float(ps.pose.position.y),
+            float(ps.pose.position.z),
+        ]
 
 
 def main(args=None):
