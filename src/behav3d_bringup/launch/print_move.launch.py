@@ -53,7 +53,22 @@ def generate_launch_description():
     orbbec_enable_arg = DeclareLaunchArgument(
         "orbbec_enable",
         default_value="true",
-        description="Start Orbbec camera (orbbec_camera/femto_bolt.launch.py)",
+        description="Start Orbbec Femto Mega camera",
+    )
+    orbbec_enumerate_net_device_arg = DeclareLaunchArgument(
+        "orbbec_enumerate_net_device",
+        default_value="false",
+        description="Femto Mega: auto-discover network camera over PoE (false = use fixed IP)",
+    )
+    orbbec_net_device_ip_arg = DeclareLaunchArgument(
+        "orbbec_net_device_ip",
+        default_value="192.168.1.10",
+        description="Femto Mega: fixed camera IP (used when enumerate_net_device=false)",
+    )
+    orbbec_net_device_port_arg = DeclareLaunchArgument(
+        "orbbec_net_device_port",
+        default_value="8090",
+        description="Femto Mega: network camera port",
     )
     reconstruct_services_enable_arg = DeclareLaunchArgument(
         "enable_reconstruct_services",
@@ -146,39 +161,41 @@ def generate_launch_description():
         get_package_share_directory("behav3d_sense"), "launch"
     )
 
-    orbbec_camera = IncludeLaunchDescription(
+    orbbec_common_args = {
+        # Color: 1920 x 1080 @ 30 fps
+        "enable_color": "true",
+        "color_width": "1920",
+        "color_height": "1080",
+        "color_fps": "30",
+        "color_format": "MJPG",
+        # Depth (NFOV): 640 x 576 @ 30 fps
+        "enable_depth": "true",
+        "depth_width": "640",
+        "depth_height": "576",
+        "depth_fps": "30",
+        "depth_format": "Y16",
+        # IR: 640 x 576 @ 30 fps
+        "enable_ir": "true",
+        "ir_width": "640",
+        "ir_height": "576",
+        "ir_fps": "30",
+        "ir_format": "Y16",
+        # Depth registration to color
+        "depth_registration": "false",
+        # PointCloud
+        "enable_point_cloud": "true",
+        "cloud_frame_id": "femto_ir_optical_calib",
+    }
+
+    orbbec_camera_mega = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
-            orbbec_launch_dir, "femto_bolt.launch.py")),
+            orbbec_launch_dir, "femto_mega.launch.py")),
         condition=IfCondition(LaunchConfiguration("orbbec_enable")),
         launch_arguments={
-            # Color: 3840 x 2160 @ 30 fps
-            "enable_color": "true",
-            "color_width": "1920",
-            "color_height": "1080",
-            "color_fps": "30",
-            "color_format": "MJPG",
-            # Depth (NFOV, unbinned-equivalent): 640 x 576 @ 30 fps
-            "enable_depth": "true",
-            "depth_width": "640",
-            "depth_height": "576",
-            "depth_fps": "30",
-            "depth_format": "Y16",
-            # IR: 640 x 576 @ 30 fps
-            "enable_ir": "true",
-            "ir_width": "640",
-            "ir_height": "576",
-            "ir_fps": "30",
-            "ir_format": "Y16",
-
-            # depth registeration to color
-            "enable_depth_registration" : "False",
-
-            # PointCloud
-            "enable_point_cloud" : "True",
-            "cloud_frame_id":"femto_ir_optical_calib",
-            # TODO: 'enable_ldp' throws compilation error!
-            # Laser Dot Projector (true for scan / false for calibration)
-            # "enable_ldp": "false"
+            **orbbec_common_args,
+            "enumerate_net_device": LaunchConfiguration("orbbec_enumerate_net_device"),
+            "net_device_ip": LaunchConfiguration("orbbec_net_device_ip"),
+            "net_device_port": LaunchConfiguration("orbbec_net_device_port"),
         }.items(),
     )
 
@@ -315,6 +332,9 @@ def generate_launch_description():
             max_accel_scale_arg,
             debug_arg,
             orbbec_enable_arg,
+            orbbec_enumerate_net_device_arg,
+            orbbec_net_device_ip_arg,
+            orbbec_net_device_port_arg,
             reconstruct_services_enable_arg,
             reconstruct_scan_folder_arg,
             reconstruct_visualize_arg,
@@ -323,7 +343,7 @@ def generate_launch_description():
             
             ur_driver,
             moveit_stack,
-            orbbec_camera,
+            orbbec_camera_mega,
             rviz_node,
             
             motion_bridge,

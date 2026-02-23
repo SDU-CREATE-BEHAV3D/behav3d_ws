@@ -34,8 +34,8 @@ from utils.extrinsics import load_extrinsics
 from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
-DEFAULT_SESSION_PATH = "/home/lab/behav3d_ws/captures/260211_141640"
-DEFAULT_SCAN_FOLDER = "grid_sweep_00"
+DEFAULT_SESSION_PATH = "/home/lab/behav3d_ws/captures/260219_142101"
+DEFAULT_SCAN_FOLDER = "scan_fib_simple"
 DEFAULT_RECONSTRUCT_FOLDER = "reconstruct"
 
 SESSION_PATH = DEFAULT_SESSION_PATH
@@ -106,7 +106,7 @@ CONF_COLORMAP = cv2.COLORMAP_TURBO  # conventional gradient for confidence
 # ----------------------------
 # "table": horizontal surface workflow (fit/load plane + optional slicing)
 # "environment": full scene (no plane generation)
-RUN_MODE = "table"  # "table" or "environment"
+RUN_MODE = "environment"  # "table" or "environment"
 
 # Table mode options
 TABLE_MODE_PLANE = "fit"  # "fit" to save plane, "load" to reuse

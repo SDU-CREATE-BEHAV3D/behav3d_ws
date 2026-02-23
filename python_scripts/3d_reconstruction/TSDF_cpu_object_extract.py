@@ -19,10 +19,10 @@ from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
 from utils.image_loader import load_images
 
-session_folder = "260114_112631"
-SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/" + session_folder
-scan_folder = "manual_caps"
-output_folder = Path("/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/" + session_folder)
+session_folder = "260219_142101"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/" + session_folder
+scan_folder = "scan_fib_simple"
+output_folder = Path("/home/lab/behav3d_ws/captures/" + session_folder)
 my_session = Session(SESSION_PATH, scan_folder)
 
 # Folder containing your color_in_depth outputs
@@ -32,7 +32,7 @@ C2D_GLOB = "color_in_depth*.png"
 # ----------------------------
 # Crop (WORLD/base frame)
 # ----------------------------
-CROP_ENABLE = True
+CROP_ENABLE = False
 CROP_MIN = np.array([-0.25, -1.1, -1.0], dtype=np.float64)  # meters
 CROP_MAX = np.array([0.3, -0.65, 0.5], dtype=np.float64)    # meters
 
@@ -46,7 +46,7 @@ TABLE_PLANE_KEEP_SIDE = "above"  # keep points above the plane
 TABLE_PLANE_MARGIN = 0.0
 
 # Visualization
-PLANE_VIS_ENABLE = True
+PLANE_VIS_ENABLE = False
 PLANE_VIS_COLOR = (0.2, 0.4, 1.0)
 PLANE_VIS_SCALE = 1.2
 PLANE_VIS_GRID = 25
