@@ -62,7 +62,7 @@ def generate_launch_description():
     )
     orbbec_net_device_ip_arg = DeclareLaunchArgument(
         "orbbec_net_device_ip",
-        default_value="192.168.1.10",
+        default_value="192.168.1.11",
         description="Femto Mega: fixed camera IP (used when enumerate_net_device=false)",
     )
     orbbec_net_device_port_arg = DeclareLaunchArgument(
