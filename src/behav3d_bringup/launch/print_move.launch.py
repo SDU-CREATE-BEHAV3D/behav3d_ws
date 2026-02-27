@@ -55,21 +55,6 @@ def generate_launch_description():
         default_value="true",
         description="Start Orbbec Femto Mega camera",
     )
-    orbbec_enumerate_net_device_arg = DeclareLaunchArgument(
-        "orbbec_enumerate_net_device",
-        default_value="false",
-        description="Femto Mega: auto-discover network camera over PoE (false = use fixed IP)",
-    )
-    orbbec_net_device_ip_arg = DeclareLaunchArgument(
-        "orbbec_net_device_ip",
-        default_value="192.168.1.10",
-        description="Femto Mega: fixed camera IP (used when enumerate_net_device=false)",
-    )
-    orbbec_net_device_port_arg = DeclareLaunchArgument(
-        "orbbec_net_device_port",
-        default_value="8090",
-        description="Femto Mega: network camera port",
-    )
     reconstruct_services_enable_arg = DeclareLaunchArgument(
         "enable_reconstruct_services",
         default_value="true",
@@ -193,9 +178,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration("orbbec_enable")),
         launch_arguments={
             **orbbec_common_args,
-            "enumerate_net_device": LaunchConfiguration("orbbec_enumerate_net_device"),
-            "net_device_ip": LaunchConfiguration("orbbec_net_device_ip"),
-            "net_device_port": LaunchConfiguration("orbbec_net_device_port"),
+            "enumerate_net_device": "true",
         }.items(),
     )
 
@@ -332,9 +315,6 @@ def generate_launch_description():
             max_accel_scale_arg,
             debug_arg,
             orbbec_enable_arg,
-            orbbec_enumerate_net_device_arg,
-            orbbec_net_device_ip_arg,
-            orbbec_net_device_port_arg,
             reconstruct_services_enable_arg,
             reconstruct_scan_folder_arg,
             reconstruct_visualize_arg,

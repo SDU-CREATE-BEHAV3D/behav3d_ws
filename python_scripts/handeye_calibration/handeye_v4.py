@@ -12,13 +12,13 @@ from utils.transforms import rotmat_to_quat_xyzw, rotmat_to_rpy,compose_T
 from utils.intrinsics import load_intrinsics, intrinsics_matrix
 from utils.extrinsics import load_extrinsics
 
-DEBUG_IR = True
+DEBUG_IR = False
 DEBUG_COLOR = False
 VALIDATION = True
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/260216_141648"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/260226_130512"
 
-scan_folder = "manual_caps2"
+scan_folder = "manual_caps"
 
 my_session = Session(SESSION_PATH, scan_folder)
 
