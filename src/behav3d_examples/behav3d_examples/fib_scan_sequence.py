@@ -333,8 +333,8 @@ class FibScanSequenceDemo(Node):
         self.declare_parameter("use_tf_target_orientation", False)
 
         self.declare_parameter("distance_m", 0.35)
-        self.declare_parameter("cap_rad_deg", 60.0)
-        self.declare_parameter("samples", 16)
+        self.declare_parameter("cap_rad_deg", 45.0)
+        self.declare_parameter("samples", 12)
         self.declare_parameter("settle_s", 0.3)
         self.declare_parameter("z_jitter_m", 0.02)
         self.declare_parameter("debug", False)

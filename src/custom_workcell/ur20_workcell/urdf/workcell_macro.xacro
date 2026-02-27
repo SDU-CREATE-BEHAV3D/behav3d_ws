@@ -122,7 +122,7 @@
       <!-- Origin is tool0 -> camera (meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
       <origin xyz="-0.059070068624449495 0.17914822584247272 0.09389743100591508" 
-               rpy="0.5929766178458789 -1.5588222818238573 -2.1542935523812377"/>
+               rpy="0.3774289045546536 -1.5604603417722551 -1.9398174182684138"/>
     </joint>
 
     <!-- Fixed frame for calibrated camera pose relative to tool0 -->
