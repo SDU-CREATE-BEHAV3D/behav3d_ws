@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import math
-from typing import Callable, Dict, List, Optional
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 from geometry_msgs.msg import PoseStamped
@@ -58,6 +60,14 @@ class PrintScanDotsSession(YamlSession):
         scan_axis_radius: float = 0.003,
         scan_clear_markers_before: bool = True,
         scan_clear_markers_after: bool = False,
+        run_reconstruction: bool = True,
+        reconstruct_device: str = "CPU:0",
+        reconstruct_request_timeout_s: float = 10.0,
+        color_to_depth_wait_timeout_s: float = 60.0,
+        tsdf_wait_timeout_s: float = 180.0,
+        mesh_update_wait_timeout_s: float = 45.0,
+        mesh_update_request_timeout_s: float = 55.0,
+        mesh_prefer: str = "mesh",
     ) -> dict:
         """
         Dot print behavior:
@@ -215,6 +225,7 @@ class PrintScanDotsSession(YamlSession):
 
                     center_target = targets[block_mid]
                     capture_folder = f"{scan_capture_folder_prefix.rstrip('/')}_{printed:03d}"
+                    scan_folder = self._scan_folder_from_capture_folder(capture_folder)
                     log.info(
                         f"[print_dots] Triggering scan after printed={printed}. "
                         f"Block [{block_start + 1}..{printed}] midpoint={block_mid + 1} "
@@ -290,6 +301,27 @@ class PrintScanDotsSession(YamlSession):
                         timeout_s=timeout_s,
                     )
 
+                    if run_reconstruction:
+                        recon_res = self.run_reconstruction_pipeline(
+                            capture_folder=capture_folder,
+                            device=str(reconstruct_device),
+                            request_timeout_s=float(reconstruct_request_timeout_s),
+                            color_wait_timeout_s=float(color_to_depth_wait_timeout_s),
+                            tsdf_wait_timeout_s=float(tsdf_wait_timeout_s),
+                            mesh_update_wait_timeout_s=float(mesh_update_wait_timeout_s),
+                            mesh_update_request_timeout_s=float(mesh_update_request_timeout_s),
+                            mesh_prefer=str(mesh_prefer),
+                        )
+                        if not recon_res.get("ok", False):
+                            return {
+                                "ok": False,
+                                "stage": f"reconstruct_after_{printed}",
+                                "error": recon_res.get("error", "reconstruction failed"),
+                                "scan_folder": scan_folder,
+                                "printed": printed,
+                                "targets": len(targets),
+                            }
+
             return {"ok": True, "stage": "done", "targets": len(targets), "printed": printed}
         finally:
             if publish_markers:
@@ -311,6 +343,253 @@ class PrintScanDotsSession(YamlSession):
         out.pose.orientation.z = float(ps.pose.orientation.z)
         out.pose.orientation.w = float(ps.pose.orientation.w)
         return out
+
+    def run_reconstruction_pipeline(
+        self,
+        *,
+        capture_folder: str,
+        device: str,
+        request_timeout_s: float,
+        color_wait_timeout_s: float,
+        tsdf_wait_timeout_s: float,
+        mesh_update_wait_timeout_s: float,
+        mesh_update_request_timeout_s: float,
+        mesh_prefer: str,
+    ) -> Dict[str, Any]:
+        log = self.node.get_logger()
+        scan_folder = self._scan_folder_from_capture_folder(capture_folder)
+        log.info(
+            f"[print_dots] Reconstruction for scan_folder='{scan_folder}' "
+            f"(device='{device}')"
+        )
+
+        try:
+            c2d_res = self.run_color_to_depth_reconstruct(
+                use_latest=True,
+                session_path="@session",
+                scan_folder=scan_folder,
+                visualize=False,
+                timeout_s=float(request_timeout_s),
+                wait_for_outputs=True,
+                wait_timeout_s=float(color_wait_timeout_s),
+            )
+        except TimeoutError:
+            return {"ok": False, "error": "color_to_depth request timed out"}
+
+        if not c2d_res.get("ok", False):
+            return {"ok": False, "error": f"color_to_depth failed: {c2d_res.get('error')}"}
+
+        try:
+            tsdf_res = self.run_tsdf_cropped_reconstruct(
+                use_latest=True,
+                session_path="@session",
+                scan_folder=scan_folder,
+                visualize=False,
+                device=str(device),
+                timeout_s=float(request_timeout_s),
+                wait_for_outputs=True,
+                wait_timeout_s=float(tsdf_wait_timeout_s),
+            )
+        except TimeoutError:
+            return {"ok": False, "error": "tsdf_cropped request timed out"}
+
+        if not tsdf_res.get("ok", False):
+            return {"ok": False, "error": f"tsdf_cropped failed: {tsdf_res.get('error')}"}
+
+        mesh_path = str(tsdf_res.get("metrics", {}).get("mesh_path", "")).strip()
+        rgb_ply_path = str(tsdf_res.get("metrics", {}).get("rgb_ply_path", "")).strip()
+        if not rgb_ply_path:
+            rgb_ply_path = str(tsdf_res.get("metrics", {}).get("output_path", "")).strip()
+
+        try:
+            mesh_res = self.run_update_world_mesh(
+                use_latest=True,
+                session_path="@session",
+                mesh_path=mesh_path,
+                ply_path=rgb_ply_path,
+                prefer=str(mesh_prefer),
+                wait_timeout_s=float(mesh_update_wait_timeout_s),
+                timeout_s=float(mesh_update_request_timeout_s),
+            )
+        except TimeoutError:
+            return {"ok": False, "error": "update_world_mesh request timed out"}
+
+        if not mesh_res.get("ok", False):
+            return {"ok": False, "error": f"update_world_mesh failed: {mesh_res.get('error')}"}
+
+        published_path = str(mesh_res.get("metrics", {}).get("published_path", "")).strip()
+        published_kind = str(mesh_res.get("metrics", {}).get("published_kind", "")).strip()
+        log.info(
+            f"[print_dots] Reconstruction completed for '{scan_folder}'. "
+            f"World mesh updated ({published_kind}): {published_path}"
+        )
+        return {
+            "ok": True,
+            "scan_folder": scan_folder,
+            "metrics": {
+                "published_path": published_path,
+                "published_kind": published_kind,
+                "mesh_path": mesh_path,
+                "rgb_ply_path": rgb_ply_path,
+            },
+        }
+
+    def run_tsdf_cropped_reconstruct(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: str = "",
+        scan_folder: str = "manual_caps",
+        visualize: bool = False,
+        device: str = "CPU:0",
+        timeout_s: Optional[float] = None,
+        wait_for_outputs: bool = False,
+        wait_timeout_s: float = 180.0,
+    ) -> Dict[str, Any]:
+        start_ts = time.time()
+        res = self.run_sync(
+            self.camera.reconstruct_tsdf_cropped(
+                use_latest=use_latest,
+                session_path=session_path,
+                scan_folder=scan_folder,
+                visualize=visualize,
+                device=device,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+        if not wait_for_outputs or not res.get("ok", False):
+            return res
+
+        metrics = res.get("metrics", {})
+        output_path = str(metrics.get("mesh_path", "")).strip()
+        if not output_path:
+            output_path = str(metrics.get("output_path", "")).strip()
+        if output_path:
+            self._wait_for_fresh_file_output(
+                output_path=output_path,
+                start_ts=start_ts,
+                timeout_s=float(wait_timeout_s),
+            )
+        return res
+
+    def run_color_to_depth_reconstruct(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: str = "",
+        scan_folder: str = "manual_caps",
+        visualize: bool = False,
+        timeout_s: Optional[float] = None,
+        wait_for_outputs: bool = False,
+        wait_timeout_s: float = 30.0,
+    ) -> Dict[str, Any]:
+        start_ts = time.time()
+        res = self.run_sync(
+            self.camera.reconstruct_color_to_depth(
+                use_latest=use_latest,
+                session_path=session_path,
+                scan_folder=scan_folder,
+                visualize=visualize,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+        if not wait_for_outputs or not res.get("ok", False):
+            return res
+
+        output_path = str(res.get("metrics", {}).get("output_path", ""))
+        if output_path:
+            self._wait_for_fresh_alignment_output(
+                output_path=output_path,
+                start_ts=start_ts,
+                timeout_s=float(wait_timeout_s),
+            )
+        return res
+
+    def run_update_world_mesh(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: str = "",
+        mesh_path: str = "",
+        ply_path: str = "",
+        prefer: str = "mesh",
+        wait_timeout_s: float = 60.0,
+        timeout_s: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        return self.run_sync(
+            self.camera.update_world_mesh(
+                use_latest=use_latest,
+                session_path=session_path,
+                mesh_path=mesh_path,
+                ply_path=ply_path,
+                prefer=prefer,
+                wait_timeout_s=wait_timeout_s,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+
+    def _wait_for_fresh_alignment_output(
+        self,
+        *,
+        output_path: str,
+        start_ts: float,
+        timeout_s: float,
+    ) -> Dict[str, Any]:
+        out_dir = Path(output_path)
+
+        def _fresh_alignment_exists() -> bool:
+            if not out_dir.exists() or not out_dir.is_dir():
+                return False
+            for path in out_dir.glob("color_in_depth*.png"):
+                try:
+                    if path.stat().st_mtime >= (start_ts - 0.25):
+                        return True
+                except OSError:
+                    continue
+            return False
+
+        return self.run_sync(
+            self.util.wait_until(
+                predicate=_fresh_alignment_exists,
+                period_s=0.5,
+                timeout_s=timeout_s,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s + 1.0,
+        )
+
+    def _wait_for_fresh_file_output(
+        self,
+        *,
+        output_path: str,
+        start_ts: float,
+        timeout_s: float,
+    ) -> Dict[str, Any]:
+        out_path = Path(output_path)
+
+        def _fresh_file_exists() -> bool:
+            try:
+                if not out_path.exists() or not out_path.is_file():
+                    return False
+                st = out_path.stat()
+                if st.st_size <= 0:
+                    return False
+                return st.st_mtime >= (start_ts - 0.25)
+            except OSError:
+                return False
+
+        return self.run_sync(
+            self.util.wait_until(
+                predicate=_fresh_file_exists,
+                period_s=0.5,
+                timeout_s=timeout_s,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s + 1.0,
+        )
 
     def run_fib_scan_blocking(
         self,
@@ -558,6 +837,16 @@ class PrintScanDotsSession(YamlSession):
             current = points[next_idx]
 
         return [targets[i] for i in ordered_indices]
+
+    @staticmethod
+    def _scan_folder_from_capture_folder(capture_folder: str) -> str:
+        folder = str(capture_folder or "").strip()
+        if not folder:
+            return "manual_caps"
+        if folder.startswith("@session/"):
+            folder = folder[len("@session/"):]
+        folder = folder.strip("/")
+        return folder or "manual_caps"
 
 
 def _fibonacci_cap_dirs_np(cap_rad: float, n: int) -> np.ndarray:

@@ -27,7 +27,7 @@ class PrintScanDotsSequenceNode(Node):
         self.declare_parameter("dot_vel_scale", 0.02)
         self.declare_parameter("approach_z_offset_m", 0.40)
         self.declare_parameter("dot_z_offset_m", 0.04)
-        self.declare_parameter("dot_steps", 5000)
+        self.declare_parameter("dot_steps", 9000)
         self.declare_parameter("dot_speed", 1200)
         self.declare_parameter("simulate_printing", False)
         self.declare_parameter("dwell_s", 0.4)
@@ -56,6 +56,14 @@ class PrintScanDotsSequenceNode(Node):
         self.declare_parameter("scan_axis_radius", 0.003)
         self.declare_parameter("scan_clear_markers_before", True)
         self.declare_parameter("scan_clear_markers_after", False)
+        self.declare_parameter("run_reconstruction", True)
+        self.declare_parameter("reconstruct_device", "CPU:0")
+        self.declare_parameter("reconstruct_request_timeout_s", 10.0)
+        self.declare_parameter("color_to_depth_wait_timeout_s", 60.0)
+        self.declare_parameter("tsdf_wait_timeout_s", 180.0)
+        self.declare_parameter("mesh_update_wait_timeout_s", 45.0)
+        self.declare_parameter("mesh_update_request_timeout_s", 55.0)
+        self.declare_parameter("mesh_prefer", "mesh")
 
         self.session = PrintScanDotsSession(self)
         self._paused = threading.Event()
@@ -112,6 +120,14 @@ class PrintScanDotsSequenceNode(Node):
         scan_axis_radius = float(self.get_parameter("scan_axis_radius").value)
         scan_clear_markers_before = bool(self.get_parameter("scan_clear_markers_before").value)
         scan_clear_markers_after = bool(self.get_parameter("scan_clear_markers_after").value)
+        run_reconstruction = bool(self.get_parameter("run_reconstruction").value)
+        reconstruct_device = str(self.get_parameter("reconstruct_device").value).strip() or "CPU:0"
+        reconstruct_request_timeout_s = float(self.get_parameter("reconstruct_request_timeout_s").value)
+        color_to_depth_wait_timeout_s = float(self.get_parameter("color_to_depth_wait_timeout_s").value)
+        tsdf_wait_timeout_s = float(self.get_parameter("tsdf_wait_timeout_s").value)
+        mesh_update_wait_timeout_s = float(self.get_parameter("mesh_update_wait_timeout_s").value)
+        mesh_update_request_timeout_s = float(self.get_parameter("mesh_update_request_timeout_s").value)
+        mesh_prefer = str(self.get_parameter("mesh_prefer").value).strip() or "mesh"
 
         if not yaml_path:
             log.error("Parameter 'yaml_path' is empty. Set it with --ros-args -p yaml_path:=<path>.")
@@ -126,7 +142,7 @@ class PrintScanDotsSequenceNode(Node):
             f"path='{yaml_path}', frame='{frame_id}', steps={dot_steps}, speed={dot_speed}, "
             f"pre_dot_v={pre_dot_vel_scale:.3f}, dot_v={dot_vel_scale:.3f}, accel={accel_scale:.3f}, "
             f"scan_enabled={enable_scan}, scan_every_n={scan_every_n}, "
-            f"simulate_printing={simulate_printing}"
+            f"simulate_printing={simulate_printing}, run_reconstruction={run_reconstruction}"
         )
         if self._pause_hotkey_enabled and sys.stdin and sys.stdin.isatty():
             log.info(
@@ -176,6 +192,14 @@ class PrintScanDotsSequenceNode(Node):
                 scan_axis_radius=scan_axis_radius,
                 scan_clear_markers_before=scan_clear_markers_before,
                 scan_clear_markers_after=scan_clear_markers_after,
+                run_reconstruction=run_reconstruction,
+                reconstruct_device=reconstruct_device,
+                reconstruct_request_timeout_s=reconstruct_request_timeout_s,
+                color_to_depth_wait_timeout_s=color_to_depth_wait_timeout_s,
+                tsdf_wait_timeout_s=tsdf_wait_timeout_s,
+                mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
+                mesh_update_request_timeout_s=mesh_update_request_timeout_s,
+                mesh_prefer=mesh_prefer,
             )
             if not res.get("ok", False):
                 log.error(
