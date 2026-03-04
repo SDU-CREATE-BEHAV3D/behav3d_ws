@@ -32,6 +32,11 @@ try:
 except Exception:
     cKDTree = None
 
+try:
+    import potpourri3d as pp3d
+except Exception:
+    pp3d = None
+
 
 # -----------------------------------------------------------------------------
 # Runtime defaults
@@ -49,28 +54,28 @@ default_pause_ms = 0  # 0 -> wait key, >0 -> auto-advance
 # -----------------------------------------------------------------------------
 # Stage-1 parameters (all distances in millimeters)
 # -----------------------------------------------------------------------------
-downsample_voxel_mm = 0.70  # <= 0 disables downsampling
+downsample_voxel_mm = 0.7  # <= 0 disables downsampling
 
 # Table alignment / slicing
 table_ransac_thresh_mm = 1.2
 table_ransac_n = 3
 table_ransac_iters = 2500
-z_min_above_plane_mm = 0.35
+z_min_above_plane_mm = 1.7
 
 # Height map / mask / peak detection
-grid_mm = 0.30
-height_percentile = 97.0
-gaussian_sigma_px = 1.0
-mask_percentile = 60.0
+grid_mm = 0.10
+height_percentile = 98.0
+gaussian_sigma_px = 0.6
+mask_percentile = 40.0
 morph_kernel_px = 3
 peak_detection_mode = "height"  # "height" or "dt"
-peak_height_support_percentile = 70.0
-peak_min_height_mm = -2.0
+peak_height_support_percentile = 45.0
+peak_min_height_mm = 1.0
 min_peak_distance_mm = 4
 peak_strength_fraction = 0.20
 peak_min_dt_mm = 0.10
-peak_keep_percentile = 20.0  # keep only top DT peaks by value
-max_num_peaks = 500
+peak_keep_percentile = 0.0  # keep only top DT peaks by value
+max_num_peaks = 1000
 
 # 3D peak marker display
 peak_marker_radius_mm = 1.6
@@ -83,10 +88,34 @@ peak_anchor_mode = "nearest3d"  # "grid" or "nearest3d"
 peak_max_snap_z_error_mm = 1.5
 
 # Side visualization of top-N height-map points
-top_height_points_k = 100
-top_height_marker_radius_mm = 1.8
-top_height_marker_color = (0.10, 1.00, 1.00)
-top_height_side_offset_mm = 30.0
+top_height_points_k = 0
+
+# Geodesic distance from detected peaks
+geodesic_enable = True
+geodesic_heat_t_coef = 1.2
+geodesic_clip_percentile = 98.0
+geodesic_colormap = cv2.COLORMAP_JET
+geodesic_invert_colormap = True  # near peaks -> warmer color
+geodesic_clamp_negative_mm = True
+geodesic_seeded_rings = True
+geodesic_max_seed_count = 0  # 0 -> use all detected peak seeds
+geodesic_show_heat_panel = True
+geodesic_panel_offset_mm = 45.0
+geodesic_show_rings = True
+geodesic_show_ring_points = False
+geodesic_ring_method = "triangulated"  # "logmap" or "triangulated"
+geodesic_logmap_bins = 96
+geodesic_logmap_min_bins_filled = 10
+geodesic_logmap_close_gap_bins = 1
+geodesic_ring_step_mm = 0.3
+geodesic_ring_band_mm = 0.50
+geodesic_ring_color = (0.20, 1.00, 0.25)
+geodesic_ring_connect_radius_mm = 0.5
+geodesic_ring_min_component_points = 4
+geodesic_ring_min_vertex_spacing_mm = 0.10
+geodesic_ring_smooth_window = 4
+geodesic_curve_min_points = 2
+geodesic_curve_min_length_mm = 0.3
 
 
 # -----------------------------------------------------------------------------
@@ -495,6 +524,680 @@ def _top_height_points_xyz(
     return pts, z * 1e3
 
 
+def _seed_vertex_indices(points_xyz: np.ndarray, seed_xyz: np.ndarray) -> np.ndarray:
+    if points_xyz.shape[0] == 0 or seed_xyz.shape[0] == 0:
+        return np.empty((0,), dtype=np.int32)
+    if cKDTree is not None:
+        tree = cKDTree(points_xyz)
+        _, seed_idx = tree.query(seed_xyz, k=1)
+        return np.unique(np.asarray(seed_idx, dtype=np.int32))
+
+    seed_idx: List[int] = []
+    for s in seed_xyz:
+        d2 = np.sum((points_xyz - s[None, :]) ** 2, axis=1)
+        seed_idx.append(int(np.argmin(d2)))
+    return np.unique(np.asarray(seed_idx, dtype=np.int32))
+
+
+def _compute_seeded_heat_fields(points_xyz: np.ndarray, seed_xyz: np.ndarray) -> Dict[str, object]:
+    n = int(points_xyz.shape[0])
+    info: Dict[str, object] = {
+        "enabled": 1.0 if bool(geodesic_enable) else 0.0,
+        "backend_used": "heat",
+        "num_points": float(n),
+        "num_seeds": float(seed_xyz.shape[0]),
+        "num_seed_vertices": 0.0,
+        "num_seed_solves": 0.0,
+        "num_reachable": 0.0,
+        "num_unreachable": float(n),
+        "mean_mm": 0.0,
+        "max_mm": 0.0,
+    }
+    fields: Dict[str, object] = {
+        "dist_min_mm": np.full((n,), np.inf, dtype=np.float64),
+        "dist_by_seed_mm": np.empty((0, n), dtype=np.float64),
+        "owner_seed": np.full((n,), -1, dtype=np.int32),
+        "seed_vertex_idx": np.empty((0,), dtype=np.int32),
+        "info": info,
+    }
+    if n == 0:
+        fields["dist_min_mm"] = np.empty((0,), dtype=np.float64)
+        fields["owner_seed"] = np.empty((0,), dtype=np.int32)
+        return fields
+    if not bool(geodesic_enable):
+        return fields
+    if seed_xyz.shape[0] == 0:
+        return fields
+    if pp3d is None:
+        info["error"] = "potpourri3d_not_available"
+        return fields
+
+    seed_idx = _seed_vertex_indices(points_xyz, seed_xyz)
+    if seed_idx.size == 0:
+        return fields
+
+    max_seeds = int(geodesic_max_seed_count)
+    if max_seeds > 0 and seed_idx.size > max_seeds:
+        z_seed = points_xyz[seed_idx, 2]
+        keep = np.argsort(-z_seed, kind="mergesort")[:max_seeds]
+        seed_idx = seed_idx[keep]
+    info["num_seed_vertices"] = float(seed_idx.size)
+    fields["seed_vertex_idx"] = seed_idx.astype(np.int32)
+
+    try:
+        solver = pp3d.PointCloudHeatSolver(points_xyz.astype(np.float64), float(geodesic_heat_t_coef))
+        per_seed = np.empty((seed_idx.size, n), dtype=np.float64)
+        for i, s in enumerate(seed_idx.tolist()):
+            dist_i = np.asarray(solver.compute_distance(int(s)), dtype=np.float64).reshape(-1)
+            if dist_i.shape[0] != n:
+                raise RuntimeError(f"Unexpected heat distance shape for seed {s}: {dist_i.shape}")
+            dist_i *= 1e3
+            if bool(geodesic_clamp_negative_mm):
+                dist_i = np.maximum(dist_i, 0.0)
+            dist_i[int(s)] = 0.0
+            per_seed[i] = dist_i
+
+        dist_min = np.min(per_seed, axis=0)
+        owner = np.argmin(per_seed, axis=0).astype(np.int32)
+        finite = np.isfinite(dist_min)
+        owner[~finite] = -1
+
+        fields["dist_by_seed_mm"] = per_seed
+        fields["dist_min_mm"] = dist_min
+        fields["owner_seed"] = owner
+
+        info["num_seed_solves"] = float(seed_idx.size)
+        info["num_reachable"] = float(np.count_nonzero(finite))
+        info["num_unreachable"] = float(np.count_nonzero(~finite))
+        info["mean_mm"] = float(np.mean(dist_min[finite])) if np.any(finite) else 0.0
+        info["max_mm"] = float(np.max(dist_min[finite])) if np.any(finite) else 0.0
+        return fields
+    except Exception as exc:
+        info["error"] = str(exc)
+        return fields
+
+
+def _compute_geodesic_mm(points_xyz: np.ndarray, seed_xyz: np.ndarray) -> Tuple[np.ndarray, Dict[str, object]]:
+    fields = _compute_seeded_heat_fields(points_xyz, seed_xyz)
+    return np.asarray(fields["dist_min_mm"], dtype=np.float64), dict(fields["info"])
+
+
+def _geodesic_colors(dist_mm: np.ndarray) -> np.ndarray:
+    n = int(dist_mm.size)
+    colors = np.tile(np.array([[0.55, 0.55, 0.55]], dtype=np.float64), (n, 1))
+    if n == 0:
+        return colors
+    finite = np.isfinite(dist_mm)
+    if not np.any(finite):
+        return colors
+
+    vals = dist_mm[finite]
+    vmax = float(np.percentile(vals, float(geodesic_clip_percentile)))
+    if not np.isfinite(vmax) or vmax <= 1e-6:
+        vmax = float(np.max(vals))
+    vmax = max(vmax, 1e-6)
+    norm = np.clip(vals / vmax, 0.0, 1.0)
+    if bool(geodesic_invert_colormap):
+        norm = 1.0 - norm
+
+    u8 = np.clip(norm * 255.0, 0, 255).astype(np.uint8)
+    bgr = cv2.applyColorMap(u8.reshape(-1, 1), int(geodesic_colormap)).reshape(-1, 3)
+    colors[finite] = bgr[:, ::-1].astype(np.float64) / 255.0
+    return colors
+
+
+def _geodesic_ring_cloud(points_xyz: np.ndarray, dist_mm: np.ndarray) -> o3d.geometry.PointCloud | None:
+    if not bool(geodesic_show_rings) or not bool(geodesic_show_ring_points):
+        return None
+    if points_xyz.shape[0] == 0 or dist_mm.size == 0:
+        return None
+    step = float(geodesic_ring_step_mm)
+    band = float(geodesic_ring_band_mm)
+    if step <= 0.0 or band <= 0.0:
+        return None
+
+    finite = np.isfinite(dist_mm)
+    if not np.any(finite):
+        return None
+    r = np.mod(dist_mm[finite], step)
+    near = np.minimum(r, step - r) <= band
+    mask = np.zeros_like(finite, dtype=bool)
+    idx = np.flatnonzero(finite)
+    mask[idx[near]] = True
+    if not np.any(mask):
+        return None
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points_xyz[mask].astype(np.float64))
+    pcd.colors = o3d.utility.Vector3dVector(
+        np.tile(np.asarray(geodesic_ring_color, dtype=np.float64).reshape(1, 3), (int(np.count_nonzero(mask)), 1))
+    )
+    return pcd
+
+
+def _pointcloud_triangles(points_xyz: np.ndarray) -> np.ndarray:
+    if pp3d is None or points_xyz.shape[0] == 0:
+        return np.empty((0, 3), dtype=np.int32)
+    try:
+        tri_local = pp3d.PointCloudLocalTriangulation(points_xyz.astype(np.float64)).get_local_triangulation()
+    except Exception:
+        return np.empty((0, 3), dtype=np.int32)
+    if tri_local.size == 0:
+        return np.empty((0, 3), dtype=np.int32)
+    tri_valid = tri_local[np.all(tri_local >= 0, axis=2)]
+    if tri_valid.size == 0:
+        return np.empty((0, 3), dtype=np.int32)
+    tri = np.sort(tri_valid.astype(np.int32), axis=1)
+    tri = np.unique(tri, axis=0)
+    tri = tri[(tri[:, 0] != tri[:, 1]) & (tri[:, 1] != tri[:, 2]) & (tri[:, 0] != tri[:, 2])]
+    return tri
+
+
+def _geodesic_ring_linesets(
+    points_xyz: np.ndarray,
+    dist_mm: np.ndarray,
+    point_mask: np.ndarray | None = None,
+    triangles: np.ndarray | None = None,
+) -> List[o3d.geometry.LineSet]:
+    if not bool(geodesic_show_rings):
+        return []
+    if points_xyz.shape[0] == 0 or dist_mm.size == 0:
+        return []
+    if triangles is not None and triangles.size > 0:
+        tri = np.asarray(triangles, dtype=np.int32)
+    else:
+        tri = _pointcloud_triangles(points_xyz)
+    if tri.shape[0] == 0:
+        return []
+
+    finite = np.isfinite(dist_mm)
+    if point_mask is not None:
+        finite = finite & np.asarray(point_mask, dtype=bool)
+    if not np.any(finite):
+        return []
+
+    step = float(geodesic_ring_step_mm)
+    band = float(geodesic_ring_band_mm)
+    if step <= 0.0 or band <= 0.0:
+        return []
+
+    min_comp = max(4, int(geodesic_ring_min_component_points))
+    min_spacing_m = _mm_to_m(float(geodesic_ring_min_vertex_spacing_mm))
+    smooth_k = _ensure_odd(max(1, int(geodesic_ring_smooth_window)))
+    merge_eps_m = max(_mm_to_m(0.05), 0.35 * _mm_to_m(float(geodesic_ring_connect_radius_mm)))
+    curve_min_pts = max(2, int(geodesic_curve_min_points))
+    curve_min_len_m = _mm_to_m(float(geodesic_curve_min_length_mm))
+
+    vals = dist_mm[finite]
+    dmax = float(np.max(vals))
+    if dmax <= step:
+        return []
+
+    def _smooth_polyline(points: np.ndarray, window: int, closed: bool) -> np.ndarray:
+        if points.shape[0] < 4 or window <= 1:
+            return points
+        k = _ensure_odd(window)
+        if points.shape[0] < k:
+            return points
+        r = k // 2
+        if closed:
+            pad = np.vstack([points[-r:], points, points[:r]])
+        else:
+            pad = np.vstack([np.repeat(points[:1], r, axis=0), points, np.repeat(points[-1:], r, axis=0)])
+        out = np.empty_like(points)
+        for i in range(points.shape[0]):
+            out[i] = np.mean(pad[i : i + k], axis=0)
+        return out
+
+    # Keep triangles with finite distances only.
+    tri_finite = finite[tri].all(axis=1)
+    tri = tri[tri_finite]
+    if tri.shape[0] == 0:
+        return []
+
+    def _dedup_pts(pts: List[np.ndarray], eps_m: float) -> List[np.ndarray]:
+        out: List[np.ndarray] = []
+        for p in pts:
+            keep = True
+            for q in out:
+                if np.linalg.norm(p - q) <= eps_m:
+                    keep = False
+                    break
+            if keep:
+                out.append(p)
+        return out
+
+    def _add_node(node_map: Dict[Tuple[int, int, int], int], nodes: List[np.ndarray], p: np.ndarray, eps_m: float) -> int:
+        key = tuple(np.round(p / eps_m).astype(np.int64).tolist())
+        if key in node_map:
+            return int(node_map[key])
+        idx = len(nodes)
+        node_map[key] = idx
+        nodes.append(p.astype(np.float64))
+        return idx
+
+    def _component_nodes(adj: Dict[int, List[int]]) -> List[np.ndarray]:
+        comps: List[np.ndarray] = []
+        seen: set[int] = set()
+        for s in adj.keys():
+            if s in seen:
+                continue
+            stack = [int(s)]
+            seen.add(int(s))
+            comp: List[int] = []
+            while stack:
+                u = int(stack.pop())
+                comp.append(u)
+                for v in adj.get(u, []):
+                    if int(v) not in seen:
+                        seen.add(int(v))
+                        stack.append(int(v))
+            comps.append(np.asarray(comp, dtype=np.int32))
+        return comps
+
+    def _trace_component_path(adj_comp: Dict[int, List[int]], comp_nodes: List[int]) -> Tuple[List[int], bool]:
+        deg = {u: len(adj_comp.get(u, [])) for u in comp_nodes}
+        endpoints = [u for u in comp_nodes if deg[u] == 1]
+        if any(d > 2 for d in deg.values()):
+            return [], False
+        if len(endpoints) == 2:
+            start = endpoints[0]
+            is_closed = False
+        elif len(endpoints) == 0 and all(d == 2 for d in deg.values()):
+            start = comp_nodes[0]
+            is_closed = True
+        else:
+            return [], False
+
+        path = [int(start)]
+        prev = -1
+        cur = int(start)
+        visited_edges: set[Tuple[int, int]] = set()
+        max_steps = max(2, len(comp_nodes) * 3)
+
+        for _ in range(max_steps):
+            nbrs = [int(v) for v in adj_comp.get(cur, []) if int(v) != prev]
+            nxt = None
+            for v in nbrs:
+                e = (cur, v) if cur < v else (v, cur)
+                if e not in visited_edges:
+                    nxt = v
+                    visited_edges.add(e)
+                    break
+            if nxt is None:
+                break
+
+            if is_closed and nxt == start:
+                break
+
+            path.append(int(nxt))
+            prev, cur = cur, int(nxt)
+
+            if not is_closed and len(adj_comp.get(cur, [])) == 1:
+                break
+
+        return path, is_closed
+
+    def _polyline_length(points: np.ndarray, closed: bool) -> float:
+        if points.shape[0] < 2:
+            return 0.0
+        seg = np.linalg.norm(np.diff(points, axis=0), axis=1)
+        total = float(np.sum(seg))
+        if closed and points.shape[0] > 2:
+            total += float(np.linalg.norm(points[0] - points[-1]))
+        return total
+
+    linesets: List[o3d.geometry.LineSet] = []
+    levels = np.arange(step, dmax, step, dtype=np.float64)
+    eps_val = max(1e-6, 0.02 * step)  # in mm
+    edges = ((0, 1), (1, 2), (2, 0))
+
+    for lvl in levels:
+        nodes: List[np.ndarray] = []
+        node_map: Dict[Tuple[int, int, int], int] = {}
+        edge_set: set[Tuple[int, int]] = set()
+
+        # Extract level-set segments from triangle edges.
+        for ia, ib, ic in tri.tolist():
+            ids = [int(ia), int(ib), int(ic)]
+            s = dist_mm[ids]
+            smin = float(np.min(s))
+            smax = float(np.max(s))
+            if lvl < smin or lvl > smax:
+                continue
+
+            p = points_xyz[ids].astype(np.float64)
+            inter: List[np.ndarray] = []
+            for a, b in edges:
+                sa = float(s[a])
+                sb = float(s[b])
+                da = sa - float(lvl)
+                db = sb - float(lvl)
+                pa = p[a]
+                pb = p[b]
+
+                if da * db < 0.0:
+                    t = (float(lvl) - sa) / (sb - sa)
+                    inter.append(pa + t * (pb - pa))
+                elif abs(da) <= eps_val and abs(db) <= eps_val:
+                    # Entire edge sits on contour level; skip to avoid ambiguous branching.
+                    continue
+                elif abs(da) <= eps_val:
+                    inter.append(pa.copy())
+                elif abs(db) <= eps_val:
+                    inter.append(pb.copy())
+
+            inter = _dedup_pts(inter, merge_eps_m)
+            if len(inter) < 2:
+                continue
+            if len(inter) > 2:
+                # Degenerate case: pick the farthest two points.
+                best = None
+                best_d = -1.0
+                for i in range(len(inter)):
+                    for j in range(i + 1, len(inter)):
+                        d = float(np.linalg.norm(inter[i] - inter[j]))
+                        if d > best_d:
+                            best_d = d
+                            best = (inter[i], inter[j])
+                if best is None:
+                    continue
+                p0, p1 = best
+            else:
+                p0, p1 = inter[0], inter[1]
+
+            u = _add_node(node_map, nodes, p0, merge_eps_m)
+            v = _add_node(node_map, nodes, p1, merge_eps_m)
+            if u == v:
+                continue
+            e = (u, v) if u < v else (v, u)
+            edge_set.add(e)
+
+        if not edge_set or len(nodes) < min_comp:
+            continue
+
+        # Build connectivity graph for this iso-level.
+        adj: Dict[int, List[int]] = {}
+        for u, v in edge_set:
+            adj.setdefault(int(u), []).append(int(v))
+            adj.setdefault(int(v), []).append(int(u))
+
+        node_arr = np.asarray(nodes, dtype=np.float64)
+        for comp in _component_nodes(adj):
+            if comp.size < min_comp:
+                continue
+
+            comp_list = [int(u) for u in comp.tolist()]
+            comp_set = set(comp_list)
+            adj_comp: Dict[int, List[int]] = {}
+            for u in comp_list:
+                adj_comp[u] = [int(v) for v in adj.get(u, []) if int(v) in comp_set]
+
+            path_nodes, is_closed = _trace_component_path(adj_comp, comp_list)
+            if len(path_nodes) < min_comp:
+                continue
+
+            ring = node_arr[np.asarray(path_nodes, dtype=np.int32)]
+
+            # Remove overly dense consecutive points for cleaner curves.
+            if min_spacing_m > 0.0 and ring.shape[0] > 4:
+                keep = [0]
+                for i in range(1, ring.shape[0]):
+                    if np.linalg.norm(ring[i, :2] - ring[keep[-1], :2]) >= min_spacing_m:
+                        keep.append(i)
+                ring = ring[np.asarray(keep, dtype=np.int32)]
+                if is_closed and ring.shape[0] > 3 and np.linalg.norm(ring[0, :2] - ring[-1, :2]) < min_spacing_m:
+                    ring = ring[:-1]
+
+            if ring.shape[0] < min_comp:
+                continue
+
+            ring = _smooth_polyline(ring, smooth_k, closed=is_closed)
+            if ring.shape[0] < curve_min_pts:
+                continue
+            if _polyline_length(ring, closed=is_closed) < curve_min_len_m:
+                continue
+
+            n_ring = int(ring.shape[0])
+            if is_closed:
+                lines = np.column_stack(
+                    [np.arange(n_ring, dtype=np.int32), np.roll(np.arange(n_ring, dtype=np.int32), -1)]
+                )
+            else:
+                if n_ring < 2:
+                    continue
+                lines = np.column_stack(
+                    [np.arange(n_ring - 1, dtype=np.int32), np.arange(1, n_ring, dtype=np.int32)]
+                )
+
+            ls = o3d.geometry.LineSet()
+            ls.points = o3d.utility.Vector3dVector(ring.astype(np.float64))
+            ls.lines = o3d.utility.Vector2iVector(lines.astype(np.int32))
+            ls.paint_uniform_color(list(geodesic_ring_color))
+            linesets.append(ls)
+
+    return linesets
+
+
+def _seeded_geodesic_ring_linesets(
+    points_xyz: np.ndarray,
+    dist_by_seed_mm: np.ndarray,
+    owner_seed: np.ndarray,
+    seed_vertex_idx: np.ndarray | None = None,
+) -> List[o3d.geometry.LineSet]:
+    if not bool(geodesic_show_rings):
+        return []
+    if points_xyz.shape[0] == 0:
+        return []
+    if dist_by_seed_mm.ndim != 2 or dist_by_seed_mm.shape[1] != points_xyz.shape[0]:
+        return []
+    if owner_seed.shape[0] != points_xyz.shape[0]:
+        return []
+    if not bool(geodesic_seeded_rings):
+        dist_min = np.min(dist_by_seed_mm, axis=0)
+        return _geodesic_ring_linesets(points_xyz, dist_min)
+
+    method = str(geodesic_ring_method).strip().lower()
+    if method not in {"logmap", "triangulated"}:
+        method = "logmap"
+
+    if seed_vertex_idx is None or seed_vertex_idx.size != dist_by_seed_mm.shape[0]:
+        seed_vertex_idx = np.argmin(dist_by_seed_mm, axis=1).astype(np.int32)
+    else:
+        seed_vertex_idx = np.asarray(seed_vertex_idx, dtype=np.int32).reshape(-1)
+
+    def _extract_triangulated() -> List[o3d.geometry.LineSet]:
+        tri = _pointcloud_triangles(points_xyz)
+        if tri.shape[0] == 0:
+            return []
+        all_lines: List[o3d.geometry.LineSet] = []
+        for s in range(dist_by_seed_mm.shape[0]):
+            mask = owner_seed == int(s)
+            if np.count_nonzero(mask) < max(4, int(geodesic_ring_min_component_points)):
+                continue
+            d = dist_by_seed_mm[s]
+            all_lines.extend(_geodesic_ring_linesets(points_xyz, d, point_mask=mask, triangles=tri))
+        return all_lines
+
+    if method == "triangulated" or pp3d is None:
+        return _extract_triangulated()
+
+    # Log-map based ring extraction (closer to vector heat usage).
+    min_comp_base = max(4, int(geodesic_ring_min_component_points))
+    min_spacing_base_m = _mm_to_m(float(geodesic_ring_min_vertex_spacing_mm))
+    smooth_k = _ensure_odd(max(1, int(geodesic_ring_smooth_window)))
+    bins_base = max(24, int(geodesic_logmap_bins))
+    bins_min_base = max(8, int(geodesic_logmap_min_bins_filled))
+    close_gap_base = max(0, int(geodesic_logmap_close_gap_bins))
+    step = float(geodesic_ring_step_mm)
+    band_base = float(geodesic_ring_band_mm)
+    if step <= 0.0 or band_base <= 0.0:
+        return []
+
+    def _smooth_polyline(points: np.ndarray, window: int, closed: bool) -> np.ndarray:
+        if points.shape[0] < 4 or window <= 1:
+            return points
+        k = _ensure_odd(window)
+        if points.shape[0] < k:
+            return points
+        r = k // 2
+        if closed:
+            pad = np.vstack([points[-r:], points, points[:r]])
+        else:
+            pad = np.vstack([np.repeat(points[:1], r, axis=0), points, np.repeat(points[-1:], r, axis=0)])
+        out = np.empty_like(points)
+        for i in range(points.shape[0]):
+            out[i] = np.mean(pad[i : i + k], axis=0)
+        return out
+
+    try:
+        solver = pp3d.PointCloudHeatSolver(points_xyz.astype(np.float64), float(geodesic_heat_t_coef))
+    except Exception:
+        return _extract_triangulated()
+
+    def _extract_logmap_lines(
+        bins_target: int,
+        bins_min_filled: int,
+        min_comp: int,
+        band: float,
+        close_gap_bins: int,
+        min_spacing_m: float,
+    ) -> List[o3d.geometry.LineSet]:
+        all_lines: List[o3d.geometry.LineSet] = []
+        for s in range(dist_by_seed_mm.shape[0]):
+            owner_mask = owner_seed == int(s)
+            if np.count_nonzero(owner_mask) < min_comp:
+                continue
+
+            d = dist_by_seed_mm[s]
+            finite = owner_mask & np.isfinite(d)
+            if np.count_nonzero(finite) < min_comp:
+                continue
+
+            dmax = float(np.max(d[finite]))
+            if not np.isfinite(dmax) or dmax <= step:
+                continue
+
+            try:
+                uv = np.asarray(solver.compute_log_map(int(seed_vertex_idx[s])), dtype=np.float64)
+            except Exception:
+                continue
+            if uv.ndim != 2 or uv.shape[0] != points_xyz.shape[0] or uv.shape[1] != 2:
+                continue
+            finite = finite & np.isfinite(uv[:, 0]) & np.isfinite(uv[:, 1])
+            if np.count_nonzero(finite) < min_comp:
+                continue
+
+            theta = np.arctan2(uv[:, 1], uv[:, 0])
+            levels = np.arange(step, dmax, step, dtype=np.float64)
+            if levels.size == 0:
+                continue
+
+            for lvl in levels:
+                shell = finite & (np.abs(d - lvl) <= band)
+                idx = np.flatnonzero(shell)
+                if idx.size < min_comp:
+                    continue
+
+                bins = bins_target
+                if min_spacing_m > 1e-9:
+                    circum = 2.0 * np.pi * max(float(lvl) * 1e-3, min_spacing_m)
+                    bins = max(bins, int(np.ceil(circum / min_spacing_m)))
+                bins = int(np.clip(bins, 24, 720))
+                edges = np.linspace(-np.pi, np.pi, bins + 1)
+
+                bin_hits: List[Tuple[int, int]] = []
+                for b in range(bins):
+                    in_bin = idx[(theta[idx] >= edges[b]) & (theta[idx] < edges[b + 1])]
+                    if in_bin.size == 0:
+                        continue
+                    best = int(in_bin[np.argmin(np.abs(d[in_bin] - lvl))])
+                    if bin_hits and bin_hits[-1][1] == best:
+                        continue
+                    bin_hits.append((b, best))
+
+                if len(bin_hits) < min_comp:
+                    continue
+
+                segments: List[List[Tuple[int, int]]] = [[bin_hits[0]]]
+                for (b0, _i0), (b1, i1) in zip(bin_hits[:-1], bin_hits[1:]):
+                    if (b1 - b0) <= (1 + close_gap_bins):
+                        segments[-1].append((b1, i1))
+                    else:
+                        segments.append([(b1, i1)])
+
+                seam_contiguous = ((bin_hits[0][0] + bins - bin_hits[-1][0]) <= (1 + close_gap_bins))
+                if seam_contiguous and len(segments) > 1:
+                    merged = segments[-1] + segments[0]
+                    segments = [merged] + segments[1:-1]
+
+                for seg in segments:
+                    is_closed = seam_contiguous and (len(segments) == 1)
+                    min_bins_needed = max(min_comp, bins_min_filled) if is_closed else min_comp
+                    if len(seg) < min_bins_needed:
+                        continue
+
+                    seen: set[int] = set()
+                    ordered_ids: List[int] = []
+                    for _, rid in seg:
+                        if rid not in seen:
+                            seen.add(rid)
+                            ordered_ids.append(rid)
+                    if len(ordered_ids) < min_bins_needed:
+                        continue
+
+                    curve = points_xyz[np.asarray(ordered_ids, dtype=np.int32)].astype(np.float64)
+                    if min_spacing_m > 0.0 and curve.shape[0] > 4:
+                        keep = [0]
+                        for i in range(1, curve.shape[0]):
+                            if np.linalg.norm(curve[i, :2] - curve[keep[-1], :2]) >= min_spacing_m:
+                                keep.append(i)
+                        curve = curve[np.asarray(keep, dtype=np.int32)]
+                        if is_closed and curve.shape[0] > 3 and np.linalg.norm(curve[0, :2] - curve[-1, :2]) < min_spacing_m:
+                            curve = curve[:-1]
+
+                    if curve.shape[0] < min_comp:
+                        continue
+
+                    curve = _smooth_polyline(curve, smooth_k, closed=is_closed)
+                    n_curve = int(curve.shape[0])
+                    if is_closed:
+                        lines = np.column_stack(
+                            [np.arange(n_curve, dtype=np.int32), np.roll(np.arange(n_curve, dtype=np.int32), -1)]
+                        )
+                    else:
+                        if n_curve < 2:
+                            continue
+                        lines = np.column_stack(
+                            [np.arange(n_curve - 1, dtype=np.int32), np.arange(1, n_curve, dtype=np.int32)]
+                        )
+
+                    ls = o3d.geometry.LineSet()
+                    ls.points = o3d.utility.Vector3dVector(curve.astype(np.float64))
+                    ls.lines = o3d.utility.Vector2iVector(lines.astype(np.int32))
+                    ls.paint_uniform_color(list(geodesic_ring_color))
+                    all_lines.append(ls)
+        return all_lines
+
+    attempts = [
+        (bins_base, bins_min_base, min_comp_base, band_base, close_gap_base, min_spacing_base_m),
+        (
+            max(24, bins_base // 2),
+            max(4, bins_min_base // 2),
+            max(3, min_comp_base - 2),
+            1.7 * band_base,
+            close_gap_base + 2,
+            max(_mm_to_m(0.05), 0.7 * min_spacing_base_m),
+        ),
+    ]
+    for params in attempts:
+        lines = _extract_logmap_lines(*params)
+        if len(lines) > 0:
+            return lines
+
+    return _extract_triangulated()
+
+
 def _anchor_peaks_to_points(peaks_xyz_grid: np.ndarray, points_xyz: np.ndarray) -> Tuple[np.ndarray, Dict[str, float]]:
     if peaks_xyz_grid.shape[0] == 0:
         return peaks_xyz_grid.copy(), {
@@ -585,9 +1288,14 @@ def _show_2d_debug(H: np.ndarray, M: np.ndarray, DT_mm: np.ndarray, peaks_yx: np
     cv2.waitKey(int(pause_ms) if pause_ms >= 0 else 0)
 
 
-def _show_3d_debug(points_xyz: np.ndarray, peaks_xyz: np.ndarray, top_height_xyz: np.ndarray) -> None:
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points_xyz.astype(np.float64))
+def _show_3d_debug(
+    points_xyz: np.ndarray,
+    peaks_xyz: np.ndarray,
+    geodesic_mm: np.ndarray,
+    ring_linesets: List[o3d.geometry.LineSet] | None = None,
+) -> None:
+    pcd_main = o3d.geometry.PointCloud()
+    pcd_main.points = o3d.utility.Vector3dVector(points_xyz.astype(np.float64))
 
     if colorize_cloud_by_height and points_xyz.shape[0] > 0:
         z = points_xyz[:, 2].astype(np.float32)
@@ -599,12 +1307,12 @@ def _show_3d_debug(points_xyz: np.ndarray, peaks_xyz: np.ndarray, top_height_xyz
             z_u8 = np.zeros_like(z, dtype=np.uint8)
         bgr = cv2.applyColorMap(z_u8.reshape(-1, 1), cv2.COLORMAP_TURBO).reshape(-1, 3)
         rgb = bgr[:, ::-1].astype(np.float64) / 255.0
-        pcd.colors = o3d.utility.Vector3dVector(rgb)
+        pcd_main.colors = o3d.utility.Vector3dVector(rgb)
     else:
         base_color = np.tile(np.array([[0.75, 0.75, 0.75]], dtype=np.float64), (points_xyz.shape[0], 1))
-        pcd.colors = o3d.utility.Vector3dVector(base_color)
+        pcd_main.colors = o3d.utility.Vector3dVector(base_color)
 
-    geoms = [pcd, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.02)]
+    geoms = [pcd_main, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.02)]
 
     if peaks_xyz.shape[0] > 0:
         r_m = _mm_to_m(float(peak_marker_radius_mm))
@@ -628,50 +1336,62 @@ def _show_3d_debug(points_xyz: np.ndarray, peaks_xyz: np.ndarray, top_height_xyz
         )
         geoms.append(peak_cloud)
 
-    # Side panel: duplicate cloud + top-N highest height-map points.
-    if top_height_xyz.shape[0] > 0:
+    # Adjacent panel: heat-method geodesic distances and contour-like ring curves.
+    if bool(geodesic_enable) and bool(geodesic_show_heat_panel) and geodesic_mm.size == points_xyz.shape[0]:
         if points_xyz.shape[0] > 0:
             ext = np.ptp(points_xyz, axis=0)
-            side_offset_m = max(float(ext[0]), float(ext[1]), 0.05) + _mm_to_m(top_height_side_offset_mm)
+            side_offset_m = max(float(ext[0]), float(ext[1]), 0.05) + _mm_to_m(geodesic_panel_offset_mm)
         else:
             side_offset_m = 0.08
         shift = np.array([side_offset_m, 0.0, 0.0], dtype=np.float64)
 
-        side_cloud = o3d.geometry.PointCloud()
-        side_cloud.points = o3d.utility.Vector3dVector((points_xyz + shift[None, :]).astype(np.float64))
-        side_cloud.colors = o3d.utility.Vector3dVector(
-            np.tile(np.array([[0.28, 0.28, 0.28]], dtype=np.float64), (points_xyz.shape[0], 1))
-        )
-        geoms.append(side_cloud)
+        heat_cloud = o3d.geometry.PointCloud()
+        heat_cloud.points = o3d.utility.Vector3dVector((points_xyz + shift[None, :]).astype(np.float64))
+        heat_cloud.colors = o3d.utility.Vector3dVector(_geodesic_colors(geodesic_mm))
+        geoms.append(heat_cloud)
 
-        side_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.02)
-        side_frame.translate(shift)
-        geoms.append(side_frame)
+        heat_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.02)
+        heat_frame.translate(shift)
+        geoms.append(heat_frame)
 
-        r_side = _mm_to_m(float(top_height_marker_radius_mm))
-        for p in top_height_xyz:
-            m = o3d.geometry.TriangleMesh.create_sphere(radius=r_side)
-            m.compute_vertex_normals()
-            m.paint_uniform_color(list(top_height_marker_color))
-            m.translate((p + shift).astype(np.float64))
-            geoms.append(m)
+        ring_cloud = _geodesic_ring_cloud(points_xyz, geodesic_mm)
+        if ring_cloud is not None:
+            ring_pts = np.asarray(ring_cloud.points, dtype=np.float64)
+            ring_cloud.points = o3d.utility.Vector3dVector((ring_pts + shift[None, :]).astype(np.float64))
+            geoms.append(ring_cloud)
 
-        top_side_cloud = o3d.geometry.PointCloud()
-        top_side_cloud.points = o3d.utility.Vector3dVector((top_height_xyz + shift[None, :]).astype(np.float64))
-        top_side_cloud.colors = o3d.utility.Vector3dVector(
-            np.tile(np.array([top_height_marker_color], dtype=np.float64), (top_height_xyz.shape[0], 1))
-        )
-        geoms.append(top_side_cloud)
+        lines_to_draw = ring_linesets if ring_linesets is not None else _geodesic_ring_linesets(points_xyz, geodesic_mm)
+        for ls in lines_to_draw:
+            ls_shift = o3d.geometry.LineSet()
+            ls_shift.points = o3d.utility.Vector3dVector(
+                (np.asarray(ls.points, dtype=np.float64) + shift[None, :]).astype(np.float64)
+            )
+            ls_shift.lines = o3d.utility.Vector2iVector(np.asarray(ls.lines, dtype=np.int32))
+            ls_shift.paint_uniform_color(list(geodesic_ring_color))
+            geoms.append(ls_shift)
+
+        if peaks_xyz.shape[0] > 0:
+            r_h = _mm_to_m(float(peak_marker_radius_mm) * 0.85)
+            for p in peaks_xyz:
+                m = o3d.geometry.TriangleMesh.create_sphere(radius=r_h)
+                m.compute_vertex_normals()
+                m.paint_uniform_color([1.0, 0.92, 0.10])
+                m.translate((p + shift).astype(np.float64))
+                geoms.append(m)
 
     vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name="Stage-1 Peaks on Point Cloud", width=1400, height=920)
+    vis.create_window(window_name="Stage-1 Peaks + Heat-Geodesic Panel", width=1600, height=960)
     for g in geoms:
         vis.add_geometry(g)
     opt = vis.get_render_option()
     if opt is not None:
         opt.background_color = np.array([0.05, 0.05, 0.05], dtype=np.float64)
-        opt.point_size = 2.5
+        opt.point_size = 4.0
         opt.light_on = True
+        try:
+            opt.line_width = 4.0
+        except Exception:
+            pass
     vis.run()
     vis.destroy_window()
 
@@ -772,18 +1492,43 @@ def run_first_stage_peak_debug(
             f"z_guard_reject={int(anchor_info['num_rejected_z_guard'])}"
         )
 
+    print("[5.5] Heat distance from detected peaks")
+    heat_fields = _compute_seeded_heat_fields(points_obj_table, peaks_xyz_table)
+    geodesic_mm_table = np.asarray(heat_fields["dist_min_mm"], dtype=np.float64)
+    geodesic_info = dict(heat_fields["info"])
+    geodesic_by_seed_table = np.asarray(heat_fields["dist_by_seed_mm"], dtype=np.float64)
+    geodesic_owner_table = np.asarray(heat_fields["owner_seed"], dtype=np.int32)
+    geodesic_seed_idx_table = np.asarray(heat_fields["seed_vertex_idx"], dtype=np.int32)
+    print(
+        "  Heat: "
+        f"backend={geodesic_info.get('backend_used', 'unknown')}, "
+        f"seed_vertices={int(geodesic_info['num_seed_vertices'])}, "
+        f"seed_solves={int(geodesic_info.get('num_seed_solves', 0.0))}, "
+        f"reachable={int(geodesic_info['num_reachable'])}/{int(geodesic_info['num_points'])}, "
+        f"mean={geodesic_info['mean_mm']:.3f}mm, "
+        f"max={geodesic_info['max_mm']:.3f}mm"
+    )
+    if "error" in geodesic_info:
+        print(f"  Heat error: {geodesic_info['error']}")
+
     if viz_frame == "world":
         points_viz = _transform_points(points_obj_table, T_world_from_table)
         peaks_viz = _transform_points(peaks_xyz_table, T_world_from_table) if peaks_xyz_table.size else peaks_xyz_table
-        top_height_viz = (
-            _transform_points(top_height_xyz_table, T_world_from_table)
-            if top_height_xyz_table.size
-            else top_height_xyz_table
-        )
+        geodesic_mm_viz = geodesic_mm_table
     else:
         points_viz = points_obj_table
         peaks_viz = peaks_xyz_table
-        top_height_viz = top_height_xyz_table
+        geodesic_mm_viz = geodesic_mm_table
+
+    ring_lines_viz: List[o3d.geometry.LineSet] | None = None
+    if show_3d and bool(geodesic_enable) and bool(geodesic_show_rings) and geodesic_by_seed_table.size > 0:
+        ring_lines_viz = _seeded_geodesic_ring_linesets(
+            points_viz,
+            geodesic_by_seed_table,
+            geodesic_owner_table,
+            seed_vertex_idx=geodesic_seed_idx_table,
+        )
+        print(f"  Heat ring loops: {len(ring_lines_viz)}")
 
     if top_height_xyz_table.shape[0] > 0:
         print(f"[6] Top {top_height_xyz_table.shape[0]} highest height-map points (table frame)")
@@ -796,7 +1541,7 @@ def run_first_stage_peak_debug(
         _show_2d_debug(H, M, DT_mm, peaks_yx, pause_ms=int(pause_ms))
 
     if show_3d:
-        _show_3d_debug(points_viz, peaks_viz, top_height_viz)
+        _show_3d_debug(points_viz, peaks_viz, geodesic_mm_viz, ring_linesets=ring_lines_viz)
 
     try:
         cv2.destroyAllWindows()
@@ -810,6 +1555,7 @@ def run_first_stage_peak_debug(
         "num_peaks": int(peaks_xyz_table.shape[0]),
         "peak_filtering": peak_info,
         "peak_anchoring": anchor_info,
+        "geodesic": geodesic_info,
         "viz_frame": viz_frame,
         "plane_model_world": plane.tolist(),
         "table_transform": T_table_from_world.tolist(),
@@ -837,6 +1583,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--peak_keep_percentile", type=float, default=float(peak_keep_percentile))
     parser.add_argument("--max_num_peaks", type=int, default=int(max_num_peaks))
     parser.add_argument("--peak_marker_radius_mm", type=float, default=float(peak_marker_radius_mm))
+    parser.add_argument("--geodesic_heat_t_coef", type=float, default=float(geodesic_heat_t_coef))
 
     args = parser.parse_args()
     if not str(args.input).strip():
@@ -851,13 +1598,14 @@ def main() -> None:
         # Apply CLI tuning overrides to stage-1 globals.
         global min_peak_distance_mm, peak_strength_fraction
         global peak_min_dt_mm, peak_keep_percentile, max_num_peaks
-        global peak_marker_radius_mm
+        global peak_marker_radius_mm, geodesic_heat_t_coef
         min_peak_distance_mm = float(args.min_peak_distance_mm)
         peak_strength_fraction = float(args.peak_strength_fraction)
         peak_min_dt_mm = float(args.peak_min_dt_mm)
         peak_keep_percentile = float(args.peak_keep_percentile)
         max_num_peaks = max(1, int(args.max_num_peaks))
         peak_marker_radius_mm = max(0.1, float(args.peak_marker_radius_mm))
+        geodesic_heat_t_coef = max(1e-3, float(args.geodesic_heat_t_coef))
 
         input_path = args.input
         show_3d = bool(args.show_3d)
