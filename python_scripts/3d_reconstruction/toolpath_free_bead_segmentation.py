@@ -44,7 +44,7 @@ except Exception:
 # VS Code "Run Python File" mode: keep this False to use only values in this file.
 use_cli_args = False
 
-default_input_path = "~/Downloads/260227_160709/print_scan_007/reconstruct/tsdf_surface_rgb_colored.ply"
+default_input_path = "~/Downloads/260227_160709/print_scan_014/reconstruct/tsdf_surface_rgb_colored.ply"
 default_show_3d = True
 default_show_2d = False
 default_viz_frame = "table"  # "table" or "world"
@@ -54,28 +54,28 @@ default_pause_ms = 0  # 0 -> wait key, >0 -> auto-advance
 # -----------------------------------------------------------------------------
 # Stage-1 parameters (all distances in millimeters)
 # -----------------------------------------------------------------------------
-downsample_voxel_mm = 0.7  # <= 0 disables downsampling
+downsample_voxel_mm = 0  # <= 0 disables downsampling
 
 # Table alignment / slicing
-table_ransac_thresh_mm = 1.2
+table_ransac_thresh_mm = 1.0
 table_ransac_n = 3
 table_ransac_iters = 2500
 z_min_above_plane_mm = 1.7
 
 # Height map / mask / peak detection
 grid_mm = 0.10
-height_percentile = 98.0
-gaussian_sigma_px = 0.6
+height_percentile = 99.0
+gaussian_sigma_px = 0.3
 mask_percentile = 40.0
-morph_kernel_px = 3
+morph_kernel_px = 1
 peak_detection_mode = "height"  # "height" or "dt"
 peak_height_support_percentile = 45.0
 peak_min_height_mm = 1.0
-min_peak_distance_mm = 4
-peak_strength_fraction = 0.20
+min_peak_distance_mm = 3
+peak_strength_fraction = 0.10
 peak_min_dt_mm = 0.10
 peak_keep_percentile = 0.0  # keep only top DT peaks by value
-max_num_peaks = 1000
+max_num_peaks = 1700
 
 # 3D peak marker display
 peak_marker_radius_mm = 1.6
