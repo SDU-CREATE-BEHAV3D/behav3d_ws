@@ -51,7 +51,8 @@ except Exception:
 # VS Code "Run Python File" mode: keep this False to use only values in this file.
 use_cli_args = False
 
-default_input_path = "~/Downloads/260227_160709/print_scan_007/reconstruct/tsdf_surface_rgb_colored.ply"
+default_input_path = "~/Downloads/260227_160709/print_scan_049/reconstruct/tsdf_surface_rgb_colored.ply"
+default_mesh_input_path = ""
 default_show_3d = True
 default_show_2d = False
 default_viz_frame = "table"  # "table" or "world"
@@ -72,7 +73,7 @@ downsample_voxel_mm = 0  # <= 0 disables downsampling
 table_ransac_thresh_mm = 1.0
 table_ransac_n = 3
 table_ransac_iters = 2500
-z_min_above_plane_mm = 1.55
+z_min_above_plane_mm = 1.7
 
 # Height map / mask / peak detection
 grid_mm = 0.10
@@ -88,7 +89,7 @@ min_peak_distance_mm = 4
 peak_strength_fraction = 0.10
 peak_min_dt_mm = 0.10
 peak_keep_percentile = 0.0  # keep only top DT peaks by value
-max_num_peaks = 1400
+max_num_peaks = 1500
 
 # 3D peak marker display
 peak_marker_radius_mm = 1.6
@@ -131,12 +132,12 @@ geodesic_ring_smooth_window = 4
 geodesic_curve_min_points = 2
 geodesic_curve_min_length_mm = 0.3
 
-# Mesh reconstruction from heat-labeled grid support
+# Mesh label transfer onto TSDF mesh
 mesh_enable = True
-mesh_min_points = 10
-mesh_min_cells = 8
-mesh_label_close_px = 1
-mesh_allow_boundary_triangles = True
+mesh_auto_filename = "tsdf_surface_mesh.stl"
+mesh_vertex_label_max_dist_mm = 1.5
+mesh_min_vertices_per_label = 20
+mesh_min_triangles_per_label = 10
 mesh_show_point_cloud_background = False
 
 
@@ -221,6 +222,26 @@ def _load_points(input_path: Path) -> np.ndarray:
     if pts.shape[0] == 0:
         raise RuntimeError("No points remain after optional downsampling.")
     return pts
+
+
+def _resolve_mesh_input_path(input_path: Path, mesh_input_path: str | os.PathLike[str] | None) -> Path | None:
+    if mesh_input_path is not None and str(mesh_input_path).strip():
+        mesh_path = Path(mesh_input_path).expanduser().resolve()
+        if not mesh_path.exists():
+            raise FileNotFoundError(f"Mesh input file not found: {mesh_path}")
+        return mesh_path
+
+    auto_path = (input_path.parent / str(mesh_auto_filename)).expanduser().resolve()
+    if auto_path.exists():
+        return auto_path
+    return None
+
+
+def _load_triangle_mesh(mesh_path: Path) -> o3d.geometry.TriangleMesh:
+    mesh = o3d.io.read_triangle_mesh(str(mesh_path), enable_post_processing=True)
+    if len(mesh.vertices) == 0 or len(mesh.triangles) == 0:
+        raise RuntimeError(f"Input mesh is empty or invalid: {mesh_path}")
+    return mesh
 
 
 def _fit_table_frame(points_world: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -1766,6 +1787,170 @@ def _build_meshes_from_point_labels(
     return meshes, summary, debug
 
 
+def _crop_mesh_above_table(
+    mesh: o3d.geometry.TriangleMesh,
+    z_min_m: float,
+) -> o3d.geometry.TriangleMesh:
+    mesh_out = o3d.geometry.TriangleMesh(mesh)
+    verts = np.asarray(mesh_out.vertices, dtype=np.float64)
+    if verts.shape[0] == 0:
+        return mesh_out
+    remove_mask = verts[:, 2] <= float(z_min_m)
+    if np.any(remove_mask):
+        mesh_out.remove_vertices_by_mask(remove_mask)
+        mesh_out.remove_unreferenced_vertices()
+    return mesh_out
+
+
+def _label_mesh_vertices_from_points(
+    mesh_vertices: np.ndarray,
+    point_vertices: np.ndarray,
+    point_labels: np.ndarray,
+) -> Tuple[np.ndarray, Dict[str, float]]:
+    vertex_labels = np.zeros((mesh_vertices.shape[0],), dtype=np.int32)
+    if mesh_vertices.shape[0] == 0:
+        return vertex_labels, {
+            "num_mesh_vertices": 0.0,
+            "num_labeled_vertices": 0.0,
+            "num_unlabeled_vertices": 0.0,
+            "mean_snap_dist_mm": 0.0,
+            "max_snap_dist_mm": 0.0,
+        }
+
+    point_labels_i = np.asarray(point_labels, dtype=np.int32)
+    valid = point_labels_i > 0
+    if not np.any(valid):
+        return vertex_labels, {
+            "num_mesh_vertices": float(mesh_vertices.shape[0]),
+            "num_labeled_vertices": 0.0,
+            "num_unlabeled_vertices": float(mesh_vertices.shape[0]),
+            "mean_snap_dist_mm": 0.0,
+            "max_snap_dist_mm": 0.0,
+        }
+
+    src_points = np.asarray(point_vertices[valid], dtype=np.float64)
+    src_labels = point_labels_i[valid]
+    if cKDTree is not None:
+        tree = cKDTree(src_points)
+        dist_m, nn = tree.query(mesh_vertices.astype(np.float64), k=1)
+        dist_m = np.asarray(dist_m, dtype=np.float64).reshape(-1)
+        nn = np.asarray(nn, dtype=np.int32).reshape(-1)
+    else:
+        dist_m = np.empty((mesh_vertices.shape[0],), dtype=np.float64)
+        nn = np.empty((mesh_vertices.shape[0],), dtype=np.int32)
+        for i, q in enumerate(mesh_vertices.astype(np.float64)):
+            d2 = np.sum((src_points - q[None, :]) ** 2, axis=1)
+            j = int(np.argmin(d2))
+            nn[i] = j
+            dist_m[i] = float(np.sqrt(d2[j]))
+
+    keep = dist_m <= _mm_to_m(float(mesh_vertex_label_max_dist_mm))
+    vertex_labels[keep] = src_labels[nn[keep]]
+    labeled = int(np.count_nonzero(vertex_labels > 0))
+    unlabeled = int(vertex_labels.shape[0] - labeled)
+    return vertex_labels, {
+        "num_mesh_vertices": float(mesh_vertices.shape[0]),
+        "num_labeled_vertices": float(labeled),
+        "num_unlabeled_vertices": float(unlabeled),
+        "mean_snap_dist_mm": float(np.mean(dist_m) * 1e3) if dist_m.size > 0 else 0.0,
+        "max_snap_dist_mm": float(np.max(dist_m) * 1e3) if dist_m.size > 0 else 0.0,
+    }
+
+
+def _build_submeshes_from_vertex_labels(
+    mesh: o3d.geometry.TriangleMesh,
+    vertex_labels: np.ndarray,
+) -> Tuple[List[o3d.geometry.TriangleMesh], List[Dict[str, float]]]:
+    verts = np.asarray(mesh.vertices, dtype=np.float64)
+    tris = np.asarray(mesh.triangles, dtype=np.int32)
+    if verts.shape[0] == 0 or tris.shape[0] == 0:
+        return [], []
+
+    tri_labels = np.zeros((tris.shape[0],), dtype=np.int32)
+    tri_vertex_labels = vertex_labels[tris]
+    for i in range(tri_vertex_labels.shape[0]):
+        labs = tri_vertex_labels[i]
+        labs = labs[labs > 0]
+        if labs.size < 2:
+            continue
+        uniq, counts = np.unique(labs, return_counts=True)
+        best = int(np.argmax(counts))
+        if int(counts[best]) < 2:
+            continue
+        tri_labels[i] = int(uniq[best])
+
+    meshes: List[o3d.geometry.TriangleMesh] = []
+    summary: List[Dict[str, float]] = []
+    unique_labels = np.unique(tri_labels[tri_labels > 0])
+    for lab in unique_labels.tolist():
+        lab_i = int(lab)
+        tri_mask = tri_labels == lab_i
+        tri_count = int(np.count_nonzero(tri_mask))
+        info: Dict[str, float] = {
+            "label": float(lab_i),
+            "vertex_count": 0.0,
+            "triangle_count": float(tri_count),
+            "status": 0.0,
+        }
+        if tri_count < int(mesh_min_triangles_per_label):
+            summary.append(info)
+            continue
+
+        mesh_lab = o3d.geometry.TriangleMesh(mesh)
+        mesh_lab.remove_triangles_by_mask(~tri_mask)
+        mesh_lab.remove_unreferenced_vertices()
+        if len(mesh_lab.vertices) < int(mesh_min_vertices_per_label) or len(mesh_lab.triangles) == 0:
+            summary.append(info)
+            continue
+
+        mesh_lab.compute_vertex_normals()
+        color = _labels_to_colors(np.array([lab_i], dtype=np.int32))[0]
+        mesh_lab.paint_uniform_color(color.tolist())
+        info["vertex_count"] = float(len(mesh_lab.vertices))
+        info["triangle_count"] = float(len(mesh_lab.triangles))
+        info["status"] = 1.0
+        meshes.append(mesh_lab)
+        summary.append(info)
+
+    summary.sort(key=lambda row: int(row["label"]))
+    return meshes, summary
+
+
+def _build_meshes_from_tsdf_mesh(
+    mesh_world: o3d.geometry.TriangleMesh,
+    T_table_from_world: np.ndarray,
+    points_obj_table: np.ndarray,
+    point_labels_table: np.ndarray,
+) -> Tuple[List[o3d.geometry.TriangleMesh], List[Dict[str, float]], Dict[str, float], o3d.geometry.TriangleMesh]:
+    mesh_table = o3d.geometry.TriangleMesh(mesh_world)
+    mesh_table.transform(T_table_from_world)
+
+    source_vertices = int(len(mesh_table.vertices))
+    source_triangles = int(len(mesh_table.triangles))
+    mesh_table = _crop_mesh_above_table(mesh_table, _mm_to_m(z_min_above_plane_mm))
+    cropped_vertices = int(len(mesh_table.vertices))
+    cropped_triangles = int(len(mesh_table.triangles))
+
+    vertex_labels, label_info = _label_mesh_vertices_from_points(
+        np.asarray(mesh_table.vertices, dtype=np.float64),
+        points_obj_table,
+        point_labels_table,
+    )
+    submeshes, summary = _build_submeshes_from_vertex_labels(mesh_table, vertex_labels)
+    debug = {
+        "source_vertices": float(source_vertices),
+        "source_triangles": float(source_triangles),
+        "cropped_vertices": float(cropped_vertices),
+        "cropped_triangles": float(cropped_triangles),
+        "num_mesh_vertices": float(label_info["num_mesh_vertices"]),
+        "num_labeled_vertices": float(label_info["num_labeled_vertices"]),
+        "num_unlabeled_vertices": float(label_info["num_unlabeled_vertices"]),
+        "mean_snap_dist_mm": float(label_info["mean_snap_dist_mm"]),
+        "max_snap_dist_mm": float(label_info["max_snap_dist_mm"]),
+    }
+    return submeshes, summary, debug, mesh_table
+
+
 def _show_2d_debug(
     H: np.ndarray,
     M: np.ndarray,
@@ -2005,6 +2190,7 @@ def _show_3d_debug(
 def run_first_stage_peak_debug(
     input_path,
     output_dir,
+    mesh_input_path=None,
     show_3d=True,
     show_2d=True,
     viz_frame="table",
@@ -2015,6 +2201,7 @@ def run_first_stage_peak_debug(
     input_path = Path(input_path).expanduser().resolve()
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
+    mesh_input_resolved = _resolve_mesh_input_path(input_path, mesh_input_path)
     output_dir = Path(output_dir).expanduser().resolve()
 
     viz_frame = str(viz_frame).strip().lower()
@@ -2195,37 +2382,45 @@ def run_first_stage_peak_debug(
                 f"{row['mean_height_mm']:9.3f}"
             )
 
-    print("[8] Height-field mesh reconstruction from heat-labeled support")
+    print("[8] TSDF mesh label transfer")
     mesh_geoms_table: List[o3d.geometry.TriangleMesh] = []
     mesh_summary: List[Dict[str, float]] = []
-    mesh_debug: Dict[str, int] = {}
+    mesh_debug: Dict[str, float] = {}
     if bool(mesh_enable):
-        mesh_geoms_table, mesh_summary, mesh_debug = _build_meshes_from_point_labels(
-            point_labels_table,
-            H,
-            min_xy,
-            grid_m,
-            cell_point_indices,
-            support_mask=M_watershed,
-        )
+        if mesh_input_resolved is None:
+            print(
+                "  Mesh input not found; "
+                f"set default_mesh_input_path or place '{mesh_auto_filename}' next to the point cloud."
+            )
+        else:
+            print(f"  Mesh input: {mesh_input_resolved}")
+            mesh_world = _load_triangle_mesh(mesh_input_resolved)
+            mesh_geoms_table, mesh_summary, mesh_debug, _ = _build_meshes_from_tsdf_mesh(
+                mesh_world,
+                T_table_from_world,
+                points_obj_table,
+                point_labels_table,
+            )
     if len(mesh_summary) == 0:
-        print("  No mesh candidates available.")
+        if mesh_input_resolved is not None and bool(mesh_enable):
+            print("  No labeled TSDF submeshes available.")
     else:
         print(
-            "  Height-field grid ownership: "
-            f"mixed_cells={int(mesh_debug.get('mixed_cells', 0))}, "
-            f"empty_cells={int(mesh_debug.get('empty_cells', 0))}, "
-            f"seeded_cells={int(mesh_debug.get('seeded_cells', 0))}, "
-            f"propagated_cells={int(mesh_debug.get('propagated_cells', 0))}"
+            "  Mesh transfer: "
+            f"source_verts={int(mesh_debug.get('source_vertices', 0))}, "
+            f"source_tris={int(mesh_debug.get('source_triangles', 0))}, "
+            f"cropped_verts={int(mesh_debug.get('cropped_vertices', 0))}, "
+            f"cropped_tris={int(mesh_debug.get('cropped_triangles', 0))}, "
+            f"labeled_verts={int(mesh_debug.get('num_labeled_vertices', 0))}, "
+            f"unlabeled_verts={int(mesh_debug.get('num_unlabeled_vertices', 0))}, "
+            f"mean_snap={float(mesh_debug.get('mean_snap_dist_mm', 0.0)):.3f}mm, "
+            f"max_snap={float(mesh_debug.get('max_snap_dist_mm', 0.0)):.3f}mm"
         )
-        print("  label | points | sparse_cells | mesh_cells | verts | tris | status")
+        print("  label | verts | tris | status")
         for row in mesh_summary:
             status = "ok" if int(row["status"]) == 1 else "skip"
             print(
                 f"  {int(row['label']):5d} | "
-                f"{int(row['point_count']):6d} | "
-                f"{int(row['sparse_cells']):12d} | "
-                f"{int(row['mesh_cells']):10d} | "
                 f"{int(row['vertex_count']):5d} | "
                 f"{int(row['triangle_count']):4d} | "
                 f"{status}"
@@ -2338,6 +2533,7 @@ def run_first_stage_peak_debug(
 
     return {
         "input_path": str(input_path),
+        "mesh_input_path": str(mesh_input_resolved) if mesh_input_resolved is not None else None,
         "num_points_loaded": int(points_world.shape[0]),
         "num_points_above_table": int(points_obj_table.shape[0]),
         "num_peaks": int(peaks_xyz_table.shape[0]),
@@ -2363,6 +2559,7 @@ def run_first_stage_peak_debug(
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stage-1 debug: visualize point cloud with detected peaks.")
     parser.add_argument("--input", default=default_input_path, help="Input point cloud path (PLY/PCD)")
+    parser.add_argument("--mesh_input", default=default_mesh_input_path, help="Optional TSDF mesh path (STL/PLY/OBJ)")
     parser.add_argument("--output_dir", default=default_output_dir, help="Output directory for exports")
 
     parser.add_argument("--show_3d", dest="show_3d", action="store_true", default=bool(default_show_3d))
@@ -2433,6 +2630,7 @@ def main() -> None:
         geodesic_heat_t_coef = max(1e-3, float(args.geodesic_heat_t_coef))
 
         input_path = args.input
+        mesh_input_path = args.mesh_input
         output_dir = args.output_dir
         show_3d = bool(args.show_3d)
         show_2d = bool(args.show_2d)
@@ -2442,6 +2640,7 @@ def main() -> None:
         export_world_frame = bool(args.export_world_frame)
     else:
         input_path = default_input_path
+        mesh_input_path = default_mesh_input_path
         output_dir = default_output_dir
         show_3d = bool(default_show_3d)
         show_2d = bool(default_show_2d)
@@ -2453,6 +2652,7 @@ def main() -> None:
 
     result = run_first_stage_peak_debug(
         input_path=input_path,
+        mesh_input_path=mesh_input_path,
         output_dir=output_dir,
         show_3d=show_3d,
         show_2d=show_2d,
