@@ -51,13 +51,16 @@ except Exception:
 # VS Code "Run Python File" mode: keep this False to use only values in this file.
 use_cli_args = False
 
-default_input_path = "~/Downloads/260227_160709/print_scan_021/reconstruct/tsdf_surface_rgb_colored.ply"
+default_input_path = "~/Downloads/260227_160709/print_scan_007/reconstruct/tsdf_surface_rgb_colored.ply"
 default_show_3d = True
 default_show_2d = False
 default_viz_frame = "table"  # "table" or "world"
 default_pause_ms = 0  # 0 -> wait key, >0 -> auto-advance
-debug_visual_focus = "segmentation3d"  # "all", "watershed", or "segmentation3d"
+debug_visual_focus = "mesh3d"  # "all", "watershed", "segmentation3d", or "mesh3d"
 open3d_random_seed = 7
+default_output_dir = "bead_segmentation_output"
+default_export_colored = False
+default_export_world_frame = False
 
 
 # -----------------------------------------------------------------------------
@@ -127,6 +130,14 @@ geodesic_ring_min_vertex_spacing_mm = 0.10
 geodesic_ring_smooth_window = 4
 geodesic_curve_min_points = 2
 geodesic_curve_min_length_mm = 0.3
+
+# Mesh reconstruction from heat-labeled grid support
+mesh_enable = True
+mesh_min_points = 10
+mesh_min_cells = 8
+mesh_label_close_px = 1
+mesh_allow_boundary_triangles = True
+mesh_show_point_cloud_background = False
 
 
 # -----------------------------------------------------------------------------
@@ -1466,6 +1477,295 @@ def _labels_to_colors(labels: np.ndarray) -> np.ndarray:
     return colors
 
 
+def _export_colored_point_cloud(
+    points_xyz: np.ndarray,
+    point_labels: np.ndarray,
+    output_path: Path,
+) -> Dict[str, object]:
+    output_path = Path(output_path).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points_xyz.astype(np.float64))
+    pcd.colors = o3d.utility.Vector3dVector(_labels_to_colors(point_labels))
+
+    ok = bool(
+        o3d.io.write_point_cloud(
+            str(output_path),
+            pcd,
+            write_ascii=False,
+            compressed=False,
+            print_progress=False,
+        )
+    )
+    if not ok:
+        raise RuntimeError(f"Failed to export point cloud: {output_path}")
+
+    labels = np.asarray(point_labels, dtype=np.int32)
+    unique_labels = np.unique(labels[labels > 0])
+    return {
+        "output_path": str(output_path),
+        "num_points": int(points_xyz.shape[0]),
+        "num_labels": int(unique_labels.size),
+    }
+
+
+def _summarize_point_labels(
+    points_xyz: np.ndarray,
+    point_labels: np.ndarray,
+    cell_point_indices: Dict[Tuple[int, int], np.ndarray],
+) -> List[Dict[str, float]]:
+    labels = np.asarray(point_labels, dtype=np.int32)
+    points = np.asarray(points_xyz, dtype=np.float64)
+    unique_labels = np.unique(labels[labels > 0])
+    if unique_labels.size == 0:
+        return []
+
+    cell_counts: Dict[int, int] = {}
+    for _, point_idx in cell_point_indices.items():
+        if point_idx.size == 0:
+            continue
+        cell_labels = np.unique(labels[np.asarray(point_idx, dtype=np.int32)])
+        cell_labels = cell_labels[cell_labels > 0]
+        for lab in cell_labels:
+            lab_i = int(lab)
+            cell_counts[lab_i] = cell_counts.get(lab_i, 0) + 1
+
+    summary: List[Dict[str, float]] = []
+    for lab in unique_labels.tolist():
+        lab_i = int(lab)
+        mask = labels == lab_i
+        if not np.any(mask):
+            continue
+        z_mm = points[mask, 2] * 1e3
+        summary.append(
+            {
+                "label": float(lab_i),
+                "point_count": float(np.count_nonzero(mask)),
+                "grid_cells": float(cell_counts.get(lab_i, 0)),
+                "max_height_mm": float(np.max(z_mm)),
+                "mean_height_mm": float(np.mean(z_mm)),
+            }
+        )
+
+    summary.sort(key=lambda row: int(row["label"]))
+    return summary
+
+
+def _close_mask(mask: np.ndarray, kernel_px: int) -> np.ndarray:
+    out = np.asarray(mask, dtype=bool).copy()
+    if not np.any(out):
+        return out
+    k = _ensure_odd(max(1, int(kernel_px)))
+    if k <= 1:
+        return out
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    return cv2.morphologyEx(out.astype(np.uint8), cv2.MORPH_CLOSE, kernel, iterations=1).astype(bool)
+
+
+def _grid_majority_labels(
+    point_labels: np.ndarray,
+    cell_point_indices: Dict[Tuple[int, int], np.ndarray],
+    shape_hw: Tuple[int, int],
+) -> Tuple[np.ndarray, Dict[int, int]]:
+    grid_labels = np.zeros(shape_hw, dtype=np.int32)
+    ambiguity = {"mixed_cells": 0, "empty_cells": 0}
+    labels = np.asarray(point_labels, dtype=np.int32)
+
+    for (y, x), idx in cell_point_indices.items():
+        if idx.size == 0:
+            ambiguity["empty_cells"] += 1
+            continue
+        cell_labels = labels[np.asarray(idx, dtype=np.int32)]
+        cell_labels = cell_labels[cell_labels > 0]
+        if cell_labels.size == 0:
+            continue
+        uniq, counts = np.unique(cell_labels, return_counts=True)
+        if uniq.size > 1:
+            ambiguity["mixed_cells"] += 1
+        best = np.flatnonzero(counts == np.max(counts))
+        chosen = int(uniq[int(best[0])])
+        grid_labels[int(y), int(x)] = chosen
+
+    return grid_labels, ambiguity
+
+
+def _densify_grid_labels(
+    grid_labels_sparse: np.ndarray,
+    support_mask: np.ndarray,
+) -> Tuple[np.ndarray, Dict[str, int]]:
+    sparse = np.asarray(grid_labels_sparse, dtype=np.int32)
+    support = np.asarray(support_mask, dtype=bool)
+    dense = np.zeros_like(sparse, dtype=np.int32)
+
+    seed_mask = (sparse > 0) & support
+    num_seeded = int(np.count_nonzero(seed_mask))
+    if num_seeded == 0:
+        return dense, {"seeded_cells": 0, "propagated_cells": 0}
+
+    dense[seed_mask] = sparse[seed_mask]
+    target_y, target_x = np.nonzero(support & ~seed_mask)
+    if target_y.size == 0:
+        return dense, {"seeded_cells": num_seeded, "propagated_cells": 0}
+
+    seed_y, seed_x = np.nonzero(seed_mask)
+    seed_labels = sparse[seed_y, seed_x].astype(np.int32)
+    seed_coords = np.column_stack([seed_y, seed_x]).astype(np.float64)
+    query_coords = np.column_stack([target_y, target_x]).astype(np.float64)
+
+    if cKDTree is not None:
+        tree = cKDTree(seed_coords)
+        _, nn = tree.query(query_coords, k=1)
+        nn = np.asarray(nn, dtype=np.int32).reshape(-1)
+    else:
+        nn = np.empty((query_coords.shape[0],), dtype=np.int32)
+        for i, q in enumerate(query_coords):
+            d2 = np.sum((seed_coords - q[None, :]) ** 2, axis=1)
+            nn[i] = int(np.argmin(d2))
+
+    dense[target_y, target_x] = seed_labels[nn]
+    return dense, {
+        "seeded_cells": num_seeded,
+        "propagated_cells": int(target_y.size),
+    }
+
+
+def _grid_mask_to_heightfield_mesh(
+    H: np.ndarray,
+    cell_mask: np.ndarray,
+    min_xy: np.ndarray,
+    grid_m: float,
+) -> o3d.geometry.TriangleMesh | None:
+    mask = np.asarray(cell_mask, dtype=bool)
+    if not np.any(mask):
+        return None
+
+    ys, xs = np.nonzero(mask)
+    if ys.size < 3:
+        return None
+
+    y0 = int(np.min(ys))
+    y1 = int(np.max(ys))
+    x0 = int(np.min(xs))
+    x1 = int(np.max(xs))
+
+    vertex_map = -np.ones(mask.shape, dtype=np.int32)
+    px = min_xy[0] + (xs.astype(np.float64) + 0.5) * float(grid_m)
+    py = min_xy[1] + (ys.astype(np.float64) + 0.5) * float(grid_m)
+    pz = H[ys, xs].astype(np.float64)
+    vertices = np.column_stack([px, py, pz]).astype(np.float64)
+    vertex_map[ys, xs] = np.arange(vertices.shape[0], dtype=np.int32)
+
+    tris: List[List[int]] = []
+    for y in range(y0, y1):
+        for x in range(x0, x1):
+            v00 = int(vertex_map[y, x])
+            v10 = int(vertex_map[y, x + 1])
+            v01 = int(vertex_map[y + 1, x])
+            v11 = int(vertex_map[y + 1, x + 1])
+            present = [v00 >= 0, v10 >= 0, v01 >= 0, v11 >= 0]
+            n_present = int(sum(present))
+            if n_present < 3:
+                continue
+            if n_present == 4:
+                tris.append([v00, v10, v11])
+                tris.append([v00, v11, v01])
+                continue
+            if not bool(mesh_allow_boundary_triangles):
+                continue
+            if v00 < 0:
+                tris.append([v10, v11, v01])
+            elif v10 < 0:
+                tris.append([v00, v11, v01])
+            elif v01 < 0:
+                tris.append([v00, v10, v11])
+            else:
+                tris.append([v00, v10, v01])
+
+    if len(tris) == 0:
+        return None
+
+    mesh = o3d.geometry.TriangleMesh()
+    mesh.vertices = o3d.utility.Vector3dVector(vertices)
+    mesh.triangles = o3d.utility.Vector3iVector(np.asarray(tris, dtype=np.int32))
+    mesh.remove_degenerate_triangles()
+    mesh.remove_duplicated_triangles()
+    mesh.remove_duplicated_vertices()
+    mesh.remove_unreferenced_vertices()
+    if len(mesh.triangles) == 0 or len(mesh.vertices) == 0:
+        return None
+    mesh.compute_vertex_normals()
+    return mesh
+
+
+def _build_meshes_from_point_labels(
+    point_labels: np.ndarray,
+    H: np.ndarray,
+    min_xy: np.ndarray,
+    grid_m: float,
+    cell_point_indices: Dict[Tuple[int, int], np.ndarray],
+    support_mask: np.ndarray | None = None,
+) -> Tuple[List[o3d.geometry.TriangleMesh], List[Dict[str, float]], Dict[str, int]]:
+    labels = np.asarray(point_labels, dtype=np.int32)
+    unique_labels = np.unique(labels[labels > 0])
+
+    grid_labels_sparse, ambiguity = _grid_majority_labels(labels, cell_point_indices, H.shape)
+    support = np.asarray(support_mask, dtype=bool) if support_mask is not None else np.ones(H.shape, dtype=bool)
+    grid_labels_dense, dense_info = _densify_grid_labels(grid_labels_sparse, support)
+
+    meshes: List[o3d.geometry.TriangleMesh] = []
+    summary: List[Dict[str, float]] = []
+
+    for lab in unique_labels.tolist():
+        lab_i = int(lab)
+        point_count = int(np.count_nonzero(labels == lab_i))
+        sparse_mask = grid_labels_sparse == lab_i
+        sparse_cells = int(np.count_nonzero(sparse_mask))
+        info: Dict[str, float] = {
+            "label": float(lab_i),
+            "point_count": float(point_count),
+            "sparse_cells": float(sparse_cells),
+            "mesh_cells": 0.0,
+            "triangle_count": 0.0,
+            "vertex_count": 0.0,
+            "status": 0.0,
+        }
+        if point_count < int(mesh_min_points) or sparse_cells < int(mesh_min_cells):
+            summary.append(info)
+            continue
+
+        dense_mask = grid_labels_dense == lab_i
+        dense_mask = _close_mask(dense_mask, int(mesh_label_close_px))
+        dense_mask &= support
+        mesh_cells = int(np.count_nonzero(dense_mask))
+        info["mesh_cells"] = float(mesh_cells)
+        if mesh_cells < int(mesh_min_cells):
+            summary.append(info)
+            continue
+
+        mesh = _grid_mask_to_heightfield_mesh(H, dense_mask, min_xy, grid_m)
+        if mesh is None:
+            summary.append(info)
+            continue
+
+        color = _labels_to_colors(np.array([lab_i], dtype=np.int32))[0]
+        mesh.paint_uniform_color(color.tolist())
+        info["triangle_count"] = float(len(mesh.triangles))
+        info["vertex_count"] = float(len(mesh.vertices))
+        info["status"] = 1.0
+        meshes.append(mesh)
+        summary.append(info)
+
+    summary.sort(key=lambda row: int(row["label"]))
+    debug = {
+        "mixed_cells": int(ambiguity.get("mixed_cells", 0)),
+        "empty_cells": int(ambiguity.get("empty_cells", 0)),
+        "seeded_cells": int(dense_info.get("seeded_cells", 0)),
+        "propagated_cells": int(dense_info.get("propagated_cells", 0)),
+    }
+    return meshes, summary, debug
+
+
 def _show_2d_debug(
     H: np.ndarray,
     M: np.ndarray,
@@ -1585,8 +1885,10 @@ def _show_3d_debug(
     peaks_xyz: np.ndarray,
     geodesic_mm: np.ndarray,
     point_labels: np.ndarray | None = None,
+    meshes: List[o3d.geometry.TriangleMesh] | None = None,
     ring_linesets: List[o3d.geometry.LineSet] | None = None,
 ) -> None:
+    focus = str(debug_visual_focus).strip().lower()
     pcd_main = o3d.geometry.PointCloud()
     pcd_main.points = o3d.utility.Vector3dVector(points_xyz.astype(np.float64))
 
@@ -1607,7 +1909,11 @@ def _show_3d_debug(
         base_color = np.tile(np.array([[0.75, 0.75, 0.75]], dtype=np.float64), (points_xyz.shape[0], 1))
         pcd_main.colors = o3d.utility.Vector3dVector(base_color)
 
-    geoms = [pcd_main, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.02)]
+    geoms: List[o3d.geometry.Geometry] = [o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.02)]
+    if focus != "mesh3d" or bool(mesh_show_point_cloud_background) or not meshes:
+        geoms.insert(0, pcd_main)
+    if meshes:
+        geoms.extend(meshes)
 
     if peaks_xyz.shape[0] > 0:
         r_m = _mm_to_m(float(peak_marker_radius_mm))
@@ -1632,7 +1938,12 @@ def _show_3d_debug(
         geoms.append(peak_cloud)
 
     # Adjacent panel: heat-method geodesic distances and contour-like ring curves.
-    if bool(geodesic_enable) and bool(geodesic_show_heat_panel) and geodesic_mm.size == points_xyz.shape[0]:
+    if (
+        focus != "mesh3d"
+        and bool(geodesic_enable)
+        and bool(geodesic_show_heat_panel)
+        and geodesic_mm.size == points_xyz.shape[0]
+    ):
         if points_xyz.shape[0] > 0:
             ext = np.ptp(points_xyz, axis=0)
             side_offset_m = max(float(ext[0]), float(ext[1]), 0.05) + _mm_to_m(geodesic_panel_offset_mm)
@@ -1693,14 +2004,18 @@ def _show_3d_debug(
 
 def run_first_stage_peak_debug(
     input_path,
+    output_dir,
     show_3d=True,
     show_2d=True,
     viz_frame="table",
     pause_ms=0,
+    export_colored=True,
+    export_world_frame=False,
 ) -> Dict[str, object]:
     input_path = Path(input_path).expanduser().resolve()
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
+    output_dir = Path(output_dir).expanduser().resolve()
 
     viz_frame = str(viz_frame).strip().lower()
     if viz_frame not in {"table", "world"}:
@@ -1865,6 +2180,57 @@ def run_first_stage_peak_debug(
             n_lab = int(np.count_nonzero(point_labels_table == int(lab)))
             print(f"    label {int(lab)}: {n_lab} points")
 
+    print("[7] Segmentation quality summary")
+    label_summary = _summarize_point_labels(points_obj_table, point_labels_table, cell_point_indices)
+    if len(label_summary) == 0:
+        print("  No labeled beads available for summary.")
+    else:
+        print("  label | points | cells | max_z_mm | mean_z_mm")
+        for row in label_summary:
+            print(
+                f"  {int(row['label']):5d} | "
+                f"{int(row['point_count']):6d} | "
+                f"{int(row['grid_cells']):5d} | "
+                f"{row['max_height_mm']:8.3f} | "
+                f"{row['mean_height_mm']:9.3f}"
+            )
+
+    print("[8] Height-field mesh reconstruction from heat-labeled support")
+    mesh_geoms_table: List[o3d.geometry.TriangleMesh] = []
+    mesh_summary: List[Dict[str, float]] = []
+    mesh_debug: Dict[str, int] = {}
+    if bool(mesh_enable):
+        mesh_geoms_table, mesh_summary, mesh_debug = _build_meshes_from_point_labels(
+            point_labels_table,
+            H,
+            min_xy,
+            grid_m,
+            cell_point_indices,
+            support_mask=M_watershed,
+        )
+    if len(mesh_summary) == 0:
+        print("  No mesh candidates available.")
+    else:
+        print(
+            "  Height-field grid ownership: "
+            f"mixed_cells={int(mesh_debug.get('mixed_cells', 0))}, "
+            f"empty_cells={int(mesh_debug.get('empty_cells', 0))}, "
+            f"seeded_cells={int(mesh_debug.get('seeded_cells', 0))}, "
+            f"propagated_cells={int(mesh_debug.get('propagated_cells', 0))}"
+        )
+        print("  label | points | sparse_cells | mesh_cells | verts | tris | status")
+        for row in mesh_summary:
+            status = "ok" if int(row["status"]) == 1 else "skip"
+            print(
+                f"  {int(row['label']):5d} | "
+                f"{int(row['point_count']):6d} | "
+                f"{int(row['sparse_cells']):12d} | "
+                f"{int(row['mesh_cells']):10d} | "
+                f"{int(row['vertex_count']):5d} | "
+                f"{int(row['triangle_count']):4d} | "
+                f"{status}"
+            )
+
     if viz_frame == "world":
         points_viz = _transform_points(points_obj_table, T_world_from_table)
         peaks_viz = _transform_points(peaks_xyz_table, T_world_from_table) if peaks_xyz_table.size else peaks_xyz_table
@@ -1874,6 +2240,14 @@ def run_first_stage_peak_debug(
         peaks_viz = peaks_xyz_table
         geodesic_mm_viz = geodesic_mm_table
     point_labels_viz = point_labels_table
+    mesh_geoms_viz = mesh_geoms_table
+    if viz_frame == "world" and len(mesh_geoms_viz) > 0:
+        mesh_geoms_world: List[o3d.geometry.TriangleMesh] = []
+        for mesh in mesh_geoms_viz:
+            mesh_w = o3d.geometry.TriangleMesh(mesh)
+            mesh_w.transform(T_world_from_table)
+            mesh_geoms_world.append(mesh_w)
+        mesh_geoms_viz = mesh_geoms_world
 
     ring_lines_viz: List[o3d.geometry.LineSet] | None = None
     if show_3d and bool(geodesic_enable) and bool(geodesic_show_rings) and geodesic_by_seed_table.size > 0:
@@ -1888,6 +2262,9 @@ def run_first_stage_peak_debug(
     if focus == "segmentation3d":
         geodesic_mm_viz = np.empty((0,), dtype=np.float64)
         ring_lines_viz = None
+    if focus == "mesh3d":
+        geodesic_mm_viz = np.empty((0,), dtype=np.float64)
+        ring_lines_viz = None
 
     print("[5.4] Heat-geodesic 3D label visualization")
     unique_labels_viz = np.unique(point_labels_viz[point_labels_viz > 0])
@@ -1898,6 +2275,8 @@ def run_first_stage_peak_debug(
         f"background_label_color={tuple(float(v) for v in label_background_color)}, "
         "deterministic_mapping=True"
     )
+    if focus == "mesh3d":
+        print(f"  3D meshes: count={len(mesh_geoms_viz)}, point_background={bool(mesh_show_point_cloud_background)}")
 
     if top_height_xyz_table.shape[0] > 0:
         print(f"[6] Top {top_height_xyz_table.shape[0]} highest height-map points (table frame)")
@@ -1925,8 +2304,32 @@ def run_first_stage_peak_debug(
             peaks_viz,
             geodesic_mm_viz,
             point_labels=point_labels_viz,
+            meshes=mesh_geoms_viz,
             ring_linesets=ring_lines_viz,
         )
+
+    export_info_table: Dict[str, object] | None = None
+    export_info_world: Dict[str, object] | None = None
+    if bool(export_colored):
+        print("[6] Export colored segmented point cloud")
+        table_path = output_dir / "segmented_beads_colored_table.ply"
+        export_info_table = _export_colored_point_cloud(points_obj_table, point_labels_table, table_path)
+        print(
+            "  Exported table frame: "
+            f"path={export_info_table['output_path']}, "
+            f"points={int(export_info_table['num_points'])}, "
+            f"labels={int(export_info_table['num_labels'])}"
+        )
+        if bool(export_world_frame):
+            world_points = _transform_points(points_obj_table, T_world_from_table)
+            world_path = output_dir / "segmented_beads_colored_world.ply"
+            export_info_world = _export_colored_point_cloud(world_points, point_labels_table, world_path)
+            print(
+                "  Exported world frame: "
+                f"path={export_info_world['output_path']}, "
+                f"points={int(export_info_world['num_points'])}, "
+                f"labels={int(export_info_world['num_labels'])}"
+            )
 
     try:
         cv2.destroyAllWindows()
@@ -1943,24 +2346,40 @@ def run_first_stage_peak_debug(
         "label_source": "heat",
         "watershed": watershed_info,
         "point_labels_table": point_labels_table.tolist(),
+        "label_summary": label_summary,
+        "mesh_summary": mesh_summary,
+        "mesh_debug": mesh_debug,
         "geodesic": geodesic_info,
         "viz_frame": viz_frame,
         "plane_model_world": plane.tolist(),
         "table_transform": T_table_from_world.tolist(),
         "peaks_xyz_table": peaks_xyz_table.tolist(),
         "top_height_xyz_table": top_height_xyz_table.tolist(),
+        "export_table": export_info_table,
+        "export_world": export_info_world,
     }
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stage-1 debug: visualize point cloud with detected peaks.")
     parser.add_argument("--input", default=default_input_path, help="Input point cloud path (PLY/PCD)")
+    parser.add_argument("--output_dir", default=default_output_dir, help="Output directory for exports")
 
     parser.add_argument("--show_3d", dest="show_3d", action="store_true", default=bool(default_show_3d))
     parser.add_argument("--no_show_3d", dest="show_3d", action="store_false")
 
     parser.add_argument("--show_2d", dest="show_2d", action="store_true", default=bool(default_show_2d))
     parser.add_argument("--no_show_2d", dest="show_2d", action="store_false")
+
+    parser.add_argument("--export_colored", dest="export_colored", action="store_true", default=bool(default_export_colored))
+    parser.add_argument("--no_export_colored", dest="export_colored", action="store_false")
+    parser.add_argument(
+        "--export_world_frame",
+        dest="export_world_frame",
+        action="store_true",
+        default=bool(default_export_world_frame),
+    )
+    parser.add_argument("--no_export_world_frame", dest="export_world_frame", action="store_false")
 
     parser.add_argument("--viz_frame", choices=["table", "world"], default=default_viz_frame)
     parser.add_argument("--pause_ms", type=int, default=int(default_pause_ms))
@@ -2014,24 +2433,33 @@ def main() -> None:
         geodesic_heat_t_coef = max(1e-3, float(args.geodesic_heat_t_coef))
 
         input_path = args.input
+        output_dir = args.output_dir
         show_3d = bool(args.show_3d)
         show_2d = bool(args.show_2d)
         viz_frame = args.viz_frame
         pause_ms = int(args.pause_ms)
+        export_colored = bool(args.export_colored)
+        export_world_frame = bool(args.export_world_frame)
     else:
         input_path = default_input_path
+        output_dir = default_output_dir
         show_3d = bool(default_show_3d)
         show_2d = bool(default_show_2d)
         viz_frame = default_viz_frame
         pause_ms = int(default_pause_ms)
+        export_colored = bool(default_export_colored)
+        export_world_frame = bool(default_export_world_frame)
         print("Using in-script parameters (use_cli_args=False).")
 
     result = run_first_stage_peak_debug(
         input_path=input_path,
+        output_dir=output_dir,
         show_3d=show_3d,
         show_2d=show_2d,
         viz_frame=viz_frame,
         pause_ms=pause_ms,
+        export_colored=export_colored,
+        export_world_frame=export_world_frame,
     )
     print("\nDone.")
     print(f"Peaks detected: {result['num_peaks']}")
