@@ -51,13 +51,12 @@ except Exception:
 # VS Code "Run Python File" mode: keep this False to use only values in this file.
 use_cli_args = False
 
-default_input_path = "~/Downloads/260227_160709/print_scan_021/reconstruct/tsdf_surface_rgb_colored.ply"
+default_input_path = "~/Downloads/260227_160709/print_scan_014/reconstruct/tsdf_surface_rgb_colored.ply"
 default_show_3d = True
 default_show_2d = False
 default_viz_frame = "table"  # "table" or "world"
 default_pause_ms = 0  # 0 -> wait key, >0 -> auto-advance
 debug_visual_focus = "segmentation3d"  # "all", "watershed", or "segmentation3d"
-open3d_random_seed = 7
 
 
 # -----------------------------------------------------------------------------
@@ -69,23 +68,23 @@ downsample_voxel_mm = 0  # <= 0 disables downsampling
 table_ransac_thresh_mm = 1.0
 table_ransac_n = 3
 table_ransac_iters = 2500
-z_min_above_plane_mm = 1.55
+z_min_above_plane_mm = 1.7
 
 # Height map / mask / peak detection
 grid_mm = 0.10
 height_percentile = 99.0
-gaussian_sigma_px = 0.2
-mask_percentile = 50.0
+gaussian_sigma_px = 0.3
+mask_percentile = 40.0
 morph_kernel_px = 1
 watershed_mask_kernel_px = 5
 peak_detection_mode = "height"  # "height" or "dt"
 peak_height_support_percentile = 45.0
 peak_min_height_mm = 1.0
-min_peak_distance_mm = 4
+min_peak_distance_mm = 3
 peak_strength_fraction = 0.10
 peak_min_dt_mm = 0.10
 peak_keep_percentile = 0.0  # keep only top DT peaks by value
-max_num_peaks = 1400
+max_num_peaks = 1800
 
 # 3D peak marker display
 peak_marker_radius_mm = 1.6
@@ -213,9 +212,6 @@ def _load_points(input_path: Path) -> np.ndarray:
 
 
 def _fit_table_frame(points_world: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    if hasattr(o3d.utility, "random") and hasattr(o3d.utility.random, "seed"):
-        o3d.utility.random.seed(int(open3d_random_seed))
-
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points_world)
 
@@ -1779,14 +1775,68 @@ def run_first_stage_peak_debug(
             "  Peak marker warning: "
             f"ignored {int(marker_info['num_duplicates_ignored'])} duplicate peaks mapping to same cell."
         )
+    print("[5.2] Marker-controlled watershed on height energy (-H)")
     watershed_labels: np.ndarray | None = None
     watershed_info: Dict[str, float | str] = {
-        "status": "not_used",
+        "status": "not_run",
         "energy_mode": "height",
         "num_labels_excluding_zero": 0.0,
         "num_labeled_cells": 0.0,
         "num_unlabeled_inside_mask": float(np.count_nonzero(M_watershed)),
     }
+    try:
+        watershed_energy = -H.astype(np.float32)
+        watershed_labels = _watershed_labels(watershed_energy, M_watershed, peak_markers)
+        labels_nonzero = np.unique(watershed_labels[watershed_labels > 0])
+        num_labels = int(labels_nonzero.size)
+        num_labeled_cells = int(np.count_nonzero(watershed_labels > 0))
+        num_unlabeled_inside = int(np.count_nonzero(M_watershed & (watershed_labels == 0)))
+        print(
+            "  Watershed stats: "
+            f"energy=height, "
+            f"labels={num_labels}, "
+            f"labeled_cells={num_labeled_cells}, "
+            f"unlabeled_inside_mask={num_unlabeled_inside}"
+        )
+        watershed_info = {
+            "status": "ok",
+            "energy_mode": "height",
+            "num_labels_excluding_zero": float(num_labels),
+            "num_labeled_cells": float(num_labeled_cells),
+            "num_unlabeled_inside_mask": float(num_unlabeled_inside),
+        }
+    except Exception as e:
+        print(f"  Watershed skipped: {e}")
+        watershed_info = {
+            "status": "skipped",
+            "energy_mode": "height",
+            "reason": str(e),
+            "num_labels_excluding_zero": 0.0,
+            "num_labeled_cells": 0.0,
+            "num_unlabeled_inside_mask": float(np.count_nonzero(M_watershed)),
+        }
+    print("[5.3] Lift watershed labels back to 3D points")
+    point_labels_table = np.zeros((points_obj_table.shape[0],), dtype=np.int32)
+    if watershed_labels is not None:
+        point_labels_table = _grid_labels_to_point_labels(
+            point_count=int(points_obj_table.shape[0]),
+            cell_point_indices=cell_point_indices,
+            grid_labels=watershed_labels,
+        )
+    labeled_points = int(np.count_nonzero(point_labels_table > 0))
+    unlabeled_points = int(point_labels_table.shape[0] - labeled_points)
+    unique_point_labels = np.unique(point_labels_table[point_labels_table > 0])
+    print(
+        "  Point labels: "
+        f"array_len={point_labels_table.shape[0]}, "
+        f"labeled_points={labeled_points}, "
+        f"unlabeled_points={unlabeled_points}, "
+        f"unique_labels={unique_point_labels.tolist() if unique_point_labels.size > 0 else []}"
+    )
+    if unique_point_labels.size > 0:
+        for lab in unique_point_labels:
+            n_lab = int(np.count_nonzero(point_labels_table == int(lab)))
+            print(f"    label {int(lab)}: {n_lab} points")
     peaks_xyz_grid = _peaks_to_xyz(peaks_yx, H, min_xy, grid_m)
     peaks_xyz_table, anchor_info = _anchor_peaks_to_points(peaks_xyz_grid, points_obj_table)
 
@@ -1845,26 +1895,6 @@ def run_first_stage_peak_debug(
     if "error" in geodesic_info:
         print(f"  Heat error: {geodesic_info['error']}")
 
-    print("[5.6] Heat-geodesic labels on 3D points")
-    point_labels_table = np.zeros((points_obj_table.shape[0],), dtype=np.int32)
-    if geodesic_owner_table.shape[0] == points_obj_table.shape[0]:
-        good_owner = geodesic_owner_table >= 0
-        point_labels_table[good_owner] = geodesic_owner_table[good_owner] + 1
-    labeled_points = int(np.count_nonzero(point_labels_table > 0))
-    unlabeled_points = int(point_labels_table.shape[0] - labeled_points)
-    unique_point_labels = np.unique(point_labels_table[point_labels_table > 0])
-    print(
-        "  Heat labels: "
-        f"array_len={point_labels_table.shape[0]}, "
-        f"labeled_points={labeled_points}, "
-        f"unlabeled_points={unlabeled_points}, "
-        f"unique_labels={unique_point_labels.tolist() if unique_point_labels.size > 0 else []}"
-    )
-    if unique_point_labels.size > 0:
-        for lab in unique_point_labels:
-            n_lab = int(np.count_nonzero(point_labels_table == int(lab)))
-            print(f"    label {int(lab)}: {n_lab} points")
-
     if viz_frame == "world":
         points_viz = _transform_points(points_obj_table, T_world_from_table)
         peaks_viz = _transform_points(peaks_xyz_table, T_world_from_table) if peaks_xyz_table.size else peaks_xyz_table
@@ -1889,11 +1919,10 @@ def run_first_stage_peak_debug(
         geodesic_mm_viz = np.empty((0,), dtype=np.float64)
         ring_lines_viz = None
 
-    print("[5.4] Heat-geodesic 3D label visualization")
+    print("[5.4] 3D label visualization")
     unique_labels_viz = np.unique(point_labels_viz[point_labels_viz > 0])
     print(
         "  3D colors: "
-        "label_source=heat, "
         f"visualized_labels={int(unique_labels_viz.size)}, "
         f"background_label_color={tuple(float(v) for v in label_background_color)}, "
         "deterministic_mapping=True"
@@ -1940,7 +1969,6 @@ def run_first_stage_peak_debug(
         "num_peaks": int(peaks_xyz_table.shape[0]),
         "peak_filtering": peak_info,
         "peak_anchoring": anchor_info,
-        "label_source": "heat",
         "watershed": watershed_info,
         "point_labels_table": point_labels_table.tolist(),
         "geodesic": geodesic_info,
@@ -1982,17 +2010,12 @@ def _parse_args() -> argparse.Namespace:
 def _print_runtime_context() -> None:
     conda_env = os.environ.get("CONDA_DEFAULT_ENV", "")
     conda_prefix = os.environ.get("CONDA_PREFIX", "")
-    seed_str = str(int(open3d_random_seed))
     print(
         "Runtime: "
         f"python={sys.executable}, "
         f"conda_env={conda_env or '<unset>'}, "
-        f"conda_prefix={conda_prefix or '<unset>'}, "
-        f"open3d_seed={seed_str}"
+        f"conda_prefix={conda_prefix or '<unset>'}"
     )
-
-    if hasattr(o3d.utility, "random") and hasattr(o3d.utility.random, "seed"):
-        o3d.utility.random.seed(int(open3d_random_seed))
 
 
 def main() -> None:
