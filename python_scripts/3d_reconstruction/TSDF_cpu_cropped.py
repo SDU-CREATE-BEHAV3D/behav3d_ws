@@ -34,31 +34,99 @@ from utils.extrinsics import load_extrinsics
 from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
-DEFAULT_SESSION_PATH = "/home/lab/behav3d_ws/captures/260219_142101"
-DEFAULT_SCAN_FOLDER = "scan_fib_simple"
+DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/post_process"
+DEFAULT_SCAN_FOLDER = "print_scan_014"
 DEFAULT_RECONSTRUCT_FOLDER = "reconstruct"
+DEFAULT_COLOR_IN_DEPTH_FOLDER = "color_in_depth"
 
 SESSION_PATH = DEFAULT_SESSION_PATH
 scan_folder = DEFAULT_SCAN_FOLDER
 
 
+def _expand_path(path_value):
+    return Path(path_value).expanduser().resolve()
+
+
+def _resolve_session_inputs(session_path, scan_folder_name):
+    session_hint = _expand_path(session_path)
+
+    # Allow passing either the session root or a direct scan folder path.
+    if (session_hint / "manifest.yaml").exists() and session_hint.name.startswith("print_scan_"):
+        return session_hint.parent, session_hint.name
+
+    return session_hint, scan_folder_name
+
+
+def _first_existing_path(candidates):
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _resolve_reconstruct_dir_from_hint(path_hint, scan_folder_name):
+    hint = _expand_path(path_hint)
+    candidates = []
+
+    if hint.name == DEFAULT_COLOR_IN_DEPTH_FOLDER:
+        candidates.append(hint.parent)
+    if hint.name == DEFAULT_RECONSTRUCT_FOLDER:
+        candidates.append(hint)
+
+    candidates.extend([
+        hint / DEFAULT_RECONSTRUCT_FOLDER,
+        hint / scan_folder_name / DEFAULT_RECONSTRUCT_FOLDER,
+    ])
+
+    existing = _first_existing_path(candidates)
+    if existing is not None:
+        return existing
+    return candidates[0]
+
+
+def _resolve_c2d_dir_from_hint(path_hint, scan_folder_name, reconstruct_dir):
+    hint = _expand_path(path_hint)
+    candidates = []
+
+    if hint.name == DEFAULT_COLOR_IN_DEPTH_FOLDER:
+        candidates.append(hint)
+    if hint.name == DEFAULT_RECONSTRUCT_FOLDER:
+        candidates.append(hint / DEFAULT_COLOR_IN_DEPTH_FOLDER)
+
+    candidates.extend([
+        hint / DEFAULT_COLOR_IN_DEPTH_FOLDER,
+        hint / DEFAULT_RECONSTRUCT_FOLDER / DEFAULT_COLOR_IN_DEPTH_FOLDER,
+        hint / scan_folder_name / DEFAULT_RECONSTRUCT_FOLDER / DEFAULT_COLOR_IN_DEPTH_FOLDER,
+        reconstruct_dir / DEFAULT_COLOR_IN_DEPTH_FOLDER,
+    ])
+
+    existing = _first_existing_path(candidates)
+    if existing is not None:
+        return existing
+    return candidates[0]
+
+
 def _resolve_reconstruct_paths(session_path, scan_folder_name,
                                reconstruct_dir_override=None, c2d_dir_override=None):
-    reconstruct_dir = (
-        Path(reconstruct_dir_override)
-        if reconstruct_dir_override
-        else (Path(session_path) / scan_folder_name / DEFAULT_RECONSTRUCT_FOLDER)
-    )
-    c2d_dir = (
-        Path(c2d_dir_override)
-        if c2d_dir_override
-        else (reconstruct_dir / "color_in_depth")
-    )
+    session_root, resolved_scan_folder = _resolve_session_inputs(session_path, scan_folder_name)
+
+    if reconstruct_dir_override:
+        reconstruct_dir = _resolve_reconstruct_dir_from_hint(reconstruct_dir_override, resolved_scan_folder)
+    elif c2d_dir_override:
+        reconstruct_dir = _resolve_reconstruct_dir_from_hint(c2d_dir_override, resolved_scan_folder)
+    else:
+        reconstruct_dir = session_root / resolved_scan_folder / DEFAULT_RECONSTRUCT_FOLDER
+
+    if c2d_dir_override:
+        c2d_dir = _resolve_c2d_dir_from_hint(c2d_dir_override, resolved_scan_folder, reconstruct_dir)
+    else:
+        c2d_dir = reconstruct_dir / DEFAULT_COLOR_IN_DEPTH_FOLDER
+
     table_plane_file = reconstruct_dir / "table_plane.json"
-    return reconstruct_dir, c2d_dir, table_plane_file
+    return session_root, resolved_scan_folder, reconstruct_dir, c2d_dir, table_plane_file
 
 
-output_folder, C2D_DIR, TABLE_PLANE_FILE = _resolve_reconstruct_paths(SESSION_PATH, scan_folder)
+SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE = _resolve_reconstruct_paths(SESSION_PATH, scan_folder)
 C2D_GLOB = "color_in_depth*.png"
 
 # Optional post-processing on color_in_depth images before colorization.
@@ -759,11 +827,11 @@ def run(session_path=None,
     global C2D_CENTER_CROP_ENABLE, C2D_CENTER_CROP_WIDTH, C2D_CENTER_CROP_HEIGHT, C2D_CENTER_CROP_APPLY_TO_DEPTH
     global C2D_ERODE_ENABLE, C2D_ERODE_KERNEL_SIZE, C2D_ERODE_ITERATIONS, C2D_ERODE_SHAPE
 
-    SESSION_PATH = session_path or DEFAULT_SESSION_PATH
-    scan_folder = scan_folder_override or DEFAULT_SCAN_FOLDER
-    output_folder, C2D_DIR, TABLE_PLANE_FILE = _resolve_reconstruct_paths(
-        SESSION_PATH,
-        scan_folder,
+    session_input = session_path or DEFAULT_SESSION_PATH
+    scan_input = scan_folder_override or DEFAULT_SCAN_FOLDER
+    SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE = _resolve_reconstruct_paths(
+        session_input,
+        scan_input,
         reconstruct_dir_override=reconstruct_dir_override,
         c2d_dir_override=c2d_dir_override
     )
@@ -788,10 +856,10 @@ def run(session_path=None,
 
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    print(f"Session path: {SESSION_PATH}")
-    print(f"Scan folder: {scan_folder}")
-    print(f"Reconstruct folder: {output_folder}")
-    print(f"Color-in-depth folder: {C2D_DIR}")
+    print(f"Resolved session path: {SESSION_PATH}")
+    print(f"Resolved scan folder: {scan_folder}")
+    print(f"Resolved reconstruct folder: {output_folder}")
+    print(f"Resolved color-in-depth folder: {C2D_DIR}")
     print(
         "Color-in-depth center crop: "
         f"{C2D_CENTER_CROP_ENABLE} (crop_w={C2D_CENTER_CROP_WIDTH}, crop_h={C2D_CENTER_CROP_HEIGHT}, "
@@ -930,18 +998,26 @@ def run(session_path=None,
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="TSDF reconstruction (reads color_in_depth from reconstruct folder)")
-    parser.add_argument("--session-path", default=DEFAULT_SESSION_PATH)
-    parser.add_argument("--scan-folder", default=DEFAULT_SCAN_FOLDER)
+    parser = argparse.ArgumentParser(description="TSDF reconstruction with flexible color_in_depth path resolution")
+    parser.add_argument(
+        "--session-path",
+        default=DEFAULT_SESSION_PATH,
+        help="Session root or direct scan folder path. Default points to the desktop post_process dataset."
+    )
+    parser.add_argument(
+        "--scan-folder",
+        default=DEFAULT_SCAN_FOLDER,
+        help="Scan folder name when --session-path points to the dataset root."
+    )
     parser.add_argument(
         "--reconstruct-dir",
         default=None,
-        help="Override reconstruct folder (default: <session>/<scan>/reconstruct)"
+        help="Override reconstruct path. Accepts a reconstruct folder, a scan folder, or a root containing scan folders."
     )
     parser.add_argument(
         "--color-in-depth-dir",
         default=None,
-        help="Override color_in_depth folder (default: <reconstruct>/color_in_depth)"
+        help="Override color_in_depth path. Accepts a color_in_depth folder, a reconstruct folder, a scan folder, or a root containing scan folders."
     )
     parser.add_argument(
         "--c2d-center-crop",
