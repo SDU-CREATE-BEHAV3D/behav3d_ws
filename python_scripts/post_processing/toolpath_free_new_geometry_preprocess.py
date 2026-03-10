@@ -21,11 +21,14 @@ Steps implemented here:
 - Optionally visualize the kept mesh
 - Visualize the final kept mesh by itself
 - Save the final kept mesh
+- Build a combined colored mesh from the previous mesh plus the extracted new mesh
+- Save the combined mesh under a different name
 """
 
 from __future__ import annotations
 
 import argparse
+import colorsys
 from pathlib import Path
 
 import numpy as np
@@ -36,14 +39,16 @@ import open3d as o3d
 # In-script parameters
 # -----------------------------------------------------------------------------
 
-default_prev_mesh_path = "~/Downloads/260227_160709/print_scan_014/reconstruct/new_geometry_mesh_kept.stl"
-default_curr_mesh_path = "~/Downloads/260227_160709/print_scan_021/reconstruct/tsdf_surface_mesh.stl"
+default_prev_mesh_path = "~/Downloads/260227_160709/print_scan_028/reconstruct/previous_plus_new_geometry.stl"
+default_curr_mesh_path = "~/Downloads/260227_160709/print_scan_035/reconstruct/tsdf_surface_mesh.stl"
 show_debug_vis = True
 sample_point_count_prev = 100000
 sample_point_count_curr = 100000
-new_geom_dist_thresh_mm = 1.50
+new_geom_dist_thresh_mm = 1.5
 mesh_keep_dist_mm = 1.0
 default_output_mesh_path = ""
+default_output_combined_mesh_path = ""
+combined_mesh_color_seed = 17
 
 # Visualization colors for inspection.
 prev_mesh_color = (0.65, 0.65, 0.65)
@@ -70,6 +75,12 @@ def _resolve_output_mesh_path(curr_mesh_path: Path, output_mesh_path_str: str | 
     if output_mesh_path_str is not None and str(output_mesh_path_str).strip():
         return Path(output_mesh_path_str).expanduser().resolve()
     return curr_mesh_path.parent / "new_geometry_mesh_kept.stl"
+
+
+def _resolve_combined_output_mesh_path(curr_mesh_path: Path, output_mesh_path_str: str | None) -> Path:
+    if output_mesh_path_str is not None and str(output_mesh_path_str).strip():
+        return Path(output_mesh_path_str).expanduser().resolve()
+    return curr_mesh_path.parent / "previous_plus_new_geometry.stl"
 
 
 def _load_mesh(mesh_path: Path) -> o3d.geometry.TriangleMesh:
@@ -337,20 +348,110 @@ def _show_final_mesh(kept_mesh: o3d.geometry.TriangleMesh) -> None:
     )
 
 
-def _save_mesh(mesh: o3d.geometry.TriangleMesh, output_path: Path) -> None:
+def _seeded_mesh_colors(num_colors: int, seed: int) -> list[list[float]]:
+    rng = np.random.default_rng(int(seed))
+    hue0 = float(rng.uniform(0.0, 1.0))
+    colors: list[list[float]] = []
+    for idx in range(max(0, int(num_colors))):
+        hue = (hue0 + (idx / max(1, num_colors))) % 1.0
+        sat = float(rng.uniform(0.55, 0.80))
+        val = float(rng.uniform(0.80, 0.95))
+        rgb = colorsys.hsv_to_rgb(hue, sat, val)
+        colors.append([float(rgb[0]), float(rgb[1]), float(rgb[2])])
+    return colors
+
+
+def _paint_mesh_copy(mesh: o3d.geometry.TriangleMesh, color: list[float]) -> o3d.geometry.TriangleMesh:
+    mesh_out = o3d.geometry.TriangleMesh(mesh)
+    mesh_out.paint_uniform_color(color)
+    if len(mesh_out.vertices) > 0 and len(mesh_out.triangles) > 0:
+        mesh_out.compute_vertex_normals()
+    return mesh_out
+
+
+def _combine_meshes(meshes: list[o3d.geometry.TriangleMesh]) -> o3d.geometry.TriangleMesh:
+    verts_all: list[np.ndarray] = []
+    tris_all: list[np.ndarray] = []
+    colors_all: list[np.ndarray] = []
+    vert_offset = 0
+
+    for mesh in meshes:
+        verts = np.asarray(mesh.vertices, dtype=np.float64)
+        tris = np.asarray(mesh.triangles, dtype=np.int32)
+        if verts.shape[0] == 0 or tris.shape[0] == 0:
+            continue
+
+        if len(mesh.vertex_colors) == len(mesh.vertices):
+            vcols = np.asarray(mesh.vertex_colors, dtype=np.float64)
+        else:
+            vcols = np.full((verts.shape[0], 3), 0.7, dtype=np.float64)
+
+        verts_all.append(verts)
+        tris_all.append(tris + vert_offset)
+        colors_all.append(vcols)
+        vert_offset += verts.shape[0]
+
+    if len(verts_all) == 0:
+        return o3d.geometry.TriangleMesh()
+
+    mesh_combined = o3d.geometry.TriangleMesh()
+    mesh_combined.vertices = o3d.utility.Vector3dVector(np.vstack(verts_all))
+    mesh_combined.triangles = o3d.utility.Vector3iVector(np.vstack(tris_all))
+    mesh_combined.vertex_colors = o3d.utility.Vector3dVector(np.vstack(colors_all))
+    mesh_combined.compute_vertex_normals()
+    return mesh_combined
+
+
+def _build_combined_colored_mesh(
+    prev_mesh: o3d.geometry.TriangleMesh,
+    kept_mesh: o3d.geometry.TriangleMesh,
+    seed: int,
+) -> tuple[o3d.geometry.TriangleMesh, list[list[float]]]:
+    colors = _seeded_mesh_colors(2, seed)
+    prev_colored = _paint_mesh_copy(prev_mesh, colors[0])
+    kept_colored = _paint_mesh_copy(kept_mesh, colors[1])
+    return _combine_meshes([prev_colored, kept_colored]), colors
+
+
+def _print_combined_mesh_stats(
+    combined_mesh: o3d.geometry.TriangleMesh,
+    colors: list[list[float]],
+    seed: int,
+) -> None:
+    print("Step 7: Build combined colored mesh from previous + new extracted mesh")
+    print(f"  combined_mesh_color_seed: {int(seed)}")
+    if len(colors) >= 2:
+        print(f"  prev_component_color_rgb: [{colors[0][0]:.3f}, {colors[0][1]:.3f}, {colors[0][2]:.3f}]")
+        print(f"  new_component_color_rgb: [{colors[1][0]:.3f}, {colors[1][1]:.3f}, {colors[1][2]:.3f}]")
+    print(f"  combined_vertices: {len(combined_mesh.vertices)}")
+    print(f"  combined_triangles: {len(combined_mesh.triangles)}")
+
+
+def _show_combined_colored_mesh(combined_mesh: o3d.geometry.TriangleMesh) -> None:
+    combined_mesh_viz = o3d.geometry.TriangleMesh(combined_mesh)
+    o3d.visualization.draw_geometries(
+        [combined_mesh_viz],
+        window_name="Step 7: Combined previous + new colored mesh",
+        mesh_show_back_face=True,
+    )
+
+
+def _save_mesh(mesh: o3d.geometry.TriangleMesh, output_path: Path, label: str) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     success = o3d.io.write_triangle_mesh(str(output_path), mesh)
     if not success:
         raise RuntimeError(f"Failed to save mesh: {output_path}")
-    print("Step 6: Saved final kept mesh")
+    print(label)
     print(f"  output_mesh_path: {output_path}")
     print(f"  saved_vertices: {len(mesh.vertices)}")
     print(f"  saved_triangles: {len(mesh.triangles)}")
+    if output_path.suffix.lower() == ".stl" and len(mesh.vertex_colors) == len(mesh.vertices):
+        print("  note: STL export does not preserve mesh colors; seeded colors are visualization-only.")
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Step 6 loader, sampled-point, NN-distance, threshold, mesh-guided extraction, final mesh viewer, and mesh export for consecutive TSDF meshes."
+        description="Step 7 loader, sampled-point, NN-distance, threshold, mesh-guided extraction, final mesh viewer, and combined mesh export for consecutive TSDF meshes."
     )
     parser.add_argument(
         "--prev_mesh",
@@ -376,6 +477,12 @@ def _parse_args() -> argparse.Namespace:
         default=default_output_mesh_path,
         help="Output mesh path for the final kept mesh. Defaults next to the current mesh.",
     )
+    parser.add_argument(
+        "--output_combined_mesh",
+        type=str,
+        default=default_output_combined_mesh_path,
+        help="Output mesh path for the combined mesh. Defaults next to the current mesh as STL.",
+    )
     return parser.parse_args()
 
 
@@ -385,6 +492,7 @@ def main() -> None:
     prev_mesh_path = _resolve_mesh_path(args.prev_mesh, default_prev_mesh_path, "--prev_mesh")
     curr_mesh_path = _resolve_mesh_path(args.curr_mesh, default_curr_mesh_path, "--curr_mesh")
     output_mesh_path = _resolve_output_mesh_path(curr_mesh_path, args.output_mesh)
+    output_combined_mesh_path = _resolve_combined_output_mesh_path(curr_mesh_path, args.output_combined_mesh)
 
     print("Step 1: Load and verify previous/current TSDF meshes")
     print(f"  prev_mesh_path: {prev_mesh_path}")
@@ -415,6 +523,8 @@ def main() -> None:
 
     kept_mesh, keep_tri_mask = _extract_mesh_near_points(curr_mesh, points_new, mesh_keep_dist_mm)
     _print_kept_mesh_stats(curr_mesh, kept_mesh, keep_tri_mask, mesh_keep_dist_mm)
+    combined_mesh, combined_colors = _build_combined_colored_mesh(prev_mesh, kept_mesh, combined_mesh_color_seed)
+    _print_combined_mesh_stats(combined_mesh, combined_colors, combined_mesh_color_seed)
 
     if args.show:
         print("Opening mesh viewer...")
@@ -429,10 +539,13 @@ def main() -> None:
         _show_kept_mesh_debug(prev_mesh, curr_mesh, kept_mesh, points_new)
         print("Opening final kept-mesh viewer...")
         _show_final_mesh(kept_mesh)
+        print("Opening combined colored mesh viewer...")
+        _show_combined_colored_mesh(combined_mesh)
     else:
-        print("Visualization skipped. Use --show to inspect mesh, sampled-cloud, NN-distance, threshold, and kept-mesh alignment.")
+        print("Visualization skipped. Use --show to inspect mesh, sampled-cloud, NN-distance, threshold, kept-mesh, and combined-mesh alignment.")
 
-    _save_mesh(kept_mesh, output_mesh_path)
+    _save_mesh(kept_mesh, output_mesh_path, "Step 6: Saved final kept mesh")
+    _save_mesh(combined_mesh, output_combined_mesh_path, "Step 7: Saved combined mesh")
 
 
 if __name__ == "__main__":
