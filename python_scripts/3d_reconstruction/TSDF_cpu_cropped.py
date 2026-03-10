@@ -9,12 +9,14 @@
 # Outputs:
 # - tsdf_surface_rgb_colored.ply
 # - tsdf_surface_confidence_colored.ply
+# - tsdf_surface_mesh.stl
 #
 # Notes:
 # - Confidence here is an observation-count proxy (robust and practical).
 # - Colormap is OpenCV COLORMAP_TURBO (conventional, perceptually strong).
 
 # set src path for utils import
+import os
 import sys
 import json
 import re
@@ -34,8 +36,8 @@ from utils.extrinsics import load_extrinsics
 from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
-DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/post_process"
-DEFAULT_SCAN_FOLDER = "print_scan_014"
+DEFAULT_SESSION_PATH = "~/Downloads/260227_160709"
+DEFAULT_SCAN_FOLDER = "print_scan_028"
 DEFAULT_RECONSTRUCT_FOLDER = "reconstruct"
 DEFAULT_COLOR_IN_DEPTH_FOLDER = "color_in_depth"
 
@@ -137,8 +139,8 @@ C2D_ERODE_ITERATIONS = 3
 C2D_ERODE_SHAPE = "cross"  # "ellipse", "rect", "cross"
 # Optional center crop on color_in_depth images. Outside region is zeroed.
 C2D_CENTER_CROP_ENABLE = True
-C2D_CENTER_CROP_WIDTH = 270   # pixels, None keeps full width
-C2D_CENTER_CROP_HEIGHT = 290  # pixels, None keeps full height
+C2D_CENTER_CROP_WIDTH = 500   # pixels, None keeps full width
+C2D_CENTER_CROP_HEIGHT = 500  # pixels, None keeps full height
 # If True, the same center crop mask is also applied to depth images before TSDF integration.
 C2D_CENTER_CROP_APPLY_TO_DEPTH = True
 # If enabled, only count an observation when the projected color_in_depth pixel is still valid.
@@ -479,10 +481,16 @@ class TSDF_Integration():
         print("TSDF Integration complete.")
         return True
 
-    def extract_tsdf_surface_point_cloud(self):
+    def extract_tsdf_surface_mesh(self):
         mesh = self.vbg.extract_triangle_mesh().to_legacy()
+        if len(mesh.vertices) == 0 or len(mesh.triangles) == 0:
+            raise RuntimeError("Extracted TSDF surface mesh is empty.")
         mesh.compute_vertex_normals()
+        return mesh
 
+
+    @staticmethod
+    def mesh_to_point_cloud(mesh):
         pts = np.asarray(mesh.vertices, dtype=np.float64)
         nrm = np.asarray(mesh.vertex_normals, dtype=np.float64)
 
@@ -883,8 +891,9 @@ def run(session_path=None,
     # 1) TSDF integrate (depth only)
     tsdf_integration.integrate_depths()
 
-    # 2) Extract TSDF surface as point cloud
-    pcd_surface = tsdf_integration.extract_tsdf_surface_point_cloud()
+    # 2) Extract TSDF surface mesh and derive point cloud from its vertices
+    mesh_surface = tsdf_integration.extract_tsdf_surface_mesh()
+    pcd_surface = tsdf_integration.mesh_to_point_cloud(mesh_surface)
 
     # 3) RGB color + confidence (obs count)
     pcd_rgb, conf = tsdf_integration.colorize_tsdf_surface_points(
@@ -988,9 +997,12 @@ def run(session_path=None,
     # 8) Save outputs
     out_rgb = output_folder / "tsdf_surface_rgb_colored.ply"
     out_conf = output_folder / "tsdf_surface_confidence_colored.ply"
+    out_mesh = output_folder / "tsdf_surface_mesh.stl"
     o3d.io.write_point_cloud(str(out_rgb), pcd_rgb)
+    o3d.io.write_triangle_mesh(str(out_mesh), mesh_surface)
     # o3d.io.write_point_cloud(str(out_conf), pcd_conf)
     print("Saved:", out_rgb)
+    print("Saved:", out_mesh)
     # print("Saved:", out_conf)
     return out_rgb
 

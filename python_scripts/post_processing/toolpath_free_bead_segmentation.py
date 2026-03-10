@@ -40,7 +40,7 @@ except Exception:
 # In-script parameters
 # -----------------------------------------------------------------------------
 
-default_input_path = "~/Downloads/260227_160709/print_scan_021/reconstruct/tsdf_surface_rgb_colored.ply"
+default_input_path = "~/Downloads/260227_160709/print_scan_014/reconstruct/tsdf_surface_rgb_colored.ply"
 default_mesh_input_path = ""
 default_show_3d = True
 default_show_2d = False
@@ -58,7 +58,7 @@ downsample_voxel_mm = 0  # <= 0 disables downsampling
 table_ransac_thresh_mm = 1.0
 table_ransac_n = 3
 table_ransac_iters = 2500
-z_min_above_plane_mm = 1.7
+z_min_above_plane_mm = 1.9
 
 # Height map / mask / peak detection
 grid_mm = 0.10
@@ -90,7 +90,7 @@ mesh_enable = True
 mesh_auto_filename = "new_geometry_mesh_kept.stl"
 mesh_vertex_label_max_dist_mm = 1.5
 mesh_min_vertices_per_label = 20
-mesh_min_triangles_per_label = 10
+mesh_min_triangles_per_label = 100
 mesh_show_point_cloud_background = False
 
 
