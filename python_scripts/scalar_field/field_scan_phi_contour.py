@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compute phi mask between field and scan meshes, then extract phi=0 contour in 3D."""
+"""Compute phi mask, extract contours, and select print points on offset contour."""
 
 from __future__ import annotations
 
@@ -10,9 +10,15 @@ import numpy as np
 import open3d as o3d
 
 from lib_scalar.extract_phi_contour import extract_phi_contour
+from lib_scalar.extract_offset_phi_contour import extract_offset_phi_contour
+from lib_scalar.generate_print_points import generate_print_points
 from lib_scalar.geometry import load_triangle_mesh_arrays, load_triangle_mesh_legacy
 from lib_scalar.compute_heat_field import compute_heat_field
-from lib_scalar.compute_phi_mask import evaluate_fixed_pose, make_scan_scene
+from lib_scalar.compute_phi_mask import (
+    evaluate_fixed_pose,
+    make_scan_scene,
+    query_scan_z_with_vertical_rays,
+)
 from lib_scalar.position_field import (
     default_xy_search_bounds,
     make_axis_samples,
@@ -25,11 +31,38 @@ DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 
 
+def write_targets_yaml(
+    out_yaml: Path,
+    points_world: np.ndarray,
+    z_dir: tuple[float, float, float],
+    position_scale: float,
+) -> None:
+    """Write targets YAML with legacy plane-string format."""
+    out_yaml.parent.mkdir(parents=True, exist_ok=True)
+    zx, zy, zz = float(z_dir[0]), float(z_dir[1]), float(z_dir[2])
+    scale = float(position_scale)
+
+    lines: list[str] = ["targets:"]
+    for i in range(points_world.shape[0]):
+        p = points_world[i]
+        ox = scale * float(p[0])
+        oy = scale * float(p[1])
+        oz = scale * float(p[2])
+        plane = f'O({ox:.2f},{oy:.2f},{oz:.2f}) Z({zx:.2f},{zy:.2f},{zz:.2f})'
+        lines.append(f"  - index: {i}")
+        lines.append(f'    plane: "{plane}"')
+
+    out_yaml.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def run(
     field_mesh_path: Path,
     scan_mesh_path: Path,
     out_field_ply: Path | None,
     out_contour_ply: Path | None,
+    out_offset_ply: Path | None,
+    out_print_ply: Path | None,
+    out_targets_yaml: Path | None,
     seed: int | None,
     seed_level: float | None,
     t_coef: float,
@@ -50,6 +83,13 @@ def run(
     base_epsilon: float,
     clearance: float,
     iso_level: float,
+    offset_distance_mm: float,
+    offset_t_coef: float,
+    offset_toward_unprinted: bool,
+    print_count: int,
+    print_min_spacing_mm: float,
+    target_z_dir: tuple[float, float, float],
+    target_position_scale: float,
     axis_size: float,
     visualize: bool,
 ) -> None:
@@ -148,6 +188,44 @@ def run(
     )
     contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
 
+    offset_distance_m = 1e-3 * float(offset_distance_mm)
+    offset_points, offset_lines, _, offset_seed_vertices = extract_offset_phi_contour(
+        vertices=pose.field_vertices_world,
+        faces=field_mesh.faces,
+        phi=pose.phi,
+        iso_level=float(iso_level),
+        offset_distance=offset_distance_m,
+        toward_unprinted=bool(offset_toward_unprinted),
+        t_coef=float(offset_t_coef),
+    )
+    offset_ls = make_line_set(offset_points, offset_lines, color=(1.0, 0.0, 1.0))
+
+    if offset_points.shape[0] > 0:
+        offset_z_scan, offset_has_hit = query_scan_z_with_vertical_rays(scene, offset_points, z_top=z_top)
+        offset_abs_dz = np.full(offset_points.shape[0], np.inf, dtype=np.float64)
+        offset_abs_dz[offset_has_hit] = np.abs(offset_points[offset_has_hit, 2] - offset_z_scan[offset_has_hit])
+        offset_valid_by_z = offset_has_hit & (offset_abs_dz <= offset_distance_m)
+    else:
+        offset_has_hit = np.zeros((0,), dtype=bool)
+        offset_abs_dz = np.zeros((0,), dtype=np.float64)
+        offset_valid_by_z = np.zeros((0,), dtype=bool)
+
+    print_min_spacing_m = 1e-3 * float(print_min_spacing_mm)
+    print_points = generate_print_points(
+        polyline_points=offset_points,
+        polyline_lines=offset_lines,
+        field_vertices_world=pose.field_vertices_world,
+        field_scalar=heat.norm,
+        count=int(print_count),
+        min_spacing=float(print_min_spacing_m),
+        point_valid_mask=offset_valid_by_z,
+    )
+    if print_points.points.shape[0] > 0:
+        print_colors = np.tile(np.array([0.0, 1.0, 0.0], dtype=np.float64), (print_points.points.shape[0], 1))
+        print_pcd = make_point_cloud(print_points.points, print_colors)
+    else:
+        print_pcd = None
+
     print(f"field_mesh: {field_mesh_path}")
     print(f"scan_mesh: {scan_mesh_path}")
     print(f"field_scale: {scale}")
@@ -194,6 +272,50 @@ def run(
         )
     print(f"contour segments: {contour_lines.shape[0]}")
 
+    print(
+        "offset contour config: "
+        f"distance_mm={offset_distance_mm:.3f} "
+        f"distance_m={offset_distance_m:.6f} "
+        f"side={'unprinted(phi>iso)' if offset_toward_unprinted else 'printed(phi<=iso)'} "
+        f"t_coef={float(offset_t_coef):.6f}"
+    )
+    print(f"offset contour seed vertices: {offset_seed_vertices.shape[0]}")
+    print(f"offset contour segments: {offset_lines.shape[0]}")
+    print(
+        "offset contour z-valid: "
+        f"{int(np.count_nonzero(offset_valid_by_z))}/{offset_valid_by_z.shape[0]} "
+        f"(abs(z_point-z_scan) <= {offset_distance_m:.6f} m)"
+    )
+    if offset_abs_dz.shape[0] > 0 and np.any(np.isfinite(offset_abs_dz)):
+        finite_dz = offset_abs_dz[np.isfinite(offset_abs_dz)]
+        print(
+            "offset contour z-distance stats: "
+            f"min={float(np.min(finite_dz)):.6f} max={float(np.max(finite_dz)):.6f}"
+        )
+    print(
+        "print point config: "
+        f"count={int(print_count)} min_spacing_mm={float(print_min_spacing_mm):.3f} "
+        f"min_spacing_m={print_min_spacing_m:.6f}"
+    )
+    print(
+        "print point selection: "
+        f"selected={print_points.points.shape[0]} "
+        f"available_polyline_vertices={print_points.available_vertices}"
+    )
+    if print_points.points.shape[0] > 0:
+        print(
+            "print point scalar stats: "
+            f"min={float(np.min(print_points.scalar_values)):.6f} "
+            f"max={float(np.max(print_points.scalar_values)):.6f}"
+        )
+        for i in range(print_points.points.shape[0]):
+            p = print_points.points[i]
+            s = float(print_points.scalar_values[i])
+            print(
+                f"print_point[{i}]: "
+                f"x={float(p[0]):.6f} y={float(p[1]):.6f} z={float(p[2]):.6f} scalar={s:.6f}"
+            )
+
     if out_field_ply is not None:
         out_field_ply.parent.mkdir(parents=True, exist_ok=True)
         ok = o3d.io.write_point_cloud(str(out_field_ply), field_pcd)
@@ -208,6 +330,33 @@ def run(
             raise RuntimeError(f"Failed to write contour line set: {out_contour_ply}")
         print(f"saved contour lines: {out_contour_ply}")
 
+    if out_offset_ply is not None and offset_lines.shape[0] > 0:
+        out_offset_ply.parent.mkdir(parents=True, exist_ok=True)
+        ok = o3d.io.write_line_set(str(out_offset_ply), offset_ls)
+        if not ok:
+            raise RuntimeError(f"Failed to write offset contour line set: {out_offset_ply}")
+        print(f"saved offset contour lines: {out_offset_ply}")
+
+    if out_print_ply is not None and print_pcd is not None:
+        out_print_ply.parent.mkdir(parents=True, exist_ok=True)
+        ok = o3d.io.write_point_cloud(str(out_print_ply), print_pcd)
+        if not ok:
+            raise RuntimeError(f"Failed to write print points point cloud: {out_print_ply}")
+        print(f"saved print points: {out_print_ply}")
+
+    if out_targets_yaml is not None:
+        write_targets_yaml(
+            out_yaml=out_targets_yaml,
+            points_world=print_points.points,
+            z_dir=target_z_dir,
+            position_scale=float(target_position_scale),
+        )
+        print(
+            "saved targets yaml: "
+            f"{out_targets_yaml} "
+            f"(points={print_points.points.shape[0]}, scale={float(target_position_scale):.2f})"
+        )
+
     if visualize:
         bb_min, bb_max = compute_scene_bounds(pose.field_vertices_world, scan_vertices)
         bb_diag = float(np.linalg.norm(bb_max - bb_min))
@@ -218,6 +367,10 @@ def run(
         geometries = [field_pcd, scan_wire]
         if contour_lines.shape[0] > 0:
             geometries.append(contour_ls)
+        if offset_lines.shape[0] > 0:
+            geometries.append(offset_ls)
+        if print_pcd is not None:
+            geometries.append(print_pcd)
 
         axis_size_val = float(axis_size)
         if axis_size_val == 0.0:
@@ -232,12 +385,16 @@ def run(
             print(f"axis size used: {axis_size_val:.6f} (axis centered at scene bbox center)")
         else:
             print("axis disabled")
+        if offset_lines.shape[0] > 0:
+            print("offset contour shown in magenta")
+        if print_pcd is not None:
+            print("print points shown in green")
         o3d.visualization.draw_geometries(geometries)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Compute phi mask between field and scan meshes, then extract phi=0 contour in 3D."
+        description="Compute phi mask, extract contours, and select print points on offset contour."
     )
     parser.add_argument("--field-mesh", type=Path, default=DEFAULT_FIELD_MESH)
     parser.add_argument("--scan-mesh", type=Path, default=DEFAULT_SCAN_MESH)
@@ -250,6 +407,24 @@ def main() -> None:
         "--out-contour-ply",
         type=Path,
         default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_phi0_contour.ply"),
+    )
+    parser.add_argument(
+        "--out-offset-ply",
+        type=Path,
+        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_phi_offset_12mm.ply"),
+        help="Output line set (.ply) for geodesic offset contour.",
+    )
+    parser.add_argument(
+        "--out-print-ply",
+        type=Path,
+        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_print_points.ply"),
+        help="Output point cloud (.ply) for selected print points.",
+    )
+    parser.add_argument(
+        "--out-targets-yaml",
+        type=Path,
+        default=Path("/home/lab/behav3d_ws/yaml/scalar_field_targets.yaml"),
+        help="Output YAML with legacy targets/plane format.",
     )
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--seed-level", type=float, default=None)
@@ -288,6 +463,59 @@ def main() -> None:
         help="Contour level over phi (default 0 => boundary viable/non-viable).",
     )
     parser.add_argument(
+        "--offset-distance-mm",
+        type=float,
+        default=12.0,
+        help="Geodesic offset distance from phi contour, in millimeters (default 12 mm).",
+    )
+    parser.add_argument(
+        "--offset-t-coef",
+        type=float,
+        default=1.0,
+        help="Heat-method t_coef used for geodesic offset solve.",
+    )
+    parser.add_argument(
+        "--offset-toward-printed",
+        action="store_true",
+        help="Offset toward printed side (phi<=iso). Default is toward unprinted side (phi>iso).",
+    )
+    parser.add_argument(
+        "--print-count",
+        type=int,
+        default=7,
+        help="Number of print points to select from offset polyline (default 7).",
+    )
+    parser.add_argument(
+        "--print-min-spacing-mm",
+        type=float,
+        default=16.0,
+        help="Minimum spacing between selected print points along polyline (default 16 mm).",
+    )
+    parser.add_argument(
+        "--target-zx",
+        type=float,
+        default=0.03,
+        help="Fixed plane Z-direction x component for YAML export.",
+    )
+    parser.add_argument(
+        "--target-zy",
+        type=float,
+        default=-0.01,
+        help="Fixed plane Z-direction y component for YAML export.",
+    )
+    parser.add_argument(
+        "--target-zz",
+        type=float,
+        default=1.00,
+        help="Fixed plane Z-direction z component for YAML export.",
+    )
+    parser.add_argument(
+        "--target-position-scale",
+        type=float,
+        default=1000.0,
+        help="Scale factor applied to XYZ before YAML export (1000 => meters to millimeters).",
+    )
+    parser.add_argument(
         "--axis-size",
         type=float,
         default=0.0,
@@ -301,6 +529,9 @@ def main() -> None:
         scan_mesh_path=args.scan_mesh,
         out_field_ply=args.out_field_ply,
         out_contour_ply=args.out_contour_ply,
+        out_offset_ply=args.out_offset_ply,
+        out_print_ply=args.out_print_ply,
+        out_targets_yaml=args.out_targets_yaml,
         seed=args.seed,
         seed_level=args.seed_level,
         t_coef=args.t_coef,
@@ -321,6 +552,13 @@ def main() -> None:
         base_epsilon=args.base_epsilon,
         clearance=args.clearance,
         iso_level=args.iso_level,
+        offset_distance_mm=args.offset_distance_mm,
+        offset_t_coef=args.offset_t_coef,
+        offset_toward_unprinted=not args.offset_toward_printed,
+        print_count=args.print_count,
+        print_min_spacing_mm=args.print_min_spacing_mm,
+        target_z_dir=(args.target_zx, args.target_zy, args.target_zz),
+        target_position_scale=args.target_position_scale,
         axis_size=args.axis_size,
         visualize=not args.no_vis,
     )

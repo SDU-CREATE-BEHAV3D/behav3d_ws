@@ -5,7 +5,7 @@ Reusable library for the scalar-field pipeline used in `python_scripts/scalar_fi
 The objective is to keep each stage isolated, testable, and reusable from:
 - standalone scripts,
 - future ROS nodes/services,
-- future candidate-selection optimizers.
+- future planning and print-path modules.
 
 ## Pipeline Stages
 
@@ -47,7 +47,20 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Main API:
      - `extract_phi_contour(vertices, faces, scalar, iso=0.0)`
 
-5. `viz.py`
+5. `extract_offset_phi_contour.py`
+   - Builds an offset polyline from the `phi=iso` contour directly on the field mesh.
+   - First it detects seed vertices adjacent to contour-crossing edges.
+   - Then it solves geodesic distance from those seeds over the mesh using `potpourri3d`.
+   - Geodesic distance is signed by side:
+     - unprinted side: `phi > iso`
+     - printed side: `phi <= iso`
+   - The offset polyline is extracted as an iso-curve of this signed geodesic field.
+   - Main APIs:
+     - `contour_seed_vertices_from_phi(...)`
+     - `compute_geodesic_from_phi_contour(...)`
+     - `extract_offset_phi_contour(...)`
+
+6. `viz.py`
    - Converts numeric outputs to Open3D visualization objects.
    - Main APIs:
      - `yellow_to_red_colors(norm_scalar)`
@@ -55,7 +68,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `make_line_set(points, lines, color)`
      - `compute_scene_bounds(...)`
 
-6. `geometry.py`
+7. `geometry.py`
    - Geometry loading and preparation utilities.
    - Ensures triangle meshes are valid and indexing is compact.
    - Main APIs:
@@ -64,16 +77,29 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `compact_triangle_mesh(vertices, faces)`
      - `apply_scale_and_offset(...)`
 
-7. `types.py`
+8. `types.py`
    - Shared dataclasses used as contracts across stages.
    - `MeshData`: compacted mesh arrays + number of dropped vertices.
    - `HeatField`: raw and normalized scalar + summary stats + seed metadata.
    - `PoseResult`: positioned field, phi values, viability mask, ray-hit stats, search stats.
+   - `PrintPointSet`: selected print points and spacing/selection metadata.
+
+9. `generate_print_points.py`
+   - Selects print points from the offset polyline.
+   - For each iteration:
+     - pick the polyline vertex with minimum scalar-field value,
+     - require vertical proximity to scan surface (configured upstream),
+     - suppress nearby polyline vertices within minimum spacing,
+     - repeat until requested count is reached.
+   - Distances are measured along the polyline graph.
+   - Main API:
+     - `generate_print_points(...) -> PrintPointSet`
 
 ## Design Notes
 
 - Field scalar computation and geometric viability are explicitly separated.
 - `position_field` handles local candidate ranking for pose search.
+- Offset generation is geodesic on the mesh, not Euclidean in free space.
 - Full-loop/global objective design remains external to this library.
 
 ## Typical Script-Level Usage
@@ -83,4 +109,6 @@ The objective is to keep each stage isolated, testable, and reusable from:
 3. Position the field (manual offset or `position_field` search).
 4. Compute phi and viable mask.
 5. Extract `phi=0` contour.
-6. Export and visualize.
+6. Extract geodesic offset contour at desired distance (default 12 mm).
+7. Select print points from the offset contour (default 7 points, 16 mm spacing).
+8. Export and visualize.

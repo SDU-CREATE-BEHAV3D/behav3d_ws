@@ -50,3 +50,15 @@ class PoseResult:
     viable_heat: Optional[float] = None
     tested: Optional[int] = None
     accepted: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class PrintPointSet:
+    """Selected print points over polyline and selection metadata."""
+    points: np.ndarray
+    scalar_values: np.ndarray
+    polyline_indices: np.ndarray
+    nearest_field_vertex_indices: np.ndarray
+    requested_count: int
+    min_spacing: float
+    available_vertices: int

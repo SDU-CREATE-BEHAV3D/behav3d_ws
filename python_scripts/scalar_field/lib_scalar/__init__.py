@@ -2,17 +2,24 @@
 """Reusable scalar-field pipeline library."""
 
 from .extract_phi_contour import extract_phi_contour
+from .extract_offset_phi_contour import (
+    compute_geodesic_from_phi_contour,
+    contour_seed_vertices_from_phi,
+    extract_offset_phi_contour,
+)
+from .generate_print_points import generate_print_points
 from .geometry import apply_scale_and_offset, load_triangle_mesh_arrays, load_triangle_mesh_legacy
 from .compute_heat_field import compute_heat_field
 from .compute_phi_mask import compute_phi_mask, evaluate_fixed_pose, make_scan_scene
 from .position_field import default_xy_search_bounds, make_axis_samples, position_field
-from .types import HeatField, MeshData, PoseResult
+from .types import HeatField, MeshData, PoseResult, PrintPointSet
 from .viz import compute_scene_bounds, make_line_set, make_point_cloud, yellow_to_red_colors
 
 __all__ = [
     "MeshData",
     "HeatField",
     "PoseResult",
+    "PrintPointSet",
     "load_triangle_mesh_arrays",
     "load_triangle_mesh_legacy",
     "apply_scale_and_offset",
@@ -20,6 +27,10 @@ __all__ = [
     "make_scan_scene",
     "compute_phi_mask",
     "evaluate_fixed_pose",
+    "contour_seed_vertices_from_phi",
+    "compute_geodesic_from_phi_contour",
+    "extract_offset_phi_contour",
+    "generate_print_points",
     "make_axis_samples",
     "default_xy_search_bounds",
     "position_field",
