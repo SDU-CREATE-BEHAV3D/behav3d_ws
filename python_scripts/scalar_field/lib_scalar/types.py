@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Typed data contracts shared across scalar-field pipeline stages.
+
+These dataclasses make each stage explicit and composable:
+- geometry in,
+- scalar field out,
+- pose/phi evaluation out.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class MeshData:
+    """Prepared triangle-mesh arrays after load/compaction stage."""
+    vertices: np.ndarray
+    faces: np.ndarray
+    dropped_vertices: int = 0
+
+
+@dataclass(frozen=True)
+class HeatField:
+    """Heat scalar output with normalized values and summary statistics."""
+    dist: np.ndarray
+    norm: np.ndarray
+    min_value: float
+    max_value: float
+    mean_value: float
+    seed_info: str
+
+
+@dataclass(frozen=True)
+class PoseResult:
+    """Result of field placement + phi evaluation against scan geometry."""
+    offset_xyz: Tuple[float, float, float]
+    field_vertices_world: np.ndarray
+    z_scan: np.ndarray
+    has_hit: np.ndarray
+    phi: np.ndarray
+    viable: np.ndarray
+    base_dz: np.ndarray
+    base_world_z: float
+    hit_count: int
+    viable_count: int
+    viable_heat: Optional[float] = None
+    tested: Optional[int] = None
+    accepted: Optional[int] = None
