@@ -133,6 +133,12 @@ Test install:
 python3 -c "import pymodbus; print(pymodbus.__version__)"
 ```
 
+### Install Potpourri3D
+
+```bash
+pip install potpourri3d --break-system-packages
+```
+
 ## 4\. Install External Repositories
 
 Now, you'll import the external package dependencies into your workspace.

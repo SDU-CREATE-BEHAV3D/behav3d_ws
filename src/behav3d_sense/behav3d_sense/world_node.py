@@ -8,7 +8,7 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import yaml
 
@@ -48,6 +48,8 @@ class WorldNode(Node):
         self.declare_parameter("mesh_source_settle_s", 0.35)
         self.declare_parameter("mesh_stage_dir", "/tmp/behav3d_world_mesh_cache")
         self.declare_parameter("mesh_stage_keep", 20)
+        self.declare_parameter("mesh_accumulate", False)
+        self.declare_parameter("mesh_accumulate_max_markers", 100)
 
         self._mesh_frame_id = str(self.get_parameter("mesh_frame_id").value)
         self._mesh_topic = str(self.get_parameter("mesh_topic").value)
@@ -63,6 +65,12 @@ class WorldNode(Node):
         )
         self._mesh_stage_dir = Path(str(self.get_parameter("mesh_stage_dir").value)).expanduser().resolve()
         self._mesh_stage_keep = max(1, int(self.get_parameter("mesh_stage_keep").value))
+        self._mesh_accumulate = bool(self.get_parameter("mesh_accumulate").value)
+        self._mesh_accumulate_max_markers = max(
+            1, int(self.get_parameter("mesh_accumulate_max_markers").value)
+        )
+        self._mesh_next_marker_id = 0
+        self._mesh_active_marker_ids: List[int] = []
 
         qos = QoSProfile(depth=1)
         qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
@@ -88,6 +96,10 @@ class WorldNode(Node):
         self.get_logger().info(f"Mesh marker topic: {self._mesh_topic} (frame={self._mesh_frame_id})")
         self.get_logger().info(f"Mesh staging dir: {self._mesh_stage_dir}")
         self.get_logger().info(f"Mesh source settle time: {self._mesh_source_settle_s:.2f}s")
+        self.get_logger().info(
+            "Mesh accumulate mode: "
+            f"{self._mesh_accumulate} (max markers={self._mesh_accumulate_max_markers})"
+        )
 
     @staticmethod
     def _parse_rgba(value: Any) -> Tuple[float, float, float, float]:
@@ -382,13 +394,22 @@ class WorldNode(Node):
         if suffix not in (".stl", ".obj", ".ply", ".dae", ".mesh"):
             self.get_logger().warn(f"Publishing uncommon mesh extension '{suffix}' from {path}")
 
+        self._refresh_mesh_accumulate_settings()
+
         staged_path = self._stage_mesh_file(path, kind)
 
         marker = Marker()
         marker.header.frame_id = self._mesh_frame_id
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.ns = self._mesh_ns
-        marker.id = 0
+        if self._mesh_accumulate:
+            marker.id = int(self._mesh_next_marker_id)
+            self._mesh_next_marker_id += 1
+        else:
+            if self._mesh_active_marker_ids:
+                self._clear_accumulated_markers()
+            marker.id = 0
+            self._mesh_next_marker_id = 1
         marker.type = Marker.MESH_RESOURCE
         marker.action = Marker.ADD
         marker.mesh_resource = staged_path.as_uri()
@@ -405,11 +426,56 @@ class WorldNode(Node):
         marker.color.a = float(self._mesh_rgba[3])
 
         self._mesh_pub.publish(marker)
+        if self._mesh_accumulate:
+            self._mesh_active_marker_ids.append(int(marker.id))
+            self._trim_accumulated_markers()
         self._last_mesh_path = path.resolve()
         self._last_mesh_kind = kind
         self.get_logger().info(
             f"Published world mesh ({kind}): source={path.resolve()} staged={staged_path}"
         )
+
+    def _refresh_mesh_accumulate_settings(self) -> None:
+        mesh_accumulate = bool(self.get_parameter("mesh_accumulate").value)
+        max_markers = max(1, int(self.get_parameter("mesh_accumulate_max_markers").value))
+
+        if mesh_accumulate != self._mesh_accumulate:
+            self._mesh_accumulate = mesh_accumulate
+            self.get_logger().info(
+                "Mesh accumulate mode changed: "
+                f"{self._mesh_accumulate} (max markers={max_markers})"
+            )
+            if self._mesh_accumulate:
+                self._mesh_next_marker_id = max(1, int(self._mesh_next_marker_id))
+
+        if max_markers != self._mesh_accumulate_max_markers:
+            self._mesh_accumulate_max_markers = max_markers
+            self.get_logger().info(
+                f"mesh_accumulate_max_markers set to {self._mesh_accumulate_max_markers}"
+            )
+            if self._mesh_accumulate:
+                self._trim_accumulated_markers()
+
+    def _clear_accumulated_markers(self) -> None:
+        if not self._mesh_active_marker_ids:
+            return
+        for marker_id in self._mesh_active_marker_ids:
+            self._publish_delete_marker(marker_id)
+        self._mesh_active_marker_ids.clear()
+
+    def _trim_accumulated_markers(self) -> None:
+        while len(self._mesh_active_marker_ids) > self._mesh_accumulate_max_markers:
+            old_id = self._mesh_active_marker_ids.pop(0)
+            self._publish_delete_marker(old_id)
+
+    def _publish_delete_marker(self, marker_id: int) -> None:
+        marker = Marker()
+        marker.header.frame_id = self._mesh_frame_id
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = self._mesh_ns
+        marker.id = int(marker_id)
+        marker.action = Marker.DELETE
+        self._mesh_pub.publish(marker)
 
     def _stage_mesh_file(self, src_path: Path, kind: str) -> Path:
         self._mesh_stage_dir.mkdir(parents=True, exist_ok=True)
