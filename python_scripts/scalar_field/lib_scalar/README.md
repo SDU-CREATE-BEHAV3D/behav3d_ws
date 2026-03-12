@@ -89,6 +89,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - For each iteration:
      - pick the polyline vertex with minimum scalar-field value,
      - require vertical proximity to scan surface (configured upstream),
+     - optionally add external bridge points (e.g. from phi=0 endpoints projected in +Z),
      - suppress nearby polyline vertices within minimum spacing,
      - repeat until requested count is reached.
    - Distances are measured along the polyline graph.

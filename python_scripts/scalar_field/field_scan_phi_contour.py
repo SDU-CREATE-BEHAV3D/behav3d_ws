@@ -31,6 +31,81 @@ DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 
 
+def deduplicate_polyline(
+    points: np.ndarray,
+    lines: np.ndarray,
+    merge_tol: float = 1e-6,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Merge near-equal polyline points and remap line indices."""
+    if points.size == 0 or lines.size == 0:
+        return np.zeros((0, 3), dtype=np.float64), np.zeros((0, 2), dtype=np.int32)
+
+    tol = max(float(merge_tol), 1e-12)
+    keys = np.round(points / tol).astype(np.int64)
+    key_to_uid: dict[tuple[int, int, int], int] = {}
+    uid_points: list[np.ndarray] = []
+    old_to_uid = np.full(points.shape[0], -1, dtype=np.int32)
+
+    for i in range(points.shape[0]):
+        k = (int(keys[i, 0]), int(keys[i, 1]), int(keys[i, 2]))
+        uid = key_to_uid.get(k)
+        if uid is None:
+            uid = len(uid_points)
+            key_to_uid[k] = uid
+            uid_points.append(points[i])
+        old_to_uid[i] = int(uid)
+
+    edge_set: set[tuple[int, int]] = set()
+    for e in lines:
+        a = int(old_to_uid[int(e[0])])
+        b = int(old_to_uid[int(e[1])])
+        if a == b:
+            continue
+        u, v = (a, b) if a < b else (b, a)
+        edge_set.add((u, v))
+
+    if not uid_points or not edge_set:
+        return np.zeros((0, 3), dtype=np.float64), np.zeros((0, 2), dtype=np.int32)
+    return np.vstack(uid_points), np.asarray(sorted(edge_set), dtype=np.int32)
+
+
+def polyline_endpoints(
+    points: np.ndarray,
+    lines: np.ndarray,
+    merge_tol: float = 1e-6,
+) -> np.ndarray:
+    """Return endpoints (degree==1) of a polyline graph."""
+    p_u, l_u = deduplicate_polyline(points=points, lines=lines, merge_tol=merge_tol)
+    if p_u.shape[0] == 0 or l_u.shape[0] == 0:
+        return np.zeros((0, 3), dtype=np.float64)
+    deg = np.zeros(p_u.shape[0], dtype=np.int32)
+    for e in l_u:
+        deg[int(e[0])] += 1
+        deg[int(e[1])] += 1
+    idx = np.flatnonzero(deg == 1)
+    if idx.size == 0:
+        return np.zeros((0, 3), dtype=np.float64)
+    return p_u[idx]
+
+
+def closest_points_on_mesh(
+    query_points: np.ndarray,
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+) -> np.ndarray:
+    """Project query points to closest points on triangle surface."""
+    if query_points.size == 0:
+        return np.zeros((0, 3), dtype=np.float64)
+    v = o3d.core.Tensor(mesh_vertices.astype(np.float32), dtype=o3d.core.Dtype.Float32)
+    f = o3d.core.Tensor(mesh_faces.astype(np.int32), dtype=o3d.core.Dtype.Int32)
+    tmesh = o3d.t.geometry.TriangleMesh(v, f)
+    scene_local = o3d.t.geometry.RaycastingScene()
+    scene_local.add_triangles(tmesh)
+    q = o3d.core.Tensor(query_points.astype(np.float32), dtype=o3d.core.Dtype.Float32)
+    out = scene_local.compute_closest_points(q)
+    return out["points"].numpy().astype(np.float64)
+
+
 def write_targets_yaml(
     out_yaml: Path,
     points_world: np.ndarray,
@@ -210,6 +285,26 @@ def run(
         offset_abs_dz = np.zeros((0,), dtype=np.float64)
         offset_valid_by_z = np.zeros((0,), dtype=bool)
 
+    phi0_endpoints = polyline_endpoints(contour_points, contour_lines, merge_tol=1e-6)
+    if phi0_endpoints.shape[0] > 0:
+        phi0_proj = phi0_endpoints.copy()
+        phi0_proj[:, 2] += offset_distance_m
+        phi0_bridge = closest_points_on_mesh(
+            query_points=phi0_proj,
+            mesh_vertices=pose.field_vertices_world,
+            mesh_faces=field_mesh.faces,
+        )
+
+        bridge_z_scan, bridge_has_hit = query_scan_z_with_vertical_rays(scene, phi0_bridge, z_top=z_top)
+        bridge_abs_dz = np.full(phi0_bridge.shape[0], np.inf, dtype=np.float64)
+        bridge_abs_dz[bridge_has_hit] = np.abs(phi0_bridge[bridge_has_hit, 2] - bridge_z_scan[bridge_has_hit])
+        bridge_valid = bridge_has_hit & (bridge_abs_dz <= offset_distance_m)
+        phi0_bridge_valid = phi0_bridge[bridge_valid]
+    else:
+        bridge_abs_dz = np.zeros((0,), dtype=np.float64)
+        bridge_valid = np.zeros((0,), dtype=bool)
+        phi0_bridge_valid = np.zeros((0, 3), dtype=np.float64)
+
     print_min_spacing_m = 1e-3 * float(print_min_spacing_mm)
     print_points = generate_print_points(
         polyline_points=offset_points,
@@ -219,6 +314,7 @@ def run(
         count=int(print_count),
         min_spacing=float(print_min_spacing_m),
         point_valid_mask=offset_valid_by_z,
+        extra_points=phi0_bridge_valid,
     )
     if print_points.points.shape[0] > 0:
         print_colors = np.tile(np.array([0.0, 1.0, 0.0], dtype=np.float64), (print_points.points.shape[0], 1))
@@ -293,6 +389,18 @@ def run(
             f"min={float(np.min(finite_dz)):.6f} max={float(np.max(finite_dz)):.6f}"
         )
     print(
+        "phi0 endpoint bridges: "
+        f"endpoints={phi0_endpoints.shape[0]} "
+        f"valid={int(np.count_nonzero(bridge_valid))}/{bridge_valid.shape[0]} "
+        f"(project +Z by {offset_distance_m:.6f} m, then snap to field)"
+    )
+    if bridge_abs_dz.shape[0] > 0 and np.any(np.isfinite(bridge_abs_dz)):
+        finite_bridge_dz = bridge_abs_dz[np.isfinite(bridge_abs_dz)]
+        print(
+            "phi0 bridge z-distance stats: "
+            f"min={float(np.min(finite_bridge_dz)):.6f} max={float(np.max(finite_bridge_dz)):.6f}"
+        )
+    print(
         "print point config: "
         f"count={int(print_count)} min_spacing_mm={float(print_min_spacing_mm):.3f} "
         f"min_spacing_m={print_min_spacing_m:.6f}"
@@ -300,7 +408,8 @@ def run(
     print(
         "print point selection: "
         f"selected={print_points.points.shape[0]} "
-        f"available_polyline_vertices={print_points.available_vertices}"
+        f"available_polyline_vertices={print_points.available_vertices} "
+        f"endpoint_bridges_added={print_points.augmented_vertices}"
     )
     if print_points.points.shape[0] > 0:
         print(

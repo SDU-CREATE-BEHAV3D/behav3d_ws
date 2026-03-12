@@ -62,3 +62,4 @@ class PrintPointSet:
     requested_count: int
     min_spacing: float
     available_vertices: int
+    augmented_vertices: int = 0

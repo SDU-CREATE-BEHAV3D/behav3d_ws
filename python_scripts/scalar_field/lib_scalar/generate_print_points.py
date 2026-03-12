@@ -86,6 +86,75 @@ def _build_adjacency(
     return adj
 
 
+def _augment_with_endpoint_z_projection(
+    points: np.ndarray,
+    lines: np.ndarray,
+    valid_mask: np.ndarray,
+    extra_points: np.ndarray | None,
+    merge_tol: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """Add extra bridge points and connect each to nearest existing graph vertex."""
+    if extra_points is None or extra_points.size == 0:
+        return points, lines, valid_mask, 0
+
+    points_list = [points[i].copy() for i in range(points.shape[0])]
+    valid_list = [bool(v) for v in valid_mask.tolist()]
+    lines_list = [[int(e[0]), int(e[1])] for e in lines.tolist()]
+    edge_set: set[tuple[int, int]] = set()
+    for e in lines_list:
+        u, v = (e[0], e[1]) if e[0] < e[1] else (e[1], e[0])
+        edge_set.add((u, v))
+
+    tol2 = max(float(merge_tol), 1e-12) ** 2
+    added = 0
+    for i in range(extra_points.shape[0]):
+        p_extra = extra_points[i]
+        if not np.all(np.isfinite(p_extra)):
+            continue
+
+        if len(points_list) > 0:
+            existing = np.asarray(points_list, dtype=np.float64)
+            d2_existing = np.sum((existing - p_extra) ** 2, axis=1)
+            near_idx = int(np.argmin(d2_existing))
+        else:
+            d2_existing = np.array([], dtype=np.float64)
+            near_idx = -1
+
+        if d2_existing.size > 0 and float(d2_existing[near_idx]) <= tol2:
+            new_idx = near_idx
+            valid_list[new_idx] = True
+        else:
+            new_idx = len(points_list)
+            points_list.append(p_extra.copy())
+            valid_list.append(True)
+            added += 1
+
+        if new_idx < 0:
+            continue
+        if len(points_list) <= 1:
+            continue
+        if new_idx < len(points_list) - 1:
+            # Point already existed; keep graph unchanged.
+            continue
+
+        # Connect new bridge node to nearest previous graph vertex.
+        existing_prev = np.asarray(points_list[:-1], dtype=np.float64)
+        d2_prev = np.sum((existing_prev - points_list[new_idx]) ** 2, axis=1)
+        anchor = int(np.argmin(d2_prev))
+        u, v = (anchor, new_idx) if anchor < new_idx else (new_idx, anchor)
+        if (u, v) in edge_set:
+            continue
+        edge_set.add((u, v))
+        lines_list.append([u, v])
+
+    return (
+        np.asarray(points_list, dtype=np.float64),
+        np.asarray(lines_list, dtype=np.int32),
+        np.asarray(valid_list, dtype=bool),
+        added,
+    )
+
+
 def _sample_scalar_nearest_vertex(
     sample_points: np.ndarray,
     field_vertices_world: np.ndarray,
@@ -141,6 +210,7 @@ def generate_print_points(
     min_spacing: float = 0.016,
     merge_tol: float = 1e-6,
     point_valid_mask: np.ndarray | None = None,
+    extra_points: np.ndarray | None = None,
 ) -> PrintPointSet:
     """Select print points on polyline via scalar-min + spacing suppression."""
     k = int(count)
@@ -153,7 +223,7 @@ def generate_print_points(
         lines=polyline_lines,
         merge_tol=merge_tol,
     )
-    if unique_points.shape[0] == 0 or unique_lines.shape[0] == 0 or k == 0:
+    if unique_points.shape[0] == 0 or k == 0:
         return PrintPointSet(
             points=np.zeros((0, 3), dtype=np.float64),
             scalar_values=np.zeros((0,), dtype=np.float64),
@@ -162,6 +232,7 @@ def generate_print_points(
             requested_count=k,
             min_spacing=spacing,
             available_vertices=int(unique_points.shape[0]),
+            augmented_vertices=0,
         )
 
     if point_valid_mask is not None:
@@ -170,6 +241,14 @@ def generate_print_points(
         unique_valid = point_valid_mask[unique_to_old].astype(bool)
     else:
         unique_valid = np.ones(unique_points.shape[0], dtype=bool)
+
+    unique_points, unique_lines, unique_valid, added_vertices = _augment_with_endpoint_z_projection(
+        points=unique_points,
+        lines=unique_lines,
+        valid_mask=unique_valid,
+        extra_points=extra_points,
+        merge_tol=float(merge_tol),
+    )
 
     scalar_vals, nearest_idx = _sample_scalar_nearest_vertex(
         sample_points=unique_points,
@@ -204,4 +283,5 @@ def generate_print_points(
         requested_count=k,
         min_spacing=spacing,
         available_vertices=int(unique_points.shape[0]),
+        augmented_vertices=int(added_vertices),
     )
