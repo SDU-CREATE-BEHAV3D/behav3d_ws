@@ -3,6 +3,19 @@
 
 This wrapper keeps the same outputs, but always uses user-provided
 field offsets (no XY pose search).
+python3 /home/lab/behav3d_ws/python_scripts/scalar_field/field_scan_phi_contour_manual.py \
+  --field-mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
+  --scan-mesh /home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl \
+  --seed-level 1 --t-coef 2000 \
+  --field-subdivide-iter 1 \
+  --field-scale 0.001 \
+  --field-offset-x -0.17 --field-offset-y -0.92 --field-offset-z -0.05 \
+  --clearance 0.00 \
+  --offset-distance-mm 12 \
+  --offset-geodesic-delta-mm 1.0 \
+  --print-count 7 --print-min-spacing-mm 16 \
+  --axis-size -1
+
 """
 
 from __future__ import annotations
@@ -47,6 +60,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--seed-level", type=float, default=None)
     parser.add_argument("--t-coef", type=float, default=1.0)
+    parser.add_argument("--field-subdivide-iter", type=int, default=0)
     parser.add_argument("--field-scale", type=float, default=1.0)
     parser.add_argument("--field-offset-x", type=float, default=0.0)
     parser.add_argument("--field-offset-y", type=float, default=0.0)
@@ -55,6 +69,7 @@ def main() -> None:
     parser.add_argument("--clearance", type=float, default=0.0003)
     parser.add_argument("--iso-level", type=float, default=0.0)
     parser.add_argument("--offset-distance-mm", type=float, default=12.0)
+    parser.add_argument("--offset-geodesic-delta-mm", type=float, default=0.0)
     parser.add_argument("--offset-t-coef", type=float, default=1.0)
     parser.add_argument("--offset-toward-printed", action="store_true")
     parser.add_argument("--print-count", type=int, default=7)
@@ -78,6 +93,7 @@ def main() -> None:
         seed=args.seed,
         seed_level=args.seed_level,
         t_coef=args.t_coef,
+        field_subdivide_iter=args.field_subdivide_iter,
         field_scale=args.field_scale,
         field_offset=(args.field_offset_x, args.field_offset_y, args.field_offset_z),
         pose_search=False,
@@ -96,6 +112,7 @@ def main() -> None:
         clearance=args.clearance,
         iso_level=args.iso_level,
         offset_distance_mm=args.offset_distance_mm,
+        offset_geodesic_delta_mm=args.offset_geodesic_delta_mm,
         offset_t_coef=args.offset_t_coef,
         offset_toward_unprinted=not args.offset_toward_printed,
         print_count=args.print_count,

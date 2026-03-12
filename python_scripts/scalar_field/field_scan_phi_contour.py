@@ -106,6 +106,27 @@ def closest_points_on_mesh(
     return out["points"].numpy().astype(np.float64)
 
 
+def subdivide_field_mesh_loop(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    iterations: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Optional Loop subdivision to increase field mesh resolution."""
+    it = int(iterations)
+    if it <= 0:
+        return vertices, faces
+    if it > 4:
+        raise ValueError(f"field_subdivide_iter too large ({it}); use 0..4 to avoid excessive runtime.")
+
+    mesh = o3d.geometry.TriangleMesh()
+    mesh.vertices = o3d.utility.Vector3dVector(vertices.astype(np.float64))
+    mesh.triangles = o3d.utility.Vector3iVector(faces.astype(np.int32))
+    mesh_sub = mesh.subdivide_loop(number_of_iterations=it)
+    v_sub = np.asarray(mesh_sub.vertices, dtype=np.float64)
+    f_sub = np.asarray(mesh_sub.triangles, dtype=np.int32)
+    return v_sub, f_sub
+
+
 def write_targets_yaml(
     out_yaml: Path,
     points_world: np.ndarray,
@@ -141,6 +162,7 @@ def run(
     seed: int | None,
     seed_level: float | None,
     t_coef: float,
+    field_subdivide_iter: int,
     field_scale: float,
     field_offset: tuple[float, float, float],
     pose_search: bool,
@@ -159,6 +181,7 @@ def run(
     clearance: float,
     iso_level: float,
     offset_distance_mm: float,
+    offset_geodesic_delta_mm: float,
     offset_t_coef: float,
     offset_toward_unprinted: bool,
     print_count: int,
@@ -169,9 +192,16 @@ def run(
     visualize: bool,
 ) -> None:
     field_mesh = load_triangle_mesh_arrays(field_mesh_path)
+    base_vertices = field_mesh.vertices
+    base_faces = field_mesh.faces
+    field_vertices, field_faces = subdivide_field_mesh_loop(
+        vertices=base_vertices,
+        faces=base_faces,
+        iterations=int(field_subdivide_iter),
+    )
     heat = compute_heat_field(
-        vertices=field_mesh.vertices,
-        faces=field_mesh.faces,
+        vertices=field_vertices,
+        faces=field_faces,
         seed=seed,
         seed_level=seed_level,
         t_coef=t_coef,
@@ -180,7 +210,7 @@ def run(
     scale = float(field_scale)
     if scale <= 0.0:
         raise ValueError(f"field_scale must be > 0, got {field_scale}")
-    field_vertices_scaled = field_mesh.vertices * scale
+    field_vertices_scaled = field_vertices * scale
 
     scan_mesh_legacy = load_triangle_mesh_legacy(scan_mesh_path)
     scan_vertices = np.asarray(scan_mesh_legacy.vertices)
@@ -257,19 +287,24 @@ def run(
 
     contour_points, contour_lines = extract_phi_contour(
         vertices=pose.field_vertices_world,
-        faces=field_mesh.faces,
+        faces=field_faces,
         scalar=pose.phi,
         iso=float(iso_level),
     )
     contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
 
     offset_distance_m = 1e-3 * float(offset_distance_mm)
+    geod_delta_mm = float(offset_geodesic_delta_mm)
+    if geod_delta_mm < 0.0:
+        raise ValueError(f"offset_geodesic_delta_mm must be >= 0, got {offset_geodesic_delta_mm}")
+    offset_geodesic_mm = max(0.0, float(offset_distance_mm) - geod_delta_mm)
+    offset_geodesic_m = 1e-3 * offset_geodesic_mm
     offset_points, offset_lines, _, offset_seed_vertices = extract_offset_phi_contour(
         vertices=pose.field_vertices_world,
-        faces=field_mesh.faces,
+        faces=field_faces,
         phi=pose.phi,
         iso_level=float(iso_level),
-        offset_distance=offset_distance_m,
+        offset_distance=offset_geodesic_m,
         toward_unprinted=bool(offset_toward_unprinted),
         t_coef=float(offset_t_coef),
     )
@@ -292,7 +327,7 @@ def run(
         phi0_bridge = closest_points_on_mesh(
             query_points=phi0_proj,
             mesh_vertices=pose.field_vertices_world,
-            mesh_faces=field_mesh.faces,
+            mesh_faces=field_faces,
         )
 
         bridge_z_scan, bridge_has_hit = query_scan_z_with_vertical_rays(scene, phi0_bridge, z_top=z_top)
@@ -330,10 +365,16 @@ def run(
         "field_offset: "
         f"[{pose.offset_xyz[0]:.6f}, {pose.offset_xyz[1]:.6f}, {pose.offset_xyz[2]:.6f}]"
     )
-    print(f"field vertices (used): {field_mesh.vertices.shape[0]}")
+    print(f"field vertices (used): {field_vertices.shape[0]}")
     if field_mesh.dropped_vertices > 0:
         print(f"dropped unreferenced field vertices: {field_mesh.dropped_vertices}")
-    print(f"field faces: {field_mesh.faces.shape[0]}")
+    print(f"field faces: {field_faces.shape[0]}")
+    if int(field_subdivide_iter) > 0:
+        print(
+            "field subdivision: "
+            f"iter={int(field_subdivide_iter)} "
+            f"base_v={base_vertices.shape[0]} base_f={base_faces.shape[0]}"
+        )
     print(heat.seed_info)
     print(
         "heat stats: "
@@ -370,8 +411,11 @@ def run(
 
     print(
         "offset contour config: "
-        f"distance_mm={offset_distance_mm:.3f} "
-        f"distance_m={offset_distance_m:.6f} "
+        f"z_limit_mm={offset_distance_mm:.3f} "
+        f"geodesic_mm={offset_geodesic_mm:.3f} "
+        f"geodesic_delta_mm={geod_delta_mm:.3f} "
+        f"z_limit_m={offset_distance_m:.6f} "
+        f"geodesic_m={offset_geodesic_m:.6f} "
         f"side={'unprinted(phi>iso)' if offset_toward_unprinted else 'printed(phi<=iso)'} "
         f"t_coef={float(offset_t_coef):.6f}"
     )
@@ -538,6 +582,12 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--seed-level", type=float, default=None)
     parser.add_argument("--t-coef", type=float, default=1.0)
+    parser.add_argument(
+        "--field-subdivide-iter",
+        type=int,
+        default=0,
+        help="Loop-subdivide field mesh before heat/phi/geodesic (0 disables).",
+    )
     parser.add_argument("--field-scale", type=float, default=1.0)
     parser.add_argument("--field-offset-x", type=float, default=0.0)
     parser.add_argument("--field-offset-y", type=float, default=0.0)
@@ -575,7 +625,13 @@ def main() -> None:
         "--offset-distance-mm",
         type=float,
         default=12.0,
-        help="Geodesic offset distance from phi contour, in millimeters (default 12 mm).",
+        help="Z-limit distance for candidate validity (and phi0 endpoint +Z projection), in mm.",
+    )
+    parser.add_argument(
+        "--offset-geodesic-delta-mm",
+        type=float,
+        default=0.0,
+        help="Geodesic distance is (offset-distance-mm - this delta), in mm.",
     )
     parser.add_argument(
         "--offset-t-coef",
@@ -644,6 +700,7 @@ def main() -> None:
         seed=args.seed,
         seed_level=args.seed_level,
         t_coef=args.t_coef,
+        field_subdivide_iter=args.field_subdivide_iter,
         field_scale=args.field_scale,
         field_offset=(args.field_offset_x, args.field_offset_y, args.field_offset_z),
         pose_search=args.pose_search,
@@ -662,6 +719,7 @@ def main() -> None:
         clearance=args.clearance,
         iso_level=args.iso_level,
         offset_distance_mm=args.offset_distance_mm,
+        offset_geodesic_delta_mm=args.offset_geodesic_delta_mm,
         offset_t_coef=args.offset_t_coef,
         offset_toward_unprinted=not args.offset_toward_printed,
         print_count=args.print_count,
