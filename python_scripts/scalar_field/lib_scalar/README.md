@@ -42,25 +42,18 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `evaluate_fixed_pose(...)` (manual pose helper)
 
 4. `extract_phi_contour.py`
+   - Contour-centric module for `phi` boundaries and geodesic offsets.
    - Extracts the 3D boundary `phi = iso` by edge interpolation over field triangles.
+   - Can also build geodesic offset curves from that boundary.
    - Typical use: `iso = 0` for viable/non-viable boundary.
-   - Main API:
-     - `extract_phi_contour(vertices, faces, scalar, iso=0.0)`
-
-5. `extract_offset_phi_contour.py`
-   - Builds an offset polyline from the `phi=iso` contour directly on the field mesh.
-   - First it detects seed vertices adjacent to contour-crossing edges.
-   - Then it solves geodesic distance from those seeds over the mesh using `potpourri3d`.
-   - Geodesic distance is signed by side:
-     - unprinted side: `phi > iso`
-     - printed side: `phi <= iso`
-   - The offset polyline is extracted as an iso-curve of this signed geodesic field.
    - Main APIs:
+     - `extract_phi_contour(vertices, faces, scalar, iso=0.0)`
+     - `extract_offset_phi_contour(vertices, faces, phi, iso_level, offset_distance, ...)`
+     - `extract_phi_contour_with_offset(vertices, faces, phi, iso_level, offset_distance, ...)`
      - `contour_seed_vertices_from_phi(...)`
      - `compute_geodesic_from_phi_contour(...)`
-     - `extract_offset_phi_contour(...)`
 
-6. `viz.py`
+5. `viz.py`
    - Converts numeric outputs to Open3D visualization objects.
    - Main APIs:
      - `yellow_to_red_colors(norm_scalar)`
@@ -68,7 +61,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `make_line_set(points, lines, color)`
      - `compute_scene_bounds(...)`
 
-7. `geometry.py`
+6. `geometry.py`
    - Geometry loading and preparation utilities.
    - Ensures triangle meshes are valid and indexing is compact.
    - Includes scalar sampling on mesh surface using triangle interpolation.
@@ -79,14 +72,14 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `apply_scale_and_offset(...)`
      - `sample_vertex_scalar_on_surface(query_points, mesh_vertices, mesh_faces, vertex_scalar)`
 
-8. `types.py`
+7. `types.py`
    - Shared dataclasses used as contracts across stages.
    - `MeshData`: compacted mesh arrays + number of dropped vertices.
    - `HeatField`: raw and normalized scalar + summary stats + seed metadata.
    - `PoseResult`: positioned field, phi values, viability mask, ray-hit stats, search stats.
    - `PrintPointSet`: selected print points and spacing/selection metadata.
 
-9. `generate_print_points.py`
+8. `generate_print_points.py`
    - Selects print points from the offset polyline.
    - For each iteration:
      - pick the polyline vertex with minimum scalar-field value,
@@ -98,7 +91,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Main API:
      - `generate_print_points(...) -> PrintPointSet`
 
-10. `generate_print_points_phi_lift.py`
+9. `generate_print_points_phi_lift.py`
    - Alternative point-generation strategy without geodesic contour offset.
    - Uses the existing source polyline (typically `phi=0`) as candidate set.
    - Evaluates `heat.norm` on that polyline by triangle interpolation.

@@ -25,6 +25,8 @@ from pathlib import Path
 
 from field_scan_phi_contour import DEFAULT_FIELD_MESH, DEFAULT_SCAN_MESH, run
 
+OUTPUT_DIR = Path("/home/lab/behav3d_ws/python_scripts/scalar_field/output")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -35,22 +37,22 @@ def main() -> None:
     parser.add_argument(
         "--out-field-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_masked.ply"),
+        default=OUTPUT_DIR / "field_masked.ply",
     )
     parser.add_argument(
         "--out-contour-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_phi0_contour.ply"),
+        default=OUTPUT_DIR / "field_phi0_contour.ply",
     )
     parser.add_argument(
         "--out-offset-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_phi_offset_12mm.ply"),
+        default=OUTPUT_DIR / "field_phi_offset_12mm.ply",
     )
     parser.add_argument(
         "--out-print-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_print_points.ply"),
+        default=OUTPUT_DIR / "field_print_points.ply",
     )
     parser.add_argument(
         "--out-targets-yaml",

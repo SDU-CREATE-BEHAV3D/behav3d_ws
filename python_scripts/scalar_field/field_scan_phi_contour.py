@@ -9,8 +9,7 @@ from pathlib import Path
 import numpy as np
 import open3d as o3d
 
-from lib_scalar.extract_phi_contour import extract_phi_contour
-from lib_scalar.extract_offset_phi_contour import extract_offset_phi_contour
+from lib_scalar.extract_phi_contour import extract_phi_contour_with_offset
 from lib_scalar.generate_print_points import generate_print_points
 from lib_scalar.geometry import load_triangle_mesh_arrays, load_triangle_mesh_legacy
 from lib_scalar.compute_heat_field import compute_heat_field
@@ -29,6 +28,7 @@ from lib_scalar.viz import compute_scene_bounds, make_line_set, make_point_cloud
 
 DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
+OUTPUT_DIR = Path("/home/lab/behav3d_ws/python_scripts/scalar_field/output")
 
 
 def deduplicate_polyline(
@@ -285,29 +285,22 @@ def run(
     masked_colors[~pose.viable] = np.array([0.2, 0.2, 0.2], dtype=np.float64)
     field_pcd = make_point_cloud(pose.field_vertices_world, masked_colors)
 
-    contour_points, contour_lines = extract_phi_contour(
-        vertices=pose.field_vertices_world,
-        faces=field_faces,
-        scalar=pose.phi,
-        iso=float(iso_level),
-    )
-    contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
-
     offset_distance_m = 1e-3 * float(offset_distance_mm)
     geod_delta_mm = float(offset_geodesic_delta_mm)
     if geod_delta_mm < 0.0:
         raise ValueError(f"offset_geodesic_delta_mm must be >= 0, got {offset_geodesic_delta_mm}")
     offset_geodesic_mm = max(0.0, float(offset_distance_mm) - geod_delta_mm)
     offset_geodesic_m = 1e-3 * offset_geodesic_mm
-    offset_points, offset_lines, _, offset_seed_vertices = extract_offset_phi_contour(
+    contour_points, contour_lines, offset_points, offset_lines, _, offset_seed_vertices = extract_phi_contour_with_offset(
         vertices=pose.field_vertices_world,
         faces=field_faces,
         phi=pose.phi,
         iso_level=float(iso_level),
         offset_distance=offset_geodesic_m,
         toward_unprinted=bool(offset_toward_unprinted),
-        t_coef=float(offset_t_coef),
+        offset_t_coef=float(offset_t_coef),
     )
+    contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
     offset_ls = make_line_set(offset_points, offset_lines, color=(1.0, 0.0, 1.0))
 
     if offset_points.shape[0] > 0:
@@ -554,23 +547,23 @@ def main() -> None:
     parser.add_argument(
         "--out-field-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_masked.ply"),
+        default=OUTPUT_DIR / "field_masked.ply",
     )
     parser.add_argument(
         "--out-contour-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_phi0_contour.ply"),
+        default=OUTPUT_DIR / "field_phi0_contour.ply",
     )
     parser.add_argument(
         "--out-offset-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_phi_offset_12mm.ply"),
+        default=OUTPUT_DIR / "field_phi_offset_12mm.ply",
         help="Output line set (.ply) for geodesic offset contour.",
     )
     parser.add_argument(
         "--out-print-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_print_points.ply"),
+        default=OUTPUT_DIR / "field_print_points.ply",
         help="Output point cloud (.ply) for selected print points.",
     )
     parser.add_argument(

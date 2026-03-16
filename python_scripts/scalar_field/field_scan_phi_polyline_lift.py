@@ -39,6 +39,7 @@ from lib_scalar.viz import compute_scene_bounds, make_line_set, make_point_cloud
 
 DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
+OUTPUT_DIR = Path("/home/lab/behav3d_ws/python_scripts/scalar_field/output")
 
 
 def subdivide_field_mesh_loop(
@@ -400,17 +401,17 @@ def main() -> None:
     parser.add_argument(
         "--out-field-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_masked.ply"),
+        default=OUTPUT_DIR / "field_masked.ply",
     )
     parser.add_argument(
         "--out-contour-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_phi0_contour.ply"),
+        default=OUTPUT_DIR / "field_phi0_contour.ply",
     )
     parser.add_argument(
         "--out-print-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/field_print_points_phi_lift.ply"),
+        default=OUTPUT_DIR / "field_print_points_phi_lift.ply",
     )
     parser.add_argument(
         "--out-targets-yaml",

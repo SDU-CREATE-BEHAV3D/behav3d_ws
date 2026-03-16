@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Reusable scalar-field pipeline library."""
 
-from .extract_phi_contour import extract_phi_contour
-from .extract_offset_phi_contour import (
+from .extract_phi_contour import (
     compute_geodesic_from_phi_contour,
     contour_seed_vertices_from_phi,
     extract_offset_phi_contour,
+    extract_phi_contour,
+    extract_phi_contour_with_offset,
 )
 from .generate_print_points import generate_print_points
 from .generate_print_points_phi_lift import generate_print_points_phi_lift
@@ -38,6 +39,7 @@ __all__ = [
     "contour_seed_vertices_from_phi",
     "compute_geodesic_from_phi_contour",
     "extract_offset_phi_contour",
+    "extract_phi_contour_with_offset",
     "generate_print_points",
     "generate_print_points_phi_lift",
     "make_axis_samples",

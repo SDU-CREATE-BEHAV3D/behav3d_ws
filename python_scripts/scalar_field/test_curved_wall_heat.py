@@ -25,6 +25,7 @@ from lib_scalar.viz import make_point_cloud, yellow_to_red_colors
 
 
 DEFAULT_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
+OUTPUT_DIR = Path("/home/lab/behav3d_ws/python_scripts/scalar_field/output")
 
 
 def run(
@@ -87,7 +88,7 @@ def main() -> None:
     parser.add_argument(
         "--out-ply",
         type=Path,
-        default=Path("/home/lab/behav3d_ws/python_scripts/scalar_field/curved_wall_heat_yellow_red.ply"),
+        default=OUTPUT_DIR / "curved_wall_heat.ply",
         help="Output .ply path for colored point cloud (yellow -> red gradient).",
     )
     parser.add_argument(
