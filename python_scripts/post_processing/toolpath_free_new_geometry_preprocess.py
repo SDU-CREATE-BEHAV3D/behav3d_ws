@@ -39,8 +39,8 @@ import open3d as o3d
 # In-script parameters
 # -----------------------------------------------------------------------------
 
-default_prev_mesh_path = "~/Downloads/260227_160709/print_scan_042/reconstruct/previous_plus_new_geometry.stl"
-default_curr_mesh_path = "~/Downloads/260227_160709/print_scan_049/reconstruct/tsdf_surface_mesh.stl"
+default_prev_mesh_path = "~/Downloads/260227_160709/print_scan_098/reconstruct/previous_plus_new_geometry.stl"
+default_curr_mesh_path = "~/Downloads/260227_160709/print_scan_105/reconstruct/tsdf_surface_mesh.stl"
 show_debug_vis = True
 sample_point_count_prev = 100000
 sample_point_count_curr = 100000

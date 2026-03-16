@@ -37,7 +37,7 @@ from utils.image_loader import load_images
 from utils.integration import visualize_camera_poses
 
 DEFAULT_SESSION_PATH = "~/Downloads/260227_160709"
-DEFAULT_SCAN_FOLDER = "print_scan_028"
+DEFAULT_SCAN_FOLDER = "print_scan_098"
 DEFAULT_RECONSTRUCT_FOLDER = "reconstruct"
 DEFAULT_COLOR_IN_DEPTH_FOLDER = "color_in_depth"
 
@@ -139,8 +139,8 @@ C2D_ERODE_ITERATIONS = 3
 C2D_ERODE_SHAPE = "cross"  # "ellipse", "rect", "cross"
 # Optional center crop on color_in_depth images. Outside region is zeroed.
 C2D_CENTER_CROP_ENABLE = True
-C2D_CENTER_CROP_WIDTH = 500   # pixels, None keeps full width
-C2D_CENTER_CROP_HEIGHT = 500  # pixels, None keeps full height
+C2D_CENTER_CROP_WIDTH = 450   # pixels, None keeps full width
+C2D_CENTER_CROP_HEIGHT = 350  # pixels, None keeps full height
 # If True, the same center crop mask is also applied to depth images before TSDF integration.
 C2D_CENTER_CROP_APPLY_TO_DEPTH = True
 # If enabled, only count an observation when the projected color_in_depth pixel is still valid.
