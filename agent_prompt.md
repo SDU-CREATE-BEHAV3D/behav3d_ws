@@ -142,7 +142,7 @@ Camera commands:
 | `reconstruct_color_to_depth_grid_sweep()` | Color-to-depth for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize` | Default `scan_folder="grid_sweep"`. |
 | `reconstruct_tsdf_cropped()` | Run TSDF cropped stage. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Calls `/reconstruct/tsdf_cropped`. |
 | `reconstruct_tsdf_grid_sweep()` | TSDF cropped for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Default `scan_folder="grid_sweep"`. |
-| `update_world_mesh()` | Update RViz mesh marker from explicit or inferred reconstruction outputs. | `use_latest`, `session_path`, `mesh_path`, `ply_path`, `prefer`, `wait_timeout_s` | Calls `/behav3d/update_world_mesh`. Prefer explicit `mesh_path`/`ply_path` from TSDF response. |
+| `update_world_mesh()` | Update RViz world geometry from explicit or inferred reconstruction outputs. | `use_latest`, `session_path`, `mesh_path`, `ply_path`, `prefer`, `wait_timeout_s` | Calls `/behav3d/update_world_mesh`. `prefer="mesh"` publishes `MESH_RESOURCE`; `prefer="ply"` publishes colored PLY markers (`POINTS`/`TRIANGLE_LIST`) for debugging when available. Prefer explicit `mesh_path`/`ply_path` from TSDF response. |
 
 Reconstruction command usage notes:
 - Stage order for mesh flow: `reconstruct_color_to_depth*` first, then `reconstruct_tsdf_*`.
