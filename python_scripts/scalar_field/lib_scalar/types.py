@@ -63,3 +63,18 @@ class PrintPointSet:
     min_spacing: float
     available_vertices: int
     augmented_vertices: int = 0
+
+
+@dataclass(frozen=True)
+class LiftedPrintPointSet:
+    """Print points selected on a source polyline and lifted along +Z."""
+    source_points: np.ndarray
+    lifted_points: np.ndarray
+    source_values: np.ndarray
+    polyline_indices: np.ndarray
+    nearest_field_vertex_indices: np.ndarray
+    requested_count: int
+    min_spacing: float
+    available_vertices: int
+    lift_height: float
+    augmented_vertices: int = 0

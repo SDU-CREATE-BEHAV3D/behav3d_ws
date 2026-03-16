@@ -71,11 +71,13 @@ The objective is to keep each stage isolated, testable, and reusable from:
 7. `geometry.py`
    - Geometry loading and preparation utilities.
    - Ensures triangle meshes are valid and indexing is compact.
+   - Includes scalar sampling on mesh surface using triangle interpolation.
    - Main APIs:
      - `load_triangle_mesh_arrays(path) -> MeshData`
      - `load_triangle_mesh_legacy(path)`
      - `compact_triangle_mesh(vertices, faces)`
      - `apply_scale_and_offset(...)`
+     - `sample_vertex_scalar_on_surface(query_points, mesh_vertices, mesh_faces, vertex_scalar)`
 
 8. `types.py`
    - Shared dataclasses used as contracts across stages.
@@ -96,6 +98,15 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Main API:
      - `generate_print_points(...) -> PrintPointSet`
 
+10. `generate_print_points_phi_lift.py`
+   - Alternative point-generation strategy without geodesic contour offset.
+   - Uses the existing source polyline (typically `phi=0`) as candidate set.
+   - Evaluates `heat.norm` on that polyline by triangle interpolation.
+   - Selects lowest interpolated heat values with spacing suppression.
+   - Lifts selected points in `+Z` by configured print height.
+   - Main API:
+     - `generate_print_points_phi_lift(...) -> LiftedPrintPointSet`
+
 ## Design Notes
 
 - Field scalar computation and geometric viability are explicitly separated.
@@ -113,3 +124,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
 6. Extract geodesic offset contour at desired distance (default 12 mm).
 7. Select print points from the offset contour (default 7 points, 16 mm spacing).
 8. Export and visualize.
+
+Alternative path (no geodesic offset):
+1. Extract `phi=0` contour.
+2. Interpolate `heat.norm` on that contour and select minima.
+3. Lift selected points in `+Z` by print height.
