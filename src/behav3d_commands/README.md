@@ -4,7 +4,8 @@
 `behav3d_commands` provides the low-level command layer and a queue-driven
 orchestration surface for Behav3D systems. The main entry point is `Session`,
 which owns a `SessionQueue`, a `CommandRouter`, and subsystem command sets
-(`MotionCommands`, `CameraCommands`, `ExtruderCommands`, `UtilCommands`).
+(`MotionCommands`, `CameraCommands`, `FieldCommands`, `ExtruderCommands`,
+`UtilCommands`).
 
 Higher-level orchestration and example sessions live in `behav3d_examples`.
 
@@ -62,6 +63,61 @@ Example (blocking call):
 plan_item = session.motion.plan(x=0.5, y=1.0, z=0.3, enqueue=False)
 result = session.run_sync(plan_item, timeout_s=10.0)
 ```
+
+### FieldCommands
+`FieldCommands` wraps scalar-field services exposed by `fields_node`:
+- `/behav3d/init_field_from_scan`
+- `/behav3d/generate_print_candidates`
+
+Public methods:
+- `session.field.init_field_from_scan(...)`
+- `session.field.generate_print_candidates(...)`
+
+Minimal blocking example:
+```python
+session = Session(node)
+
+init_res = session.run_sync(
+    session.field.init_field_from_scan(
+        use_latest=False,
+        session_path="@session",
+        scan_mesh_paths=["@session/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl"],
+        field_mesh_path="/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj",
+        state_output_dir="@session/field_loop/cycle_0000/field_init",
+        enqueue=False,
+    ),
+    timeout_s=120.0,
+)
+
+cand_res = session.run_sync(
+    session.field.generate_print_candidates(
+        use_latest=False,
+        session_path="@session",
+        field_state_path=init_res["metrics"]["field_state_path"],
+        scan_mesh_paths=["@session/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl"],
+        output_dir="@session/field_loop/cycle_0000/candidates",
+        beads_per_step=7,
+        bead_separation_mm=16.0,
+        bead_height_mm=12.0,
+        target_zx=0.03,
+        target_zy=-0.01,
+        target_zz=1.0,
+        target_position_scale=1000.0,
+        enqueue=False,
+    ),
+    timeout_s=120.0,
+)
+```
+
+Returned metrics include:
+- Init: `field_state_path`, `debug_field_ply_path`, `offset_x/y/z`
+- Candidates: `targets_yaml_path`, `debug_field_ply_path`,
+  `debug_contour_ply_path`, `debug_candidates_ply_path`, `candidate_count`
+
+Notes:
+- If `session_path` is provided, `use_latest` is forced to `False`.
+- YAML target frame reorientation (`base_link -> world`) is handled in
+  `fields_node` during target generation.
 
 ## Result contract
 `on_done` receives a dict with:

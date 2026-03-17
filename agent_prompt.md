@@ -38,7 +38,7 @@ The launch file brings up these runtime roles:
 Primary entry point: `behav3d_commands.Session` in `src/behav3d_commands/behav3d_commands/session.py`.
 
 Key concepts:
-- `Session` owns a `SessionQueue`, a `CommandRouter`, and four command sets: motion, camera, extruder, util.
+- `Session` owns a `SessionQueue`, a `CommandRouter`, and five command sets: motion, camera, field, extruder, util.
 - Each command returns a `QueueItem` when `enqueue=False` and enqueues by default when `enqueue=True`.
 - `SessionQueue` supports FIFO execution and best-effort parallel groups (`run_group`).
 - `run_sync` blocks the caller until `on_done` fires. It must not be called from the ROS executor thread; use a worker thread or a multi-threaded executor.
@@ -183,6 +183,34 @@ Implementation: `src/behav3d_sense/behav3d_sense/sense_node.py`, `src/behav3d_se
 
 ---
 
+**Command Surface: Field**
+
+Implementation: `src/behav3d_commands/behav3d_commands/sense_commands/field_commands.py`
+
+Underlying ROS interfaces:
+- Service `/behav3d/init_field_from_scan` (`InitFieldFromScan`)
+- Service `/behav3d/generate_print_candidates` (`GeneratePrintCandidates`)
+
+Field commands:
+
+| Command | Purpose | Key Parameters | Notes |
+| --- | --- | --- | --- |
+| `init_field_from_scan()` | Build and position the scalar field once from scan mesh + field mesh. | `use_latest`, `session_path`, `scan_mesh_paths[]`, `field_mesh_path`, `state_output_dir` | Produces `field_state_init.npz` and debug `field_masked_init.ply`; returns positioned offset `(x,y,z)`. |
+| `generate_print_candidates()` | Evaluate current scan against initialized field and produce print candidates. | `use_latest`, `session_path`, `field_state_path`, `scan_mesh_paths[]`, `output_dir`, `beads_per_step`, `bead_separation_mm`, `bead_height_mm`, `target_zx/zy/zz`, `target_position_scale` | Produces cycle debug artifacts + `targets.yaml` from z-lift candidate strategy. |
+
+Field command usage notes:
+- If `session_path` is non-empty, command layer forces `use_latest=False` (explicit path wins).
+- `scan_mesh_paths` can be omitted; the service resolves default TSDF mesh inside the session.
+- `field_state_path` can be omitted in `generate_print_candidates`; the service resolves latest `field_state_init.npz`.
+- Targets YAML is written in robot plane format `O(x,y,z) Z(i,j,k)` with position scaled by `target_position_scale` (default mm).
+- Base-link to world target reorientation is applied inside `fields_node` at YAML generation time (`target_base_to_world_yaw_deg`, default `180.0`).
+
+Fields node implementation:
+- `src/behav3d_sense/behav3d_sense/fields_node.py`
+- Services exposed: `/behav3d/init_field_from_scan`, `/behav3d/generate_print_candidates`
+
+---
+
 **Command Surface: Utility**
 
 Implementation: `src/behav3d_commands/behav3d_commands/util_commands/util_commands.py`
@@ -218,6 +246,8 @@ Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 - `/reconstruct/tsdf_cropped` (`TsdfCropped`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/behav3d/update_world_mesh` (`UpdateWorldMesh`) via `behav3d_sense/world_node.py`
+- `/behav3d/init_field_from_scan` (`InitFieldFromScan`) via `behav3d_sense/fields_node.py`
+- `/behav3d/generate_print_candidates` (`GeneratePrintCandidates`) via `behav3d_sense/fields_node.py`
 - `update_print_config` (`UpdatePrintConfig`) via `behav3d_print`
 - `get_print_status` (`GetPrintStatus`) via `behav3d_print`
 - `/behav3d/publish_targets` (`PublishTargets`) via `behav3d_motion_bridge`
