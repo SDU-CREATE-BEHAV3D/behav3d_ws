@@ -16,6 +16,12 @@ from .geometry import (
     load_triangle_mesh_legacy,
     sample_vertex_scalar_on_surface,
 )
+from .loop_simulation import (
+    apply_simulated_beads,
+    compute_offset_contour_stage,
+    generate_step_candidates,
+    position_field_with_attempts,
+)
 from .compute_heat_field import compute_heat_field
 from .compute_phi_mask import compute_phi_mask, evaluate_fixed_pose, make_scan_scene
 from .position_field import default_xy_search_bounds, make_axis_samples, position_field
@@ -42,6 +48,10 @@ __all__ = [
     "extract_phi_contour_with_offset",
     "generate_print_points",
     "generate_print_points_phi_lift",
+    "position_field_with_attempts",
+    "compute_offset_contour_stage",
+    "generate_step_candidates",
+    "apply_simulated_beads",
     "make_axis_samples",
     "default_xy_search_bounds",
     "position_field",

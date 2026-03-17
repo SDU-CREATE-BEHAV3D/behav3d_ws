@@ -100,12 +100,29 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Main API:
      - `generate_print_points_phi_lift(...) -> LiftedPrintPointSet`
 
+10. `loop_simulation.py`
+   - Utilities for iterative loop simulation before robot execution.
+   - Keeps loop stages explicit:
+     - position field with bounded retries (`positioning_attempts`),
+     - extract `phi` contour and geodesic offset contour,
+     - generate print points with selectable mode:
+       - `geodesic`: from geodesic offset contour (+ z-valid filter),
+       - `z_lift`: from `phi=0` contour + vertical lift,
+     - update scan mesh by adding simulated bead solids (default cylinder).
+   - Main APIs:
+     - `position_field_with_attempts(...) -> PoseResult`
+     - `compute_offset_contour_stage(...) -> ContourStage`
+     - `generate_step_candidates(...) -> CandidateStage`
+     - `apply_simulated_beads(...) -> (scan_mesh, bead_centers)`
+
 ## Design Notes
 
 - Field scalar computation and geometric viability are explicitly separated.
 - `position_field` handles local candidate ranking for pose search.
 - Offset generation is geodesic on the mesh, not Euclidean in free space.
 - Full-loop/global objective design remains external to this library.
+- Loop simulation keeps bead accumulation local to the simulator layer, so
+  field/phi/contour stages remain reusable in ROS integration.
 
 ## Typical Script-Level Usage
 
