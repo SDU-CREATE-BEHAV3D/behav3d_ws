@@ -14,6 +14,8 @@ from typing import Optional
 import behav3d_commands
 import rclpy
 from behav3d_examples.src.grid_sweep_session import GridSweepSession
+from behav3d_orchestrator.src.yaml_session import YamlSession
+from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 
 
@@ -68,10 +70,31 @@ class PrintFieldSequenceNode(Node):
         self.declare_parameter("field_mesh_path", "/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
         self.declare_parameter("field_state_output_dir", "@session/field_loop/init")
         self.declare_parameter("field_request_timeout_s", 120.0)
+        self.declare_parameter("run_generate_candidates", True)
+        self.declare_parameter("candidate_use_latest", True)
+        self.declare_parameter("candidate_session_path", "@session")
+        self.declare_parameter("candidate_field_state_path", "")
+        self.declare_parameter("candidate_scan_mesh_path", "")
+        self.declare_parameter("candidate_output_dir", "@session/field_loop/cycle_0001")
+        self.declare_parameter("candidate_request_timeout_s", 120.0)
+        self.declare_parameter("candidate_beads_per_step", 7)
+        self.declare_parameter("candidate_bead_separation_mm", 16.0)
+        self.declare_parameter("candidate_bead_height_mm", 12.0)
+        self.declare_parameter("candidate_target_zx", 0.03)
+        self.declare_parameter("candidate_target_zy", -0.01)
+        self.declare_parameter("candidate_target_zz", 1.00)
+        self.declare_parameter("candidate_target_position_scale", 1000.0)
+        self.declare_parameter("candidate_visualize_field_ply", True)
+        self.declare_parameter("candidate_restore_scan_mesh_after_field_ply", True)
+        self.declare_parameter("candidate_publish_markers", True)
+        self.declare_parameter("candidate_marker_axis_length", 0.05)
+        self.declare_parameter("candidate_marker_axis_radius", 0.003)
+        self.declare_parameter("candidate_marker_clear_before", True)
 
         # Same node, two sessions: macro + direct commands.
         self.session = behav3d_commands.Session(self)
         self.grid_macro = GridSweepSession(self)
+        self.yaml_parser = YamlSession(self, register_default_commands=False)
 
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
@@ -122,16 +145,51 @@ class PrintFieldSequenceNode(Node):
         field_mesh_path = str(self.get_parameter("field_mesh_path").value).strip()
         field_state_output_dir = str(self.get_parameter("field_state_output_dir").value).strip()
         field_request_timeout_s = float(self.get_parameter("field_request_timeout_s").value)
+        run_generate_candidates = bool(self.get_parameter("run_generate_candidates").value)
+        candidate_use_latest = bool(self.get_parameter("candidate_use_latest").value)
+        candidate_session_path = str(self.get_parameter("candidate_session_path").value).strip()
+        candidate_field_state_path = str(self.get_parameter("candidate_field_state_path").value).strip()
+        candidate_scan_mesh_path = str(self.get_parameter("candidate_scan_mesh_path").value).strip()
+        candidate_output_dir = str(self.get_parameter("candidate_output_dir").value).strip()
+        candidate_request_timeout_s = float(self.get_parameter("candidate_request_timeout_s").value)
+        candidate_beads_per_step = int(self.get_parameter("candidate_beads_per_step").value)
+        candidate_bead_separation_mm = float(self.get_parameter("candidate_bead_separation_mm").value)
+        candidate_bead_height_mm = float(self.get_parameter("candidate_bead_height_mm").value)
+        candidate_target_zx = float(self.get_parameter("candidate_target_zx").value)
+        candidate_target_zy = float(self.get_parameter("candidate_target_zy").value)
+        candidate_target_zz = float(self.get_parameter("candidate_target_zz").value)
+        candidate_target_position_scale = float(self.get_parameter("candidate_target_position_scale").value)
+        candidate_visualize_field_ply = bool(self.get_parameter("candidate_visualize_field_ply").value)
+        candidate_restore_scan_mesh_after_field_ply = bool(
+            self.get_parameter("candidate_restore_scan_mesh_after_field_ply").value
+        )
+        candidate_publish_markers = bool(self.get_parameter("candidate_publish_markers").value)
+        candidate_marker_axis_length = float(self.get_parameter("candidate_marker_axis_length").value)
+        candidate_marker_axis_radius = float(self.get_parameter("candidate_marker_axis_radius").value)
+        candidate_marker_clear_before = bool(self.get_parameter("candidate_marker_clear_before").value)
+
+        cycle_tag = "cycle_0000"
+        cycle_root = f"@session/field_loop/{cycle_tag}"
+        scan_capture_folder = f"{cycle_root}/scan"
+        scan_folder = f"field_loop/{cycle_tag}/scan"
+        field_state_output_dir = f"{cycle_root}/field_init"
+        candidate_output_dir = f"{cycle_root}/candidates"
+        log.info(
+            f"[print_field] fixed cycle layout: {cycle_tag} "
+            f"scan_capture_folder='{scan_capture_folder}' field_state_output_dir='{field_state_output_dir}' "
+            f"candidate_output_dir='{candidate_output_dir}'"
+        )
 
         log.info(
             "Starting print_field sequence: "
             f"home_before_scan={home_before_scan}, grid=({scan_nx}x{scan_ny}), "
             f"capture_folder='{scan_capture_folder}', run_reconstruction={run_reconstruction}, "
-            f"run_field_init={run_field_init}"
+            f"run_field_init={run_field_init}, run_generate_candidates={run_generate_candidates}"
         )
 
         mesh_path = ""
         rgb_ply_path = ""
+        field_state_path = ""
         try:
             if home_before_scan:
                 self.session.run_sync(
@@ -254,6 +312,7 @@ class PrintFieldSequenceNode(Node):
                 if not init_res.get("ok", False):
                     raise RuntimeError(f"init_field_from_scan failed: {init_res.get('error')}")
                 metrics = init_res.get("metrics", {})
+                field_state_path = str(metrics.get("field_state_path", "")).strip()
                 log.info(
                     "[print_field] Field initialized: "
                     f"state='{metrics.get('field_state_path', '')}', "
@@ -262,6 +321,178 @@ class PrintFieldSequenceNode(Node):
                     f"{metrics.get('offset_y', 0.0):.4f}, "
                     f"{metrics.get('offset_z', 0.0):.4f})"
                 )
+
+                debug_field_ply_path = str(metrics.get("debug_field_ply_path", "")).strip()
+                if debug_field_ply_path:
+                    field_vis_res = self.session.run_sync(
+                        self.session.camera.update_world_mesh(
+                            use_latest=False,
+                            session_path=field_session_path or "@session",
+                            mesh_path="",
+                            ply_path=debug_field_ply_path,
+                            prefer="ply",
+                            wait_timeout_s=mesh_update_wait_timeout_s,
+                            enqueue=False,
+                        ),
+                        timeout_s=mesh_update_request_timeout_s,
+                    )
+                    if not field_vis_res.get("ok", False):
+                        raise RuntimeError(
+                            f"update_world_mesh(field_ply) failed: {field_vis_res.get('error')}"
+                        )
+                    field_vis_path = str(field_vis_res.get("metrics", {}).get("published_path", "")).strip()
+                    field_vis_kind = str(field_vis_res.get("metrics", {}).get("published_kind", "")).strip()
+                    log.info(
+                        f"[print_field] Field PLY published in RViz ({field_vis_kind}): {field_vis_path}"
+                    )
+
+            if run_generate_candidates:
+                scan_mesh_for_candidates = candidate_scan_mesh_path or field_scan_mesh_path or mesh_path
+                scan_mesh_paths = [scan_mesh_for_candidates] if scan_mesh_for_candidates else []
+                field_state_for_candidates = candidate_field_state_path or field_state_path
+
+                cand_res = self.session.run_sync(
+                    self.session.field.generate_print_candidates(
+                        use_latest=candidate_use_latest,
+                        session_path=candidate_session_path,
+                        field_state_path=field_state_for_candidates,
+                        scan_mesh_paths=scan_mesh_paths,
+                        output_dir=candidate_output_dir,
+                        beads_per_step=candidate_beads_per_step,
+                        bead_separation_mm=candidate_bead_separation_mm,
+                        bead_height_mm=candidate_bead_height_mm,
+                        target_zx=candidate_target_zx,
+                        target_zy=candidate_target_zy,
+                        target_zz=candidate_target_zz,
+                        target_position_scale=candidate_target_position_scale,
+                        enqueue=False,
+                    ),
+                    timeout_s=candidate_request_timeout_s,
+                )
+                if not cand_res.get("ok", False):
+                    raise RuntimeError(f"generate_print_candidates failed: {cand_res.get('error')}")
+                cand_metrics = cand_res.get("metrics", {})
+                log.info(
+                    "[print_field] Candidates generated: "
+                    f"count={cand_metrics.get('candidate_count', 0)} "
+                    f"viable={cand_metrics.get('viable_count', 0)} "
+                    f"contour_segments={cand_metrics.get('contour_segment_count', 0)} "
+                    f"yaml='{cand_metrics.get('targets_yaml_path', '')}' "
+                    f"cycle_dir='{cand_metrics.get('cycle_output_dir', '')}'"
+                )
+
+                targets_yaml_path = str(cand_metrics.get("targets_yaml_path", "")).strip()
+                preview_targets = []
+                if targets_yaml_path:
+                    preview_targets = self.yaml_parser.parse_yaml_targets(
+                        yaml_path=targets_yaml_path,
+                        frame_id=frame_id,
+                    )
+
+                if candidate_visualize_field_ply:
+                    cycle_field_ply = str(cand_metrics.get("debug_field_ply_path", "")).strip()
+                    if cycle_field_ply:
+                        cycle_vis_res = self.session.run_sync(
+                            self.session.camera.update_world_mesh(
+                                use_latest=False,
+                                session_path=candidate_session_path or "@session",
+                                mesh_path="",
+                                ply_path=cycle_field_ply,
+                                prefer="ply",
+                                wait_timeout_s=mesh_update_wait_timeout_s,
+                                enqueue=False,
+                            ),
+                            timeout_s=mesh_update_request_timeout_s,
+                        )
+                        if not cycle_vis_res.get("ok", False):
+                            raise RuntimeError(
+                                f"update_world_mesh(cycle_field_ply) failed: {cycle_vis_res.get('error')}"
+                            )
+                        cycle_vis_path = str(
+                            cycle_vis_res.get("metrics", {}).get("published_path", "")
+                        ).strip()
+                        cycle_vis_kind = str(
+                            cycle_vis_res.get("metrics", {}).get("published_kind", "")
+                        ).strip()
+                        log.info(
+                            f"[print_field] Cycle field PLY published in RViz ({cycle_vis_kind}): {cycle_vis_path}"
+                        )
+                        if candidate_restore_scan_mesh_after_field_ply and scan_mesh_for_candidates:
+                            scan_restore_res = self.session.run_sync(
+                                self.session.camera.update_world_mesh(
+                                    use_latest=False,
+                                    session_path=candidate_session_path or "@session",
+                                    mesh_path=scan_mesh_for_candidates,
+                                    ply_path="",
+                                    prefer="mesh",
+                                    wait_timeout_s=mesh_update_wait_timeout_s,
+                                    enqueue=False,
+                                ),
+                                timeout_s=mesh_update_request_timeout_s,
+                            )
+                            if not scan_restore_res.get("ok", False):
+                                raise RuntimeError(
+                                    f"update_world_mesh(restore_scan_mesh) failed: "
+                                    f"{scan_restore_res.get('error')}"
+                                )
+                            restored_path = str(
+                                scan_restore_res.get("metrics", {}).get("published_path", "")
+                            ).strip()
+                            restored_kind = str(
+                                scan_restore_res.get("metrics", {}).get("published_kind", "")
+                            ).strip()
+                            log.info(
+                                f"[print_field] Scan mesh restored in RViz ({restored_kind}): {restored_path}"
+                            )
+
+                if candidate_publish_markers and preview_targets:
+                    marker_res = self.session.run_sync(
+                        self.session.util.publish_targets(
+                            preview_targets,
+                            axis_length=float(candidate_marker_axis_length),
+                            axis_radius=float(candidate_marker_axis_radius),
+                            clear_before=bool(candidate_marker_clear_before),
+                            enqueue=False,
+                        ),
+                        timeout_s=mesh_update_request_timeout_s,
+                    )
+                    if not marker_res.get("ok", False):
+                        raise RuntimeError(
+                            f"publish_targets(candidates) failed: {marker_res.get('error')}"
+                        )
+                    log.info(
+                        f"[print_field] Candidate markers published: {len(preview_targets)} targets "
+                        f"(yaml='{targets_yaml_path}', frame='{frame_id}')"
+                    )
+
+                if preview_targets:
+                    gate_res = self.session.run_sync(
+                        self.session.util.input(
+                            prompt=(
+                                "[print_field] Press ENTER to execute print dots on generated targets "
+                                "(type 'q' + ENTER to skip)."
+                            ),
+                            enqueue=False,
+                        ),
+                        timeout_s=None,
+                    )
+                    gate_value = str(gate_res.get("metrics", {}).get("value", "")).strip().lower()
+                    if gate_value == "q":
+                        log.warn("[print_field] Print execution skipped by user.")
+                    else:
+                        print_res = self._run_print_dots_targets(
+                            targets=preview_targets,
+                            timeout_s=timeout_s,
+                        )
+                        if not print_res.get("ok", False):
+                            raise RuntimeError(
+                                f"print targets failed at stage={print_res.get('stage')}: "
+                                f"{print_res.get('error', 'unknown')}"
+                            )
+                        log.info(
+                            "[print_field] Print dots completed: "
+                            f"printed={print_res.get('printed', 0)} / targets={print_res.get('targets', 0)}"
+                        )
 
             if home_after:
                 self.session.run_sync(
@@ -340,6 +571,124 @@ class PrintFieldSequenceNode(Node):
         if val <= 0.0:
             return None
         return val
+
+    def _run_print_dots_targets(
+        self,
+        *,
+        targets: list[PoseStamped],
+        timeout_s: Optional[float],
+    ) -> dict:
+        if len(targets) < 1:
+            return {"ok": False, "stage": "parse_targets", "error": "Need at least 1 target."}
+
+        pre_dot_vel_scale = 0.02
+        dot_vel_scale = 0.02
+        accel_scale = 0.05
+        approach_z_offset_m = 0.40
+        dot_z_offset_m = 0.04
+        dot_steps = 5000
+        dot_speed = 1200
+        dwell_s = 0.4
+
+        self.session.run_sync(self.session.motion.setLIN(enqueue=False), timeout_s=timeout_s)
+        self.session.run_sync(self.session.motion.setAcc(float(accel_scale), enqueue=False), timeout_s=timeout_s)
+        self.session.run_sync(self.session.motion.setSpd(float(dot_vel_scale), enqueue=False), timeout_s=timeout_s)
+        self.session.run_sync(self.session.motion.setEef("extruder_tcp", enqueue=False), timeout_s=timeout_s)
+
+        first_approach = self._with_z_offset(targets[0], float(approach_z_offset_m))
+        res = self.session.run_sync(
+            self.session.motion.goto(
+                pose=first_approach,
+                motion="LIN",
+                vel_scale=float(pre_dot_vel_scale),
+                exec=True,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+        if not res.get("ok", False):
+            return {"ok": False, "stage": "approach_first", "error": res.get("error", "unknown")}
+
+        printed = 0
+        for i, target in enumerate(targets):
+            above = self._with_z_offset(target, float(dot_z_offset_m))
+
+            above_vel = float(pre_dot_vel_scale) if i == 0 else float(dot_vel_scale)
+            res = self.session.run_sync(
+                self.session.motion.goto(
+                    pose=above,
+                    motion="LIN",
+                    vel_scale=above_vel,
+                    exec=True,
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
+            )
+            if not res.get("ok", False):
+                return {"ok": False, "stage": f"goto_above_{i}", "error": res.get("error", "unknown")}
+
+            res = self.session.run_sync(
+                self.session.motion.goto(
+                    pose=target,
+                    motion="LIN",
+                    vel_scale=float(dot_vel_scale),
+                    exec=True,
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
+            )
+            if not res.get("ok", False):
+                return {"ok": False, "stage": f"goto_target_{i}", "error": res.get("error", "unknown")}
+
+            res = self.session.run_sync(
+                self.session.extruder.print_steps(
+                    steps=int(dot_steps),
+                    speed=int(dot_speed),
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
+            )
+            if not res.get("ok", False):
+                return {"ok": False, "stage": f"extrude_{i}", "error": res.get("error", "unknown")}
+
+            if float(dwell_s) > 0.0:
+                res = self.session.run_sync(
+                    self.session.util.wait(float(dwell_s), enqueue=False),
+                    timeout_s=timeout_s,
+                )
+                if not res.get("ok", False):
+                    return {"ok": False, "stage": f"wait_{i}", "error": res.get("error", "unknown")}
+
+            res = self.session.run_sync(
+                self.session.motion.goto(
+                    pose=above,
+                    motion="LIN",
+                    vel_scale=float(dot_vel_scale),
+                    exec=True,
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
+            )
+            if not res.get("ok", False):
+                return {"ok": False, "stage": f"lift_{i}", "error": res.get("error", "unknown")}
+
+            printed += 1
+
+        return {"ok": True, "stage": "done", "targets": len(targets), "printed": printed}
+
+    @staticmethod
+    def _with_z_offset(ps: PoseStamped, z_offset_m: float) -> PoseStamped:
+        out = PoseStamped()
+        out.header.frame_id = ps.header.frame_id
+        out.header.stamp = ps.header.stamp
+        out.pose.position.x = float(ps.pose.position.x)
+        out.pose.position.y = float(ps.pose.position.y)
+        out.pose.position.z = float(ps.pose.position.z) + float(z_offset_m)
+        out.pose.orientation.x = float(ps.pose.orientation.x)
+        out.pose.orientation.y = float(ps.pose.orientation.y)
+        out.pose.orientation.z = float(ps.pose.orientation.z)
+        out.pose.orientation.w = float(ps.pose.orientation.w)
+        return out
 
 
 def main(args=None):

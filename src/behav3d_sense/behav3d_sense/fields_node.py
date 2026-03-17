@@ -13,23 +13,32 @@ import rclpy
 from rclpy.node import Node
 
 try:
-    from behav3d_interfaces.srv import InitFieldFromScan
+    from behav3d_interfaces.srv import GeneratePrintCandidates, InitFieldFromScan
 except ImportError:  # pragma: no cover
+    from behav3d_interfaces.srv._generate_print_candidates import GeneratePrintCandidates
     from behav3d_interfaces.srv._init_field_from_scan import InitFieldFromScan
 
 from .reconstruct.service_utils import get_captures_root, resolve_session_path
 
 try:
     from behav3d_py.scalar_field.lib_scalar.compute_heat_field import compute_heat_field
+    from behav3d_py.scalar_field.lib_scalar.compute_phi_mask import evaluate_fixed_pose, make_scan_scene
+    from behav3d_py.scalar_field.lib_scalar.extract_phi_contour import extract_phi_contour
+    from behav3d_py.scalar_field.lib_scalar.generate_print_points_phi_lift import generate_print_points_phi_lift
     from behav3d_py.scalar_field.lib_scalar.geometry import load_triangle_mesh_arrays
     from behav3d_py.scalar_field.lib_scalar.loop_simulation import position_field_with_attempts
-    from behav3d_py.scalar_field.lib_scalar.viz import make_point_cloud, yellow_to_red_colors
+    from behav3d_py.scalar_field.lib_scalar.viz import make_line_set, make_point_cloud, yellow_to_red_colors
 
     _SCALAR_IMPORT_ERROR = None
 except Exception as exc:  # pragma: no cover
     compute_heat_field = None
+    evaluate_fixed_pose = None
+    make_scan_scene = None
+    extract_phi_contour = None
+    generate_print_points_phi_lift = None
     load_triangle_mesh_arrays = None
     position_field_with_attempts = None
+    make_line_set = None
     make_point_cloud = None
     yellow_to_red_colors = None
     _SCALAR_IMPORT_ERROR = exc
@@ -54,10 +63,10 @@ def _resolve_input_path(raw_path: str, session_dir: Path, captures_root: Path) -
     return (Path.cwd() / p).resolve()
 
 
-def _resolve_output_dir(raw_path: str, session_dir: Path, captures_root: Path) -> Path:
+def _resolve_output_dir(raw_path: str, session_dir: Path, captures_root: Path, default_value: str) -> Path:
     value = str(raw_path or "").strip()
     if not value:
-        value = "@session/field_loop/init"
+        value = str(default_value or "").strip() or "@session/field_loop/init"
     if value.startswith("@session"):
         return resolve_session_path(value, False, captures_root).resolve()
     p = Path(value).expanduser()
@@ -98,6 +107,18 @@ def _default_scan_mesh_path(session_dir: Path) -> Optional[Path]:
     )
 
 
+def _default_field_state_path(session_dir: Path) -> Optional[Path]:
+    return _latest_existing(
+        session_dir,
+        (
+            "field_loop/**/field_state_init.npz",
+            "**/field_loop/init/field_state_init.npz",
+            "**/field_state_init.npz",
+            "field_state_init.npz",
+        ),
+    )
+
+
 def _load_scan_mesh(paths: List[Path]) -> o3d.geometry.TriangleMesh:
     if not paths:
         raise ValueError("No scan mesh paths to load.")
@@ -113,6 +134,45 @@ def _load_scan_mesh(paths: List[Path]) -> o3d.geometry.TriangleMesh:
             merged += mesh
     assert merged is not None
     return merged
+
+
+def _write_targets_yaml(
+    out_yaml: Path,
+    points_world: np.ndarray,
+    z_dir: tuple[float, float, float],
+    position_scale: float,
+    base_to_world_yaw_deg: float,
+) -> None:
+    out_yaml.parent.mkdir(parents=True, exist_ok=True)
+    zx, zy, zz = float(z_dir[0]), float(z_dir[1]), float(z_dir[2])
+    scale = float(position_scale)
+    yaw = np.deg2rad(float(base_to_world_yaw_deg))
+    c = float(np.cos(yaw))
+    s = float(np.sin(yaw))
+    rot_z = np.array(
+        [
+            [c, -s, 0.0],
+            [s, c, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    z_world = rot_z @ np.array([zx, zy, zz], dtype=np.float64)
+
+    lines: list[str] = ["targets:"]
+    for i in range(points_world.shape[0]):
+        p = rot_z @ np.asarray(points_world[i], dtype=np.float64)
+        ox = scale * float(p[0])
+        oy = scale * float(p[1])
+        oz = scale * float(p[2])
+        zwx = float(z_world[0])
+        zwy = float(z_world[1])
+        zwz = float(z_world[2])
+        plane = f'O({ox:.2f},{oy:.2f},{oz:.2f}) Z({zwx:.2f},{zwy:.2f},{zwz:.2f})'
+        lines.append(f"  - index: {i}")
+        lines.append(f'    plane: "{plane}"')
+
+    out_yaml.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 class FieldsNode(Node):
@@ -131,13 +191,34 @@ class FieldsNode(Node):
         self.declare_parameter("base_epsilon", 1e-6)
         self.declare_parameter("state_filename", "field_state_init.npz")
         self.declare_parameter("debug_field_ply_filename", "field_masked_init.ply")
+        self.declare_parameter("iso_level", 0.0)
+        self.declare_parameter("default_cycle_output_dir", "@session/field_loop/cycle")
+        self.declare_parameter("cycle_field_ply_filename", "field_masked_cycle.ply")
+        self.declare_parameter("cycle_contour_ply_filename", "field_phi0_contour_cycle.ply")
+        self.declare_parameter("cycle_candidates_ply_filename", "field_print_candidates_cycle.ply")
+        self.declare_parameter("cycle_targets_yaml_filename", "targets.yaml")
+        self.declare_parameter("beads_per_step", 7)
+        self.declare_parameter("bead_separation_mm", 16.0)
+        self.declare_parameter("bead_height_mm", 12.0)
+        self.declare_parameter("target_zx", 0.03)
+        self.declare_parameter("target_zy", -0.01)
+        self.declare_parameter("target_zz", 1.00)
+        self.declare_parameter("target_position_scale", 1000.0)
+        self.declare_parameter("target_base_to_world_yaw_deg", 180.0)
 
-        self._srv = self.create_service(
+        self._srv_init = self.create_service(
             InitFieldFromScan,
             "/behav3d/init_field_from_scan",
             self._handle_init_field_from_scan,
         )
-        self.get_logger().info("Fields node ready: /behav3d/init_field_from_scan")
+        self._srv_generate = self.create_service(
+            GeneratePrintCandidates,
+            "/behav3d/generate_print_candidates",
+            self._handle_generate_print_candidates,
+        )
+        self.get_logger().info(
+            "Fields node ready: /behav3d/init_field_from_scan, /behav3d/generate_print_candidates"
+        )
 
     def _handle_init_field_from_scan(
         self,
@@ -206,7 +287,12 @@ class FieldsNode(Node):
             )
             viable = np.asarray(position.viable, dtype=bool)
 
-            out_dir = _resolve_output_dir(req.state_output_dir, session_dir, self._captures_root)
+            out_dir = _resolve_output_dir(
+                req.state_output_dir,
+                session_dir,
+                self._captures_root,
+                default_value="@session/field_loop/init",
+            )
             out_dir.mkdir(parents=True, exist_ok=True)
             state_path = out_dir / str(self.get_parameter("state_filename").value)
             debug_field_path = out_dir / str(self.get_parameter("debug_field_ply_filename").value)
@@ -247,6 +333,218 @@ class FieldsNode(Node):
             res.offset_x = float(position.offset_xyz[0])
             res.offset_y = float(position.offset_xyz[1])
             res.offset_z = float(position.offset_xyz[2])
+            return res
+        except Exception as exc:
+            res.success = False
+            res.message = str(exc)
+            return res
+
+    def _handle_generate_print_candidates(
+        self,
+        req: GeneratePrintCandidates.Request,
+        res: GeneratePrintCandidates.Response,
+    ) -> GeneratePrintCandidates.Response:
+        if _SCALAR_IMPORT_ERROR is not None:
+            res.success = False
+            res.message = f"scalar_field import failed: {_SCALAR_IMPORT_ERROR}"
+            return res
+
+        try:
+            session_dir = resolve_session_path(req.session_path, bool(req.use_latest), self._captures_root).resolve()
+            res.session_dir = str(session_dir)
+            if not session_dir.exists():
+                raise FileNotFoundError(f"Session directory not found: {session_dir}")
+
+            scan_paths: List[Path] = []
+            for raw in list(req.scan_mesh_paths):
+                p = _resolve_input_path(raw, session_dir, self._captures_root)
+                if p is not None and p.is_file():
+                    scan_paths.append(p)
+            if not scan_paths:
+                default_scan = _default_scan_mesh_path(session_dir)
+                if default_scan is None:
+                    raise FileNotFoundError("No scan mesh path provided and no default tsdf mesh found in session.")
+                scan_paths = [default_scan]
+
+            field_state_path = _resolve_input_path(req.field_state_path, session_dir, self._captures_root)
+            if field_state_path is None or not field_state_path.is_file():
+                default_state = _default_field_state_path(session_dir)
+                if default_state is None:
+                    raise FileNotFoundError(
+                        "Field state not found. Provide field_state_path or run init_field_from_scan first."
+                    )
+                field_state_path = default_state
+
+            scan_mesh = _load_scan_mesh(scan_paths)
+            state = np.load(str(field_state_path), allow_pickle=False)
+            if "field_faces" not in state:
+                raise KeyError(f"Missing 'field_faces' in field state: {field_state_path}")
+            if "heat_norm" not in state:
+                raise KeyError(f"Missing 'heat_norm' in field state: {field_state_path}")
+            if "offset_xyz" not in state:
+                raise KeyError(f"Missing 'offset_xyz' in field state: {field_state_path}")
+
+            if "field_vertices_scaled" in state:
+                field_vertices_scaled = np.asarray(state["field_vertices_scaled"], dtype=np.float64)
+            elif "field_vertices" in state:
+                field_vertices = np.asarray(state["field_vertices"], dtype=np.float64)
+                scale_arr = np.asarray(state["field_scale"], dtype=np.float64).reshape(-1) if "field_scale" in state else np.array([1.0], dtype=np.float64)
+                field_vertices_scaled = field_vertices * float(scale_arr[0])
+            else:
+                raise KeyError(
+                    f"Missing 'field_vertices_scaled' (or fallback 'field_vertices') in field state: {field_state_path}"
+                )
+
+            field_faces = np.asarray(state["field_faces"], dtype=np.int32)
+            heat_norm = np.asarray(state["heat_norm"], dtype=np.float64).reshape(-1)
+            if field_vertices_scaled.ndim != 2 or field_vertices_scaled.shape[1] != 3:
+                raise ValueError(f"field_vertices_scaled has invalid shape: {field_vertices_scaled.shape}")
+            if field_faces.ndim != 2 or field_faces.shape[1] != 3:
+                raise ValueError(f"field_faces has invalid shape: {field_faces.shape}")
+            if heat_norm.shape[0] != field_vertices_scaled.shape[0]:
+                raise ValueError("heat_norm length does not match field vertices.")
+
+            offset_arr = np.asarray(state["offset_xyz"], dtype=np.float64).reshape(-1)
+            if offset_arr.size < 3:
+                raise ValueError(f"offset_xyz has invalid shape: {offset_arr.shape}")
+            offset_xyz = (float(offset_arr[0]), float(offset_arr[1]), float(offset_arr[2]))
+
+            if "clearance" in state:
+                clearance_arr = np.asarray(state["clearance"], dtype=np.float64).reshape(-1)
+                clearance_used = float(clearance_arr[0]) if clearance_arr.size > 0 else float(
+                    self.get_parameter("clearance").value
+                )
+            else:
+                clearance_used = float(self.get_parameter("clearance").value)
+            iso_level = float(self.get_parameter("iso_level").value)
+
+            scene, z_top = make_scan_scene(scan_mesh)
+            pose = evaluate_fixed_pose(
+                scene=scene,
+                z_top=z_top,
+                field_vertices_scaled=field_vertices_scaled,
+                offset_xyz=offset_xyz,
+                clearance=clearance_used,
+                iso_level=iso_level,
+            )
+
+            contour_points, contour_lines = extract_phi_contour(
+                vertices=pose.field_vertices_world,
+                faces=field_faces,
+                scalar=pose.phi,
+                iso=iso_level,
+            )
+
+            beads_per_step_used = int(req.beads_per_step)
+            if beads_per_step_used <= 0:
+                beads_per_step_used = int(self.get_parameter("beads_per_step").value)
+            bead_separation_mm_used = float(req.bead_separation_mm)
+            if bead_separation_mm_used <= 0.0:
+                bead_separation_mm_used = float(self.get_parameter("bead_separation_mm").value)
+            bead_height_mm_used = float(req.bead_height_mm)
+            if bead_height_mm_used <= 0.0:
+                bead_height_mm_used = float(self.get_parameter("bead_height_mm").value)
+
+            if bead_separation_mm_used <= 0.0:
+                raise ValueError(f"bead_separation_mm must be > 0, got {bead_separation_mm_used}")
+            if bead_height_mm_used < 0.0:
+                raise ValueError(f"bead_height_mm must be >= 0, got {bead_height_mm_used}")
+            if beads_per_step_used < 0:
+                raise ValueError(f"beads_per_step must be >= 0, got {beads_per_step_used}")
+
+            targets_zx = float(req.target_zx)
+            targets_zy = float(req.target_zy)
+            targets_zz = float(req.target_zz)
+            if not (np.isfinite(targets_zx) and np.isfinite(targets_zy) and np.isfinite(targets_zz)):
+                raise ValueError("target_z direction must be finite values.")
+            target_position_scale = float(req.target_position_scale)
+            if target_position_scale <= 0.0:
+                target_position_scale = float(self.get_parameter("target_position_scale").value)
+            target_base_to_world_yaw_deg = float(self.get_parameter("target_base_to_world_yaw_deg").value)
+            if not np.isfinite(target_base_to_world_yaw_deg):
+                raise ValueError("target_base_to_world_yaw_deg must be a finite value.")
+
+            lifted = generate_print_points_phi_lift(
+                polyline_points=contour_points,
+                polyline_lines=contour_lines,
+                field_vertices_world=pose.field_vertices_world,
+                field_faces=field_faces,
+                heat_norm=heat_norm,
+                print_height=1e-3 * bead_height_mm_used,
+                count=beads_per_step_used,
+                min_spacing=1e-3 * bead_separation_mm_used,
+                point_valid_mask=None,
+            )
+
+            out_dir = _resolve_output_dir(
+                req.output_dir,
+                session_dir,
+                self._captures_root,
+                default_value=str(self.get_parameter("default_cycle_output_dir").value),
+            )
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            debug_field_path = out_dir / str(self.get_parameter("cycle_field_ply_filename").value)
+            debug_contour_path = out_dir / str(self.get_parameter("cycle_contour_ply_filename").value)
+            debug_candidates_path = out_dir / str(self.get_parameter("cycle_candidates_ply_filename").value)
+            targets_yaml_path = out_dir / str(self.get_parameter("cycle_targets_yaml_filename").value)
+
+            colors = yellow_to_red_colors(heat_norm)
+            colors = np.asarray(colors, dtype=np.float64)
+            colors[~pose.viable] = np.array([0.2, 0.2, 0.2], dtype=np.float64)
+            debug_field_pcd = make_point_cloud(pose.field_vertices_world, colors)
+            if not o3d.io.write_point_cloud(str(debug_field_path), debug_field_pcd):
+                raise RuntimeError(f"Failed to write debug field PLY: {debug_field_path}")
+
+            contour_written = ""
+            if contour_lines.shape[0] > 0:
+                contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
+                if not o3d.io.write_line_set(str(debug_contour_path), contour_ls):
+                    raise RuntimeError(f"Failed to write contour PLY: {debug_contour_path}")
+                contour_written = str(debug_contour_path)
+
+            candidate_written = ""
+            if lifted.lifted_points.shape[0] > 0:
+                candidate_colors = np.tile(
+                    np.array([1.0, 0.0, 1.0], dtype=np.float64),
+                    (lifted.lifted_points.shape[0], 1),
+                )
+                candidates_pcd = make_point_cloud(lifted.lifted_points, candidate_colors)
+                if not o3d.io.write_point_cloud(str(debug_candidates_path), candidates_pcd):
+                    raise RuntimeError(f"Failed to write candidates PLY: {debug_candidates_path}")
+                candidate_written = str(debug_candidates_path)
+
+            _write_targets_yaml(
+                out_yaml=targets_yaml_path,
+                points_world=lifted.lifted_points,
+                z_dir=(targets_zx, targets_zy, targets_zz),
+                position_scale=target_position_scale,
+                base_to_world_yaw_deg=target_base_to_world_yaw_deg,
+            )
+
+            res.success = True
+            res.message = (
+                f"Generated z_lift candidates. scan_meshes={len(scan_paths)} "
+                f"viable={int(np.count_nonzero(pose.viable))} "
+                f"contour_segments={int(contour_lines.shape[0])} "
+                f"candidates={int(lifted.lifted_points.shape[0])}"
+            )
+            res.resolved_field_state_path = str(field_state_path)
+            res.resolved_scan_mesh_path = str(scan_paths[0])
+            res.cycle_output_dir = str(out_dir)
+            res.debug_field_ply_path = str(debug_field_path)
+            res.debug_contour_ply_path = contour_written
+            res.debug_candidates_ply_path = candidate_written
+            res.targets_yaml_path = str(targets_yaml_path)
+            res.scan_mesh_count = int(len(scan_paths))
+            res.viable_count = int(np.count_nonzero(pose.viable))
+            res.contour_segment_count = int(contour_lines.shape[0])
+            res.candidate_count = int(lifted.lifted_points.shape[0])
+            res.clearance_used = float(clearance_used)
+            res.iso_level_used = float(iso_level)
+            res.beads_per_step_used = int(beads_per_step_used)
+            res.bead_separation_mm_used = float(bead_separation_mm_used)
+            res.bead_height_mm_used = float(bead_height_mm_used)
             return res
         except Exception as exc:
             res.success = False
