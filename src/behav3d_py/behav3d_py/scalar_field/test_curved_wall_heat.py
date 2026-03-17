@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """Quick potpourri3d heat-method test on a mesh file.
 Sample run:
-python3 /home/lab/behav3d_ws/python_scripts/scalar_field/field_scan_phi_contour.py \
-  --field-mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
-  --scan-mesh /home/lab/behav3d_ws/mesh/tsdf_surface_mesh.stl \
-  --seed-level 1 --t-coef 2000 \
-  --field-scale 0.001 \
-  --pose-search --search-step-x 0.01 --search-step-y 0.01 \
-  --clearance 0.001 --axis-size 0
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/test_curved_wall_heat.py \
+  --mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
+  --seed-level 1 --t-coef 2000
 
 """
 
@@ -25,7 +21,7 @@ from lib_scalar.viz import make_point_cloud, yellow_to_red_colors
 
 
 DEFAULT_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
-OUTPUT_DIR = Path("/home/lab/behav3d_ws/python_scripts/scalar_field/output")
+OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
 def run(

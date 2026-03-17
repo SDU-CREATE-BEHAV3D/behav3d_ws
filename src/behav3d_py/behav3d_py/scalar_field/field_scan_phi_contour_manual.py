@@ -3,7 +3,7 @@
 
 This wrapper keeps the same outputs, but always uses user-provided
 field offsets (no XY pose search).
-python3 /home/lab/behav3d_ws/python_scripts/scalar_field/field_scan_phi_contour_manual.py \
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_phi_contour_manual.py \
   --field-mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
   --scan-mesh /home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl \
   --seed-level 1 --t-coef 2000 \
@@ -25,7 +25,7 @@ from pathlib import Path
 
 from field_scan_phi_contour import DEFAULT_FIELD_MESH, DEFAULT_SCAN_MESH, run
 
-OUTPUT_DIR = Path("/home/lab/behav3d_ws/python_scripts/scalar_field/output")
+OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
 def main() -> None:

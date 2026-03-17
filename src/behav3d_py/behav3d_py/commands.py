@@ -25,7 +25,7 @@ OnMoveDone = Optional[Callable[[Dict[str, Any]], None]]
 
 class Commands:
     """
-
+    DEPRECATED VERSION OF COMMAND INTERFACE
     Async command orchestrator managing motion, printing, sensing, and utility actions through a unified FIFO queue.
 
     Public API:

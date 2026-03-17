@@ -8,7 +8,7 @@ Compared to the default geodesic-offset method:
 - selected points are then lifted by print-height along +Z.
 
 Example command:
-python3 /home/lab/behav3d_ws/python_scripts/scalar_field/field_scan_phi_polyline_lift.py \
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_phi_polyline_lift.py \
   --field-mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
   --scan-mesh /home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl \
   --seed-level 1 --t-coef 2000 \
@@ -39,7 +39,7 @@ from lib_scalar.viz import compute_scene_bounds, make_line_set, make_point_cloud
 
 DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
-OUTPUT_DIR = Path("/home/lab/behav3d_ws/python_scripts/scalar_field/output")
+OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
 def subdivide_field_mesh_loop(

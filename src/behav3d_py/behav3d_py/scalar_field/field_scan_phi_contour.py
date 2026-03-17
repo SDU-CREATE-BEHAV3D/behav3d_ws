@@ -28,7 +28,7 @@ from lib_scalar.viz import compute_scene_bounds, make_line_set, make_point_cloud
 
 DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
-OUTPUT_DIR = Path("/home/lab/behav3d_ws/python_scripts/scalar_field/output")
+OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
 def deduplicate_polyline(
