@@ -26,6 +26,7 @@ setup(
             'print_scan_dots_sequence = behav3d_orchestrator.print_scan_dots_sequencenc:main',
             'print_scan_dots_sequencenc = behav3d_orchestrator.print_scan_dots_sequencenc:main',
             'depth_bias_capture_sequence = behav3d_orchestrator.depth_bias_capture_sequence:main',
+            'print_field_sequence = behav3d_orchestrator.print_field_sequence:main',
         ],
     },
 )

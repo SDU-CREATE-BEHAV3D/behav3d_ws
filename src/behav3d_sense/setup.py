@@ -28,6 +28,7 @@ setup(
             'tsdf_cropped_service = behav3d_sense.reconstruct.reconstruct_services:main_tsdf_cropped',
             'tsdf_object_extract_service = behav3d_sense.reconstruct.reconstruct_services:main_tsdf_object_extract',
             'world_node = behav3d_sense.world_node:main',
+            'fields_node = behav3d_sense.fields_node:main',
         ],
     },
 )

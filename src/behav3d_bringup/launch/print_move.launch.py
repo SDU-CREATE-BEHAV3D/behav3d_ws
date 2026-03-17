@@ -280,6 +280,14 @@ def generate_launch_description():
     )
     world_node_call = TimerAction(period=2.0, actions=[world_node])
 
+    fields_node = Node(
+        name="behav3d_fields",
+        package="behav3d_sense",
+        executable="fields_node",
+        output="screen",
+    )
+    fields_node_call = TimerAction(period=2.0, actions=[fields_node])
+
     node_demo = Node(
         name="behav3d_demo",
         package="behav3d_demo",
@@ -331,6 +339,7 @@ def generate_launch_description():
             sense_node_call,
             reconstruct_services,
             world_node_call,
+            fields_node_call,
        #    node_demo
         ]
     )
