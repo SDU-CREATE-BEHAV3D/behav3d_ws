@@ -41,7 +41,7 @@ except Exception:
 # -----------------------------------------------------------------------------
 
 default_input_path = ""
-default_mesh_input_path = "~/Downloads/260227_160709/print_scan_049/reconstruct/new_geometry_mesh_kept.stl"
+default_mesh_input_path = "~/Downloads/260227_160709/print_scan_189/reconstruct/tsdf_surface_mesh.stl"
 default_show_3d = True
 default_show_2d = False
 default_viz_frame = "table"  # "table" or "world"

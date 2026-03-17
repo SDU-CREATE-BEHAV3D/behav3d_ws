@@ -21,14 +21,17 @@ Steps implemented here:
 - Optionally visualize the kept mesh
 - Visualize the final kept mesh by itself
 - Save the final kept mesh
-- Build a combined colored mesh from the previous mesh plus the extracted new mesh
-- Save the combined mesh under a different name
+- Try to merge the extracted new mesh back into the previous cumulative mesh
+- Repair boundary holes on the merged cumulative mesh when possible
+- Save the merged cumulative mesh under a different name
 """
 
 from __future__ import annotations
 
 import argparse
-import colorsys
+import importlib.util
+import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -39,8 +42,8 @@ import open3d as o3d
 # In-script parameters
 # -----------------------------------------------------------------------------
 
-default_prev_mesh_path = "~/Downloads/260227_160709/print_scan_098/reconstruct/previous_plus_new_geometry.stl"
-default_curr_mesh_path = "~/Downloads/260227_160709/print_scan_105/reconstruct/tsdf_surface_mesh.stl"
+default_prev_mesh_path = "~/Downloads/260227_160709/print_scan_070/reconstruct/previous_plus_new_geometry.stl"
+default_curr_mesh_path = "~/Downloads/260227_160709/print_scan_077/reconstruct/tsdf_surface_mesh.stl"
 show_debug_vis = True
 sample_point_count_prev = 100000
 sample_point_count_curr = 100000
@@ -48,12 +51,19 @@ new_geom_dist_thresh_mm = 1.5
 mesh_keep_dist_mm = 1.0
 default_output_mesh_path = ""
 default_output_combined_mesh_path = ""
-combined_mesh_color_seed = 17
+merge_seam_weld_dist_mm = 0.60
+merge_fill_holes_enable = True
+merge_fill_holes_max_boundary_edges = 800
+merge_fill_holes_max_planarity_mm = 4.0
 
 # Visualization colors for inspection.
 prev_mesh_color = (0.65, 0.65, 0.65)
 curr_mesh_color = (0.15, 0.35, 0.95)
 final_output_color = (0.95, 0.15, 0.15)
+merged_output_color = (0.20, 0.72, 0.28)
+
+_mesh_cleanup_module = None
+_mesh_cleanup_module_load_attempted = False
 
 
 def _mm_to_m(v_mm: float) -> float:
@@ -93,14 +103,129 @@ def _load_mesh(mesh_path: Path) -> o3d.geometry.TriangleMesh:
     return mesh
 
 
+def _copy_mesh(mesh: o3d.geometry.TriangleMesh) -> o3d.geometry.TriangleMesh:
+    return o3d.geometry.TriangleMesh(mesh)
+
+
+def _basic_cleanup(mesh: o3d.geometry.TriangleMesh) -> o3d.geometry.TriangleMesh:
+    mesh_out = _copy_mesh(mesh)
+    mesh_out.remove_duplicated_vertices()
+    mesh_out.remove_duplicated_triangles()
+    mesh_out.remove_degenerate_triangles()
+    mesh_out.remove_unreferenced_vertices()
+    if hasattr(mesh_out, "remove_non_manifold_edges"):
+        mesh_out.remove_non_manifold_edges()
+    mesh_out.remove_unreferenced_vertices()
+    if len(mesh_out.vertices) > 0 and len(mesh_out.triangles) > 0:
+        mesh_out.compute_vertex_normals()
+    return mesh_out
+
+
+def _build_boundary_edges(mesh: o3d.geometry.TriangleMesh) -> list[tuple[int, int]]:
+    triangles = np.asarray(mesh.triangles, dtype=np.int32)
+    edge_counts: Counter[tuple[int, int]] = Counter()
+    for tri in triangles:
+        i0, i1, i2 = map(int, tri.tolist())
+        for u, v in ((i0, i1), (i1, i2), (i2, i0)):
+            key = (u, v) if u < v else (v, u)
+            edge_counts[key] += 1
+    return [edge for edge, count in edge_counts.items() if count == 1]
+
+
+def _extract_boundary_loops(mesh: o3d.geometry.TriangleMesh) -> list[list[int]]:
+    boundary_edges = _build_boundary_edges(mesh)
+    if not boundary_edges:
+        return []
+
+    adjacency: dict[int, list[int]] = defaultdict(list)
+    for u, v in boundary_edges:
+        adjacency[u].append(v)
+        adjacency[v].append(u)
+
+    visited_edges: set[tuple[int, int]] = set()
+    loops: list[list[int]] = []
+
+    for start_u, start_v in boundary_edges:
+        start_edge = (start_u, start_v) if start_u < start_v else (start_v, start_u)
+        if start_edge in visited_edges:
+            continue
+
+        loop = [start_u, start_v]
+        visited_edges.add(start_edge)
+        prev_vertex = start_u
+        current_vertex = start_v
+
+        while True:
+            neighbors = adjacency[current_vertex]
+            next_candidates = [n for n in neighbors if n != prev_vertex]
+            if not next_candidates:
+                break
+
+            if len(loop) >= 3 and loop[0] in next_candidates:
+                closing_edge = (
+                    (current_vertex, loop[0]) if current_vertex < loop[0] else (loop[0], current_vertex)
+                )
+                visited_edges.add(closing_edge)
+                loop.append(loop[0])
+                break
+
+            next_vertex = None
+            for candidate in next_candidates:
+                edge_key = (
+                    (current_vertex, candidate) if current_vertex < candidate else (candidate, current_vertex)
+                )
+                if edge_key not in visited_edges:
+                    next_vertex = candidate
+                    visited_edges.add(edge_key)
+                    break
+
+            if next_vertex is None:
+                break
+
+            loop.append(next_vertex)
+            prev_vertex, current_vertex = current_vertex, next_vertex
+
+        if len(loop) >= 4 and loop[0] == loop[-1]:
+            loops.append(loop[:-1])
+
+    return loops
+
+
+def _mesh_summary(mesh: o3d.geometry.TriangleMesh) -> dict[str, object]:
+    return {
+        "vertices": int(len(mesh.vertices)),
+        "triangles": int(len(mesh.triangles)),
+        "boundary_loops": int(len(_extract_boundary_loops(mesh))),
+        "is_watertight": bool(mesh.is_watertight()) if len(mesh.triangles) > 0 else False,
+        "is_edge_manifold_closed": bool(mesh.is_edge_manifold(False)) if len(mesh.triangles) > 0 else False,
+        "is_vertex_manifold": bool(mesh.is_vertex_manifold()) if len(mesh.triangles) > 0 else False,
+    }
+
+
+def _mesh_quality_key(mesh: o3d.geometry.TriangleMesh) -> tuple[int, int, int, int, int]:
+    summary = _mesh_summary(mesh)
+    return (
+        int(not bool(summary["is_watertight"])),
+        int(summary["boundary_loops"]),
+        int(not bool(summary["is_edge_manifold_closed"])),
+        int(not bool(summary["is_vertex_manifold"])),
+        -int(summary["triangles"]),
+    )
+
+
 def _print_mesh_info(name: str, mesh: o3d.geometry.TriangleMesh) -> None:
     aabb = mesh.get_axis_aligned_bounding_box()
     bbox_min = np.asarray(aabb.min_bound, dtype=np.float64)
     bbox_max = np.asarray(aabb.max_bound, dtype=np.float64)
+    summary = _mesh_summary(mesh)
 
     print(f"{name}:")
-    print(f"  vertices: {len(mesh.vertices)}")
-    print(f"  triangles: {len(mesh.triangles)}")
+    print(f"  vertices: {summary['vertices']}")
+    print(f"  triangles: {summary['triangles']}")
+    print(f"  boundary_loops: {summary['boundary_loops']}")
+    print(f"  is_watertight: {summary['is_watertight']}")
+    print(f"  is_edge_manifold_closed: {summary['is_edge_manifold_closed']}")
+    print(f"  is_vertex_manifold: {summary['is_vertex_manifold']}")
     print(f"  aabb_min_m: [{bbox_min[0]:.6f}, {bbox_min[1]:.6f}, {bbox_min[2]:.6f}]")
     print(f"  aabb_max_m: [{bbox_max[0]:.6f}, {bbox_max[1]:.6f}, {bbox_max[2]:.6f}]")
 
@@ -348,31 +473,9 @@ def _show_final_mesh(kept_mesh: o3d.geometry.TriangleMesh) -> None:
     )
 
 
-def _seeded_mesh_colors(num_colors: int, seed: int) -> list[list[float]]:
-    rng = np.random.default_rng(int(seed))
-    hue0 = float(rng.uniform(0.0, 1.0))
-    colors: list[list[float]] = []
-    for idx in range(max(0, int(num_colors))):
-        hue = (hue0 + (idx / max(1, num_colors))) % 1.0
-        sat = float(rng.uniform(0.55, 0.80))
-        val = float(rng.uniform(0.80, 0.95))
-        rgb = colorsys.hsv_to_rgb(hue, sat, val)
-        colors.append([float(rgb[0]), float(rgb[1]), float(rgb[2])])
-    return colors
-
-
-def _paint_mesh_copy(mesh: o3d.geometry.TriangleMesh, color: list[float]) -> o3d.geometry.TriangleMesh:
-    mesh_out = o3d.geometry.TriangleMesh(mesh)
-    mesh_out.paint_uniform_color(color)
-    if len(mesh_out.vertices) > 0 and len(mesh_out.triangles) > 0:
-        mesh_out.compute_vertex_normals()
-    return mesh_out
-
-
 def _combine_meshes(meshes: list[o3d.geometry.TriangleMesh]) -> o3d.geometry.TriangleMesh:
     verts_all: list[np.ndarray] = []
     tris_all: list[np.ndarray] = []
-    colors_all: list[np.ndarray] = []
     vert_offset = 0
 
     for mesh in meshes:
@@ -381,14 +484,8 @@ def _combine_meshes(meshes: list[o3d.geometry.TriangleMesh]) -> o3d.geometry.Tri
         if verts.shape[0] == 0 or tris.shape[0] == 0:
             continue
 
-        if len(mesh.vertex_colors) == len(mesh.vertices):
-            vcols = np.asarray(mesh.vertex_colors, dtype=np.float64)
-        else:
-            vcols = np.full((verts.shape[0], 3), 0.7, dtype=np.float64)
-
         verts_all.append(verts)
         tris_all.append(tris + vert_offset)
-        colors_all.append(vcols)
         vert_offset += verts.shape[0]
 
     if len(verts_all) == 0:
@@ -397,41 +494,176 @@ def _combine_meshes(meshes: list[o3d.geometry.TriangleMesh]) -> o3d.geometry.Tri
     mesh_combined = o3d.geometry.TriangleMesh()
     mesh_combined.vertices = o3d.utility.Vector3dVector(np.vstack(verts_all))
     mesh_combined.triangles = o3d.utility.Vector3iVector(np.vstack(tris_all))
-    mesh_combined.vertex_colors = o3d.utility.Vector3dVector(np.vstack(colors_all))
-    mesh_combined.compute_vertex_normals()
-    return mesh_combined
+    return _basic_cleanup(mesh_combined)
 
 
-def _build_combined_colored_mesh(
+def _load_mesh_cleanup_module():
+    global _mesh_cleanup_module, _mesh_cleanup_module_load_attempted
+    if _mesh_cleanup_module_load_attempted:
+        return _mesh_cleanup_module
+
+    _mesh_cleanup_module_load_attempted = True
+    module_path = Path(__file__).with_name("mesh_cleanup_close_holes.py")
+    if not module_path.exists():
+        return None
+
+    try:
+        spec = importlib.util.spec_from_file_location("mesh_cleanup_close_holes_runtime", module_path)
+        if spec is None or spec.loader is None:
+            return None
+
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        _mesh_cleanup_module = module
+    except Exception as exc:
+        print(f"Warning: failed to load mesh cleanup helper module: {exc}")
+        _mesh_cleanup_module = None
+
+    return _mesh_cleanup_module
+
+
+def _merge_close_vertices(
+    mesh: o3d.geometry.TriangleMesh,
+    weld_dist_mm: float,
+) -> tuple[o3d.geometry.TriangleMesh, int]:
+    mesh_out = _copy_mesh(mesh)
+    if weld_dist_mm <= 0.0 or len(mesh_out.vertices) == 0 or not hasattr(mesh_out, "merge_close_vertices"):
+        return _basic_cleanup(mesh_out), 0
+
+    vertices_before = len(mesh_out.vertices)
+    mesh_out.merge_close_vertices(_mm_to_m(float(weld_dist_mm)))
+    mesh_out = _basic_cleanup(mesh_out)
+    collapsed = max(0, int(vertices_before) - int(len(mesh_out.vertices)))
+    return mesh_out, collapsed
+
+
+def _repair_boundary_holes(
+    mesh: o3d.geometry.TriangleMesh,
+) -> tuple[o3d.geometry.TriangleMesh, object | None, str | None]:
+    if not merge_fill_holes_enable or len(mesh.vertices) == 0 or len(mesh.triangles) == 0:
+        return _basic_cleanup(mesh), None, None
+
+    cleanup_module = _load_mesh_cleanup_module()
+    if cleanup_module is None:
+        return _basic_cleanup(mesh), None, "mesh_cleanup_close_holes.py could not be loaded"
+
+    try:
+        repaired_mesh, repair_result = cleanup_module._repair_boundary_loops(
+            mesh=_copy_mesh(mesh),
+            fill_holes_enable=True,
+            fill_holes_max_boundary_edges=int(merge_fill_holes_max_boundary_edges),
+            fill_holes_max_planarity_m=_mm_to_m(merge_fill_holes_max_planarity_mm),
+            bottom_cap_enable=False,
+            bottom_cap_mode="planar_in_place",
+            bottom_axis_index=2,
+            bottom_loop_height_tol_m=0.0,
+            bottom_cap_plane_offset_m=0.0,
+            bottom_local_patch_resolution_m=0.0,
+            bottom_local_patch_margin_m=0.0,
+            repair_order="side_first",
+        )
+        return _basic_cleanup(repaired_mesh), repair_result, None
+    except Exception as exc:
+        return _basic_cleanup(mesh), None, str(exc)
+
+
+def _merge_extracted_mesh_into_previous(
     prev_mesh: o3d.geometry.TriangleMesh,
     kept_mesh: o3d.geometry.TriangleMesh,
-    seed: int,
-) -> tuple[o3d.geometry.TriangleMesh, list[list[float]]]:
-    colors = _seeded_mesh_colors(2, seed)
-    prev_colored = _paint_mesh_copy(prev_mesh, colors[0])
-    kept_colored = _paint_mesh_copy(kept_mesh, colors[1])
-    return _combine_meshes([prev_colored, kept_colored]), colors
+) -> tuple[o3d.geometry.TriangleMesh, dict[str, object]]:
+    candidate_info: list[dict[str, object]] = []
+
+    def add_candidate(name: str, mesh: o3d.geometry.TriangleMesh) -> None:
+        mesh_clean = _basic_cleanup(mesh)
+        summary = _mesh_summary(mesh_clean)
+        candidate_info.append(
+            {
+                "name": name,
+                "mesh": mesh_clean,
+                "summary": summary,
+                "quality_key": _mesh_quality_key(mesh_clean),
+            }
+        )
+
+    if len(kept_mesh.vertices) == 0 or len(kept_mesh.triangles) == 0:
+        prev_only = _basic_cleanup(prev_mesh)
+        add_candidate("previous_only", prev_only)
+        return prev_only, {
+            "selected_candidate": "previous_only",
+            "candidate_info": candidate_info,
+            "collapsed_vertices": 0,
+            "repair_result": None,
+            "repair_warning": "No extracted new mesh was available, so the previous mesh was kept as-is.",
+        }
+
+    merged_raw = _combine_meshes([prev_mesh, kept_mesh])
+    add_candidate("combined_raw", merged_raw)
+
+    merged_welded, collapsed_vertices = _merge_close_vertices(merged_raw, merge_seam_weld_dist_mm)
+    add_candidate("seam_welded", merged_welded)
+
+    repaired_mesh, repair_result, repair_warning = _repair_boundary_holes(merged_welded)
+    add_candidate("hole_repaired", repaired_mesh)
+
+    best_candidate = min(candidate_info, key=lambda item: item["quality_key"])
+    return best_candidate["mesh"], {
+        "selected_candidate": best_candidate["name"],
+        "candidate_info": candidate_info,
+        "collapsed_vertices": int(collapsed_vertices),
+        "repair_result": repair_result,
+        "repair_warning": repair_warning,
+    }
 
 
-def _print_combined_mesh_stats(
-    combined_mesh: o3d.geometry.TriangleMesh,
-    colors: list[list[float]],
-    seed: int,
+def _print_merged_mesh_stats(
+    merge_debug: dict[str, object],
+    merged_mesh: o3d.geometry.TriangleMesh,
 ) -> None:
-    print("Step 7: Build combined colored mesh from previous + new extracted mesh")
-    print(f"  combined_mesh_color_seed: {int(seed)}")
-    if len(colors) >= 2:
-        print(f"  prev_component_color_rgb: [{colors[0][0]:.3f}, {colors[0][1]:.3f}, {colors[0][2]:.3f}]")
-        print(f"  new_component_color_rgb: [{colors[1][0]:.3f}, {colors[1][1]:.3f}, {colors[1][2]:.3f}]")
-    print(f"  combined_vertices: {len(combined_mesh.vertices)}")
-    print(f"  combined_triangles: {len(combined_mesh.triangles)}")
+    print("Step 7: Merge extracted new mesh into previous cumulative mesh")
+    print(f"  seam_weld_dist_mm: {float(merge_seam_weld_dist_mm):.6f}")
+    print(f"  seam_weld_collapsed_vertices: {int(merge_debug['collapsed_vertices'])}")
+    print(f"  selected_candidate: {merge_debug['selected_candidate']}")
+
+    repair_result = merge_debug.get("repair_result")
+    if repair_result is not None:
+        print(f"  repaired_loop_count: {int(repair_result.repaired_loop_count)}")
+        print(f"  skipped_loop_count: {int(repair_result.skipped_loop_count)}")
+        print(f"  repair_backend: {repair_result.backend_used}")
+        print(f"  repair_order: {repair_result.order_used}")
+
+    repair_warning = merge_debug.get("repair_warning")
+    if repair_warning:
+        print(f"  repair_warning: {repair_warning}")
+
+    for candidate in merge_debug["candidate_info"]:
+        summary = candidate["summary"]
+        print(
+            "  candidate_{}: vertices={}, triangles={}, boundary_loops={}, is_watertight={}, "
+            "is_edge_manifold_closed={}, is_vertex_manifold={}".format(
+                candidate["name"],
+                int(summary["vertices"]),
+                int(summary["triangles"]),
+                int(summary["boundary_loops"]),
+                bool(summary["is_watertight"]),
+                bool(summary["is_edge_manifold_closed"]),
+                bool(summary["is_vertex_manifold"]),
+            )
+        )
+
+    final_summary = _mesh_summary(merged_mesh)
+    print(f"  merged_vertices: {int(final_summary['vertices'])}")
+    print(f"  merged_triangles: {int(final_summary['triangles'])}")
+    print(f"  merged_boundary_loops: {int(final_summary['boundary_loops'])}")
+    print(f"  merged_is_watertight: {bool(final_summary['is_watertight'])}")
 
 
-def _show_combined_colored_mesh(combined_mesh: o3d.geometry.TriangleMesh) -> None:
-    combined_mesh_viz = o3d.geometry.TriangleMesh(combined_mesh)
+def _show_merged_mesh(merged_mesh: o3d.geometry.TriangleMesh) -> None:
+    combined_mesh_viz = o3d.geometry.TriangleMesh(merged_mesh)
+    combined_mesh_viz.paint_uniform_color(list(merged_output_color))
     o3d.visualization.draw_geometries(
         [combined_mesh_viz],
-        window_name="Step 7: Combined previous + new colored mesh",
+        window_name="Step 7: Merged cumulative mesh",
         mesh_show_back_face=True,
     )
 
@@ -446,12 +678,12 @@ def _save_mesh(mesh: o3d.geometry.TriangleMesh, output_path: Path, label: str) -
     print(f"  saved_vertices: {len(mesh.vertices)}")
     print(f"  saved_triangles: {len(mesh.triangles)}")
     if output_path.suffix.lower() == ".stl" and len(mesh.vertex_colors) == len(mesh.vertices):
-        print("  note: STL export does not preserve mesh colors; seeded colors are visualization-only.")
+        print("  note: STL export does not preserve mesh colors; any visualization colors are not saved.")
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Step 7 loader, sampled-point, NN-distance, threshold, mesh-guided extraction, final mesh viewer, and combined mesh export for consecutive TSDF meshes."
+        description="Load consecutive TSDF meshes, extract newly added geometry, and merge it back into the cumulative mesh."
     )
     parser.add_argument(
         "--prev_mesh",
@@ -481,7 +713,7 @@ def _parse_args() -> argparse.Namespace:
         "--output_combined_mesh",
         type=str,
         default=default_output_combined_mesh_path,
-        help="Output mesh path for the combined mesh. Defaults next to the current mesh as STL.",
+        help="Output mesh path for the merged cumulative mesh. Defaults next to the current mesh as STL.",
     )
     return parser.parse_args()
 
@@ -523,8 +755,8 @@ def main() -> None:
 
     kept_mesh, keep_tri_mask = _extract_mesh_near_points(curr_mesh, points_new, mesh_keep_dist_mm)
     _print_kept_mesh_stats(curr_mesh, kept_mesh, keep_tri_mask, mesh_keep_dist_mm)
-    combined_mesh, combined_colors = _build_combined_colored_mesh(prev_mesh, kept_mesh, combined_mesh_color_seed)
-    _print_combined_mesh_stats(combined_mesh, combined_colors, combined_mesh_color_seed)
+    merged_mesh, merge_debug = _merge_extracted_mesh_into_previous(prev_mesh, kept_mesh)
+    _print_merged_mesh_stats(merge_debug, merged_mesh)
 
     if args.show:
         print("Opening mesh viewer...")
@@ -539,13 +771,13 @@ def main() -> None:
         _show_kept_mesh_debug(prev_mesh, curr_mesh, kept_mesh, points_new)
         print("Opening final kept-mesh viewer...")
         _show_final_mesh(kept_mesh)
-        print("Opening combined colored mesh viewer...")
-        _show_combined_colored_mesh(combined_mesh)
+        print("Opening merged cumulative mesh viewer...")
+        _show_merged_mesh(merged_mesh)
     else:
-        print("Visualization skipped. Use --show to inspect mesh, sampled-cloud, NN-distance, threshold, kept-mesh, and combined-mesh alignment.")
+        print("Visualization skipped. Use --show to inspect mesh, sampled-cloud, NN-distance, threshold, kept-mesh, and merged-mesh alignment.")
 
     _save_mesh(kept_mesh, output_mesh_path, "Step 6: Saved final kept mesh")
-    _save_mesh(combined_mesh, output_combined_mesh_path, "Step 7: Saved combined mesh")
+    _save_mesh(merged_mesh, output_combined_mesh_path, "Step 7: Saved merged cumulative mesh")
 
 
 if __name__ == "__main__":
