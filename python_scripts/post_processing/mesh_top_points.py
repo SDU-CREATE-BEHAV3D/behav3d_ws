@@ -27,7 +27,7 @@ except Exception:
 # Important parameters
 # -----------------------------------------------------------------------------
 
-mesh_input_path = "~/Downloads/260227_160709/print_scan_049/reconstruct/tsdf_surface_mesh.stl"
+mesh_input_path = "~/Downloads/260227_160709/print_scan_175/reconstruct/tsdf_surface_mesh.stl"
 show_3d = True
 show_2d = False
 viz_frame = "table"  # "table" or "world"
@@ -419,7 +419,7 @@ def crop_mesh_above_table(mesh: o3d.geometry.TriangleMesh, z_min_m: float) -> o3
 
 def build_bounding_box_info(points_table: np.ndarray) -> Dict[str, object]:
     if points_table.shape[0] == 0:
-        raise RuntimeError("Cannot build a bounding box without object points.")
+        raise RuntimeError("Cannot build a bounding box without detected peak points.")
 
     pad_xy_m = mm_to_m(box_padding_xy_mm)
     pad_top_m = mm_to_m(box_padding_top_mm)
@@ -592,14 +592,14 @@ def run() -> Dict[str, object]:
     peaks_xyz_grid = peaks_to_xyz(peaks_yx, H, min_xy, grid_m)
     peaks_xyz_table, anchor_info = anchor_peaks(peaks_xyz_grid, points_obj_table)
     peaks_xyz_world = transform_points(peaks_xyz_table, T_world_from_table) if peaks_xyz_table.shape[0] else np.empty((0, 3))
-    box_info = build_bounding_box_info(points_obj_table)
+    box_info = build_bounding_box_info(peaks_xyz_table)
 
     print(f"Mesh: {mesh_path}")
     print(f"Vertices loaded: {points_world.shape[0]}")
     print(f"Vertices above table: {points_obj_table.shape[0]}")
     print(f"Top points detected: {peaks_xyz_table.shape[0]}")
     print(
-        "Bounding box (table frame): "
+        "Bounding box from detected peaks (table frame): "
         f"size_x={box_info['size_x_mm']:.3f} mm, "
         f"size_y={box_info['size_y_mm']:.3f} mm, "
         f"top_z={box_info['top_z_mm']:.3f} mm"
