@@ -807,8 +807,22 @@ def _make_plane_line_set(plane_model, pcd_ref, color=(0.85, 0.85, 0.85), scale=1
     return [line_set, normal]
 
 
-def run(session_path=None, scan_folder_override=None, visualize=True, device=None):
+def run(
+    session_path=None,
+    scan_folder_override=None,
+    visualize=True,
+    device=None,
+    center_crop_enable=None,
+    center_crop_width=None,
+    center_crop_height=None,
+    center_crop_apply_to_depth=None,
+    aabb_crop_enable=None,
+    aabb_crop_min=None,
+    aabb_crop_max=None,
+):
     global SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE
+    global C2D_CENTER_CROP_ENABLE, C2D_CENTER_CROP_WIDTH, C2D_CENTER_CROP_HEIGHT
+    global C2D_CENTER_CROP_APPLY_TO_DEPTH, CROP_ENABLE, CROP_MIN, CROP_MAX
 
     SESSION_PATH = session_path or DEFAULT_SESSION_PATH
     scan_folder = scan_folder_override or DEFAULT_SCAN_FOLDER
@@ -816,6 +830,27 @@ def run(session_path=None, scan_folder_override=None, visualize=True, device=Non
     output_folder.mkdir(parents=True, exist_ok=True)
     C2D_DIR = output_folder / "color_in_depth"
     TABLE_PLANE_FILE = output_folder / "table_plane.json"
+
+    if center_crop_enable is not None:
+        C2D_CENTER_CROP_ENABLE = bool(center_crop_enable)
+    if center_crop_width is not None:
+        w = int(center_crop_width)
+        C2D_CENTER_CROP_WIDTH = None if w <= 0 else w
+    if center_crop_height is not None:
+        h = int(center_crop_height)
+        C2D_CENTER_CROP_HEIGHT = None if h <= 0 else h
+    if center_crop_apply_to_depth is not None:
+        C2D_CENTER_CROP_APPLY_TO_DEPTH = bool(center_crop_apply_to_depth)
+    if aabb_crop_enable is not None:
+        CROP_ENABLE = bool(aabb_crop_enable)
+    if aabb_crop_min is not None:
+        arr = np.asarray(aabb_crop_min, dtype=np.float64).reshape(-1)
+        if arr.shape[0] >= 3:
+            CROP_MIN = np.array([float(arr[0]), float(arr[1]), float(arr[2])], dtype=np.float64)
+    if aabb_crop_max is not None:
+        arr = np.asarray(aabb_crop_max, dtype=np.float64).reshape(-1)
+        if arr.shape[0] >= 3:
+            CROP_MAX = np.array([float(arr[0]), float(arr[1]), float(arr[2])], dtype=np.float64)
 
     session = Session(SESSION_PATH, scan_folder)
     device = _validate_device(_normalize_device(device))
@@ -828,6 +863,12 @@ def run(session_path=None, scan_folder_override=None, visualize=True, device=Non
         f"apply_to_depth={C2D_CENTER_CROP_APPLY_TO_DEPTH}), "
         f"erode={C2D_ERODE_ENABLE} (shape={C2D_ERODE_SHAPE}, "
         f"kernel={C2D_ERODE_KERNEL_SIZE}, iters={C2D_ERODE_ITERATIONS})"
+    )
+    print(
+        "AABB crop: "
+        f"enabled={CROP_ENABLE}, "
+        f"min={np.asarray(CROP_MIN, dtype=np.float64).tolist()}, "
+        f"max={np.asarray(CROP_MAX, dtype=np.float64).tolist()}"
     )
     tsdf_integration = TSDF_Integration(session, device=device, depth_bias_m=depth_bias_m)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")

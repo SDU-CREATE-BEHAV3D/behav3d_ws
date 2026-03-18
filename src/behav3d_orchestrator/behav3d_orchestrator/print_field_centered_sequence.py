@@ -18,6 +18,8 @@ from behav3d_examples.src.grid_sweep_session import GridSweepSession
 from behav3d_orchestrator.src.yaml_session import YamlSession
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
+from rclpy.parameter import Parameter
+from rclpy.parameter_client import AsyncParameterClient
 
 
 class PrintFieldCenteredSequenceNode(Node):
@@ -33,13 +35,13 @@ class PrintFieldCenteredSequenceNode(Node):
         self.declare_parameter("frame_id", "world")
         self.declare_parameter("scan_eef_link", "femto_color_optical_calib")
         self.declare_parameter("scan_use_tf_orientation", True)
-        self.declare_parameter("scan_width", 0.60)
+        self.declare_parameter("scan_width", 0.50)
         self.declare_parameter("scan_height", 0.40)
-        self.declare_parameter("scan_center_x", 0.0)
+        self.declare_parameter("scan_center_x", -0.20)
         self.declare_parameter("scan_center_y", 0.80)
         self.declare_parameter("scan_center_z", 0.0)
         self.declare_parameter("scan_z_off", 0.60)
-        self.declare_parameter("scan_nx", 6)
+        self.declare_parameter("scan_nx", 5)
         self.declare_parameter("scan_ny", 4)
         self.declare_parameter("scan_row_major", False)
         self.declare_parameter("scan_capture_folder", "@session/grid_sweep")
@@ -54,11 +56,11 @@ class PrintFieldCenteredSequenceNode(Node):
         # Layer scan params (used for cycle_0001 and later)
         self.declare_parameter("layer_scan_width", 0.30)
         self.declare_parameter("layer_scan_height", 0.30)
-        self.declare_parameter("layer_scan_nx", 5)
+        self.declare_parameter("layer_scan_nx", 3)
         self.declare_parameter("layer_scan_ny", 3)
         self.declare_parameter("layer_scan_row_major", False)
         self.declare_parameter("layer_scan_first_z_off", 0.06)
-        self.declare_parameter("layer_scan_z_margin_mm", 400.0)
+        self.declare_parameter("layer_scan_z_margin_mm", 550.0)
         self.declare_parameter("field_center_sign_x", -1.0)
         self.declare_parameter("field_center_sign_y", -1.0)
         self.declare_parameter("field_center_offset_x", 0.0)
@@ -75,6 +77,14 @@ class PrintFieldCenteredSequenceNode(Node):
         self.declare_parameter("mesh_prefer", "mesh")
         self.declare_parameter("mesh_update_wait_timeout_s", 45.0)
         self.declare_parameter("mesh_update_request_timeout_s", 55.0)
+        self.declare_parameter("tsdf_center_crop_enable", True)
+        self.declare_parameter("tsdf_center_crop_width", 300)
+        self.declare_parameter("tsdf_center_crop_height", 290)
+        self.declare_parameter("tsdf_center_crop_apply_to_depth", True)
+        self.declare_parameter("tsdf_aabb_crop_enable", False)
+        self.declare_parameter("tsdf_aabb_crop_min", [-0.25, -1.10, -1.00])
+        self.declare_parameter("tsdf_aabb_crop_max", [0.30, -0.65, 0.50])
+        self.declare_parameter("tsdf_param_update_timeout_s", 8.0)
 
         # Field init command
         self.declare_parameter("run_field_init", True)
@@ -166,6 +176,14 @@ class PrintFieldCenteredSequenceNode(Node):
         mesh_prefer = str(self.get_parameter("mesh_prefer").value).strip() or "mesh"
         mesh_update_wait_timeout_s = float(self.get_parameter("mesh_update_wait_timeout_s").value)
         mesh_update_request_timeout_s = float(self.get_parameter("mesh_update_request_timeout_s").value)
+        tsdf_center_crop_enable = bool(self.get_parameter("tsdf_center_crop_enable").value)
+        tsdf_center_crop_width = int(self.get_parameter("tsdf_center_crop_width").value)
+        tsdf_center_crop_height = int(self.get_parameter("tsdf_center_crop_height").value)
+        tsdf_center_crop_apply_to_depth = bool(self.get_parameter("tsdf_center_crop_apply_to_depth").value)
+        tsdf_aabb_crop_enable = bool(self.get_parameter("tsdf_aabb_crop_enable").value)
+        tsdf_aabb_crop_min = list(self.get_parameter("tsdf_aabb_crop_min").value)
+        tsdf_aabb_crop_max = list(self.get_parameter("tsdf_aabb_crop_max").value)
+        tsdf_param_update_timeout_s = float(self.get_parameter("tsdf_param_update_timeout_s").value)
 
         run_field_init = bool(self.get_parameter("run_field_init").value)
         field_use_latest = bool(self.get_parameter("field_use_latest").value)
@@ -282,6 +300,14 @@ class PrintFieldCenteredSequenceNode(Node):
                     mesh_prefer=mesh_prefer,
                     mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
                     mesh_update_request_timeout_s=mesh_update_request_timeout_s,
+                    tsdf_center_crop_enable=tsdf_center_crop_enable,
+                    tsdf_center_crop_width=tsdf_center_crop_width,
+                    tsdf_center_crop_height=tsdf_center_crop_height,
+                    tsdf_center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
+                    tsdf_aabb_crop_enable=tsdf_aabb_crop_enable,
+                    tsdf_aabb_crop_min=tsdf_aabb_crop_min,
+                    tsdf_aabb_crop_max=tsdf_aabb_crop_max,
+                    tsdf_param_update_timeout_s=tsdf_param_update_timeout_s,
                 )
 
             if run_field_init:
@@ -676,6 +702,14 @@ class PrintFieldCenteredSequenceNode(Node):
                         mesh_prefer=mesh_prefer,
                         mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
                         mesh_update_request_timeout_s=mesh_update_request_timeout_s,
+                        tsdf_center_crop_enable=tsdf_center_crop_enable,
+                        tsdf_center_crop_width=tsdf_center_crop_width,
+                        tsdf_center_crop_height=tsdf_center_crop_height,
+                        tsdf_center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
+                        tsdf_aabb_crop_enable=tsdf_aabb_crop_enable,
+                        tsdf_aabb_crop_min=tsdf_aabb_crop_min,
+                        tsdf_aabb_crop_max=tsdf_aabb_crop_max,
+                        tsdf_param_update_timeout_s=tsdf_param_update_timeout_s,
                     )
                 else:
                     log.warn(
@@ -708,6 +742,14 @@ class PrintFieldCenteredSequenceNode(Node):
         mesh_prefer: str,
         mesh_update_wait_timeout_s: float,
         mesh_update_request_timeout_s: float,
+        tsdf_center_crop_enable: bool,
+        tsdf_center_crop_width: int,
+        tsdf_center_crop_height: int,
+        tsdf_center_crop_apply_to_depth: bool,
+        tsdf_aabb_crop_enable: bool,
+        tsdf_aabb_crop_min: list[float],
+        tsdf_aabb_crop_max: list[float],
+        tsdf_param_update_timeout_s: float,
     ) -> tuple[str, str]:
         log = self.get_logger()
 
@@ -733,9 +775,26 @@ class PrintFieldCenteredSequenceNode(Node):
                 timeout_s=color_to_depth_wait_timeout_s,
             )
 
+        try:
+            self._set_tsdf_service_crop_params(
+                center_crop_enable=tsdf_center_crop_enable,
+                center_crop_width=tsdf_center_crop_width,
+                center_crop_height=tsdf_center_crop_height,
+                center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
+                aabb_crop_enable=tsdf_aabb_crop_enable,
+                aabb_crop_min=tsdf_aabb_crop_min,
+                aabb_crop_max=tsdf_aabb_crop_max,
+                timeout_s=tsdf_param_update_timeout_s,
+            )
+        except Exception as exc:
+            log.warn(
+                "[print_field_centered] Failed to update TSDF crop params; "
+                f"continuing with current service params. reason='{exc}'"
+            )
+
         tsdf_start_ts = time.time()
         tsdf_res = self.session.run_sync(
-            self.session.camera.reconstruct_tsdf_cropped(
+            self.session.camera.reconstruct_tsdf_grid_sweep(
                 use_latest=True,
                 session_path="@session",
                 scan_folder=scan_folder,
@@ -746,7 +805,7 @@ class PrintFieldCenteredSequenceNode(Node):
             timeout_s=reconstruct_request_timeout_s,
         )
         if not tsdf_res.get("ok", False):
-            raise RuntimeError(f"tsdf_cropped failed: {tsdf_res.get('error')}")
+            raise RuntimeError(f"tsdf_grid_sweep failed: {tsdf_res.get('error')}")
 
         mesh_path = str(tsdf_res.get("metrics", {}).get("mesh_path", "")).strip()
         rgb_ply_path = str(tsdf_res.get("metrics", {}).get("rgb_ply_path", "")).strip()
@@ -782,6 +841,79 @@ class PrintFieldCenteredSequenceNode(Node):
         )
         return mesh_path, rgb_ply_path
 
+    def _set_tsdf_service_crop_params(
+        self,
+        *,
+        center_crop_enable: bool,
+        center_crop_width: int,
+        center_crop_height: int,
+        center_crop_apply_to_depth: bool,
+        aabb_crop_enable: bool,
+        aabb_crop_min: list[float],
+        aabb_crop_max: list[float],
+        timeout_s: float,
+    ) -> None:
+        log = self.get_logger()
+        timeout = max(0.1, float(timeout_s))
+        crop_min = self._coerce_xyz_triplet(aabb_crop_min, fallback=(-0.25, -1.10, -1.00))
+        crop_max = self._coerce_xyz_triplet(aabb_crop_max, fallback=(0.30, -0.65, 0.50))
+
+        client = AsyncParameterClient(self, "/tsdf_cropped_service")
+        if hasattr(client, "wait_for_services"):
+            ready = bool(client.wait_for_services(timeout_sec=timeout))
+        elif hasattr(client, "wait_for_service"):
+            ready = bool(client.wait_for_service(timeout_sec=timeout))
+        else:
+            ready = bool(client.services_are_ready()) if hasattr(client, "services_are_ready") else False
+        if not ready:
+            raise RuntimeError("Parameter service for /tsdf_cropped_service not available.")
+
+        params = [
+            Parameter("center_crop_enable", value=bool(center_crop_enable)),
+            Parameter("center_crop_width", value=int(center_crop_width)),
+            Parameter("center_crop_height", value=int(center_crop_height)),
+            Parameter("center_crop_apply_to_depth", value=bool(center_crop_apply_to_depth)),
+            Parameter("aabb_crop_enable", value=bool(aabb_crop_enable)),
+            Parameter("aabb_crop_min", value=[float(crop_min[0]), float(crop_min[1]), float(crop_min[2])]),
+            Parameter("aabb_crop_max", value=[float(crop_max[0]), float(crop_max[1]), float(crop_max[2])]),
+        ]
+
+        fut = client.set_parameters(params)
+        deadline = time.time() + timeout
+        while rclpy.ok() and not fut.done() and time.time() < deadline:
+            time.sleep(0.05)
+
+        if not fut.done():
+            raise TimeoutError("Timed out while setting TSDF crop parameters.")
+
+        response = fut.result()
+        if response is None:
+            raise RuntimeError("Failed to set TSDF crop parameters: no response.")
+
+        if hasattr(response, "results"):
+            results = list(response.results)
+        elif isinstance(response, (list, tuple)):
+            results = list(response)
+        else:
+            raise RuntimeError(
+                "Failed to set TSDF crop parameters: unexpected response type "
+                f"{type(response).__name__}"
+            )
+
+        failed = [str(r.reason) for r in results if not bool(getattr(r, "successful", False))]
+        if failed:
+            raise RuntimeError(f"Failed to set TSDF crop parameters: {'; '.join(failed)}")
+
+        log.info(
+            "[print_field_centered] TSDF crop params set: "
+            f"center_crop_enable={bool(center_crop_enable)} "
+            f"w={int(center_crop_width)} h={int(center_crop_height)} "
+            f"apply_to_depth={bool(center_crop_apply_to_depth)} "
+            f"aabb_crop_enable={bool(aabb_crop_enable)} "
+            f"aabb_min=({crop_min[0]:.3f}, {crop_min[1]:.3f}, {crop_min[2]:.3f}) "
+            f"aabb_max=({crop_max[0]:.3f}, {crop_max[1]:.3f}, {crop_max[2]:.3f})"
+        )
+
     @staticmethod
     def _compute_field_center_from_state(field_state_path: str) -> tuple[float, float, float]:
         path = Path(str(field_state_path).strip()).expanduser().resolve()
@@ -816,6 +948,16 @@ class PrintFieldCenteredSequenceNode(Node):
             f"Unable to infer field center from state file '{path}'. "
             "Expected field_vertices_world or (field_vertices_scaled + offset_xyz)."
         )
+
+    @staticmethod
+    def _coerce_xyz_triplet(values: list[float], *, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
+        try:
+            arr = np.asarray(values, dtype=float).reshape(-1)
+            if arr.shape[0] >= 3:
+                return (float(arr[0]), float(arr[1]), float(arr[2]))
+        except Exception:
+            pass
+        return (float(fallback[0]), float(fallback[1]), float(fallback[2]))
 
     @staticmethod
     def _map_field_center_xy(
@@ -907,12 +1049,12 @@ class PrintFieldCenteredSequenceNode(Node):
         if len(targets) < 1:
             return {"ok": False, "stage": "parse_targets", "error": "Need at least 1 target."}
 
-        pre_dot_vel_scale = 0.02
-        dot_vel_scale = 0.02
+        pre_dot_vel_scale = 0.1
+        dot_vel_scale = 0.05
         accel_scale = 0.05
         approach_z_offset_m = 0.40
         dot_z_offset_m = 0.04
-        dot_steps = 5000
+        dot_steps = 11000
         dot_speed = 1200
         dwell_s = 0.4
 
