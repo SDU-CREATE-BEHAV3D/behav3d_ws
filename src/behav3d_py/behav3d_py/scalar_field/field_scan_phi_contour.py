@@ -177,7 +177,7 @@ def run(
     search_max_candidates: int,
     search_allow_partial_hit: bool,
     search_verbose: bool,
-    base_epsilon: float,
+    base_z_offset: float,
     clearance: float,
     iso_level: float,
     offset_distance_mm: float,
@@ -251,7 +251,7 @@ def run(
             y_values=y_values,
             clearance=float(clearance),
             iso_level=float(iso_level),
-            base_epsilon=float(base_epsilon),
+            base_z_offset=float(base_z_offset),
             require_full_hit=not bool(search_allow_partial_hit),
             verbose=bool(search_verbose),
         )
@@ -602,7 +602,7 @@ def main() -> None:
     )
     parser.add_argument("--search-verbose", action="store_true")
     parser.add_argument(
-        "--base-epsilon",
+        "--base-z-offset",
         type=float,
         default=1e-6,
         help="Small downward shift when enforcing base_z <= z_scan during pose search.",
@@ -708,7 +708,7 @@ def main() -> None:
         search_max_candidates=args.search_max_candidates,
         search_allow_partial_hit=args.search_allow_partial_hit,
         search_verbose=args.search_verbose,
-        base_epsilon=args.base_epsilon,
+        base_z_offset=args.base_z_offset,
         clearance=args.clearance,
         iso_level=args.iso_level,
         offset_distance_mm=args.offset_distance_mm,

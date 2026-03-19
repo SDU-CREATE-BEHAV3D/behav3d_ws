@@ -53,7 +53,7 @@ def position_field_with_attempts(
     *,
     clearance: float,
     iso_level: float,
-    base_epsilon: float,
+    base_z_offset: float,
     search_step_x: float,
     search_step_y: float,
     positioning_attempts: int,
@@ -99,7 +99,7 @@ def position_field_with_attempts(
             y_values=y_values,
             clearance=float(clearance),
             iso_level=float(iso_level),
-            base_epsilon=float(base_epsilon),
+            base_z_offset=float(base_z_offset),
             require_full_hit=True,
             verbose=False,
         )

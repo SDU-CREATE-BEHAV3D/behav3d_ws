@@ -67,7 +67,7 @@ def main() -> None:
     parser.add_argument("--field-offset-x", type=float, default=0.0)
     parser.add_argument("--field-offset-y", type=float, default=0.0)
     parser.add_argument("--field-offset-z", type=float, default=0.0)
-    parser.add_argument("--base-epsilon", type=float, default=1e-6)
+    parser.add_argument("--base-z-offset", type=float, default=1e-6)
     parser.add_argument("--clearance", type=float, default=0.0003)
     parser.add_argument("--iso-level", type=float, default=0.0)
     parser.add_argument("--offset-distance-mm", type=float, default=12.0)
@@ -110,7 +110,7 @@ def main() -> None:
         search_max_candidates=1,
         search_allow_partial_hit=False,
         search_verbose=False,
-        base_epsilon=args.base_epsilon,
+        base_z_offset=args.base_z_offset,
         clearance=args.clearance,
         iso_level=args.iso_level,
         offset_distance_mm=args.offset_distance_mm,

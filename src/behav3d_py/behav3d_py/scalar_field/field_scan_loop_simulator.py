@@ -51,7 +51,7 @@ DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 ISO_LEVEL = 0.0
-BASE_EPSILON = 1e-6
+BASE_Z_OFFSET = 1e-6
 SEARCH_MAX_CANDIDATES = 30000
 
 
@@ -270,7 +270,7 @@ def run(
                 heat_norm=heat.norm,
                 clearance=float(clearance),
                 iso_level=float(ISO_LEVEL),
-                base_epsilon=float(BASE_EPSILON),
+                base_z_offset=float(BASE_Z_OFFSET),
                 search_step_x=float(search_step_x),
                 search_step_y=float(search_step_y),
                 positioning_attempts=int(positioning_attempts),

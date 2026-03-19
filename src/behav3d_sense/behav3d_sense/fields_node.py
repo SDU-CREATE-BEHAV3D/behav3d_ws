@@ -188,7 +188,7 @@ class FieldsNode(Node):
         self.declare_parameter("search_step_y", 0.01)
         self.declare_parameter("search_max_candidates", 20000)
         self.declare_parameter("positioning_attempts", 3)
-        self.declare_parameter("base_epsilon", 1e-6)
+        self.declare_parameter("base_z_offset", 1e-6)
         self.declare_parameter("state_filename", "field_state_init.npz")
         self.declare_parameter("debug_field_ply_filename", "field_masked_init.ply")
         self.declare_parameter("iso_level", 0.0)
@@ -279,7 +279,7 @@ class FieldsNode(Node):
                 heat_norm=heat_norm,
                 clearance=float(self.get_parameter("clearance").value),
                 iso_level=0.0,
-                base_epsilon=float(self.get_parameter("base_epsilon").value),
+                base_z_offset=float(self.get_parameter("base_z_offset").value),
                 search_step_x=float(self.get_parameter("search_step_x").value),
                 search_step_y=float(self.get_parameter("search_step_y").value),
                 positioning_attempts=int(self.get_parameter("positioning_attempts").value),

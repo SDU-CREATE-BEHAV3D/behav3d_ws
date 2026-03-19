@@ -19,7 +19,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Searches XY placement of the field mesh over the scan geometry.
    - For each XY candidate `(ox, oy)`, solves feasible Z using:
      - `base_local_z = min(field_vertices_scaled[:, 2])`
-     - `z_offset = min(z_scan_hit - base_local_z) - base_epsilon`
+     - `z_offset = min(z_scan_hit - base_local_z) - base_z_offset`
    - This enforces base feasibility on hit points:
      - `base_world_z - z_scan <= 0`
    - Then computes viability from phi:

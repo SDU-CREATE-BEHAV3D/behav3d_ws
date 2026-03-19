@@ -67,7 +67,7 @@ def position_field(
     y_values: np.ndarray,
     clearance: float,
     iso_level: float,
-    base_epsilon: float,
+    base_z_offset: float,
     require_full_hit: bool,
     verbose: bool,
 ) -> PoseResult:
@@ -80,7 +80,7 @@ def position_field(
 
     Base-feasible Z solve:
     - `base_local_z = min(field_vertices_scaled[:, 2])`
-    - `z_offset = min(z_scan_hit - base_local_z) - base_epsilon`
+    - `z_offset = min(z_scan_hit - base_local_z) - base_z_offset`
     - This guarantees base non-penetration on hit points.
 
     Local ranking used in this method:
@@ -114,7 +114,7 @@ def position_field(
                 continue
 
             # Highest Z that keeps the base under (or touching) scan on all hit points.
-            z_offset = float(np.min(z_scan[has_hit] - base_local_z) - float(base_epsilon))
+            z_offset = float(np.min(z_scan[has_hit] - base_local_z) - float(base_z_offset))
             field_world = probe.copy()
             field_world[:, 2] = field_vertices_scaled[:, 2] + z_offset
 

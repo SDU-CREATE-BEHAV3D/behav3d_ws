@@ -7,7 +7,12 @@ Compared to the default geodesic-offset method:
   using minimum `heat.norm` values interpolated on the triangle surface,
 - selected points are then lifted by print-height along +Z.
 
-Example command:
+Positioning modes:
+- `manual` (default): uses `--field-offset-x/y/z`
+- `search`: computes XY+Z placement from scan/phi constraints
+  (equivalent to enabling legacy `--pose-search`)
+
+Example command (manual positioning):
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_phi_polyline_lift.py \
   --field-mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
   --scan-mesh /home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl \
@@ -15,6 +20,19 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_p
   --field-subdivide-iter 1 \
   --field-scale 0.001 \
   --field-offset-x -0.17 --field-offset-y -0.92 --field-offset-z -0.05 \
+  --clearance 0.00 \
+  --print-height-mm 12 --print-count 7 --print-min-spacing-mm 16 \
+  --axis-size -1
+
+Example command (auto positioning / search):
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_phi_polyline_lift.py \
+  --field-mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
+  --scan-mesh /home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl \
+  --seed-level 1 --t-coef 2000 \
+  --field-scale 0.001 \
+  --positioning search \
+  --base-z-offset 0.01 \
+  --search-step-x 0.01 --search-step-y 0.01 \
   --clearance 0.00 \
   --print-height-mm 12 --print-count 7 --print-min-spacing-mm 16 \
   --axis-size -1
@@ -112,7 +130,7 @@ def run(
     search_max_candidates: int,
     search_allow_partial_hit: bool,
     search_verbose: bool,
-    base_epsilon: float,
+    base_z_offset: float,
     clearance: float,
     iso_level: float,
     print_height_mm: float,
@@ -183,7 +201,7 @@ def run(
             y_values=y_values,
             clearance=float(clearance),
             iso_level=float(iso_level),
-            base_epsilon=float(base_epsilon),
+            base_z_offset=float(base_z_offset),
             require_full_hit=not bool(search_allow_partial_hit),
             verbose=bool(search_verbose),
         )
@@ -431,7 +449,14 @@ def main() -> None:
     parser.add_argument("--field-offset-x", type=float, default=0.0)
     parser.add_argument("--field-offset-y", type=float, default=0.0)
     parser.add_argument("--field-offset-z", type=float, default=0.0)
-    parser.add_argument("--pose-search", action="store_true")
+    parser.add_argument(
+        "--positioning",
+        type=str,
+        choices=("manual", "search"),
+        default="manual",
+        help="Field placement mode: manual offsets or automatic search.",
+    )
+    parser.add_argument("--pose-search", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--search-x-min", type=float, default=None)
     parser.add_argument("--search-x-max", type=float, default=None)
     parser.add_argument("--search-y-min", type=float, default=None)
@@ -443,7 +468,7 @@ def main() -> None:
     parser.add_argument("--search-max-candidates", type=int, default=20000)
     parser.add_argument("--search-allow-partial-hit", action="store_true")
     parser.add_argument("--search-verbose", action="store_true")
-    parser.add_argument("--base-epsilon", type=float, default=1e-6)
+    parser.add_argument("--base-z-offset", type=float, default=1e-6)
     parser.add_argument("--clearance", type=float, default=0.0003)
     parser.add_argument("--iso-level", type=float, default=0.0)
     parser.add_argument(
@@ -462,6 +487,8 @@ def main() -> None:
     parser.add_argument("--no-vis", action="store_true")
     args = parser.parse_args()
 
+    use_pose_search = bool(args.pose_search) or (str(args.positioning).strip().lower() == "search")
+
     run(
         field_mesh_path=args.field_mesh,
         scan_mesh_path=args.scan_mesh,
@@ -475,7 +502,7 @@ def main() -> None:
         field_subdivide_iter=args.field_subdivide_iter,
         field_scale=args.field_scale,
         field_offset=(args.field_offset_x, args.field_offset_y, args.field_offset_z),
-        pose_search=args.pose_search,
+        pose_search=use_pose_search,
         search_x_min=args.search_x_min,
         search_x_max=args.search_x_max,
         search_y_min=args.search_y_min,
@@ -487,7 +514,7 @@ def main() -> None:
         search_max_candidates=args.search_max_candidates,
         search_allow_partial_hit=args.search_allow_partial_hit,
         search_verbose=args.search_verbose,
-        base_epsilon=args.base_epsilon,
+        base_z_offset=args.base_z_offset,
         clearance=args.clearance,
         iso_level=args.iso_level,
         print_height_mm=args.print_height_mm,
