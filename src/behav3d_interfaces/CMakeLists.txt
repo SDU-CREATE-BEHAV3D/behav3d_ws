@@ -34,6 +34,7 @@ set(srv_files
   srv/TsdfCropped.srv
   srv/TsdfObjectExtract.srv
   srv/UpdateWorldMesh.srv
+  srv/UpdatePlanningSceneMesh.srv
   srv/InitFieldFromScan.srv
   srv/GeneratePrintCandidates.srv
   srv/PublishTargets.srv

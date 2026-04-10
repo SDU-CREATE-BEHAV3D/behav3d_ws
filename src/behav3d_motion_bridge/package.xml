@@ -10,8 +10,10 @@
 
   <depend>rclcpp</depend>
   <depend>geometry_msgs</depend>
+  <depend>shape_msgs</depend>
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_msgs</depend>
+  <depend>geometric_shapes</depend>
   <exec_depend>moveit_configs_utils</exec_depend>
   <depend>behav3d_interfaces</depend>
   <depend>rclcpp_action</depend>

@@ -18,7 +18,7 @@ Launch file: `src/behav3d_bringup/launch/print_move.launch.py`
 The launch file brings up these runtime roles:
 - UR driver and controllers (UR20 workcell).
 - MoveIt `move_group`.
-- `behav3d_motion_bridge` (planning + pose services).
+- `behav3d_motion_bridge` (planning + pose + planning-scene services).
 - Orbbec camera driver (Femto Bolt).
 - `behav3d_print` (extrusion actions + print services).
 - `behav3d_sense` (capture service and session storage).
@@ -132,6 +132,7 @@ Underlying ROS interfaces:
 - Service `/reconstruct/tsdf_cropped` (`TsdfCropped`)
 - Service `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`)
 - Service `/behav3d/update_world_mesh` (`UpdateWorldMesh`)
+- Service `/behav3d/update_planning_scene_mesh` (`UpdatePlanningSceneMesh`)
 
 Camera commands:
 
@@ -144,6 +145,7 @@ Camera commands:
 | `reconstruct_tsdf_cropped()` | Run TSDF cropped stage. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Calls `/reconstruct/tsdf_cropped`. |
 | `reconstruct_tsdf_grid_sweep()` | TSDF cropped for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Default `scan_folder="grid_sweep"`. |
 | `update_world_mesh()` | Update RViz world geometry from explicit or inferred reconstruction outputs. | `use_latest`, `session_path`, `mesh_path`, `ply_path`, `prefer`, `wait_timeout_s` | Calls `/behav3d/update_world_mesh`. `prefer="mesh"` publishes `MESH_RESOURCE`; `prefer="ply"` publishes colored PLY markers (`POINTS`/`TRIANGLE_LIST`) for debugging when available. Prefer explicit `mesh_path`/`ply_path` from TSDF response. |
+| `update_planning_scene_mesh()` | Update MoveIt planning-scene collision geometry from reconstructed mesh outputs. | `use_latest`, `session_path`, `mesh_path`, `object_id`, `frame_id`, `wait_timeout_s` | Calls `/behav3d/update_planning_scene_mesh`. Prefer explicit `mesh_path` from TSDF response. Re-using the same `object_id` replaces the previous obstacle mesh. If `frame_id` is empty, the motion bridge uses the MoveIt planning frame. For reconstructed TSDF meshes, `frame_id` should normally match the RViz world-mesh frame (`behav3d_world.mesh_frame_id`, currently `ur20_base_link`). |
 
 Reconstruction command usage notes:
 - Stage order for mesh flow: `reconstruct_color_to_depth*` first, then `reconstruct_tsdf_*`.
@@ -157,6 +159,13 @@ Reconstruction command usage notes:
 - Current protocol stores only `color_in_depth_*.png` for alignment (heavy debug files are not saved by default).
 - No reconstruction history snapshot duplication is used; outputs are kept in the active scan-folder reconstruction path.
 - For `update_world_mesh`, if explicit `mesh_path`/`ply_path` is provided, use those; do not rely on fallback discovery unless necessary.
+- For `update_planning_scene_mesh`, if explicit `mesh_path` is provided, use it; do not rely on fallback discovery unless necessary.
+- `update_planning_scene_mesh` applies the mesh as a MoveIt `CollisionObject` for obstacle avoidance; this is separate from RViz visualization in `update_world_mesh`.
+- `update_world_mesh` is the frame/alignment reference for reconstructed geometry. The planning-scene mesh should use the same frame interpretation as the RViz world mesh.
+- Verified behavior: if `update_world_mesh` publishes in `ur20_base_link` but `update_planning_scene_mesh` is added in `world`, the collision mesh can appear correct in RViz yet be offset in MoveIt. In that case motions may seem to pass through the obstacle.
+- Verified behavior: when the planning-scene collision mesh is added in the same frame as the RViz world mesh (`ur20_base_link` in the current bringup), the obstacle blocks planning as expected.
+- Current limitation: there is no explicit Behav3D command/service yet to remove a planning-scene collision mesh by `object_id`. Re-using the same `object_id` replaces the obstacle mesh, but clearing it explicitly still requires a future API addition.
+- TODO: add a planning-scene removal service in `behav3d_motion_bridge` (expected implementation: `PlanningSceneInterface.removeCollisionObjects([object_id])`) and wrap it in `behav3d_commands`.
 - `tsdf_object_extract` is currently exposed as a ROS service only (`/reconstruct/tsdf_object_extract`); it is launched in bringup but not wrapped as a `CameraCommands` method yet.
 - TSDF depth bias correction is currently applied internally in `src/behav3d_sense/behav3d_sense/reconstruct/TSDF_cpu_cropped.py` via `DEPTH_BIAS_MM` (current tuned value: `-5.1` mm). This bias is not part of the `/reconstruct/tsdf_cropped` service request contract.
 
@@ -166,7 +175,9 @@ Reconstruction + world-mesh protocol (current):
 3. Run `reconstruct_color_to_depth*` with the same `scan_folder` and wait for fresh `color_in_depth` outputs.
 4. Run `reconstruct_tsdf_*` with the same `scan_folder` and read returned `mesh_path` and `rgb_ply_path`.
 5. Call `update_world_mesh` using explicit `mesh_path`/`ply_path` and `prefer` (`mesh` or `ply`).
-6. World node stages a timestamped mesh copy in `/tmp/behav3d_world_mesh_cache` before publish, which avoids RViz stale-resource caching on repeated updates.
+6. Call `update_planning_scene_mesh` using explicit `mesh_path` if the reconstructed surface should be used for MoveIt obstacle avoidance.
+7. Use the same frame for planning-scene insertion as for RViz world-mesh publication. In the current bringup, `behav3d_world` publishes the reconstructed mesh in `ur20_base_link`, so `update_planning_scene_mesh(frame_id="ur20_base_link")` is the expected default.
+8. World node stages a timestamped mesh copy in `/tmp/behav3d_world_mesh_cache` before publish, which avoids RViz stale-resource caching on repeated updates.
 
 Capture folder semantics (as implemented in `behav3d_sense`):
 - `""` or `"."` uses current capture directory.
@@ -241,6 +252,7 @@ Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 - `/behav3d/plan_pilz_ptp` (`PlanPilzPtp`) via `behav3d_motion_bridge`
 - `/behav3d/plan_pilz_lin` (`PlanPilzLin`) via `behav3d_motion_bridge`
 - `/behav3d/get_link_pose` (`GetLinkPose`) via `behav3d_motion_bridge`
+- `/behav3d/update_planning_scene_mesh` (`UpdatePlanningSceneMesh`) via `behav3d_motion_bridge`
 - `/capture` (`Capture`) via `behav3d_sense`
 - `/reconstruct/color_to_depth` (`ColorToDepth`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/reconstruct/tsdf_cropped` (`TsdfCropped`) via `behav3d_sense/reconstruct/reconstruct_services.py`

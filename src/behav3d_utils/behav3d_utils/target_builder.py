@@ -315,12 +315,15 @@ def offset_target(pose: PoseStamped, offset_dist: float) -> PoseStamped:
 
 def set_target_origin(pose: PoseStamped, x: float, y: float, z: float) -> PoseStamped:
     out = PoseStamped()
-    out.header = pose.header
+    out.header.frame_id = pose.header.frame_id
     out.header.stamp = _now_msg()
-    out.pose = pose.pose
     out.pose.position.x = float(x)
     out.pose.position.y = float(y)
     out.pose.position.z = float(z)
+    out.pose.orientation.x = float(pose.pose.orientation.x)
+    out.pose.orientation.y = float(pose.pose.orientation.y)
+    out.pose.orientation.z = float(pose.pose.orientation.z)
+    out.pose.orientation.w = float(pose.pose.orientation.w)
     return out
 
 
