@@ -11,7 +11,7 @@ There are **two orchestration layers** in this workspace:
 
 1. **YAML runner (`behav3d_py.SequenceParser`)**  
    This file documents that YAML format. YAML commands are parsed into calls on `behav3d_py.Commands`, which uses a **single FIFO queue**.  
-   - **Queued commands** (`home`, `goto`, `printTime`, `printSteps`, `wait`, `pose/getPose`, `capture`, `input`, `reconstruct`) run strictly in order.  
+   - **Queued commands** (`home`, `goto`, `printTime`, `printSteps`, `wait`, `pose/getPose`, `capture`, `input`) run strictly in order.  
    - **Setters** (`setPTP`, `setLIN`, `setEef`, `setSpd`, `setAcc`) apply **immediately** and affect subsequent commands.  
    - **There is no explicit `exec` command in YAML.** Planning and execution are controlled by `goto.exec`.
 

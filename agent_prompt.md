@@ -30,6 +30,9 @@ The launch file brings up these runtime roles:
   - world-state publishing (`/behav3d/world_state`, `/behav3d/get_world_state`)
   - mesh update service (`/behav3d/update_world_mesh`)
   - RViz mesh marker publication (`/visualization_marker`)
+- `behav3d_fields` (`behav3d_sense/fields_node.py`) for:
+  - `/behav3d/init_field_from_scan`
+  - `/behav3d/generate_print_candidates`
 
 ---
 
@@ -125,7 +128,6 @@ Implementation: `src/behav3d_commands/behav3d_commands/sense_commands/camera_com
 Underlying ROS interfaces:
 - Service `/capture` (`Capture`)
 - Service `/behav3d/get_link_pose` (`GetLinkPose`)
-- Service `/reconstruct_mesh` (`ReconstructMesh`)
 - Service `/reconstruct/color_to_depth` (`ColorToDepth`)
 - Service `/reconstruct/tsdf_cropped` (`TsdfCropped`)
 - Service `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`)
@@ -137,7 +139,6 @@ Camera commands:
 | --- | --- | --- | --- |
 | `capture()` | Capture RGB/Depth/IR (+ optional pose). | `rgb`, `depth`, `ir`, `pose`, `folder` | If `folder` is provided, `set_folder=True`. |
 | `get_pose()` | Get link pose in a base frame. | `eef`, `base_frame`, `use_tf` | If `use_tf=True`, bypasses MoveIt and reads TF. |
-| `reconstruct()` | Run TSDF reconstruction. | `use_latest`, `session_path` | Starts a background reconstruction job. |
 | `reconstruct_color_to_depth()` | Run color-to-depth alignment stage. | `use_latest`, `session_path`, `scan_folder`, `visualize` | Calls `/reconstruct/color_to_depth`. |
 | `reconstruct_color_to_depth_grid_sweep()` | Color-to-depth for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize` | Default `scan_folder="grid_sweep"`. |
 | `reconstruct_tsdf_cropped()` | Run TSDF cropped stage. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Calls `/reconstruct/tsdf_cropped`. |
@@ -241,7 +242,6 @@ Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 - `/behav3d/plan_pilz_lin` (`PlanPilzLin`) via `behav3d_motion_bridge`
 - `/behav3d/get_link_pose` (`GetLinkPose`) via `behav3d_motion_bridge`
 - `/capture` (`Capture`) via `behav3d_sense`
-- `/reconstruct_mesh` (`ReconstructMesh`) via `behav3d_sense/reconstruction`
 - `/reconstruct/color_to_depth` (`ColorToDepth`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/reconstruct/tsdf_cropped` (`TsdfCropped`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`) via `behav3d_sense/reconstruct/reconstruct_services.py`
@@ -304,11 +304,16 @@ Why this pattern is ideal:
 
 **Additional Orchestration Patterns (Current)**
 
-YAML-driven orchestration in `behav3d_orchestrator`:
+Orchestration entry points in `behav3d_orchestrator`:
 - Entry points:
   - `ros2 run behav3d_orchestrator yaml_target_sequence`
   - `ros2 run behav3d_orchestrator print_path_sequence`
-- Session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
+  - `ros2 run behav3d_orchestrator print_dots_sequence`
+  - `ros2 run behav3d_orchestrator print_scan_dots_sequence` (legacy alias: `print_scan_dots_sequencenc`)
+  - `ros2 run behav3d_orchestrator depth_bias_capture_sequence`
+  - `ros2 run behav3d_orchestrator print_field_sequence`
+  - `ros2 run behav3d_orchestrator print_field_centered_sequence`
+- YAML-specific session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
 - `parse_yaml_targets(...)` supports:
   - `{index: N, xyz: [x, y, z]}`
   - `{index: N, x: ..., y: ..., z: ...}`
