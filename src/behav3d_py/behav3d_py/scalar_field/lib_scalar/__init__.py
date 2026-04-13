@@ -12,8 +12,12 @@ from .generate_print_points import generate_print_points
 from .generate_print_points_phi_lift import generate_print_points_phi_lift
 from .geometry import (
     apply_scale_and_offset,
+    compute_vertex_normals,
+    compute_vertex_scalar_gradient,
+    compute_vertex_tangent_axes_from_scalar,
     load_triangle_mesh_arrays,
     load_triangle_mesh_legacy,
+    sample_tangent_axes_on_surface_from_scalar,
     sample_vertex_scalar_on_surface,
 )
 from .loop_simulation import (
@@ -37,6 +41,10 @@ __all__ = [
     "load_triangle_mesh_arrays",
     "load_triangle_mesh_legacy",
     "apply_scale_and_offset",
+    "compute_vertex_normals",
+    "compute_vertex_scalar_gradient",
+    "compute_vertex_tangent_axes_from_scalar",
+    "sample_tangent_axes_on_surface_from_scalar",
     "sample_vertex_scalar_on_surface",
     "compute_heat_field",
     "make_scan_scene",

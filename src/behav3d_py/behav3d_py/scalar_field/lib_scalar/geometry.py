@@ -71,25 +71,25 @@ def apply_scale_and_offset(
     return out
 
 
-def sample_vertex_scalar_on_surface(
-    query_points: np.ndarray,
+def _validate_mesh_arrays(
     mesh_vertices: np.ndarray,
     mesh_faces: np.ndarray,
-    vertex_scalar: np.ndarray,
-) -> np.ndarray:
-    """Interpolate per-vertex scalar values at query points on/near mesh surface."""
-    if query_points.ndim != 2 or query_points.shape[1] != 3:
-        raise ValueError("query_points must have shape (N, 3)")
+) -> None:
     if mesh_vertices.ndim != 2 or mesh_vertices.shape[1] != 3:
         raise ValueError("mesh_vertices must have shape (V, 3)")
     if mesh_faces.ndim != 2 or mesh_faces.shape[1] != 3:
         raise ValueError("mesh_faces must have shape (F, 3)")
-    if vertex_scalar.ndim != 1 or vertex_scalar.shape[0] != mesh_vertices.shape[0]:
-        raise ValueError("vertex_scalar must have shape (V,) matching mesh_vertices")
 
-    n = query_points.shape[0]
-    if n == 0:
-        return np.zeros((0,), dtype=np.float64)
+
+def _closest_triangles_and_uv(
+    query_points: np.ndarray,
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Find closest triangle id + barycentric UV for each query point."""
+    if query_points.ndim != 2 or query_points.shape[1] != 3:
+        raise ValueError("query_points must have shape (N, 3)")
+    _validate_mesh_arrays(mesh_vertices, mesh_faces)
 
     v = o3d.core.Tensor(mesh_vertices.astype(np.float32), dtype=o3d.core.Dtype.Float32)
     f = o3d.core.Tensor(mesh_faces.astype(np.int32), dtype=o3d.core.Dtype.Int32)
@@ -101,6 +101,223 @@ def sample_vertex_scalar_on_surface(
     out = scene.compute_closest_points(q)
     tri_ids = out["primitive_ids"].numpy().astype(np.int64).reshape(-1)
     uv = out["primitive_uvs"].numpy().astype(np.float64).reshape(-1, 2)
+    return tri_ids, uv
+
+
+def _normalize_rows(vectors: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    out = np.asarray(vectors, dtype=np.float64).copy()
+    nrm = np.linalg.norm(out, axis=1)
+    valid = nrm > float(eps)
+    out[valid] /= nrm[valid, None]
+    out[~valid] = 0.0
+    return out
+
+
+def _fallback_tangent_from_normals(normals: np.ndarray) -> np.ndarray:
+    """Build deterministic tangent fallback orthogonal to normals."""
+    n = _normalize_rows(normals)
+    ref = np.tile(np.array([1.0, 0.0, 0.0], dtype=np.float64), (n.shape[0], 1))
+    near_parallel = np.abs(np.sum(n * ref, axis=1)) > 0.9
+    ref[near_parallel] = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    t = np.cross(ref, n)
+    return _normalize_rows(t)
+
+
+def compute_vertex_normals(
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+) -> np.ndarray:
+    """Area-weighted per-vertex normals."""
+    _validate_mesh_arrays(mesh_vertices, mesh_faces)
+    v0 = mesh_vertices[mesh_faces[:, 0]]
+    v1 = mesh_vertices[mesh_faces[:, 1]]
+    v2 = mesh_vertices[mesh_faces[:, 2]]
+    face_normals = np.cross(v1 - v0, v2 - v0)
+
+    vert_normals = np.zeros((mesh_vertices.shape[0], 3), dtype=np.float64)
+    for col in range(3):
+        idx = mesh_faces[:, col]
+        np.add.at(vert_normals, idx, face_normals)
+    return _normalize_rows(vert_normals)
+
+
+def compute_vertex_scalar_gradient(
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+    vertex_scalar: np.ndarray,
+) -> np.ndarray:
+    """Area-weighted per-vertex gradient of a scalar defined on mesh vertices."""
+    _validate_mesh_arrays(mesh_vertices, mesh_faces)
+    if vertex_scalar.ndim != 1 or vertex_scalar.shape[0] != mesh_vertices.shape[0]:
+        raise ValueError("vertex_scalar must have shape (V,) matching mesh_vertices")
+
+    v0 = mesh_vertices[mesh_faces[:, 0]]
+    v1 = mesh_vertices[mesh_faces[:, 1]]
+    v2 = mesh_vertices[mesh_faces[:, 2]]
+
+    n_unnorm = np.cross(v1 - v0, v2 - v0)
+    two_area = np.linalg.norm(n_unnorm, axis=1)
+    valid = two_area > 1e-12
+    if not np.any(valid):
+        raise ValueError("Degenerate mesh: all triangle areas are near zero.")
+
+    n_hat = np.zeros_like(n_unnorm)
+    n_hat[valid] = n_unnorm[valid] / two_area[valid, None]
+
+    f0 = vertex_scalar[mesh_faces[:, 0]]
+    f1 = vertex_scalar[mesh_faces[:, 1]]
+    f2 = vertex_scalar[mesh_faces[:, 2]]
+
+    face_grad = np.zeros((mesh_faces.shape[0], 3), dtype=np.float64)
+    face_grad[valid] = (
+        f0[valid, None] * np.cross(n_hat[valid], v2[valid] - v1[valid])
+        + f1[valid, None] * np.cross(n_hat[valid], v0[valid] - v2[valid])
+        + f2[valid, None] * np.cross(n_hat[valid], v1[valid] - v0[valid])
+    ) / two_area[valid, None]
+
+    face_area = 0.5 * two_area
+    vert_grad = np.zeros((mesh_vertices.shape[0], 3), dtype=np.float64)
+    vert_weight = np.zeros((mesh_vertices.shape[0],), dtype=np.float64)
+    for col in range(3):
+        idx = mesh_faces[:, col]
+        np.add.at(vert_grad, idx, face_grad * face_area[:, None])
+        np.add.at(vert_weight, idx, face_area)
+
+    nonzero = vert_weight > 1e-12
+    vert_grad[nonzero] /= vert_weight[nonzero, None]
+    return vert_grad
+
+
+def compute_vertex_tangent_axes_from_scalar(
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+    vertex_scalar: np.ndarray,
+    *,
+    tangent_sign: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute local tangent axes from a scalar field.
+
+    Returns:
+    - tangent_t: projected gradient direction on tangent plane
+    - orthogonal_b: 90-deg axis in tangent plane (cross(normal, tangent))
+    - normal_n: surface normal
+    """
+    normals = compute_vertex_normals(mesh_vertices, mesh_faces)
+    grad = compute_vertex_scalar_gradient(mesh_vertices, mesh_faces, vertex_scalar)
+
+    sign = 1.0 if float(tangent_sign) >= 0.0 else -1.0
+    t_raw = sign * grad
+    t_proj = t_raw - np.sum(t_raw * normals, axis=1, keepdims=True) * normals
+    t_norm = np.linalg.norm(t_proj, axis=1)
+    bad = t_norm <= 1e-12
+    t = _normalize_rows(t_proj)
+    if np.any(bad):
+        t_fallback = _fallback_tangent_from_normals(normals)
+        t[bad] = t_fallback[bad]
+        t = _normalize_rows(t)
+
+    b = np.cross(normals, t)
+    b = _normalize_rows(b)
+    return t, b, normals
+
+
+def sample_tangent_axes_on_surface_from_scalar(
+    query_points: np.ndarray,
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+    vertex_scalar: np.ndarray,
+    *,
+    tangent_sign: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Sample tangent/orthogonal/normal axes at arbitrary points on mesh surface."""
+    if query_points.ndim != 2 or query_points.shape[1] != 3:
+        raise ValueError("query_points must have shape (N, 3)")
+    _validate_mesh_arrays(mesh_vertices, mesh_faces)
+    if vertex_scalar.ndim != 1 or vertex_scalar.shape[0] != mesh_vertices.shape[0]:
+        raise ValueError("vertex_scalar must have shape (V,) matching mesh_vertices")
+
+    n_query = query_points.shape[0]
+    if n_query == 0:
+        empty = np.zeros((0, 3), dtype=np.float64)
+        return empty, empty, empty
+
+    t_v, b_v, n_v = compute_vertex_tangent_axes_from_scalar(
+        mesh_vertices,
+        mesh_faces,
+        vertex_scalar,
+        tangent_sign=tangent_sign,
+    )
+
+    tri_ids, uv = _closest_triangles_and_uv(query_points, mesh_vertices, mesh_faces)
+    tri_valid = (
+        (tri_ids >= 0)
+        & (tri_ids < mesh_faces.shape[0])
+        & np.isfinite(uv[:, 0])
+        & np.isfinite(uv[:, 1])
+    )
+
+    t_q = np.zeros((n_query, 3), dtype=np.float64)
+    n_q = np.zeros((n_query, 3), dtype=np.float64)
+
+    if np.any(tri_valid):
+        tri = mesh_faces[tri_ids[tri_valid]]
+        u = uv[tri_valid, 0]
+        v = uv[tri_valid, 1]
+        w = 1.0 - u - v
+
+        n_q[tri_valid] = (
+            w[:, None] * n_v[tri[:, 0]]
+            + u[:, None] * n_v[tri[:, 1]]
+            + v[:, None] * n_v[tri[:, 2]]
+        )
+        n_q[tri_valid] = _normalize_rows(n_q[tri_valid])
+
+        t_q[tri_valid] = (
+            w[:, None] * t_v[tri[:, 0]]
+            + u[:, None] * t_v[tri[:, 1]]
+            + v[:, None] * t_v[tri[:, 2]]
+        )
+        # Reproject after interpolation to enforce tangency.
+        t_q[tri_valid] = t_q[tri_valid] - np.sum(t_q[tri_valid] * n_q[tri_valid], axis=1, keepdims=True) * n_q[tri_valid]
+        t_q[tri_valid] = _normalize_rows(t_q[tri_valid])
+
+    invalid_idx = np.flatnonzero(~tri_valid)
+    if invalid_idx.size > 0:
+        for i in invalid_idx:
+            d2 = np.sum((mesh_vertices - query_points[i]) ** 2, axis=1)
+            k = int(np.argmin(d2))
+            t_q[i] = t_v[k]
+            n_q[i] = n_v[k]
+
+    t_bad = np.linalg.norm(t_q, axis=1) <= 1e-12
+    if np.any(t_bad):
+        t_fb = _fallback_tangent_from_normals(n_q)
+        t_q[t_bad] = t_fb[t_bad]
+        t_q = _normalize_rows(t_q)
+
+    b_q = np.cross(n_q, t_q)
+    b_q = _normalize_rows(b_q)
+    return t_q, b_q, n_q
+
+
+def sample_vertex_scalar_on_surface(
+    query_points: np.ndarray,
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+    vertex_scalar: np.ndarray,
+) -> np.ndarray:
+    """Interpolate per-vertex scalar values at query points on/near mesh surface."""
+    if query_points.ndim != 2 or query_points.shape[1] != 3:
+        raise ValueError("query_points must have shape (N, 3)")
+    _validate_mesh_arrays(mesh_vertices, mesh_faces)
+    if vertex_scalar.ndim != 1 or vertex_scalar.shape[0] != mesh_vertices.shape[0]:
+        raise ValueError("vertex_scalar must have shape (V,) matching mesh_vertices")
+
+    n = query_points.shape[0]
+    if n == 0:
+        return np.zeros((0,), dtype=np.float64)
+
+    tri_ids, uv = _closest_triangles_and_uv(query_points, mesh_vertices, mesh_faces)
 
     sampled = np.full((n,), np.nan, dtype=np.float64)
     tri_valid = (

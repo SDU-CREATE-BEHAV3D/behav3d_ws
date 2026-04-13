@@ -3,7 +3,7 @@
 Sample run:
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/test_curved_wall_heat.py \
   --mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
-  --seed-level 1 --t-coef 2000
+  --seed-level 1 --t-coef 2000 --vector-kind both
 
 """
 
@@ -15,13 +15,96 @@ from pathlib import Path
 import numpy as np
 import open3d as o3d
 
-from lib_scalar.geometry import load_triangle_mesh_arrays
 from lib_scalar.compute_heat_field import compute_heat_field
+from lib_scalar.geometry import compute_vertex_tangent_axes_from_scalar, load_triangle_mesh_arrays
 from lib_scalar.viz import make_point_cloud, yellow_to_red_colors
 
 
 DEFAULT_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
+
+
+def _sample_vectors(
+    points: np.ndarray,
+    vectors: np.ndarray,
+    *,
+    step: int,
+    scale: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Downsample vectors and return start/end points."""
+    step = max(1, int(step))
+    idx = np.arange(0, points.shape[0], step, dtype=np.int64)
+    p0 = points[idx]
+    v = vectors[idx]
+    n = np.linalg.norm(v, axis=1)
+    valid = n > 1e-12
+
+    p0 = p0[valid]
+    v = v[valid] / n[valid, None]
+    p1 = p0 + float(scale) * v
+
+    return p0, p1
+
+
+def _rotation_from_z(direction: np.ndarray) -> np.ndarray:
+    """Rotation matrix that maps +Z to a target unit direction."""
+    z = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    d = np.asarray(direction, dtype=np.float64)
+    d /= max(np.linalg.norm(d), 1e-12)
+    c = float(np.dot(z, d))
+    if c > 1.0 - 1e-12:
+        return np.eye(3, dtype=np.float64)
+    if c < -1.0 + 1e-12:
+        return np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+                [0.0, 0.0, -1.0],
+            ],
+            dtype=np.float64,
+        )
+
+    axis = np.cross(z, d)
+    s = max(np.linalg.norm(axis), 1e-12)
+    axis /= s
+    ax = np.array(
+        [
+            [0.0, -axis[2], axis[1]],
+            [axis[2], 0.0, -axis[0]],
+            [-axis[1], axis[0], 0.0],
+        ],
+        dtype=np.float64,
+    )
+    return np.eye(3, dtype=np.float64) + ax * s + (ax @ ax) * (1.0 - c)
+
+
+def _build_vector_tubes(
+    start: np.ndarray,
+    end: np.ndarray,
+    *,
+    radius: float,
+    color: tuple[float, float, float],
+) -> o3d.geometry.TriangleMesh:
+    """Build thicker vector glyphs using short cylinders."""
+    mesh = o3d.geometry.TriangleMesh()
+    if start.shape[0] == 0:
+        return mesh
+
+    r = max(1e-9, float(radius))
+    for i in range(start.shape[0]):
+        p0 = start[i]
+        p1 = end[i]
+        d = p1 - p0
+        length = float(np.linalg.norm(d))
+        if length <= 1e-12:
+            continue
+        tube = o3d.geometry.TriangleMesh.create_cylinder(radius=r, height=length, resolution=12, split=1)
+        tube.paint_uniform_color(color)
+        tube.rotate(_rotation_from_z(d), center=np.zeros(3, dtype=np.float64))
+        tube.translate(0.5 * (p0 + p1))
+        mesh += tube
+
+    return mesh
 
 
 def run(
@@ -30,6 +113,10 @@ def run(
     seed: int | None,
     seed_level: float | None,
     t_coef: float,
+    vector_kind: str,
+    vector_step: int,
+    vector_scale_ratio: float,
+    vector_radius_ratio: float,
     visualize: bool,
 ) -> None:
     mesh_data = load_triangle_mesh_arrays(mesh_path)
@@ -42,6 +129,9 @@ def run(
     )
     colors = yellow_to_red_colors(heat.norm)
     colored_pcd = make_point_cloud(mesh_data.vertices, colors)
+    bbox_diag = float(np.linalg.norm(np.max(mesh_data.vertices, axis=0) - np.min(mesh_data.vertices, axis=0)))
+    vec_scale = max(1e-9, float(vector_scale_ratio) * bbox_diag)
+    vec_radius = max(1e-9, float(vector_radius_ratio) * bbox_diag)
 
     print(f"mesh: {mesh_path}")
     print(f"vertices (used): {mesh_data.vertices.shape[0]}")
@@ -69,8 +159,41 @@ def run(
         print(f"saved colored point cloud: {out_ply}")
 
     if visualize:
+        geoms = [colored_pcd]
+        need_tangent_frame = vector_kind in ("gradient", "orthogonal", "both")
+        if need_tangent_frame:
+            t_dir, b_dir, _ = compute_vertex_tangent_axes_from_scalar(
+                mesh_data.vertices,
+                mesh_data.faces,
+                heat.dist,
+                tangent_sign=1.0,
+            )
+
+            if vector_kind in ("gradient", "both"):
+                g0, g1 = _sample_vectors(
+                    mesh_data.vertices,
+                    t_dir,
+                    step=vector_step,
+                    scale=vec_scale,
+                )
+                grad_tubes = _build_vector_tubes(g0, g1, radius=vec_radius, color=(0.10, 0.95, 0.10))
+                geoms.append(grad_tubes)
+                print(f"gradient tangent vectors (green): sampled every {max(1, int(vector_step))} vertices")
+
+            if vector_kind in ("orthogonal", "both"):
+                b0, b1 = _sample_vectors(
+                    mesh_data.vertices,
+                    b_dir,
+                    step=vector_step,
+                    scale=vec_scale,
+                )
+                orth_tubes = _build_vector_tubes(b0, b1, radius=vec_radius, color=(0.20, 0.60, 1.00))
+                geoms.append(orth_tubes)
+                print(f"orthogonal tangent vectors (blue): sampled every {max(1, int(vector_step))} vertices")
+
         axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        o3d.visualization.draw_geometries([colored_pcd, axes], point_show_normal=False)
+        geoms.append(axes)
+        o3d.visualization.draw_geometries(geoms, point_show_normal=False)
 
 
 def main() -> None:
@@ -109,6 +232,31 @@ def main() -> None:
         help="Heat-method time coefficient.",
     )
     parser.add_argument(
+        "--vector-kind",
+        type=str,
+        choices=("gradient", "orthogonal", "both", "none"),
+        default="both",
+        help="Which tangent vector directions to overlay in Open3D.",
+    )
+    parser.add_argument(
+        "--vector-step",
+        type=int,
+        default=35,
+        help="Draw one vector every N vertices.",
+    )
+    parser.add_argument(
+        "--vector-scale-ratio",
+        type=float,
+        default=0.02,
+        help="Vector length as ratio of mesh AABB diagonal.",
+    )
+    parser.add_argument(
+        "--vector-radius-ratio",
+        type=float,
+        default=0.0015,
+        help="Vector tube radius as ratio of mesh AABB diagonal.",
+    )
+    parser.add_argument(
         "--no-vis",
         action="store_true",
         help="Disable Open3D visualization window.",
@@ -121,6 +269,10 @@ def main() -> None:
         seed=args.seed,
         seed_level=args.seed_level,
         t_coef=args.t_coef,
+        vector_kind=str(args.vector_kind).strip().lower(),
+        vector_step=args.vector_step,
+        vector_scale_ratio=args.vector_scale_ratio,
+        vector_radius_ratio=args.vector_radius_ratio,
         visualize=not args.no_vis,
     )
 
