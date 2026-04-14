@@ -14,6 +14,11 @@ import heapq
 
 import numpy as np
 
+from .geometry import (
+    project_points_to_surface,
+    sample_tangent_axes_on_surface_from_scalar,
+    sample_vertex_scalar_on_surface,
+)
 from .types import PrintPointSet
 
 
@@ -175,6 +180,19 @@ def _sample_scalar_nearest_vertex(
     return scalar, nearest_idx
 
 
+def _nearest_indices(
+    sample_points: np.ndarray,
+    field_vertices_world: np.ndarray,
+) -> np.ndarray:
+    if sample_points.shape[0] == 0:
+        return np.zeros((0,), dtype=np.int32)
+    idx = np.zeros((sample_points.shape[0],), dtype=np.int32)
+    for i in range(sample_points.shape[0]):
+        d2 = np.sum((field_vertices_world - sample_points[i]) ** 2, axis=1)
+        idx[i] = int(np.argmin(d2))
+    return idx
+
+
 def _dijkstra_with_limit(
     adj: list[list[tuple[int, float]]],
     source: int,
@@ -200,6 +218,110 @@ def _dijkstra_with_limit(
     return dist
 
 
+def _gradient_walk_points(
+    source_points: np.ndarray,
+    field_vertices_world: np.ndarray,
+    field_faces: np.ndarray,
+    field_scalar: np.ndarray,
+    *,
+    target_distance: float,
+    step_size: float,
+    max_steps: int,
+    tangent_sign: float,
+) -> np.ndarray:
+    if source_points.shape[0] == 0:
+        return np.zeros((0, 3), dtype=np.float64)
+
+    target = max(0.0, float(target_distance))
+    if target <= 0.0:
+        return project_points_to_surface(source_points, field_vertices_world, field_faces)
+
+    step = max(1e-6, float(step_size))
+    n_steps = max(1, int(max_steps))
+
+    src = project_points_to_surface(source_points, field_vertices_world, field_faces)
+    cur = src.copy()
+    reached = np.zeros((src.shape[0],), dtype=bool)
+
+    for _ in range(n_steps):
+        active = np.flatnonzero(~reached)
+        if active.size == 0:
+            break
+
+        t_dir, _b_dir, _n_dir = sample_tangent_axes_on_surface_from_scalar(
+            query_points=cur[active],
+            mesh_vertices=field_vertices_world,
+            mesh_faces=field_faces,
+            vertex_scalar=field_scalar,
+            tangent_sign=float(tangent_sign),
+        )
+        trial = cur[active] + step * t_dir
+        trial_proj = project_points_to_surface(trial, field_vertices_world, field_faces)
+        cur[active] = trial_proj
+
+        disp = np.linalg.norm(cur - src, axis=1)
+        reached = disp >= target
+
+    return cur
+
+
+def _clamp_direction_to_cone(
+    direction: np.ndarray,
+    *,
+    z_axis: np.ndarray,
+    cos_max: float,
+    sin_max: float,
+) -> np.ndarray:
+    n = float(np.linalg.norm(direction))
+    if n <= 1e-12:
+        return z_axis.copy()
+    u = direction / n
+    c = float(np.dot(u, z_axis))
+    if c >= cos_max:
+        return u
+    p = u - c * z_axis
+    pn = float(np.linalg.norm(p))
+    if pn <= 1e-12:
+        p = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    else:
+        p = p / pn
+    return cos_max * z_axis + sin_max * p
+
+
+def _clamp_points_to_cone_final(
+    source_points: np.ndarray,
+    walked_points: np.ndarray,
+    *,
+    field_vertices_world: np.ndarray,
+    field_faces: np.ndarray,
+    cone_max_tilt_deg: float,
+) -> np.ndarray:
+    if source_points.shape[0] == 0:
+        return walked_points.copy()
+
+    z_axis = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    max_tilt_rad = np.deg2rad(float(np.clip(cone_max_tilt_deg, 0.0, 179.9)))
+    cos_max = float(np.cos(max_tilt_rad))
+    sin_max = float(np.sin(max_tilt_rad))
+
+    disp = walked_points - source_points
+    disp_norm = np.linalg.norm(disp, axis=1)
+    clamped_targets = walked_points.copy()
+
+    for i in range(source_points.shape[0]):
+        if float(disp_norm[i]) <= 1e-12:
+            continue
+        u_clamped = _clamp_direction_to_cone(
+            disp[i],
+            z_axis=z_axis,
+            cos_max=cos_max,
+            sin_max=sin_max,
+        )
+        clamped_targets[i] = source_points[i] + float(disp_norm[i]) * u_clamped
+
+    return project_points_to_surface(clamped_targets, field_vertices_world, field_faces)
+
+
 def generate_print_points(
     polyline_points: np.ndarray,
     polyline_lines: np.ndarray,
@@ -211,12 +333,42 @@ def generate_print_points(
     merge_tol: float = 1e-6,
     point_valid_mask: np.ndarray | None = None,
     extra_points: np.ndarray | None = None,
+    candidate_mode: str = "polyline",
+    lift_height: float = 0.0,
+    field_faces: np.ndarray | None = None,
+    walk_distance: float = 0.0,
+    walk_step: float = 1e-3,
+    walk_max_steps: int = 32,
+    walk_tangent_sign: float = 1.0,
+    clamp_to_cone: bool = False,
+    cone_max_tilt_deg: float = 45.0,
 ) -> PrintPointSet:
-    """Select print points on polyline via scalar-min + spacing suppression."""
+    """Select print points and optionally post-process candidate locations.
+
+    Base selection:
+    - pick scalar minima on polyline with spacing suppression.
+
+    Candidate modes:
+    - `polyline`: output selected polyline points.
+    - `z_lift`: output selected points with +Z `lift_height`.
+    - `gradient_walk`: walk on field surface along scalar tangent direction
+      until euclidean displacement from source reaches `walk_distance`
+      (or `walk_max_steps` is reached).
+      Optional clamp:
+      - if `clamp_to_cone=True`, the final displacement `source -> output`
+        is clamped to a cone around world `+Z` (semi-angle `cone_max_tilt_deg`)
+        and re-projected to the field surface.
+    """
     k = int(count)
     if k < 0:
         raise ValueError(f"count must be >= 0, got {count}")
     spacing = max(0.0, float(min_spacing))
+    mode = str(candidate_mode).strip().lower()
+    if mode not in ("polyline", "z_lift", "gradient_walk"):
+        raise ValueError(
+            f"Unknown candidate_mode: {candidate_mode}. "
+            "Use 'polyline', 'z_lift', or 'gradient_walk'."
+        )
 
     unique_points, unique_lines, unique_to_old = _deduplicate_polyline_points(
         points=polyline_points,
@@ -233,6 +385,8 @@ def generate_print_points(
             min_spacing=spacing,
             available_vertices=int(unique_points.shape[0]),
             augmented_vertices=0,
+            source_points=np.zeros((0, 3), dtype=np.float64),
+            surface_points=np.zeros((0, 3), dtype=np.float64),
         )
 
     if point_valid_mask is not None:
@@ -250,11 +404,27 @@ def generate_print_points(
         merge_tol=float(merge_tol),
     )
 
-    scalar_vals, nearest_idx = _sample_scalar_nearest_vertex(
-        sample_points=unique_points,
-        field_vertices_world=field_vertices_world,
-        field_scalar=field_scalar,
+    use_surface_sampling = (
+        field_faces is not None
+        and field_vertices_world.ndim == 2
+        and field_vertices_world.shape[1] == 3
+        and field_scalar.ndim == 1
+        and field_scalar.shape[0] == field_vertices_world.shape[0]
     )
+    if use_surface_sampling:
+        scalar_vals = sample_vertex_scalar_on_surface(
+            query_points=unique_points,
+            mesh_vertices=field_vertices_world,
+            mesh_faces=np.asarray(field_faces, dtype=np.int32),
+            vertex_scalar=field_scalar,
+        )
+        nearest_idx = _nearest_indices(unique_points, field_vertices_world)
+    else:
+        scalar_vals, nearest_idx = _sample_scalar_nearest_vertex(
+            sample_points=unique_points,
+            field_vertices_world=field_vertices_world,
+            field_scalar=field_scalar,
+        )
     adj = _build_adjacency(unique_points, unique_lines)
 
     valid = unique_valid.copy()
@@ -275,8 +445,39 @@ def generate_print_points(
                 valid[int(idx)] = False
 
     selected_arr = np.asarray(selected, dtype=np.int32)
+    source_points = unique_points[selected_arr].copy()
+    out_points = source_points.copy()
+    surface_points = source_points.copy()
+    if mode == "z_lift":
+        h = float(lift_height)
+        if h < 0.0:
+            raise ValueError(f"lift_height must be >= 0, got {lift_height}")
+        out_points[:, 2] += h
+    elif mode == "gradient_walk":
+        if field_faces is None:
+            raise ValueError("field_faces is required for candidate_mode='gradient_walk'")
+        out_points = _gradient_walk_points(
+            source_points=source_points,
+            field_vertices_world=field_vertices_world,
+            field_faces=np.asarray(field_faces, dtype=np.int32),
+            field_scalar=field_scalar,
+            target_distance=float(walk_distance),
+            step_size=float(walk_step),
+            max_steps=int(walk_max_steps),
+            tangent_sign=float(walk_tangent_sign),
+        )
+        if bool(clamp_to_cone):
+            out_points = _clamp_points_to_cone_final(
+                source_points=source_points,
+                walked_points=out_points,
+                field_vertices_world=field_vertices_world,
+                field_faces=np.asarray(field_faces, dtype=np.int32),
+                cone_max_tilt_deg=float(cone_max_tilt_deg),
+            )
+        surface_points = out_points.copy()
+
     return PrintPointSet(
-        points=unique_points[selected_arr],
+        points=out_points,
         scalar_values=scalar_vals[selected_arr],
         polyline_indices=selected_arr,
         nearest_field_vertex_indices=nearest_idx[selected_arr],
@@ -284,4 +485,6 @@ def generate_print_points(
         min_spacing=spacing,
         available_vertices=int(unique_points.shape[0]),
         augmented_vertices=int(added_vertices),
+        source_points=source_points,
+        surface_points=surface_points,
     )

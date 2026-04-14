@@ -138,6 +138,57 @@ def _normalize_rows(vectors: np.ndarray, eps: float = 1e-12) -> np.ndarray:
     return out
 
 
+def clamp_vectors_to_cone(
+    vectors: np.ndarray,
+    *,
+    max_tilt_deg: float,
+    cone_axis: tuple[float, float, float] = (0.0, 0.0, 1.0),
+) -> np.ndarray:
+    """Clamp direction vectors to a cone around a given axis.
+
+    Input vectors are treated as directions and output vectors are unit-length.
+    `max_tilt_deg` is the cone semi-angle (tilt from cone axis).
+    """
+    if vectors.ndim != 2 or vectors.shape[1] != 3:
+        raise ValueError("vectors must have shape (N, 3)")
+
+    axis = np.asarray(cone_axis, dtype=np.float64).reshape(3)
+    axis_n = float(np.linalg.norm(axis))
+    if axis_n <= 1e-12:
+        raise ValueError("cone_axis norm must be > 0")
+    axis /= axis_n
+
+    max_tilt_rad = np.deg2rad(float(np.clip(max_tilt_deg, 0.0, 179.9)))
+    cos_max = float(np.cos(max_tilt_rad))
+    sin_max = float(np.sin(max_tilt_rad))
+
+    out = np.zeros_like(vectors, dtype=np.float64)
+    for i in range(vectors.shape[0]):
+        v = np.asarray(vectors[i], dtype=np.float64)
+        n = float(np.linalg.norm(v))
+        if n <= 1e-12:
+            out[i] = axis
+            continue
+        u = v / n
+        c = float(np.dot(u, axis))
+        if c >= cos_max:
+            out[i] = u
+            continue
+        p = u - c * axis
+        pn = float(np.linalg.norm(p))
+        if pn <= 1e-12:
+            # Deterministic fallback axis orthogonal to cone axis.
+            ref = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+            if abs(float(np.dot(ref, axis))) > 0.9:
+                ref = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+            p = np.cross(axis, ref)
+            pn = float(np.linalg.norm(p))
+        p_hat = p / max(pn, 1e-12)
+        out[i] = cos_max * axis + sin_max * p_hat
+
+    return _normalize_rows(out)
+
+
 def _fallback_tangent_from_normals(normals: np.ndarray) -> np.ndarray:
     """Build deterministic tangent fallback orthogonal to normals."""
     n = _normalize_rows(normals)

@@ -71,6 +71,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `compact_triangle_mesh(vertices, faces)`
      - `apply_scale_and_offset(...)`
      - `sample_vertex_scalar_on_surface(query_points, mesh_vertices, mesh_faces, vertex_scalar)`
+     - `clamp_vectors_to_cone(vectors, max_tilt_deg, cone_axis=(0,0,1))`
 
 7. `types.py`
    - Shared dataclasses used as contracts across stages.
@@ -80,27 +81,32 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - `PrintPointSet`: selected print points and spacing/selection metadata.
 
 8. `generate_print_points.py`
-   - Selects print points from the offset polyline.
-   - For each iteration:
-     - pick the polyline vertex with minimum scalar-field value,
-     - require vertical proximity to scan surface (configured upstream),
-     - optionally add external bridge points (e.g. from phi=0 endpoints projected in +Z),
+   - Unified print-point generator.
+   - Base selection always runs on the provided polyline graph:
+     - pick the polyline vertex with minimum scalar value,
      - suppress nearby polyline vertices within minimum spacing,
      - repeat until requested count is reached.
-   - Distances are measured along the polyline graph.
+   - Supports optional post-processing through `candidate_mode`:
+     - `polyline`: keep selected points on the source polyline.
+     - `z_lift`: apply vertical offset (`lift_height`) in +Z.
+     - `gradient_walk`: walk over field surface tangentially to scalar gradient
+       until euclidean displacement reaches `walk_distance`.
+       - Optional directional limit for gradient walk:
+         - `clamp_to_cone=True` constrains the final displacement
+           (`source_point -> output_point`) to a cone around world `+Z`.
+         - `cone_max_tilt_deg` sets the cone semi-angle.
+   - Scalar sampling behavior:
+     - if `field_faces` is provided and scalar length matches field vertices, scalar
+       is sampled on polyline points by triangle interpolation (`sample_vertex_scalar_on_surface`),
+     - otherwise falls back to nearest-vertex sampling.
+   - Returns `PrintPointSet`, including:
+     - `points`: final points for the selected mode,
+     - `source_points`: points selected on the original polyline,
+     - `surface_points`: mode-aware surface points (useful before lift/projection).
    - Main API:
      - `generate_print_points(...) -> PrintPointSet`
 
-9. `generate_print_points_phi_lift.py`
-   - Alternative point-generation strategy without geodesic contour offset.
-   - Uses the existing source polyline (typically `phi=0`) as candidate set.
-   - Evaluates `heat.norm` on that polyline by triangle interpolation.
-   - Selects lowest interpolated heat values with spacing suppression.
-   - Lifts selected points in `+Z` by configured print height.
-   - Main API:
-     - `generate_print_points_phi_lift(...) -> LiftedPrintPointSet`
-
-10. `loop_simulation.py`
+9. `loop_simulation.py`
    - Utilities for iterative loop simulation before robot execution.
    - Keeps loop stages explicit:
      - position field with bounded retries (`positioning_attempts`),
@@ -120,6 +126,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
 - Field scalar computation and geometric viability are explicitly separated.
 - `position_field` handles local candidate ranking for pose search.
 - Offset generation is geodesic on the mesh, not Euclidean in free space.
+- Candidate generation is centralized in `generate_print_points` (mode-driven),
+  instead of split across multiple point-generator modules.
 - Full-loop/global objective design remains external to this library.
 - Loop simulation keeps bead accumulation local to the simulator layer, so
   field/phi/contour stages remain reusable in ROS integration.
@@ -132,10 +140,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
 4. Compute phi and viable mask.
 5. Extract `phi=0` contour.
 6. Extract geodesic offset contour at desired distance (default 12 mm).
-7. Select print points from the offset contour (default 7 points, 16 mm spacing).
+7. Select print points with `generate_print_points`:
+   - from offset contour (`candidate_mode='polyline'`), or
+   - from `phi=0` contour + lift (`candidate_mode='z_lift'`), or
+   - from contour with surface walk (`candidate_mode='gradient_walk'`).
 8. Export and visualize.
-
-Alternative path (no geodesic offset):
-1. Extract `phi=0` contour.
-2. Interpolate `heat.norm` on that contour and select minima.
-3. Lift selected points in `+Z` by print height.

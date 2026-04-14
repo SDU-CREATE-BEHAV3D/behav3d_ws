@@ -49,7 +49,7 @@ import open3d as o3d
 from lib_scalar.compute_heat_field import compute_heat_field
 from lib_scalar.compute_phi_mask import evaluate_fixed_pose, make_scan_scene
 from lib_scalar.extract_phi_contour import extract_phi_contour
-from lib_scalar.generate_print_points_phi_lift import generate_print_points_phi_lift
+from lib_scalar.generate_print_points import generate_print_points
 from lib_scalar.geometry import load_triangle_mesh_arrays, load_triangle_mesh_legacy
 from lib_scalar.position_field import default_xy_search_bounds, make_axis_samples, position_field
 from lib_scalar.viz import compute_scene_bounds, make_line_set, make_point_cloud, yellow_to_red_colors
@@ -245,20 +245,26 @@ def run(
 
     print_height_m = 1e-3 * float(print_height_mm)
     print_min_spacing_m = 1e-3 * float(print_min_spacing_mm)
-    lifted = generate_print_points_phi_lift(
+    selected = generate_print_points(
         polyline_points=contour_points,
         polyline_lines=contour_lines,
         field_vertices_world=pose.field_vertices_world,
-        field_faces=field_faces,
-        heat_norm=heat.norm,
-        print_height=float(print_height_m),
+        field_scalar=heat.norm,
         count=int(print_count),
         min_spacing=float(print_min_spacing_m),
+        candidate_mode="z_lift",
+        lift_height=float(print_height_m),
+        field_faces=field_faces,
     )
+    lifted_points = selected.points
+    source_points = selected.source_points
+    if source_points is None:
+        source_points = lifted_points.copy()
+        source_points[:, 2] -= float(print_height_m)
 
-    if lifted.lifted_points.shape[0] > 0:
-        print_colors = np.tile(np.array([1.0, 0.0, 1.0], dtype=np.float64), (lifted.lifted_points.shape[0], 1))
-        print_pcd = make_point_cloud(lifted.lifted_points, print_colors)
+    if lifted_points.shape[0] > 0:
+        print_colors = np.tile(np.array([1.0, 0.0, 1.0], dtype=np.float64), (lifted_points.shape[0], 1))
+        print_pcd = make_point_cloud(lifted_points, print_colors)
     else:
         print_pcd = None
 
@@ -323,19 +329,19 @@ def run(
     )
     print(
         "lifted point selection: "
-        f"selected={lifted.lifted_points.shape[0]} "
-        f"available_polyline_vertices={lifted.available_vertices}"
+        f"selected={lifted_points.shape[0]} "
+        f"available_polyline_vertices={selected.available_vertices}"
     )
-    if lifted.lifted_points.shape[0] > 0:
+    if lifted_points.shape[0] > 0:
         print(
             "selected heat_norm stats: "
-            f"min={float(np.min(lifted.source_values)):.6f} "
-            f"max={float(np.max(lifted.source_values)):.6f}"
+            f"min={float(np.min(selected.scalar_values)):.6f} "
+            f"max={float(np.max(selected.scalar_values)):.6f}"
         )
-        for i in range(lifted.lifted_points.shape[0]):
-            p0 = lifted.source_points[i]
-            p1 = lifted.lifted_points[i]
-            v = float(lifted.source_values[i])
+        for i in range(lifted_points.shape[0]):
+            p0 = source_points[i]
+            p1 = lifted_points[i]
+            v = float(selected.scalar_values[i])
             print(
                 f"print_point[{i}]: "
                 f"src=({float(p0[0]):.6f},{float(p0[1]):.6f},{float(p0[2]):.6f}) "
@@ -367,14 +373,14 @@ def run(
     if out_targets_yaml is not None:
         write_targets_yaml(
             out_yaml=out_targets_yaml,
-            points_world=lifted.lifted_points,
+            points_world=lifted_points,
             z_dir=target_z_dir,
             position_scale=float(target_position_scale),
         )
         print(
             "saved targets yaml: "
             f"{out_targets_yaml} "
-            f"(points={lifted.lifted_points.shape[0]}, scale={float(target_position_scale):.2f})"
+            f"(points={lifted_points.shape[0]}, scale={float(target_position_scale):.2f})"
         )
 
     if visualize:

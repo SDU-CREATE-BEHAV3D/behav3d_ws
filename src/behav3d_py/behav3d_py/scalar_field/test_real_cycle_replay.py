@@ -24,8 +24,9 @@ from lib_scalar.extract_phi_contour import (
     extract_offset_phi_contour,
     extract_phi_contour,
 )
-from lib_scalar.generate_print_points_phi_lift import generate_print_points_phi_lift
+from lib_scalar.generate_print_points import generate_print_points
 from lib_scalar.geometry import (
+    clamp_vectors_to_cone,
     load_triangle_mesh_legacy,
     project_points_to_surface,
     sample_vertex_scalar_on_surface,
@@ -179,6 +180,13 @@ def run(
     recompute_seed_iso: float,
     recompute_t_coef: float | None,
     prelift_geodesic_offset_mm: float,
+    candidate_mode: str,
+    walk_distance_mm: float,
+    walk_step_mm: float,
+    walk_max_steps: int,
+    walk_tangent_sign: float,
+    clamp_to_cone: bool,
+    cone_max_tilt_deg: float,
     tangent_sign: float,
     frame_scale_mm: float,
     axis_size: float,
@@ -238,20 +246,34 @@ def run(
             recompute_seed_iso_used = seed_iso
             recompute_used_t = t_used
 
-    lifted = generate_print_points_phi_lift(
+    mode = str(candidate_mode).strip().lower()
+    selected = generate_print_points(
         polyline_points=contour_points,
         polyline_lines=contour_lines,
         field_vertices_world=pose.field_vertices_world,
-        field_faces=field_faces,
-        heat_norm=candidate_scalar,
-        print_height=1e-3 * float(print_height_mm),
+        field_scalar=candidate_scalar,
         count=int(print_count),
         min_spacing=1e-3 * float(print_min_spacing_mm),
+        candidate_mode=mode,
+        lift_height=1e-3 * float(print_height_mm),
+        field_faces=field_faces,
+        walk_distance=1e-3 * float(walk_distance_mm),
+        walk_step=1e-3 * float(walk_step_mm),
+        walk_max_steps=int(walk_max_steps),
+        walk_tangent_sign=float(walk_tangent_sign),
+        # Cone clamp is applied at orientation stage (post point generation),
+        # so point locations stay consistent across candidate modes.
+        clamp_to_cone=False,
+        cone_max_tilt_deg=float(cone_max_tilt_deg),
     )
 
-    selected_surface_points = lifted.source_points
+    selected_surface_points = selected.surface_points
+    if selected_surface_points is None:
+        selected_surface_points = selected.source_points
+    if selected_surface_points is None:
+        selected_surface_points = selected.points.copy()
     prelift_offset_m = 1e-3 * float(prelift_geodesic_offset_mm)
-    if prelift_offset_m > 0.0 and lifted.source_points.shape[0] > 0:
+    if prelift_offset_m > 0.0 and selected_surface_points.shape[0] > 0:
         offset_points, _offset_lines, _signed_geod, _seed_vertices = extract_offset_phi_contour(
             vertices=pose.field_vertices_world,
             faces=field_faces,
@@ -263,14 +285,14 @@ def run(
         )
         if offset_points.shape[0] > 0:
             d2 = np.sum(
-                (lifted.source_points[:, None, :] - offset_points[None, :, :]) ** 2,
+                (selected_surface_points[:, None, :] - offset_points[None, :, :]) ** 2,
                 axis=2,
             )
             nn = np.argmin(d2, axis=1).astype(np.int64)
             selected_surface_points = offset_points[nn]
 
     prelift_points = selected_surface_points.copy()
-    if prelift_points.shape[0] > 0:
+    if mode == "z_lift" and prelift_points.shape[0] > 0:
         prelift_points[:, 2] += 1e-3 * float(print_height_mm)
 
     projected_points = project_points_to_surface(
@@ -289,8 +311,19 @@ def run(
     t_dir, b_dir = _align_tangent_frame_sign(
         t_dir=t_dir,
         b_dir=b_dir,
-        order_idx=np.asarray(lifted.polyline_indices, dtype=np.int64),
+        order_idx=np.asarray(selected.polyline_indices, dtype=np.int64),
     )
+    if bool(clamp_to_cone):
+        t_dir = clamp_vectors_to_cone(
+            t_dir,
+            max_tilt_deg=float(cone_max_tilt_deg),
+            cone_axis=(0.0, 0.0, 1.0),
+        )
+        b_dir = clamp_vectors_to_cone(
+            b_dir,
+            max_tilt_deg=float(cone_max_tilt_deg),
+            cone_axis=(0.0, 0.0, 1.0),
+        )
     frame_scale = 1e-3 * float(frame_scale_mm)
     t_lines = _build_axis_lines(projected_points, t_dir, scale=frame_scale, color=(0.10, 0.95, 0.10))
     b_lines = _build_axis_lines(projected_points, b_dir, scale=frame_scale, color=(0.20, 0.60, 1.00))
@@ -341,6 +374,20 @@ def run(
     print(f"viable vertices: {pose.viable_count}/{pose.field_vertices_world.shape[0]}")
     print(f"contour segments: {contour_lines.shape[0]}")
     print(f"print candidates: {projected_points.shape[0]}")
+    print(f"candidate_mode: {mode}")
+    if mode == "gradient_walk":
+        print(
+            "gradient_walk config: "
+            f"distance_mm={float(walk_distance_mm):.3f} "
+            f"step_mm={float(walk_step_mm):.3f} "
+            f"max_steps={int(walk_max_steps)} "
+            f"tangent_sign={float(walk_tangent_sign):+.1f}"
+        )
+    print(
+        "orientation clamp config: "
+        f"enabled={bool(clamp_to_cone)} "
+        f"cone_max_tilt_deg={float(cone_max_tilt_deg):.3f}"
+    )
     print(f"prelift_geodesic_offset_mm: {float(prelift_geodesic_offset_mm):.3f}")
     if selected_surface_points.shape[0] > 0:
         phi_sel = sample_vertex_scalar_on_surface(
@@ -357,7 +404,7 @@ def run(
             "phi values before lift: "
             "[" + ", ".join(f"{float(v):.6f}" for v in phi_sel.tolist()) + "]"
         )
-    if bool(recompute_field_from_contour) and lifted.source_points.shape[0] > 0:
+    if bool(recompute_field_from_contour) and selected_surface_points.shape[0] > 0:
         phi_before_lift = sample_vertex_scalar_on_surface(
             query_points=selected_surface_points,
             mesh_vertices=pose.field_vertices_world,
@@ -377,6 +424,15 @@ def run(
             f"min={float(np.min(d_proj)):.6f} "
             f"mean={float(np.mean(d_proj)):.6f} "
             f"max={float(np.max(d_proj)):.6f}"
+        )
+    src_points = selected.source_points
+    if src_points is not None and projected_points.shape[0] > 0 and src_points.shape[0] == projected_points.shape[0]:
+        d_src_final = np.linalg.norm(projected_points - src_points, axis=1)
+        print(
+            "candidate displacement (source->final) m: "
+            f"min={float(np.min(d_src_final)):.6f} "
+            f"mean={float(np.mean(d_src_final)):.6f} "
+            f"max={float(np.max(d_src_final)):.6f}"
         )
     if recompute_used_t is None:
         print("recompute_field_from_contour: False (using stored heat field)")
@@ -407,6 +463,34 @@ def main() -> None:
     parser.add_argument("--print-count", type=int, default=7)
     parser.add_argument("--print-min-spacing-mm", type=float, default=16.0)
     parser.add_argument("--print-height-mm", type=float, default=12.0)
+    parser.add_argument(
+        "--candidate-mode",
+        type=str,
+        choices=("z_lift", "gradient_walk"),
+        default="z_lift",
+        help="Candidate generation mode before projection/orientation.",
+    )
+    parser.add_argument("--walk-distance-mm", type=float, default=12.0, help="Gradient-walk target displacement.")
+    parser.add_argument("--walk-step-mm", type=float, default=1.0, help="Gradient-walk step size.")
+    parser.add_argument("--walk-max-steps", type=int, default=32, help="Gradient-walk max iterations.")
+    parser.add_argument(
+        "--walk-tangent-sign",
+        type=float,
+        default=1.0,
+        help="Gradient-walk tangent sign (+1 or -1).",
+    )
+    parser.add_argument(
+        "--clamp-to-cone",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Clamp final orientation vectors to a cone around world +Z.",
+    )
+    parser.add_argument(
+        "--cone-max-tilt-deg",
+        type=float,
+        default=45.0,
+        help="Cone semi-angle in degrees when --clamp-to-cone is enabled.",
+    )
     parser.add_argument(
         "--iso-level",
         type=float,
@@ -462,6 +546,13 @@ def main() -> None:
         recompute_seed_iso=args.recompute_seed_iso,
         recompute_t_coef=args.recompute_t_coef,
         prelift_geodesic_offset_mm=args.prelift_geodesic_offset_mm,
+        candidate_mode=args.candidate_mode,
+        walk_distance_mm=args.walk_distance_mm,
+        walk_step_mm=args.walk_step_mm,
+        walk_max_steps=args.walk_max_steps,
+        walk_tangent_sign=args.walk_tangent_sign,
+        clamp_to_cone=bool(args.clamp_to_cone),
+        cone_max_tilt_deg=args.cone_max_tilt_deg,
         tangent_sign=args.tangent_sign,
         frame_scale_mm=args.frame_scale_mm,
         axis_size=args.axis_size,

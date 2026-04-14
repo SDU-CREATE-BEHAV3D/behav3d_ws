@@ -19,7 +19,6 @@ import open3d as o3d
 from .compute_phi_mask import make_scan_scene, query_scan_z_with_vertical_rays
 from .extract_phi_contour import extract_phi_contour_with_offset
 from .generate_print_points import generate_print_points
-from .generate_print_points_phi_lift import generate_print_points_phi_lift
 from .position_field import default_xy_search_bounds, make_axis_samples, position_field
 from .types import PoseResult
 
@@ -215,20 +214,22 @@ def generate_step_candidates(
         )
 
     if mode_norm == "z_lift":
-        pool = generate_print_points_phi_lift(
+        pool = generate_print_points(
             polyline_points=contour.contour_points,
             polyline_lines=contour.contour_lines,
             field_vertices_world=field_vertices_world,
-            field_faces=field_faces,
-            heat_norm=heat_norm,
-            print_height=1e-3 * float(bead_height_mm),
+            field_scalar=heat_norm,
             count=select_count,
             min_spacing=sep_m,
             point_valid_mask=None,
+            extra_points=None,
+            candidate_mode="z_lift",
+            lift_height=1e-3 * float(bead_height_mm),
+            field_faces=field_faces,
         )
         return CandidateStage(
-            points=pool.lifted_points,
-            scalar_values=pool.source_values,
+            points=pool.points,
+            scalar_values=pool.scalar_values,
             available_vertices=int(pool.available_vertices),
             z_valid_count=int(pool.available_vertices),
         )

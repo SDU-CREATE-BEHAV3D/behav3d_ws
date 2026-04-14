@@ -24,7 +24,7 @@ try:
     from behav3d_py.scalar_field.lib_scalar.compute_heat_field import compute_heat_field
     from behav3d_py.scalar_field.lib_scalar.compute_phi_mask import evaluate_fixed_pose, make_scan_scene
     from behav3d_py.scalar_field.lib_scalar.extract_phi_contour import extract_phi_contour
-    from behav3d_py.scalar_field.lib_scalar.generate_print_points_phi_lift import generate_print_points_phi_lift
+    from behav3d_py.scalar_field.lib_scalar.generate_print_points import generate_print_points
     from behav3d_py.scalar_field.lib_scalar.geometry import load_triangle_mesh_arrays
     from behav3d_py.scalar_field.lib_scalar.loop_simulation import position_field_with_attempts
     from behav3d_py.scalar_field.lib_scalar.viz import make_line_set, make_point_cloud, yellow_to_red_colors
@@ -35,7 +35,7 @@ except Exception as exc:  # pragma: no cover
     evaluate_fixed_pose = None
     make_scan_scene = None
     extract_phi_contour = None
-    generate_print_points_phi_lift = None
+    generate_print_points = None
     load_triangle_mesh_arrays = None
     position_field_with_attempts = None
     make_line_set = None
@@ -464,17 +464,20 @@ class FieldsNode(Node):
             if not np.isfinite(target_base_to_world_yaw_deg):
                 raise ValueError("target_base_to_world_yaw_deg must be a finite value.")
 
-            lifted = generate_print_points_phi_lift(
+            candidates = generate_print_points(
                 polyline_points=contour_points,
                 polyline_lines=contour_lines,
                 field_vertices_world=pose.field_vertices_world,
-                field_faces=field_faces,
-                heat_norm=heat_norm,
-                print_height=1e-3 * bead_height_mm_used,
+                field_scalar=heat_norm,
                 count=beads_per_step_used,
                 min_spacing=1e-3 * bead_separation_mm_used,
                 point_valid_mask=None,
+                extra_points=None,
+                candidate_mode="z_lift",
+                lift_height=1e-3 * bead_height_mm_used,
+                field_faces=field_faces,
             )
+            candidate_points = candidates.points
 
             out_dir = _resolve_output_dir(
                 req.output_dir,
@@ -504,19 +507,19 @@ class FieldsNode(Node):
                 contour_written = str(debug_contour_path)
 
             candidate_written = ""
-            if lifted.lifted_points.shape[0] > 0:
+            if candidate_points.shape[0] > 0:
                 candidate_colors = np.tile(
                     np.array([1.0, 0.0, 1.0], dtype=np.float64),
-                    (lifted.lifted_points.shape[0], 1),
+                    (candidate_points.shape[0], 1),
                 )
-                candidates_pcd = make_point_cloud(lifted.lifted_points, candidate_colors)
+                candidates_pcd = make_point_cloud(candidate_points, candidate_colors)
                 if not o3d.io.write_point_cloud(str(debug_candidates_path), candidates_pcd):
                     raise RuntimeError(f"Failed to write candidates PLY: {debug_candidates_path}")
                 candidate_written = str(debug_candidates_path)
 
             _write_targets_yaml(
                 out_yaml=targets_yaml_path,
-                points_world=lifted.lifted_points,
+                points_world=candidate_points,
                 z_dir=(targets_zx, targets_zy, targets_zz),
                 position_scale=target_position_scale,
                 base_to_world_yaw_deg=target_base_to_world_yaw_deg,
@@ -527,7 +530,7 @@ class FieldsNode(Node):
                 f"Generated z_lift candidates. scan_meshes={len(scan_paths)} "
                 f"viable={int(np.count_nonzero(pose.viable))} "
                 f"contour_segments={int(contour_lines.shape[0])} "
-                f"candidates={int(lifted.lifted_points.shape[0])}"
+                f"candidates={int(candidate_points.shape[0])}"
             )
             res.resolved_field_state_path = str(field_state_path)
             res.resolved_scan_mesh_path = str(scan_paths[0])
@@ -539,7 +542,7 @@ class FieldsNode(Node):
             res.scan_mesh_count = int(len(scan_paths))
             res.viable_count = int(np.count_nonzero(pose.viable))
             res.contour_segment_count = int(contour_lines.shape[0])
-            res.candidate_count = int(lifted.lifted_points.shape[0])
+            res.candidate_count = int(candidate_points.shape[0])
             res.clearance_used = float(clearance_used)
             res.iso_level_used = float(iso_level)
             res.beads_per_step_used = int(beads_per_step_used)
