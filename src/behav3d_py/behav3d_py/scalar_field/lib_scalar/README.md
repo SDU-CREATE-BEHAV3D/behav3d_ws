@@ -1,6 +1,6 @@
 # lib_scalar
 
-Reusable library for the scalar-field pipeline used in `python_scripts/scalar_field`.
+Reusable library for the scalar-field pipeline used in `behav3d_py/scalar_field`.
 
 The objective is to keep each stage isolated, testable, and reusable from:
 - standalone scripts,
@@ -91,6 +91,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `z_lift`: apply vertical offset (`lift_height`) in +Z.
      - `gradient_walk`: walk over field surface tangentially to scalar gradient
        until euclidean displacement reaches `walk_distance`.
+       - Uses per-point remaining step (`min(step_size, remaining_distance)`) to
+         avoid overshoot from fixed-step integration.
        - Optional directional limit for gradient walk:
          - `clamp_to_cone=True` constrains the final displacement
            (`source_point -> output_point`) to a cone around world `+Z`.
@@ -128,6 +130,12 @@ The objective is to keep each stage isolated, testable, and reusable from:
 - Offset generation is geodesic on the mesh, not Euclidean in free space.
 - Candidate generation is centralized in `generate_print_points` (mode-driven),
   instead of split across multiple point-generator modules.
+- Cone clamping can be applied in two different places:
+  - point-position clamp in `generate_print_points(..., clamp_to_cone=True)`
+    for limiting candidate displacement direction in `gradient_walk`.
+  - orientation clamp in caller scripts via
+    `geometry.clamp_vectors_to_cone(...)` for limiting tangent/frame tilt
+    without moving candidate positions.
 - Full-loop/global objective design remains external to this library.
 - Loop simulation keeps bead accumulation local to the simulator layer, so
   field/phi/contour stages remain reusable in ROS integration.

@@ -238,12 +238,16 @@ def _gradient_walk_points(
 
     step = max(1e-6, float(step_size))
     n_steps = max(1, int(max_steps))
+    eps = 1e-9
 
     src = project_points_to_surface(source_points, field_vertices_world, field_faces)
     cur = src.copy()
     reached = np.zeros((src.shape[0],), dtype=bool)
 
     for _ in range(n_steps):
+        disp_now = np.linalg.norm(cur - src, axis=1)
+        remaining = target - disp_now
+        reached = reached | (remaining <= eps)
         active = np.flatnonzero(~reached)
         if active.size == 0:
             break
@@ -255,12 +259,13 @@ def _gradient_walk_points(
             vertex_scalar=field_scalar,
             tangent_sign=float(tangent_sign),
         )
-        trial = cur[active] + step * t_dir
+        local_step = np.minimum(step, np.maximum(remaining[active], 0.0))
+        trial = cur[active] + local_step[:, None] * t_dir
         trial_proj = project_points_to_surface(trial, field_vertices_world, field_faces)
         cur[active] = trial_proj
 
         disp = np.linalg.norm(cur - src, axis=1)
-        reached = disp >= target
+        reached = disp >= (target - eps)
 
     return cur
 
