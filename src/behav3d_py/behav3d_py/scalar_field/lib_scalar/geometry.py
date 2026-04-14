@@ -104,6 +104,31 @@ def _closest_triangles_and_uv(
     return tri_ids, uv
 
 
+def project_points_to_surface(
+    query_points: np.ndarray,
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+) -> np.ndarray:
+    """Project points to nearest points on mesh surface via raycasting scene."""
+    if query_points.ndim != 2 or query_points.shape[1] != 3:
+        raise ValueError("query_points must have shape (N, 3)")
+    _validate_mesh_arrays(mesh_vertices, mesh_faces)
+
+    n = query_points.shape[0]
+    if n == 0:
+        return np.zeros((0, 3), dtype=np.float64)
+
+    v = o3d.core.Tensor(mesh_vertices.astype(np.float32), dtype=o3d.core.Dtype.Float32)
+    f = o3d.core.Tensor(mesh_faces.astype(np.int32), dtype=o3d.core.Dtype.Int32)
+    tmesh = o3d.t.geometry.TriangleMesh(v, f)
+    scene = o3d.t.geometry.RaycastingScene()
+    scene.add_triangles(tmesh)
+
+    q = o3d.core.Tensor(query_points.astype(np.float32), dtype=o3d.core.Dtype.Float32)
+    out = scene.compute_closest_points(q)
+    return out["points"].numpy().astype(np.float64).reshape(-1, 3)
+
+
 def _normalize_rows(vectors: np.ndarray, eps: float = 1e-12) -> np.ndarray:
     out = np.asarray(vectors, dtype=np.float64).copy()
     nrm = np.linalg.norm(out, axis=1)

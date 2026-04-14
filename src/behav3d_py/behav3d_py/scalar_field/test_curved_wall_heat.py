@@ -16,12 +16,50 @@ import numpy as np
 import open3d as o3d
 
 from lib_scalar.compute_heat_field import compute_heat_field
-from lib_scalar.geometry import compute_vertex_tangent_axes_from_scalar, load_triangle_mesh_arrays
+from lib_scalar.geometry import (
+    compute_vertex_tangent_axes_from_scalar,
+    load_triangle_mesh_arrays,
+    sample_tangent_axes_on_surface_from_scalar,
+)
 from lib_scalar.viz import make_point_cloud, yellow_to_red_colors
 
 
 DEFAULT_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
+
+
+def _sample_surface_points_uniform(
+    mesh_vertices: np.ndarray,
+    mesh_faces: np.ndarray,
+    count: int,
+    *,
+    seed: int = 0,
+) -> np.ndarray:
+    """Sample approximately-uniform random points over triangle areas."""
+    if count <= 0:
+        return np.zeros((0, 3), dtype=np.float64)
+    v0 = mesh_vertices[mesh_faces[:, 0]]
+    v1 = mesh_vertices[mesh_faces[:, 1]]
+    v2 = mesh_vertices[mesh_faces[:, 2]]
+    face_area2 = np.linalg.norm(np.cross(v1 - v0, v2 - v0), axis=1)
+    probs = face_area2 / max(float(np.sum(face_area2)), 1e-12)
+    rng = np.random.default_rng(int(seed))
+    f_idx = rng.choice(mesh_faces.shape[0], size=int(count), replace=True, p=probs)
+
+    r1 = rng.random(int(count))
+    r2 = rng.random(int(count))
+    sr1 = np.sqrt(r1)
+    w0 = 1.0 - sr1
+    w1 = sr1 * (1.0 - r2)
+    w2 = sr1 * r2
+
+    tri = mesh_faces[f_idx]
+    pts = (
+        w0[:, None] * mesh_vertices[tri[:, 0]]
+        + w1[:, None] * mesh_vertices[tri[:, 1]]
+        + w2[:, None] * mesh_vertices[tri[:, 2]]
+    )
+    return pts
 
 
 def _sample_vectors(
@@ -117,6 +155,8 @@ def run(
     vector_step: int,
     vector_scale_ratio: float,
     vector_radius_ratio: float,
+    vector_sample_mode: str,
+    vector_surface_count: int,
     visualize: bool,
 ) -> None:
     mesh_data = load_triangle_mesh_arrays(mesh_path)
@@ -162,34 +202,57 @@ def run(
         geoms = [colored_pcd]
         need_tangent_frame = vector_kind in ("gradient", "orthogonal", "both")
         if need_tangent_frame:
-            t_dir, b_dir, _ = compute_vertex_tangent_axes_from_scalar(
-                mesh_data.vertices,
-                mesh_data.faces,
-                heat.dist,
-                tangent_sign=1.0,
-            )
+            sample_mode = str(vector_sample_mode).strip().lower()
+            if sample_mode == "surface":
+                vec_points = _sample_surface_points_uniform(
+                    mesh_data.vertices,
+                    mesh_data.faces,
+                    int(vector_surface_count),
+                    seed=0,
+                )
+                t_dir, b_dir, _ = sample_tangent_axes_on_surface_from_scalar(
+                    vec_points,
+                    mesh_data.vertices,
+                    mesh_data.faces,
+                    heat.dist,
+                    tangent_sign=1.0,
+                )
+            else:
+                vec_points = mesh_data.vertices
+                t_dir, b_dir, _ = compute_vertex_tangent_axes_from_scalar(
+                    mesh_data.vertices,
+                    mesh_data.faces,
+                    heat.dist,
+                    tangent_sign=1.0,
+                )
 
             if vector_kind in ("gradient", "both"):
                 g0, g1 = _sample_vectors(
-                    mesh_data.vertices,
+                    vec_points,
                     t_dir,
                     step=vector_step,
                     scale=vec_scale,
                 )
                 grad_tubes = _build_vector_tubes(g0, g1, radius=vec_radius, color=(0.10, 0.95, 0.10))
                 geoms.append(grad_tubes)
-                print(f"gradient tangent vectors (green): sampled every {max(1, int(vector_step))} vertices")
+                print(
+                    f"gradient tangent vectors (green): mode={sample_mode}, "
+                    f"step={max(1, int(vector_step))}"
+                )
 
             if vector_kind in ("orthogonal", "both"):
                 b0, b1 = _sample_vectors(
-                    mesh_data.vertices,
+                    vec_points,
                     b_dir,
                     step=vector_step,
                     scale=vec_scale,
                 )
                 orth_tubes = _build_vector_tubes(b0, b1, radius=vec_radius, color=(0.20, 0.60, 1.00))
                 geoms.append(orth_tubes)
-                print(f"orthogonal tangent vectors (blue): sampled every {max(1, int(vector_step))} vertices")
+                print(
+                    f"orthogonal tangent vectors (blue): mode={sample_mode}, "
+                    f"step={max(1, int(vector_step))}"
+                )
 
         axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
         geoms.append(axes)
@@ -257,6 +320,19 @@ def main() -> None:
         help="Vector tube radius as ratio of mesh AABB diagonal.",
     )
     parser.add_argument(
+        "--vector-sample-mode",
+        type=str,
+        choices=("vertices", "surface"),
+        default="surface",
+        help="Sample vectors at mesh vertices or interpolated arbitrary surface points.",
+    )
+    parser.add_argument(
+        "--vector-surface-count",
+        type=int,
+        default=2400,
+        help="Number of random surface points when --vector-sample-mode=surface.",
+    )
+    parser.add_argument(
         "--no-vis",
         action="store_true",
         help="Disable Open3D visualization window.",
@@ -273,6 +349,8 @@ def main() -> None:
         vector_step=args.vector_step,
         vector_scale_ratio=args.vector_scale_ratio,
         vector_radius_ratio=args.vector_radius_ratio,
+        vector_sample_mode=str(args.vector_sample_mode).strip().lower(),
+        vector_surface_count=args.vector_surface_count,
         visualize=not args.no_vis,
     )
 
