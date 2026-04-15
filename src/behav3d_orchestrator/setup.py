@@ -28,6 +28,7 @@ setup(
             'depth_bias_capture_sequence = behav3d_orchestrator.depth_bias_capture_sequence:main',
             'print_field_sequence = behav3d_orchestrator.print_field_sequence:main',
             'print_field_centered_sequence = behav3d_orchestrator.print_field_centered_sequence:main',
+            'print_field_oriented_sequence = behav3d_orchestrator.print_field_oriented_sequence:main',
             'interactive_scan_motion_sequence = behav3d_orchestrator.interactive_scan_motion_sequence:main',
         ],
     },
