@@ -270,6 +270,35 @@ def _gradient_walk_points(
     return cur
 
 
+def _gradient_lift_points(
+    source_points: np.ndarray,
+    field_vertices_world: np.ndarray,
+    field_faces: np.ndarray,
+    field_scalar: np.ndarray,
+    *,
+    lift_height: float,
+    tangent_sign: float,
+) -> np.ndarray:
+    if source_points.shape[0] == 0:
+        return np.zeros((0, 3), dtype=np.float64)
+
+    h = float(lift_height)
+    if h < 0.0:
+        raise ValueError(f"lift_height must be >= 0, got {lift_height}")
+    if h <= 0.0:
+        return source_points.copy()
+
+    src_surface = project_points_to_surface(source_points, field_vertices_world, field_faces)
+    t_dir, _b_dir, _n_dir = sample_tangent_axes_on_surface_from_scalar(
+        query_points=src_surface,
+        mesh_vertices=field_vertices_world,
+        mesh_faces=field_faces,
+        vertex_scalar=field_scalar,
+        tangent_sign=float(tangent_sign),
+    )
+    return source_points + h * t_dir
+
+
 def _clamp_direction_to_cone(
     direction: np.ndarray,
     *,
@@ -356,6 +385,8 @@ def generate_print_points(
     Candidate modes:
     - `polyline`: output selected polyline points.
     - `z_lift`: output selected points with +Z `lift_height`.
+    - `gradient_lift`: output selected points displaced by `lift_height`
+      in local tangent gradient direction (`walk_tangent_sign` controls sign).
     - `gradient_walk`: walk on field surface along scalar tangent direction
       until euclidean displacement from source reaches `walk_distance`
       (or `walk_max_steps` is reached).
@@ -369,10 +400,10 @@ def generate_print_points(
         raise ValueError(f"count must be >= 0, got {count}")
     spacing = max(0.0, float(min_spacing))
     mode = str(candidate_mode).strip().lower()
-    if mode not in ("polyline", "z_lift", "gradient_walk"):
+    if mode not in ("polyline", "z_lift", "gradient_lift", "gradient_walk"):
         raise ValueError(
             f"Unknown candidate_mode: {candidate_mode}. "
-            "Use 'polyline', 'z_lift', or 'gradient_walk'."
+            "Use 'polyline', 'z_lift', 'gradient_lift', or 'gradient_walk'."
         )
 
     unique_points, unique_lines, unique_to_old = _deduplicate_polyline_points(
@@ -458,6 +489,18 @@ def generate_print_points(
         if h < 0.0:
             raise ValueError(f"lift_height must be >= 0, got {lift_height}")
         out_points[:, 2] += h
+    elif mode == "gradient_lift":
+        if field_faces is None:
+            raise ValueError("field_faces is required for candidate_mode='gradient_lift'")
+        out_points = _gradient_lift_points(
+            source_points=source_points,
+            field_vertices_world=field_vertices_world,
+            field_faces=np.asarray(field_faces, dtype=np.int32),
+            field_scalar=field_scalar,
+            lift_height=float(lift_height),
+            tangent_sign=float(walk_tangent_sign),
+        )
+        surface_points = out_points.copy()
     elif mode == "gradient_walk":
         if field_faces is None:
             raise ValueError("field_faces is required for candidate_mode='gradient_walk'")

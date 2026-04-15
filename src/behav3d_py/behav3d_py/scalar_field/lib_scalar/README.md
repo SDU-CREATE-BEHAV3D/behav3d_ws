@@ -89,6 +89,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Supports optional post-processing through `candidate_mode`:
      - `polyline`: keep selected points on the source polyline.
      - `z_lift`: apply vertical offset (`lift_height`) in +Z.
+     - `gradient_lift`: displace selected points by `lift_height` along
+       local tangent gradient direction.
      - `gradient_walk`: walk over field surface tangentially to scalar gradient
        until euclidean displacement reaches `walk_distance`.
        - Uses per-point remaining step (`min(step_size, remaining_distance)`) to
@@ -151,5 +153,6 @@ The objective is to keep each stage isolated, testable, and reusable from:
 7. Select print points with `generate_print_points`:
    - from offset contour (`candidate_mode='polyline'`), or
    - from `phi=0` contour + lift (`candidate_mode='z_lift'`), or
+   - from `phi=0` contour + tangent lift (`candidate_mode='gradient_lift'`), or
    - from contour with surface walk (`candidate_mode='gradient_walk'`).
 8. Export and visualize.

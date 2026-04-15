@@ -13,6 +13,7 @@ from typing import List, Optional
 
 import behav3d_commands
 import numpy as np
+import open3d as o3d
 import rclpy
 from behav3d_utils import pose_from_xyz_and_z_axis
 from behav3d_examples.src.grid_sweep_session import GridSweepSession
@@ -23,6 +24,9 @@ from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
 
 try:
+    from behav3d_py.scalar_field.lib_scalar.compute_phi_mask import compute_phi_mask, make_scan_scene
+    from behav3d_py.scalar_field.lib_scalar.extract_phi_contour import extract_phi_contour
+    from behav3d_py.scalar_field.lib_scalar.generate_print_points import generate_print_points
     from behav3d_py.scalar_field.lib_scalar.geometry import (
         clamp_vectors_to_cone,
         project_points_to_surface,
@@ -32,6 +36,10 @@ try:
     _SCALAR_IMPORT_ERROR = None
 except Exception as exc:  # pragma: no cover
     clamp_vectors_to_cone = None
+    compute_phi_mask = None
+    extract_phi_contour = None
+    generate_print_points = None
+    make_scan_scene = None
     project_points_to_surface = None
     sample_tangent_axes_on_surface_from_scalar = None
     _SCALAR_IMPORT_ERROR = exc
@@ -109,6 +117,10 @@ class PrintFieldOrientedSequenceNode(Node):
         self.declare_parameter("field_mesh_path", "/home/lab/behav3d_ws/mesh/Marlon.obj")
         self.declare_parameter("field_state_output_dir", "@session/field_loop/init")
         self.declare_parameter("field_request_timeout_s", 120.0)
+        self.declare_parameter("skip_bootstrap_scan_and_init", False)
+        self.declare_parameter("resume_field_state_path", "")
+        self.declare_parameter("resume_scan_mesh_path", "")
+        self.declare_parameter("scan_before_generate_first_cycle", True)
 
         # Candidate generation + print
         self.declare_parameter("run_generate_candidates", True)
@@ -134,7 +146,7 @@ class PrintFieldOrientedSequenceNode(Node):
         self.declare_parameter("oriented_targets_enable", True)
         self.declare_parameter("oriented_tangent_sign", 1.0)
         self.declare_parameter("oriented_clamp_to_cone", True)
-        self.declare_parameter("oriented_cone_max_tilt_deg", 45.0)
+        self.declare_parameter("oriented_cone_max_tilt_deg", 40.0)
         self.declare_parameter("oriented_base_to_world_yaw_deg", 180.0)
         self.declare_parameter("oriented_yaml_name", "targets_oriented.yaml")
         self.declare_parameter("max_cycles", 0)
@@ -213,6 +225,10 @@ class PrintFieldOrientedSequenceNode(Node):
         field_mesh_path = str(self.get_parameter("field_mesh_path").value).strip()
         field_state_output_dir = str(self.get_parameter("field_state_output_dir").value).strip()
         field_request_timeout_s = float(self.get_parameter("field_request_timeout_s").value)
+        skip_bootstrap_scan_and_init = bool(self.get_parameter("skip_bootstrap_scan_and_init").value)
+        resume_field_state_path = str(self.get_parameter("resume_field_state_path").value).strip()
+        resume_scan_mesh_path = str(self.get_parameter("resume_scan_mesh_path").value).strip()
+        scan_before_generate_first_cycle = bool(self.get_parameter("scan_before_generate_first_cycle").value)
 
         run_generate_candidates = bool(self.get_parameter("run_generate_candidates").value)
         candidate_use_latest = bool(self.get_parameter("candidate_use_latest").value)
@@ -258,7 +274,9 @@ class PrintFieldOrientedSequenceNode(Node):
             f"run_reconstruction={run_reconstruction}, run_field_init={run_field_init}, "
             f"run_generate_candidates={run_generate_candidates}, max_cycles={max_cycles}, "
             f"oriented_targets_enable={oriented_targets_enable}, "
-            f"clamp_to_cone={oriented_clamp_to_cone}, cone_max_tilt_deg={oriented_cone_max_tilt_deg:.1f}"
+            f"clamp_to_cone={oriented_clamp_to_cone}, cone_max_tilt_deg={oriented_cone_max_tilt_deg:.1f}, "
+            f"skip_bootstrap_scan_and_init={skip_bootstrap_scan_and_init}, "
+            f"scan_before_generate_first_cycle={scan_before_generate_first_cycle}"
         )
 
         mesh_path = ""
@@ -277,98 +295,19 @@ class PrintFieldOrientedSequenceNode(Node):
 
             # -----------------------------------------------------------------
             # Bootstrap cycle: table scan + reconstruction + field init.
+            # Optional resume mode: skip bootstrap and continue from existing
+            # field state (plus optional existing scan mesh path).
             # -----------------------------------------------------------------
-            bootstrap_tag = "cycle_0000"
-            bootstrap_root = f"@session/field_loop/{bootstrap_tag}"
-            bootstrap_scan_capture_folder = f"{bootstrap_root}/scan"
-            bootstrap_scan_folder = f"field_loop/{bootstrap_tag}/scan"
-            bootstrap_field_state_output_dir = f"{bootstrap_root}/field_init"
-
-            log.info(
-                f"[print_field_oriented] ===== {bootstrap_tag} (bootstrap) ===== "
-                f"scan_capture='{bootstrap_scan_capture_folder}' "
-                f"scan_folder='{bootstrap_scan_folder}'"
-            )
-
-            bootstrap_targets = self.grid_macro.run_grid_sweep(
-                width=scan_width,
-                height=scan_height,
-                center_x=scan_center_x,
-                center_y=scan_center_y,
-                center_z=scan_center_z,
-                z_off=scan_z_off,
-                nx=scan_nx,
-                ny=scan_ny,
-                row_major=scan_row_major,
-                frame_id=frame_id,
-                eef_link=scan_eef_link,
-                use_tf_orientation=scan_use_tf_orientation,
-                debug=scan_debug_prompt,
-                capture_folder=bootstrap_scan_capture_folder,
-                do_home=False,
-                vel_scale=scan_vel_scale,
-                accel_scale=scan_accel_scale,
-                timeout_s=timeout_s,
-                publish_markers=scan_publish_markers,
-                axis_length=scan_axis_length,
-                axis_radius=scan_axis_radius,
-                clear_markers_before=scan_clear_markers_before,
-            )
-            if not bootstrap_targets:
-                raise RuntimeError("Bootstrap grid sweep produced 0 targets.")
-
-            reference_scan_orientation = (
-                float(bootstrap_targets[0].pose.orientation.x),
-                float(bootstrap_targets[0].pose.orientation.y),
-                float(bootstrap_targets[0].pose.orientation.z),
-                float(bootstrap_targets[0].pose.orientation.w),
-            )
-
-            if run_reconstruction:
-                mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
-                    scan_folder=bootstrap_scan_folder,
-                    reconstruct_device=reconstruct_device,
-                    reconstruct_request_timeout_s=reconstruct_request_timeout_s,
-                    wait_reconstruction_outputs=wait_reconstruction_outputs,
-                    color_to_depth_wait_timeout_s=color_to_depth_wait_timeout_s,
-                    tsdf_wait_timeout_s=tsdf_wait_timeout_s,
-                    mesh_prefer=mesh_prefer,
-                    mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
-                    mesh_update_request_timeout_s=mesh_update_request_timeout_s,
-                    tsdf_center_crop_enable=tsdf_center_crop_enable,
-                    tsdf_center_crop_width=tsdf_center_crop_width,
-                    tsdf_center_crop_height=tsdf_center_crop_height,
-                    tsdf_center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
-                    tsdf_aabb_crop_enable=tsdf_aabb_crop_enable,
-                    tsdf_aabb_crop_min=tsdf_aabb_crop_min,
-                    tsdf_aabb_crop_max=tsdf_aabb_crop_max,
-                    tsdf_param_update_timeout_s=tsdf_param_update_timeout_s,
-                )
-
-            if run_field_init:
-                scan_mesh_for_field = field_scan_mesh_path or mesh_path
-                scan_mesh_paths = [scan_mesh_for_field] if scan_mesh_for_field else []
-                init_res = self.session.run_sync(
-                    self.session.field.init_field_from_scan(
-                        use_latest=field_use_latest,
-                        session_path=field_session_path,
-                        scan_mesh_paths=scan_mesh_paths,
-                        field_mesh_path=field_mesh_path,
-                        state_output_dir=bootstrap_field_state_output_dir,
-                        enqueue=False,
-                    ),
-                    timeout_s=field_request_timeout_s,
-                )
-                if not init_res.get("ok", False):
-                    raise RuntimeError(f"init_field_from_scan failed: {init_res.get('error')}")
-
-                metrics = init_res.get("metrics", {})
-                field_state_path = str(metrics.get("field_state_path", "")).strip()
+            if skip_bootstrap_scan_and_init:
+                field_state_path = (resume_field_state_path or field_state_path).strip()
                 if not field_state_path:
-                    raise RuntimeError("init_field_from_scan did not return field_state_path")
+                    raise RuntimeError(
+                        "skip_bootstrap_scan_and_init=True requires a field state path via "
+                        "resume_field_state_path or candidate_field_state_path."
+                    )
 
                 field_center_raw = self._compute_field_center_from_state(field_state_path)
-                field_center_xy = self._map_field_center_xy(
+                field_center_xy_mapped = self._map_field_center_xy(
                     x=float(field_center_raw[0]),
                     y=float(field_center_raw[1]),
                     sign_x=field_center_sign_x,
@@ -377,74 +316,289 @@ class PrintFieldOrientedSequenceNode(Node):
                     offset_y=field_center_offset_y,
                 )
                 field_center_xyz = (
-                    float(field_center_xy[0]),
-                    float(field_center_xy[1]),
+                    float(field_center_xy_mapped[0]),
+                    float(field_center_xy_mapped[1]),
                     float(field_center_raw[2]),
                 )
-                log.info(
-                    "[print_field_oriented] Field initialized: "
-                    f"state='{field_state_path}', "
-                    f"debug_ply='{metrics.get('debug_field_ply_path', '')}', "
-                    f"offset=({metrics.get('offset_x', 0.0):.4f}, "
-                    f"{metrics.get('offset_y', 0.0):.4f}, "
-                    f"{metrics.get('offset_z', 0.0):.4f}), "
-                    f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
-                    f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
-                    f"xy_map=(x*{field_center_sign_x:.3f}+{field_center_offset_x:.3f}, "
-                    f"y*{field_center_sign_y:.3f}+{field_center_offset_y:.3f})"
-                )
 
-                debug_field_ply_path = str(metrics.get("debug_field_ply_path", "")).strip()
-                if debug_field_ply_path:
-                    field_vis_res = self.session.run_sync(
+                mesh_path = (
+                    resume_scan_mesh_path or candidate_scan_mesh_path or field_scan_mesh_path or mesh_path
+                ).strip()
+
+                if mesh_path:
+                    mesh_res = self.session.run_sync(
                         self.session.camera.update_world_mesh(
                             use_latest=False,
-                            session_path=field_session_path or "@session",
-                            mesh_path="",
-                            ply_path=debug_field_ply_path,
-                            prefer="ply",
+                            session_path=candidate_session_path or field_session_path or "@session",
+                            mesh_path=mesh_path,
+                            ply_path="",
+                            prefer="mesh",
                             wait_timeout_s=mesh_update_wait_timeout_s,
                             enqueue=False,
                         ),
                         timeout_s=mesh_update_request_timeout_s,
                     )
-                    if not field_vis_res.get("ok", False):
+                    if not mesh_res.get("ok", False):
                         raise RuntimeError(
-                            f"update_world_mesh(field_ply) failed: {field_vis_res.get('error')}"
+                            f"update_world_mesh(resume_scan_mesh) failed: {mesh_res.get('error')}"
                         )
-                    field_vis_path = str(field_vis_res.get("metrics", {}).get("published_path", "")).strip()
-                    field_vis_kind = str(field_vis_res.get("metrics", {}).get("published_kind", "")).strip()
+                    published_path = str(mesh_res.get("metrics", {}).get("published_path", "")).strip()
+                    published_kind = str(mesh_res.get("metrics", {}).get("published_kind", "")).strip()
                     log.info(
-                        f"[print_field_oriented] Field PLY published in RViz ({field_vis_kind}): {field_vis_path}"
+                        f"[print_field_oriented] Resume scan mesh published in RViz ({published_kind}): "
+                        f"{published_path}"
                     )
-            else:
-                if not field_state_path:
-                    raise RuntimeError(
-                        "run_field_init=False and candidate_field_state_path is empty. "
-                        "Provide an existing field state path."
-                    )
-                field_center_raw = self._compute_field_center_from_state(field_state_path)
-                field_center_xy = self._map_field_center_xy(
-                    x=float(field_center_raw[0]),
-                    y=float(field_center_raw[1]),
-                    sign_x=field_center_sign_x,
-                    sign_y=field_center_sign_y,
-                    offset_x=field_center_offset_x,
-                    offset_y=field_center_offset_y,
-                )
-                field_center_xyz = (
-                    float(field_center_xy[0]),
-                    float(field_center_xy[1]),
-                    float(field_center_raw[2]),
-                )
+
                 log.info(
-                    "[print_field_oriented] Using provided field state: "
-                    f"state='{field_state_path}', "
+                    "[print_field_oriented] Skipping bootstrap scan/init. "
+                    f"Using existing field state='{field_state_path}', "
                     f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
                     f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
                     f"xy_map=(x*{field_center_sign_x:.3f}+{field_center_offset_x:.3f}, "
-                    f"y*{field_center_sign_y:.3f}+{field_center_offset_y:.3f})"
+                    f"y*{field_center_sign_y:.3f}+{field_center_offset_y:.3f}), "
+                    f"scan_mesh='{mesh_path}'"
                 )
+
+                if scan_before_generate_first_cycle:
+                    cycle_tag = "cycle_0001"
+                    cycle_root = f"@session/field_loop/{cycle_tag}"
+                    cycle_scan_capture_folder = f"{cycle_root}/scan"
+                    cycle_scan_folder = f"field_loop/{cycle_tag}/scan"
+                    cycle_scan_z_off = float(layer_scan_first_z_off) + float(layer_scan_z_margin_m)
+                    abs_scan_z = float(field_center_xyz[2]) + float(cycle_scan_z_off)
+                    pre_scan_use_tf_orientation = bool(scan_use_tf_orientation)
+
+                    log.info(
+                        f"[print_field_oriented] ===== pre_scan_for_{cycle_tag} ===== "
+                        f"scan_capture='{cycle_scan_capture_folder}' scan_folder='{cycle_scan_folder}' "
+                        f"center=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}) "
+                        f"grid={layer_scan_nx}x{layer_scan_ny} size={1000.0*layer_scan_width:.1f}x"
+                        f"{1000.0*layer_scan_height:.1f}mm "
+                        f"z_off={cycle_scan_z_off:.4f}m => abs_scan_z={abs_scan_z:.4f}m "
+                        f"use_tf_orientation={pre_scan_use_tf_orientation}"
+                    )
+
+                    pre_scan_targets = self.grid_macro.run_grid_sweep(
+                        width=layer_scan_width,
+                        height=layer_scan_height,
+                        center_x=float(field_center_xyz[0]),
+                        center_y=float(field_center_xyz[1]),
+                        center_z=float(field_center_xyz[2]),
+                        z_off=cycle_scan_z_off,
+                        nx=layer_scan_nx,
+                        ny=layer_scan_ny,
+                        row_major=layer_scan_row_major,
+                        frame_id=frame_id,
+                        eef_link=scan_eef_link,
+                        use_tf_orientation=pre_scan_use_tf_orientation,
+                        debug=scan_debug_prompt,
+                        capture_folder=cycle_scan_capture_folder,
+                        do_home=False,
+                        vel_scale=scan_vel_scale,
+                        accel_scale=scan_accel_scale,
+                        timeout_s=timeout_s,
+                        publish_markers=scan_publish_markers,
+                        axis_length=scan_axis_length,
+                        axis_radius=scan_axis_radius,
+                        clear_markers_before=scan_clear_markers_before,
+                    )
+                    if not pre_scan_targets:
+                        raise RuntimeError(f"Grid sweep produced 0 targets for pre_scan_for_{cycle_tag}.")
+                    reference_scan_orientation = (
+                        float(pre_scan_targets[0].pose.orientation.x),
+                        float(pre_scan_targets[0].pose.orientation.y),
+                        float(pre_scan_targets[0].pose.orientation.z),
+                        float(pre_scan_targets[0].pose.orientation.w),
+                    )
+
+                    if run_reconstruction:
+                        mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
+                            scan_folder=cycle_scan_folder,
+                            reconstruct_device=reconstruct_device,
+                            reconstruct_request_timeout_s=reconstruct_request_timeout_s,
+                            wait_reconstruction_outputs=wait_reconstruction_outputs,
+                            color_to_depth_wait_timeout_s=color_to_depth_wait_timeout_s,
+                            tsdf_wait_timeout_s=tsdf_wait_timeout_s,
+                            mesh_prefer=mesh_prefer,
+                            mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
+                            mesh_update_request_timeout_s=mesh_update_request_timeout_s,
+                            tsdf_center_crop_enable=tsdf_center_crop_enable,
+                            tsdf_center_crop_width=tsdf_center_crop_width,
+                            tsdf_center_crop_height=tsdf_center_crop_height,
+                            tsdf_center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
+                            tsdf_aabb_crop_enable=tsdf_aabb_crop_enable,
+                            tsdf_aabb_crop_min=tsdf_aabb_crop_min,
+                            tsdf_aabb_crop_max=tsdf_aabb_crop_max,
+                            tsdf_param_update_timeout_s=tsdf_param_update_timeout_s,
+                        )
+            else:
+                bootstrap_tag = "cycle_0000"
+                bootstrap_root = f"@session/field_loop/{bootstrap_tag}"
+                bootstrap_scan_capture_folder = f"{bootstrap_root}/scan"
+                bootstrap_scan_folder = f"field_loop/{bootstrap_tag}/scan"
+                bootstrap_field_state_output_dir = f"{bootstrap_root}/field_init"
+
+                log.info(
+                    f"[print_field_oriented] ===== {bootstrap_tag} (bootstrap) ===== "
+                    f"scan_capture='{bootstrap_scan_capture_folder}' "
+                    f"scan_folder='{bootstrap_scan_folder}'"
+                )
+
+                bootstrap_targets = self.grid_macro.run_grid_sweep(
+                    width=scan_width,
+                    height=scan_height,
+                    center_x=scan_center_x,
+                    center_y=scan_center_y,
+                    center_z=scan_center_z,
+                    z_off=scan_z_off,
+                    nx=scan_nx,
+                    ny=scan_ny,
+                    row_major=scan_row_major,
+                    frame_id=frame_id,
+                    eef_link=scan_eef_link,
+                    use_tf_orientation=scan_use_tf_orientation,
+                    debug=scan_debug_prompt,
+                    capture_folder=bootstrap_scan_capture_folder,
+                    do_home=False,
+                    vel_scale=scan_vel_scale,
+                    accel_scale=scan_accel_scale,
+                    timeout_s=timeout_s,
+                    publish_markers=scan_publish_markers,
+                    axis_length=scan_axis_length,
+                    axis_radius=scan_axis_radius,
+                    clear_markers_before=scan_clear_markers_before,
+                )
+                if not bootstrap_targets:
+                    raise RuntimeError("Bootstrap grid sweep produced 0 targets.")
+
+                reference_scan_orientation = (
+                    float(bootstrap_targets[0].pose.orientation.x),
+                    float(bootstrap_targets[0].pose.orientation.y),
+                    float(bootstrap_targets[0].pose.orientation.z),
+                    float(bootstrap_targets[0].pose.orientation.w),
+                )
+
+                if run_reconstruction:
+                    mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
+                        scan_folder=bootstrap_scan_folder,
+                        reconstruct_device=reconstruct_device,
+                        reconstruct_request_timeout_s=reconstruct_request_timeout_s,
+                        wait_reconstruction_outputs=wait_reconstruction_outputs,
+                        color_to_depth_wait_timeout_s=color_to_depth_wait_timeout_s,
+                        tsdf_wait_timeout_s=tsdf_wait_timeout_s,
+                        mesh_prefer=mesh_prefer,
+                        mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
+                        mesh_update_request_timeout_s=mesh_update_request_timeout_s,
+                        tsdf_center_crop_enable=tsdf_center_crop_enable,
+                        tsdf_center_crop_width=tsdf_center_crop_width,
+                        tsdf_center_crop_height=tsdf_center_crop_height,
+                        tsdf_center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
+                        tsdf_aabb_crop_enable=tsdf_aabb_crop_enable,
+                        tsdf_aabb_crop_min=tsdf_aabb_crop_min,
+                        tsdf_aabb_crop_max=tsdf_aabb_crop_max,
+                        tsdf_param_update_timeout_s=tsdf_param_update_timeout_s,
+                    )
+
+                if run_field_init:
+                    scan_mesh_for_field = field_scan_mesh_path or mesh_path
+                    scan_mesh_paths = [scan_mesh_for_field] if scan_mesh_for_field else []
+                    init_res = self.session.run_sync(
+                        self.session.field.init_field_from_scan(
+                            use_latest=field_use_latest,
+                            session_path=field_session_path,
+                            scan_mesh_paths=scan_mesh_paths,
+                            field_mesh_path=field_mesh_path,
+                            state_output_dir=bootstrap_field_state_output_dir,
+                            enqueue=False,
+                        ),
+                        timeout_s=field_request_timeout_s,
+                    )
+                    if not init_res.get("ok", False):
+                        raise RuntimeError(f"init_field_from_scan failed: {init_res.get('error')}")
+
+                    metrics = init_res.get("metrics", {})
+                    field_state_path = str(metrics.get("field_state_path", "")).strip()
+                    if not field_state_path:
+                        raise RuntimeError("init_field_from_scan did not return field_state_path")
+
+                    field_center_raw = self._compute_field_center_from_state(field_state_path)
+                    field_center_xy = self._map_field_center_xy(
+                        x=float(field_center_raw[0]),
+                        y=float(field_center_raw[1]),
+                        sign_x=field_center_sign_x,
+                        sign_y=field_center_sign_y,
+                        offset_x=field_center_offset_x,
+                        offset_y=field_center_offset_y,
+                    )
+                    field_center_xyz = (
+                        float(field_center_xy[0]),
+                        float(field_center_xy[1]),
+                        float(field_center_raw[2]),
+                    )
+                    log.info(
+                        "[print_field_oriented] Field initialized: "
+                        f"state='{field_state_path}', "
+                        f"debug_ply='{metrics.get('debug_field_ply_path', '')}', "
+                        f"offset=({metrics.get('offset_x', 0.0):.4f}, "
+                        f"{metrics.get('offset_y', 0.0):.4f}, "
+                        f"{metrics.get('offset_z', 0.0):.4f}), "
+                        f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
+                        f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
+                        f"xy_map=(x*{field_center_sign_x:.3f}+{field_center_offset_x:.3f}, "
+                        f"y*{field_center_sign_y:.3f}+{field_center_offset_y:.3f})"
+                    )
+
+                    debug_field_ply_path = str(metrics.get("debug_field_ply_path", "")).strip()
+                    if debug_field_ply_path:
+                        field_vis_res = self.session.run_sync(
+                            self.session.camera.update_world_mesh(
+                                use_latest=False,
+                                session_path=field_session_path or "@session",
+                                mesh_path="",
+                                ply_path=debug_field_ply_path,
+                                prefer="ply",
+                                wait_timeout_s=mesh_update_wait_timeout_s,
+                                enqueue=False,
+                            ),
+                            timeout_s=mesh_update_request_timeout_s,
+                        )
+                        if not field_vis_res.get("ok", False):
+                            raise RuntimeError(
+                                f"update_world_mesh(field_ply) failed: {field_vis_res.get('error')}"
+                            )
+                        field_vis_path = str(field_vis_res.get("metrics", {}).get("published_path", "")).strip()
+                        field_vis_kind = str(field_vis_res.get("metrics", {}).get("published_kind", "")).strip()
+                        log.info(
+                            f"[print_field_oriented] Field PLY published in RViz ({field_vis_kind}): {field_vis_path}"
+                        )
+                else:
+                    if not field_state_path:
+                        raise RuntimeError(
+                            "run_field_init=False and candidate_field_state_path is empty. "
+                            "Provide an existing field state path."
+                        )
+                    field_center_raw = self._compute_field_center_from_state(field_state_path)
+                    field_center_xy = self._map_field_center_xy(
+                        x=float(field_center_raw[0]),
+                        y=float(field_center_raw[1]),
+                        sign_x=field_center_sign_x,
+                        sign_y=field_center_sign_y,
+                        offset_x=field_center_offset_x,
+                        offset_y=field_center_offset_y,
+                    )
+                    field_center_xyz = (
+                        float(field_center_xy[0]),
+                        float(field_center_xy[1]),
+                        float(field_center_raw[2]),
+                    )
+                    log.info(
+                        "[print_field_oriented] Using provided field state: "
+                        f"state='{field_state_path}', "
+                        f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
+                        f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
+                        f"xy_map=(x*{field_center_sign_x:.3f}+{field_center_offset_x:.3f}, "
+                        f"y*{field_center_sign_y:.3f}+{field_center_offset_y:.3f})"
+                    )
 
             if field_center_xyz is None:
                 raise RuntimeError("Field center not available after bootstrap.")
@@ -515,6 +669,30 @@ class PrintFieldOrientedSequenceNode(Node):
                         yaml_path=targets_yaml_path,
                         frame_id=frame_id,
                     )
+
+                resolved_scan_mesh_for_cycle = (
+                    str(cand_metrics.get("resolved_scan_mesh_path", "")).strip()
+                    or str(scan_mesh_for_candidates).strip()
+                )
+                if resolved_scan_mesh_for_cycle and field_state_for_candidates:
+                    gradient_lift_targets = self._generate_gradient_lift_targets(
+                        field_state_path=field_state_for_candidates,
+                        scan_mesh_path=resolved_scan_mesh_for_cycle,
+                        frame_id=frame_id,
+                        base_to_world_yaw_deg=float(oriented_base_to_world_yaw_deg),
+                        count=int(candidate_beads_per_step),
+                        min_spacing_mm=float(candidate_bead_separation_mm),
+                        lift_mm=float(candidate_bead_height_mm),
+                        tangent_sign=float(oriented_tangent_sign),
+                    )
+                    if gradient_lift_targets:
+                        preview_targets = gradient_lift_targets
+                        log.info(
+                            "[print_field_oriented] Replaced z_lift candidate positions with "
+                            f"gradient_lift positions: targets={len(preview_targets)} "
+                            "point_map_mode=raw "
+                            f"scan_mesh='{resolved_scan_mesh_for_cycle}'"
+                        )
 
                 if oriented_targets_enable and preview_targets:
                     oriented_targets, z_world, orientation_mode = self._orient_targets_from_field(
@@ -658,17 +836,23 @@ class PrintFieldOrientedSequenceNode(Node):
                     timeout_s=timeout_s,
                 )
                 if not print_res.get("ok", False):
-                    raise RuntimeError(
-                        f"print targets failed at stage={print_res.get('stage')}: "
-                        f"{print_res.get('error', 'unknown')}"
+                    log.warn(
+                        "[print_field_oriented] Print stage returned non-fatal failure: "
+                        f"stage={print_res.get('stage')} error={print_res.get('error', 'unknown')}"
                     )
+                    break
 
                 printed_count = int(print_res.get("printed", 0))
+                skipped_count = int(print_res.get("skipped", 0))
                 log.info(
                     "[print_field_oriented] Print dots completed: "
-                    f"printed={printed_count} / targets={print_res.get('targets', 0)}"
+                    f"printed={printed_count} skipped={skipped_count} / targets={print_res.get('targets', 0)}"
                 )
-                last_printed_targets = list(preview_targets[:printed_count])
+                printed_targets_res = print_res.get("printed_targets", [])
+                if isinstance(printed_targets_res, list) and printed_targets_res:
+                    last_printed_targets = list(printed_targets_res)
+                else:
+                    last_printed_targets = list(preview_targets[:printed_count])
 
                 print_cycle_index += 1
                 if max_cycles > 0 and print_cycle_index >= max_cycles:
@@ -904,31 +1088,16 @@ class PrintFieldOrientedSequenceNode(Node):
         rot_w2b = rot_b2w.T
         points_base = (rot_w2b @ points_world.T).T
 
-        # Robust frame handling:
-        # - legacy path: field state is in base frame -> query with world->base mapped points.
-        # - fallback path: field state already in world frame -> query directly in world.
+        # Field state is defined in base frame in ROS pipeline.
+        # Convert world targets -> base for surface queries and tangent sampling.
         surface_points_base = project_points_to_surface(
             query_points=points_base,
             mesh_vertices=vertices_base,
             mesh_faces=faces,
         )
-        map_err = np.linalg.norm(surface_points_base - points_base, axis=1)
-
-        surface_points_world_direct = project_points_to_surface(
-            query_points=points_world,
-            mesh_vertices=vertices_base,
-            mesh_faces=faces,
-        )
-        direct_err = np.linalg.norm(surface_points_world_direct - points_world, axis=1)
-
-        use_direct_world = float(np.mean(direct_err)) < float(np.mean(map_err))
-        if use_direct_world:
-            query_points = surface_points_world_direct
-        else:
-            query_points = surface_points_base
 
         t_dir_base, _b_dir_base, _n_dir_base = sample_tangent_axes_on_surface_from_scalar(
-            query_points=query_points,
+            query_points=surface_points_base,
             mesh_vertices=vertices_base,
             mesh_faces=faces,
             vertex_scalar=scalar,
@@ -942,10 +1111,7 @@ class PrintFieldOrientedSequenceNode(Node):
                 cone_axis=(0.0, 0.0, 1.0),
             )
 
-        if use_direct_world:
-            z_dir_world = z_dir_base.copy()
-        else:
-            z_dir_world = (rot_b2w @ z_dir_base.T).T
+        z_dir_world = (rot_b2w @ z_dir_base.T).T
         z_norm = np.linalg.norm(z_dir_world, axis=1)
         valid = z_norm > 1e-12
         if np.any(valid):
@@ -971,8 +1137,177 @@ class PrintFieldOrientedSequenceNode(Node):
             )
             oriented.append(ps)
 
-        mode = "state_world_direct" if use_direct_world else "state_base_mapped"
-        return oriented, z_dir_world, mode
+        return oriented, z_dir_world, "state_base_mapped"
+
+    @staticmethod
+    def _build_pose_targets_from_points(
+        *,
+        points_world: np.ndarray,
+        frame_id: str,
+    ) -> list[PoseStamped]:
+        out: list[PoseStamped] = []
+        out_frame = str(frame_id).strip() or "world"
+        for i in range(points_world.shape[0]):
+            ps = PoseStamped()
+            ps.header.frame_id = out_frame
+            ps.pose.position.x = float(points_world[i, 0])
+            ps.pose.position.y = float(points_world[i, 1])
+            ps.pose.position.z = float(points_world[i, 2])
+            ps.pose.orientation.w = 1.0
+            out.append(ps)
+        return out
+
+    def _generate_gradient_lift_targets(
+        self,
+        *,
+        field_state_path: str,
+        scan_mesh_path: str,
+        frame_id: str,
+        base_to_world_yaw_deg: float,
+        count: int,
+        min_spacing_mm: float,
+        lift_mm: float,
+        tangent_sign: float,
+    ) -> list[PoseStamped]:
+        state_path = Path(str(field_state_path).strip()).expanduser().resolve()
+        scan_path = Path(str(scan_mesh_path).strip()).expanduser().resolve()
+        if not state_path.is_file():
+            self.get_logger().warn(
+                f"[print_field_oriented] gradient_lift skipped: field state not found '{state_path}'"
+            )
+            return []
+        if not scan_path.is_file():
+            self.get_logger().warn(
+                f"[print_field_oriented] gradient_lift skipped: scan mesh not found '{scan_path}'"
+            )
+            return []
+
+        with np.load(str(state_path), allow_pickle=False) as state:
+            if "field_faces" not in state:
+                self.get_logger().warn(
+                    f"[print_field_oriented] gradient_lift skipped: missing field_faces in '{state_path}'"
+                )
+                return []
+            faces = np.asarray(state["field_faces"], dtype=np.int32)
+
+            if "field_vertices_world" in state:
+                vertices_world = np.asarray(state["field_vertices_world"], dtype=np.float64)
+            elif "field_vertices_scaled" in state and "offset_xyz" in state:
+                vertices_scaled = np.asarray(state["field_vertices_scaled"], dtype=np.float64)
+                offset_arr = np.asarray(state["offset_xyz"], dtype=np.float64).reshape(-1)
+                if offset_arr.shape[0] < 3:
+                    self.get_logger().warn(
+                        f"[print_field_oriented] gradient_lift skipped: invalid offset_xyz in '{state_path}'"
+                    )
+                    return []
+                vertices_world = vertices_scaled + offset_arr[:3][None, :]
+            else:
+                self.get_logger().warn(
+                    f"[print_field_oriented] gradient_lift skipped: cannot infer field vertices from '{state_path}'"
+                )
+                return []
+
+            if "heat_norm" in state:
+                scalar = np.asarray(state["heat_norm"], dtype=np.float64).reshape(-1)
+            elif "heat_dist" in state:
+                d = np.asarray(state["heat_dist"], dtype=np.float64).reshape(-1)
+                finite = np.isfinite(d)
+                if not np.any(finite):
+                    self.get_logger().warn(
+                        f"[print_field_oriented] gradient_lift skipped: no finite heat_dist in '{state_path}'"
+                    )
+                    return []
+                d_min = float(np.min(d[finite]))
+                d_max = float(np.max(d[finite]))
+                denom = max(d_max - d_min, 1e-12)
+                scalar = np.ones_like(d, dtype=np.float64)
+                scalar[finite] = (d[finite] - d_min) / denom
+            else:
+                self.get_logger().warn(
+                    f"[print_field_oriented] gradient_lift skipped: missing heat_norm/heat_dist in '{state_path}'"
+                )
+                return []
+
+            if "offset_xyz" in state:
+                offset_xyz_arr = np.asarray(state["offset_xyz"], dtype=np.float64).reshape(-1)
+                if offset_xyz_arr.shape[0] >= 3:
+                    offset_xyz = (
+                        float(offset_xyz_arr[0]),
+                        float(offset_xyz_arr[1]),
+                        float(offset_xyz_arr[2]),
+                    )
+                else:
+                    offset_xyz = (0.0, 0.0, 0.0)
+            else:
+                offset_xyz = (0.0, 0.0, 0.0)
+
+            if "clearance" in state:
+                clearance_arr = np.asarray(state["clearance"], dtype=np.float64).reshape(-1)
+                clearance = float(clearance_arr[0]) if clearance_arr.size > 0 else 0.0
+            else:
+                clearance = 0.0
+
+        if vertices_world.ndim != 2 or vertices_world.shape[1] != 3 or vertices_world.shape[0] == 0:
+            self.get_logger().warn(
+                f"[print_field_oriented] gradient_lift skipped: invalid vertices shape {vertices_world.shape}"
+            )
+            return []
+        if scalar.shape[0] != vertices_world.shape[0]:
+            self.get_logger().warn(
+                "[print_field_oriented] gradient_lift skipped: scalar length mismatch "
+                f"{scalar.shape[0]} != {vertices_world.shape[0]}"
+            )
+            return []
+
+        scan_mesh = o3d.io.read_triangle_mesh(str(scan_path))
+        if not scan_mesh.has_triangles():
+            self.get_logger().warn(
+                f"[print_field_oriented] gradient_lift skipped: scan mesh has no triangles '{scan_path}'"
+            )
+            return []
+
+        scene, z_top = make_scan_scene(scan_mesh)
+        pose = compute_phi_mask(
+            scene=scene,
+            z_top=z_top,
+            field_vertices_world=vertices_world,
+            offset_xyz=offset_xyz,
+            clearance=float(clearance),
+            iso_level=0.0,
+        )
+        contour_points, contour_lines = extract_phi_contour(
+            vertices=pose.field_vertices_world,
+            faces=faces,
+            scalar=pose.phi,
+            iso=0.0,
+        )
+        if contour_points.shape[0] == 0 or contour_lines.shape[0] == 0:
+            self.get_logger().warn(
+                "[print_field_oriented] gradient_lift produced empty contour; keeping previous candidates."
+            )
+            return []
+
+        selected = generate_print_points(
+            polyline_points=contour_points,
+            polyline_lines=contour_lines,
+            field_vertices_world=pose.field_vertices_world,
+            field_scalar=scalar,
+            count=int(count),
+            min_spacing=1e-3 * float(min_spacing_mm),
+            candidate_mode="gradient_lift",
+            lift_height=1e-3 * float(lift_mm),
+            field_faces=faces,
+            walk_tangent_sign=float(tangent_sign),
+        )
+        pts = np.asarray(selected.points, dtype=np.float64)
+        if pts.shape[0] == 0:
+            self.get_logger().warn(
+                "[print_field_oriented] gradient_lift selected 0 targets; keeping previous candidates."
+            )
+            return []
+        rot_b2w = self._rot_z_deg(float(base_to_world_yaw_deg))
+        pts_world = (rot_b2w @ pts.T).T
+        return self._build_pose_targets_from_points(points_world=pts_world, frame_id=frame_id)
 
     @staticmethod
     def _write_targets_yaml_with_z_vectors(
@@ -1325,6 +1660,7 @@ class PrintFieldOrientedSequenceNode(Node):
         targets: list[PoseStamped],
         timeout_s: Optional[float],
     ) -> dict:
+        log = self.get_logger()
         if len(targets) < 1:
             return {"ok": False, "stage": "parse_targets", "error": "Need at least 1 target."}
 
@@ -1354,9 +1690,15 @@ class PrintFieldOrientedSequenceNode(Node):
             timeout_s=timeout_s,
         )
         if not res.get("ok", False):
-            return {"ok": False, "stage": "approach_first", "error": res.get("error", "unknown")}
+            log.warn(
+                "[print_field_oriented] Failed initial approach; continuing target-by-target. "
+                f"error='{res.get('error', 'unknown')}'"
+            )
 
         printed = 0
+        skipped = 0
+        failed_targets: list[dict] = []
+        printed_targets: list[PoseStamped] = []
         for i, target in enumerate(targets):
             above = self._with_z_offset(target, float(dot_z_offset_m))
 
@@ -1372,7 +1714,13 @@ class PrintFieldOrientedSequenceNode(Node):
                 timeout_s=timeout_s,
             )
             if not res.get("ok", False):
-                return {"ok": False, "stage": f"goto_above_{i}", "error": res.get("error", "unknown")}
+                skipped += 1
+                err = str(res.get("error", "unknown"))
+                failed_targets.append({"index": int(i), "stage": f"goto_above_{i}", "error": err})
+                log.warn(
+                    f"[print_field_oriented] Skip target {i}: goto_above failed. error='{err}'"
+                )
+                continue
 
             res = self.session.run_sync(
                 self.session.motion.goto(
@@ -1385,7 +1733,13 @@ class PrintFieldOrientedSequenceNode(Node):
                 timeout_s=timeout_s,
             )
             if not res.get("ok", False):
-                return {"ok": False, "stage": f"goto_target_{i}", "error": res.get("error", "unknown")}
+                skipped += 1
+                err = str(res.get("error", "unknown"))
+                failed_targets.append({"index": int(i), "stage": f"goto_target_{i}", "error": err})
+                log.warn(
+                    f"[print_field_oriented] Skip target {i}: goto_target failed. error='{err}'"
+                )
+                continue
 
             res = self.session.run_sync(
                 self.session.extruder.print_steps(
@@ -1396,7 +1750,27 @@ class PrintFieldOrientedSequenceNode(Node):
                 timeout_s=timeout_s,
             )
             if not res.get("ok", False):
-                return {"ok": False, "stage": f"extrude_{i}", "error": res.get("error", "unknown")}
+                skipped += 1
+                err = str(res.get("error", "unknown"))
+                failed_targets.append({"index": int(i), "stage": f"extrude_{i}", "error": err})
+                log.warn(
+                    f"[print_field_oriented] Skip target {i}: extrude failed. error='{err}'"
+                )
+                # Try to retreat above even if extrusion failed.
+                try:
+                    self.session.run_sync(
+                        self.session.motion.goto(
+                            pose=above,
+                            motion="LIN",
+                            vel_scale=float(dot_vel_scale),
+                            exec=True,
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                except Exception:
+                    pass
+                continue
 
             if float(dwell_s) > 0.0:
                 res = self.session.run_sync(
@@ -1404,7 +1778,10 @@ class PrintFieldOrientedSequenceNode(Node):
                     timeout_s=timeout_s,
                 )
                 if not res.get("ok", False):
-                    return {"ok": False, "stage": f"wait_{i}", "error": res.get("error", "unknown")}
+                    log.warn(
+                        f"[print_field_oriented] Dwell wait failed at target {i}; continuing. "
+                        f"error='{res.get('error', 'unknown')}'"
+                    )
 
             res = self.session.run_sync(
                 self.session.motion.goto(
@@ -1417,11 +1794,24 @@ class PrintFieldOrientedSequenceNode(Node):
                 timeout_s=timeout_s,
             )
             if not res.get("ok", False):
-                return {"ok": False, "stage": f"lift_{i}", "error": res.get("error", "unknown")}
+                err = str(res.get("error", "unknown"))
+                failed_targets.append({"index": int(i), "stage": f"lift_{i}", "error": err})
+                log.warn(
+                    f"[print_field_oriented] Target {i} printed but lift failed. error='{err}'"
+                )
 
             printed += 1
+            printed_targets.append(target)
 
-        return {"ok": True, "stage": "done", "targets": len(targets), "printed": printed}
+        return {
+            "ok": True,
+            "stage": "done",
+            "targets": len(targets),
+            "printed": printed,
+            "skipped": skipped,
+            "failed_targets": failed_targets,
+            "printed_targets": printed_targets,
+        }
 
     @staticmethod
     def _with_z_offset(ps: PoseStamped, z_offset_m: float) -> PoseStamped:

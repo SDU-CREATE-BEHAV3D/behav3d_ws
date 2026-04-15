@@ -375,6 +375,12 @@ def run(
     print(f"contour segments: {contour_lines.shape[0]}")
     print(f"print candidates: {projected_points.shape[0]}")
     print(f"candidate_mode: {mode}")
+    if mode == "gradient_lift":
+        print(
+            "gradient_lift config: "
+            f"distance_mm={float(print_height_mm):.3f} "
+            f"tangent_sign={float(walk_tangent_sign):+.1f}"
+        )
     if mode == "gradient_walk":
         print(
             "gradient_walk config: "
@@ -466,7 +472,7 @@ def main() -> None:
     parser.add_argument(
         "--candidate-mode",
         type=str,
-        choices=("z_lift", "gradient_walk"),
+        choices=("z_lift", "gradient_lift", "gradient_walk"),
         default="z_lift",
         help="Candidate generation mode before projection/orientation.",
     )
