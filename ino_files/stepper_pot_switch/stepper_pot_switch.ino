@@ -23,6 +23,7 @@ const bool DIR_COUNTERCLOCKWISE = HIGH;
 
 // NC switch with external pull-up: normal = LOW, activated/broken wire = HIGH.
 const bool LIMIT_ACTIVE_STATE = HIGH;
+const unsigned long LIMIT_DEBOUNCE_US = 10000; // 10 ms
 
 // Stop zone centered around 512.
 const int POT_CENTER = 512;
@@ -60,6 +61,9 @@ volatile bool timerRunning = false;
 volatile uint8_t motionState = STATE_NORMAL;
 
 unsigned long lastPotReadTime = 0;
+bool rawLimitState = false;
+bool stableLimitState = false;
+unsigned long rawLimitChangedAt = 0;
 
 volatile uint8_t* stepPort = 0;
 uint8_t stepBitMask = 0;
@@ -105,7 +109,29 @@ uint32_t mmToSteps(float mm) {
 }
 
 bool limitIsActive() {
-  return digitalRead(LIMIT_PIN) == LIMIT_ACTIVE_STATE;
+  return stableLimitState;
+}
+
+void setupLimitDebounce() {
+  rawLimitState = (digitalRead(LIMIT_PIN) == LIMIT_ACTIVE_STATE);
+  stableLimitState = rawLimitState;
+  rawLimitChangedAt = micros();
+}
+
+void updateLimitDebounce() {
+  const bool reading = (digitalRead(LIMIT_PIN) == LIMIT_ACTIVE_STATE);
+  const unsigned long now = micros();
+
+  if (reading != rawLimitState) {
+    rawLimitState = reading;
+    rawLimitChangedAt = now;
+    return;
+  }
+
+  if (stableLimitState != rawLimitState &&
+      now - rawLimitChangedAt >= LIMIT_DEBOUNCE_US) {
+    stableLimitState = rawLimitState;
+  }
 }
 
 int32_t getSoftPositionSteps() {
@@ -359,6 +385,7 @@ void setup() {
   stepBitMask = digitalPinToBitMask(STEP_PIN);
 
   setupTimer1();
+  setupLimitDebounce();
 
   filteredPot = analogRead(POT_PIN);
   currentDir = DIR_COUNTERCLOCKWISE;
@@ -371,6 +398,7 @@ void setup() {
 }
 
 void loop() {
+  updateLimitDebounce();
   updateLimitState();
 
   unsigned long now = micros();
