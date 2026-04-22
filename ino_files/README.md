@@ -105,6 +105,10 @@ NC limit switch wiring with external pull-up:
          5.6k
            |
 D2 --------+-------- NC switch -------- GND
+           |
+        100 nF
+           |
+          GND
 ```
 
 With this wiring:
@@ -126,6 +130,33 @@ Limit backoff distance:      4 mm = 25,600 steps
 Limit backoff speed:         240 motor RPM ~= 1 mm/s
 ```
 
+The limit input currently uses software debounce:
+
+```text
+LIMIT_DEBOUNCE_US = 10000 us = 10 ms
+```
+
+This filters short HIGH spikes on D2 before the firmware accepts the limit as
+active. It was tested successfully even with the limit signal sharing a 6-core
+cable bundle near the stepper wiring, where the raw signal had previously
+caused false limit triggers.
+
+For the prototype, the current working stack is:
+
+```text
+NC switch
+5.6k external pull-up to +5V
+100 nF capacitor between D2 and GND
+10 ms software debounce
+```
+
+For the final machine, prefer separate wiring for motor and signals:
+
+```text
+Stepper motor: its own cable, with coil pairs kept together/twisted if possible
+Limit switch: D2 + GND as a twisted pair, shielded if the run is long/noisy
+Potentiometer: +5V + A0 + GND away from motor power wiring
+```
 The direction constants currently match the tested wiring:
 
 ```cpp
