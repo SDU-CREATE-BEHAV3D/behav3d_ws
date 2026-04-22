@@ -5,8 +5,7 @@ ros2 run behav3d_orchestrator print_field_oriented_sequence
 
 Runtime YAML (hot-reload each cycle):
 ros2 run behav3d_orchestrator print_field_oriented_sequence --ros-args \
-  -p runtime_config_path:=/home/lab/behav3d_ws/src/behav3d_orchestrator/config/print_field_oriented_sequence_config.yaml \
-  -p runtime_reload_each_cycle:=true
+  -p runtime_config_path:=/home/lab/behav3d_ws/src/behav3d_orchestrator/config/print_field_oriented_sequence_config.yaml
 """
 
 from __future__ import annotations
@@ -34,7 +33,6 @@ class PrintFieldOrientedSequenceNode(Node):
 
         # Runtime config control
         self.declare_parameter("runtime_config_path", "")
-        self.declare_parameter("runtime_reload_each_cycle", True)
 
         # Same node, dedicated field-loop session + YAML parser.
         self.session = FieldLoopSession(self)
@@ -47,7 +45,6 @@ class PrintFieldOrientedSequenceNode(Node):
         log = self.get_logger()
 
         runtime_config_path = str(self.get_parameter("runtime_config_path").value).strip()
-        runtime_reload_each_cycle = bool(self.get_parameter("runtime_reload_each_cycle").value)
         cfg = self._load_runtime_config(runtime_config_path)
 
         home_before_scan = self._cfg_bool(cfg, "home_before_scan")
@@ -159,8 +156,7 @@ class PrintFieldOrientedSequenceNode(Node):
             f"clamp_to_cone={oriented_clamp_to_cone}, cone_max_tilt_deg={oriented_cone_max_tilt_deg:.1f}, "
             f"skip_bootstrap_scan_and_init={skip_bootstrap_scan_and_init}, "
             f"scan_before_generate_first_cycle={scan_before_generate_first_cycle}, "
-            f"runtime_config_path='{runtime_config_path}', "
-            f"runtime_reload_each_cycle={runtime_reload_each_cycle}"
+            f"runtime_config_path='{runtime_config_path}'"
         )
 
         mesh_path = ""
@@ -539,7 +535,7 @@ class PrintFieldOrientedSequenceNode(Node):
             # -----------------------------------------------------------------
             print_cycle_index = 0
             while rclpy.ok():
-                if runtime_config_path and runtime_reload_each_cycle:
+                if runtime_config_path:
                     try:
                         cfg = self._load_runtime_config(runtime_config_path)
                     except Exception as exc:
