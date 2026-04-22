@@ -96,9 +96,15 @@ cand_res = session.run_sync(
         field_state_path=init_res["metrics"]["field_state_path"],
         scan_mesh_paths=["@session/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl"],
         output_dir="@session/field_loop/cycle_0000/candidates",
+        candidate_mode="gradient_lift",            # z_lift | gradient_lift
         beads_per_step=7,
         bead_separation_mm=16.0,
         bead_height_mm=12.0,
+        orient_with_tangent=True,                  # tangent-based frame orientation
+        tangent_sign=1.0,                          # +1 or -1 gradient direction
+        clamp_to_cone=True,                        # optional orientation clamp around +Z
+        cone_max_tilt_deg=40.0,
+        base_to_world_yaw_deg=180.0,               # base->world yaw for YAML output
         target_zx=0.03,
         target_zy=-0.01,
         target_zz=1.0,
@@ -116,8 +122,26 @@ Returned metrics include:
 
 Notes:
 - If `session_path` is provided, `use_latest` is forced to `False`.
+- Candidate generation mode is selected in the service request:
+  `candidate_mode="z_lift"` or `candidate_mode="gradient_lift"`.
 - YAML target frame reorientation (`base_link -> world`) is handled in
-  `fields_node` during target generation.
+  `fields_node` during target generation (`base_to_world_yaw_deg`).
+
+### CameraCommands World Mesh Preview
+For field-debug visualization + optional scan restore in one command:
+```python
+preview_res = session.run_sync(
+    session.camera.preview_field_ply(
+        use_latest=False,
+        session_path="@session",
+        field_ply_path="/tmp/field_masked_cycle.ply",
+        restore_mesh_path="/tmp/tsdf_surface_mesh.stl",  # optional
+        wait_timeout_s=45.0,
+        enqueue=False,
+    ),
+    timeout_s=55.0,
+)
+```
 
 ## Result contract
 `on_done` receives a dict with:

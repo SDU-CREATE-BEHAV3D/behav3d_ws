@@ -70,9 +70,15 @@ class FieldCommands:
         field_state_path: Optional[str] = "",
         scan_mesh_paths: Optional[Iterable[str]] = None,
         output_dir: Optional[str] = "",
+        candidate_mode: str = "z_lift",
         beads_per_step: int = 7,
         bead_separation_mm: float = 16.0,
         bead_height_mm: float = 12.0,
+        orient_with_tangent: bool = False,
+        tangent_sign: float = 1.0,
+        clamp_to_cone: bool = False,
+        cone_max_tilt_deg: float = 40.0,
+        base_to_world_yaw_deg: float = 180.0,
         target_zx: float = 0.03,
         target_zy: float = -0.01,
         target_zz: float = 1.0,
@@ -88,9 +94,15 @@ class FieldCommands:
                 "field_state_path": (field_state_path or ""),
                 "scan_mesh_paths": list(scan_mesh_paths or []),
                 "output_dir": (output_dir or ""),
+                "candidate_mode": str(candidate_mode or "z_lift"),
                 "beads_per_step": int(beads_per_step),
                 "bead_separation_mm": float(bead_separation_mm),
                 "bead_height_mm": float(bead_height_mm),
+                "orient_with_tangent": bool(orient_with_tangent),
+                "tangent_sign": float(tangent_sign),
+                "clamp_to_cone": bool(clamp_to_cone),
+                "cone_max_tilt_deg": float(cone_max_tilt_deg),
+                "base_to_world_yaw_deg": float(base_to_world_yaw_deg),
                 "target_zx": float(target_zx),
                 "target_zy": float(target_zy),
                 "target_zz": float(target_zz),
@@ -170,6 +182,9 @@ class FieldCommands:
 
         req.field_state_path = str(payload.get("field_state_path", "")).strip()
         req.output_dir = str(payload.get("output_dir", "")).strip()
+        req.candidate_mode = str(payload.get("candidate_mode", "z_lift")).strip()
+        if not req.candidate_mode:
+            req.candidate_mode = "z_lift"
 
         raw_paths = payload.get("scan_mesh_paths", [])
         if raw_paths is None:
@@ -179,6 +194,11 @@ class FieldCommands:
         req.beads_per_step = int(payload.get("beads_per_step", 7))
         req.bead_separation_mm = float(payload.get("bead_separation_mm", 16.0))
         req.bead_height_mm = float(payload.get("bead_height_mm", 12.0))
+        req.orient_with_tangent = bool(payload.get("orient_with_tangent", False))
+        req.tangent_sign = float(payload.get("tangent_sign", 1.0))
+        req.clamp_to_cone = bool(payload.get("clamp_to_cone", False))
+        req.cone_max_tilt_deg = float(payload.get("cone_max_tilt_deg", 40.0))
+        req.base_to_world_yaw_deg = float(payload.get("base_to_world_yaw_deg", 180.0))
         req.target_zx = float(payload.get("target_zx", 0.03))
         req.target_zy = float(payload.get("target_zy", -0.01))
         req.target_zz = float(payload.get("target_zz", 1.0))
@@ -187,8 +207,10 @@ class FieldCommands:
         self._node.get_logger().info(
             f"GENERATE_PRINT_CANDIDATES: use_latest={req.use_latest} session_path='{req.session_path}' "
             f"field_state_path='{req.field_state_path}' scan_mesh_paths={len(req.scan_mesh_paths)} "
-            f"output_dir='{req.output_dir}' beads_per_step={req.beads_per_step} "
-            f"bead_separation_mm={req.bead_separation_mm:.3f} bead_height_mm={req.bead_height_mm:.3f}"
+            f"output_dir='{req.output_dir}' candidate_mode='{req.candidate_mode}' "
+            f"beads_per_step={req.beads_per_step} bead_separation_mm={req.bead_separation_mm:.3f} "
+            f"bead_height_mm={req.bead_height_mm:.3f} orient_with_tangent={req.orient_with_tangent} "
+            f"clamp_to_cone={req.clamp_to_cone}"
         )
 
         fut = self._generate_candidates_cli.call_async(req)

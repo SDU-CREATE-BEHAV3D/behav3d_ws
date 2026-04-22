@@ -4,9 +4,15 @@ string session_path
 string field_state_path
 string[] scan_mesh_paths
 string output_dir
+string candidate_mode
 int32 beads_per_step
 float64 bead_separation_mm
 float64 bead_height_mm
+bool orient_with_tangent
+float64 tangent_sign
+bool clamp_to_cone
+float64 cone_max_tilt_deg
+float64 base_to_world_yaw_deg
 float64 target_zx
 float64 target_zy
 float64 target_zz

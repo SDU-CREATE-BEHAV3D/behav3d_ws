@@ -47,6 +47,7 @@ class CameraCommands:
         router.register("reconstruct_tsdf_cropped", self._handle_reconstruct_tsdf_cropped)
         router.register("reconstruct_tsdf_grid_sweep", self._handle_reconstruct_tsdf_grid_sweep)
         router.register("update_world_mesh", self._handle_update_world_mesh)
+        router.register("preview_field_ply", self._handle_preview_field_ply)
         router.register("update_planning_scene_mesh", self._handle_update_planning_scene_mesh)
 
     def _queue_or_item(self, item: QueueItem, *, enqueue: bool):
@@ -222,6 +223,31 @@ class CameraCommands:
                 "wait_timeout_s": float(wait_timeout_s),
             },
             cmd_kind="update_world_mesh",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def preview_field_ply(
+        self,
+        *,
+        use_latest: bool = True,
+        session_path: Optional[str] = "",
+        field_ply_path: str = "",
+        restore_mesh_path: Optional[str] = "",
+        wait_timeout_s: float = 30.0,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "preview_field_ply",
+            {
+                "use_latest": bool(use_latest),
+                "session_path": (session_path or ""),
+                "field_ply_path": str(field_ply_path),
+                "restore_mesh_path": (restore_mesh_path or ""),
+                "wait_timeout_s": float(wait_timeout_s),
+            },
+            cmd_kind="preview_field_ply",
             on_done=on_done,
         )
         return self._queue_or_item(item, enqueue=enqueue)
@@ -604,6 +630,113 @@ class CameraCommands:
             )
 
         fut.add_done_callback(_on_resp)
+
+    def _handle_preview_field_ply(self, payload: Dict[str, Any], cmd: Command) -> None:
+        if not self._world_mesh_cli.wait_for_service(timeout_sec=3.0):
+            cmd.finish_flag(ok=False, phase="exec", error="update_world_mesh service not available")
+            return
+
+        session_path = str(payload.get("session_path", "")).strip()
+        use_latest = bool(payload.get("use_latest", True))
+        if session_path:
+            use_latest = False
+
+        field_ply_path = str(payload.get("field_ply_path", "")).strip()
+        restore_mesh_path = str(payload.get("restore_mesh_path", "")).strip()
+
+        try:
+            wait_timeout_s = float(payload.get("wait_timeout_s", 30.0))
+        except (TypeError, ValueError):
+            wait_timeout_s = 30.0
+        if wait_timeout_s < 0.0:
+            wait_timeout_s = 0.0
+
+        if not field_ply_path:
+            cmd.finish_flag(ok=False, phase="exec", error="preview_field_ply requires field_ply_path")
+            return
+
+        req_ply = UpdateWorldMesh.Request()
+        req_ply.session_path = session_path
+        req_ply.use_latest = use_latest
+        req_ply.mesh_path = ""
+        req_ply.ply_path = field_ply_path
+        req_ply.prefer = "ply"
+        req_ply.wait_timeout_s = wait_timeout_s
+
+        self._node.get_logger().info(
+            f"PREVIEW_FIELD_PLY: session_path='{req_ply.session_path}' use_latest={req_ply.use_latest} "
+            f"field_ply='{req_ply.ply_path}' restore_mesh='{restore_mesh_path}' wait_timeout_s={wait_timeout_s:.2f}"
+        )
+
+        fut_ply = self._world_mesh_cli.call_async(req_ply)
+
+        def _finish_from_ply(resp_ply) -> None:
+            ok_ply = bool(getattr(resp_ply, "success", False))
+            msg_ply = str(getattr(resp_ply, "message", ""))
+            if not ok_ply:
+                cmd.finish_flag(ok=False, phase="exec", error=msg_ply or "preview field ply failed")
+                return
+
+            ply_metrics = {
+                "field_ply_message": msg_ply,
+                "field_ply_published_path": str(getattr(resp_ply, "published_path", "")),
+                "field_ply_published_kind": str(getattr(resp_ply, "published_kind", "")),
+            }
+
+            if not restore_mesh_path:
+                cmd.finish_flag(
+                    ok=True,
+                    phase="exec",
+                    metrics={
+                        **ply_metrics,
+                        "restored_scan_mesh": False,
+                    },
+                )
+                return
+
+            req_mesh = UpdateWorldMesh.Request()
+            req_mesh.session_path = session_path
+            req_mesh.use_latest = use_latest
+            req_mesh.mesh_path = restore_mesh_path
+            req_mesh.ply_path = ""
+            req_mesh.prefer = "mesh"
+            req_mesh.wait_timeout_s = wait_timeout_s
+
+            fut_mesh = self._world_mesh_cli.call_async(req_mesh)
+
+            def _on_mesh_done(fr_mesh):
+                try:
+                    resp_mesh = fr_mesh.result()
+                except Exception as exc:
+                    cmd.finish_flag(ok=False, phase="exec", error=f"exception: {exc}")
+                    return
+
+                ok_mesh = bool(getattr(resp_mesh, "success", False))
+                msg_mesh = str(getattr(resp_mesh, "message", ""))
+                cmd.finish_flag(
+                    ok=ok_mesh,
+                    phase="exec",
+                    metrics={
+                        **ply_metrics,
+                        "restored_scan_mesh": ok_mesh,
+                        "restore_mesh_message": msg_mesh,
+                        "restore_mesh_published_path": str(getattr(resp_mesh, "published_path", "")),
+                        "restore_mesh_published_kind": str(getattr(resp_mesh, "published_kind", "")),
+                    },
+                    error=None if ok_mesh else (msg_mesh or "restore scan mesh failed"),
+                )
+
+            fut_mesh.add_done_callback(_on_mesh_done)
+
+        def _on_ply_done(fr_ply):
+            try:
+                resp_ply = fr_ply.result()
+            except Exception as exc:
+                cmd.finish_flag(ok=False, phase="exec", error=f"exception: {exc}")
+                return
+            _finish_from_ply(resp_ply)
+
+        fut_ply.add_done_callback(_on_ply_done)
 
     def _handle_update_planning_scene_mesh(self, payload: Dict[str, Any], cmd: Command) -> None:
         if not self._planning_scene_mesh_cli.wait_for_service(timeout_sec=3.0):

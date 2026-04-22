@@ -208,14 +208,16 @@ Field commands:
 | Command | Purpose | Key Parameters | Notes |
 | --- | --- | --- | --- |
 | `init_field_from_scan()` | Build and position the scalar field once from scan mesh + field mesh. | `use_latest`, `session_path`, `scan_mesh_paths[]`, `field_mesh_path`, `state_output_dir` | Produces `field_state_init.npz` and debug `field_masked_init.ply`; returns positioned offset `(x,y,z)`. |
-| `generate_print_candidates()` | Evaluate current scan against initialized field and produce print candidates. | `use_latest`, `session_path`, `field_state_path`, `scan_mesh_paths[]`, `output_dir`, `beads_per_step`, `bead_separation_mm`, `bead_height_mm`, `target_zx/zy/zz`, `target_position_scale` | Produces cycle debug artifacts + `targets.yaml` from z-lift candidate strategy. |
+| `generate_print_candidates()` | Evaluate current scan against initialized field and produce print candidates. | `use_latest`, `session_path`, `field_state_path`, `scan_mesh_paths[]`, `output_dir`, `candidate_mode`, `beads_per_step`, `bead_separation_mm`, `bead_height_mm`, `orient_with_tangent`, `tangent_sign`, `clamp_to_cone`, `cone_max_tilt_deg`, `base_to_world_yaw_deg`, `target_zx/zy/zz`, `target_position_scale` | Produces cycle debug artifacts + final `targets.yaml` using the selected candidate mode (`z_lift` or `gradient_lift`) and optional tangent orientation. |
 
 Field command usage notes:
 - If `session_path` is non-empty, command layer forces `use_latest=False` (explicit path wins).
 - `scan_mesh_paths` can be omitted; the service resolves default TSDF mesh inside the session.
 - `field_state_path` can be omitted in `generate_print_candidates`; the service resolves latest `field_state_init.npz`.
 - Targets YAML is written in robot plane format `O(x,y,z) Z(i,j,k)` with position scaled by `target_position_scale` (default mm).
-- Base-link to world target reorientation is applied inside `fields_node` at YAML generation time (`target_base_to_world_yaw_deg`, default `180.0`).
+- `candidate_mode` currently supports `z_lift` and `gradient_lift`.
+- If `orient_with_tangent=true`, target orientation is sampled from the scalar tangent field; optional orientation clamp is applied with `clamp_to_cone` and `cone_max_tilt_deg`.
+- Base-link to world target reorientation is applied inside `fields_node` at YAML generation time (`base_to_world_yaw_deg`, default falls back to node parameter `target_base_to_world_yaw_deg`).
 
 Fields node implementation:
 - `src/behav3d_sense/behav3d_sense/fields_node.py`

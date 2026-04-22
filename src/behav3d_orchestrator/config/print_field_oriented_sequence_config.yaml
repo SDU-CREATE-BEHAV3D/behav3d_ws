@@ -1,0 +1,103 @@
+print_field_oriented_sequence:
+  ros__parameters:
+    # Global flow
+    home_before_scan: true
+    home_after: false
+    timeout_s: 0.0
+
+    # Initial table grid sweep
+    frame_id: world
+    scan_eef_link: femto_color_optical_calib
+    scan_use_tf_orientation: true
+    scan_width: 0.50
+    scan_height: 0.40
+    scan_center_x: -0.20
+    scan_center_y: 0.80
+    scan_center_z: 0.0
+    scan_z_off: 0.60
+    scan_nx: 5
+    scan_ny: 4
+    scan_row_major: false
+    scan_capture_folder: "@session/grid_sweep"
+    scan_debug_prompt: false
+    scan_vel_scale: 0.05
+    scan_accel_scale: 0.05
+    scan_publish_markers: true
+    scan_axis_length: 0.05
+    scan_axis_radius: 0.003
+    scan_clear_markers_before: true
+
+    # Layer scan
+    layer_scan_width: 0.30
+    layer_scan_height: 0.30
+    layer_scan_nx: 3
+    layer_scan_ny: 3
+    layer_scan_row_major: false
+    layer_scan_first_z_off: 0.06
+    layer_scan_z_margin_mm: 550.0
+    field_center_sign_x: -1.0
+    field_center_sign_y: -1.0
+    field_center_offset_x: 0.0
+    field_center_offset_y: 0.0
+
+    # Reconstruction + world mesh
+    run_reconstruction: true
+    reconstruct_device: CPU:0
+    reconstruct_request_timeout_s: 10.0
+    wait_reconstruction_outputs: true
+    color_to_depth_wait_timeout_s: 60.0
+    tsdf_wait_timeout_s: 180.0
+    mesh_prefer: mesh
+    mesh_update_wait_timeout_s: 45.0
+    mesh_update_request_timeout_s: 55.0
+    tsdf_center_crop_enable: true
+    tsdf_center_crop_width: 300
+    tsdf_center_crop_height: 290
+    tsdf_center_crop_apply_to_depth: true
+    tsdf_aabb_crop_enable: false
+    tsdf_aabb_crop_min: [-0.25, -1.10, -1.00]
+    tsdf_aabb_crop_max: [0.30, -0.65, 0.50]
+    tsdf_param_update_timeout_s: 8.0
+
+    # Field init
+    run_field_init: true
+    field_use_latest: true
+    field_session_path: "@session"
+    field_scan_mesh_path: ""
+    field_mesh_path: /home/lab/behav3d_ws/mesh/Marlon.obj
+    field_state_output_dir: "@session/field_loop/init"
+    field_request_timeout_s: 120.0
+    skip_bootstrap_scan_and_init: false
+    resume_field_state_path: ""
+    resume_scan_mesh_path: ""
+    scan_before_generate_first_cycle: true
+
+    # Candidate generation + print
+    run_generate_candidates: true
+    candidate_use_latest: true
+    candidate_session_path: "@session"
+    candidate_field_state_path: ""
+    candidate_scan_mesh_path: ""
+    candidate_output_dir: "@session/field_loop/cycle_0001"
+    candidate_request_timeout_s: 120.0
+    candidate_mode: gradient_lift
+    candidate_beads_per_step: 7
+    candidate_bead_separation_mm: 16.0
+    candidate_bead_height_mm: 12.0
+    candidate_target_zx: 0.03
+    candidate_target_zy: -0.01
+    candidate_target_zz: 1.0
+    candidate_target_position_scale: 1000.0
+    candidate_visualize_field_ply: true
+    candidate_restore_scan_mesh_after_field_ply: true
+    candidate_publish_markers: true
+    candidate_marker_axis_length: 0.05
+    candidate_marker_axis_radius: 0.003
+    candidate_marker_clear_before: true
+    oriented_targets_enable: true
+    oriented_tangent_sign: 1.0
+    oriented_clamp_to_cone: true
+    oriented_cone_max_tilt_deg: 40.0
+    oriented_base_to_world_yaw_deg: 180.0
+    max_cycles: 0
+    prompt_before_next_cycle: true

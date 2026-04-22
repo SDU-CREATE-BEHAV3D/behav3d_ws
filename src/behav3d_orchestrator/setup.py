@@ -1,3 +1,5 @@
+from glob import glob
+
 from setuptools import setup, find_packages
 
 package_name = 'behav3d_orchestrator'
@@ -16,6 +18,7 @@ setup(
         ('share/ament_index/resource_index/packages',
          ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
     entry_points={
         'console_scripts': [

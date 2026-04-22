@@ -485,12 +485,13 @@ class PrintFieldCenteredSequenceNode(Node):
                     cycle_field_ply = str(cand_metrics.get("debug_field_ply_path", "")).strip()
                     if cycle_field_ply:
                         cycle_vis_res = self.session.run_sync(
-                            self.session.camera.update_world_mesh(
+                            self.session.camera.preview_field_ply(
                                 use_latest=False,
                                 session_path=candidate_session_path or "@session",
-                                mesh_path="",
-                                ply_path=cycle_field_ply,
-                                prefer="ply",
+                                field_ply_path=cycle_field_ply,
+                                restore_mesh_path=(
+                                    scan_mesh_for_candidates if candidate_restore_scan_mesh_after_field_ply else ""
+                                ),
                                 wait_timeout_s=mesh_update_wait_timeout_s,
                                 enqueue=False,
                             ),
@@ -498,39 +499,26 @@ class PrintFieldCenteredSequenceNode(Node):
                         )
                         if not cycle_vis_res.get("ok", False):
                             raise RuntimeError(
-                                f"update_world_mesh(cycle_field_ply) failed: {cycle_vis_res.get('error')}"
+                                f"preview_field_ply failed: {cycle_vis_res.get('error')}"
                             )
 
-                        cycle_vis_path = str(cycle_vis_res.get("metrics", {}).get("published_path", "")).strip()
-                        cycle_vis_kind = str(cycle_vis_res.get("metrics", {}).get("published_kind", "")).strip()
+                        cycle_vis_path = str(
+                            cycle_vis_res.get("metrics", {}).get("field_ply_published_path", "")
+                        ).strip()
+                        cycle_vis_kind = str(
+                            cycle_vis_res.get("metrics", {}).get("field_ply_published_kind", "ply")
+                        ).strip()
                         log.info(
                             f"[print_field_centered] Cycle field PLY published in RViz ({cycle_vis_kind}): "
                             f"{cycle_vis_path}"
                         )
 
                         if candidate_restore_scan_mesh_after_field_ply and scan_mesh_for_candidates:
-                            scan_restore_res = self.session.run_sync(
-                                self.session.camera.update_world_mesh(
-                                    use_latest=False,
-                                    session_path=candidate_session_path or "@session",
-                                    mesh_path=scan_mesh_for_candidates,
-                                    ply_path="",
-                                    prefer="mesh",
-                                    wait_timeout_s=mesh_update_wait_timeout_s,
-                                    enqueue=False,
-                                ),
-                                timeout_s=mesh_update_request_timeout_s,
-                            )
-                            if not scan_restore_res.get("ok", False):
-                                raise RuntimeError(
-                                    f"update_world_mesh(restore_scan_mesh) failed: "
-                                    f"{scan_restore_res.get('error')}"
-                                )
                             restored_path = str(
-                                scan_restore_res.get("metrics", {}).get("published_path", "")
+                                cycle_vis_res.get("metrics", {}).get("restore_mesh_published_path", "")
                             ).strip()
                             restored_kind = str(
-                                scan_restore_res.get("metrics", {}).get("published_kind", "")
+                                cycle_vis_res.get("metrics", {}).get("restore_mesh_published_kind", "mesh")
                             ).strip()
                             log.info(
                                 f"[print_field_centered] Scan mesh restored in RViz ({restored_kind}): "
@@ -751,6 +739,9 @@ class PrintFieldCenteredSequenceNode(Node):
         tsdf_aabb_crop_max: list[float],
         tsdf_param_update_timeout_s: float,
     ) -> tuple[str, str]:
+        # TODO(scanning-pipeline): This reconstruction/crop/update flow is intentionally
+        # duplicated in print_field_* sequences for now. Consolidate into a shared helper
+        # module owned by the scanning pipeline to avoid drift.
         log = self.get_logger()
 
         c2d_start_ts = time.time()

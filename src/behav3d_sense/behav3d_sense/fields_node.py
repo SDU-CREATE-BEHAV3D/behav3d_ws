@@ -25,7 +25,11 @@ try:
     from behav3d_py.scalar_field.lib_scalar.compute_phi_mask import evaluate_fixed_pose, make_scan_scene
     from behav3d_py.scalar_field.lib_scalar.extract_phi_contour import extract_phi_contour
     from behav3d_py.scalar_field.lib_scalar.generate_print_points import generate_print_points
-    from behav3d_py.scalar_field.lib_scalar.geometry import load_triangle_mesh_arrays
+    from behav3d_py.scalar_field.lib_scalar.geometry import (
+        clamp_vectors_to_cone,
+        load_triangle_mesh_arrays,
+        sample_tangent_axes_on_surface_from_scalar,
+    )
     from behav3d_py.scalar_field.lib_scalar.loop_simulation import position_field_with_attempts
     from behav3d_py.scalar_field.lib_scalar.viz import make_line_set, make_point_cloud, yellow_to_red_colors
 
@@ -36,7 +40,9 @@ except Exception as exc:  # pragma: no cover
     make_scan_scene = None
     extract_phi_contour = None
     generate_print_points = None
+    clamp_vectors_to_cone = None
     load_triangle_mesh_arrays = None
+    sample_tangent_axes_on_surface_from_scalar = None
     position_field_with_attempts = None
     make_line_set = None
     make_point_cloud = None
@@ -138,13 +144,41 @@ def _load_scan_mesh(paths: List[Path]) -> o3d.geometry.TriangleMesh:
 
 def _write_targets_yaml(
     out_yaml: Path,
-    points_world: np.ndarray,
+    points_base: np.ndarray,
     z_dir: tuple[float, float, float],
     position_scale: float,
     base_to_world_yaw_deg: float,
 ) -> None:
+    z_dirs_base = np.tile(
+        np.asarray([[float(z_dir[0]), float(z_dir[1]), float(z_dir[2])]], dtype=np.float64),
+        (int(points_base.shape[0]), 1),
+    )
+    _write_targets_yaml_with_z_vectors(
+        out_yaml=out_yaml,
+        points_base=points_base,
+        z_dirs_base=z_dirs_base,
+        position_scale=position_scale,
+        base_to_world_yaw_deg=base_to_world_yaw_deg,
+    )
+
+
+def _write_targets_yaml_with_z_vectors(
+    out_yaml: Path,
+    points_base: np.ndarray,
+    z_dirs_base: np.ndarray,
+    position_scale: float,
+    base_to_world_yaw_deg: float,
+) -> None:
     out_yaml.parent.mkdir(parents=True, exist_ok=True)
-    zx, zy, zz = float(z_dir[0]), float(z_dir[1]), float(z_dir[2])
+    if points_base.ndim != 2 or points_base.shape[1] != 3:
+        raise ValueError(f"points_base must be (N,3), got {points_base.shape}")
+    if z_dirs_base.ndim != 2 or z_dirs_base.shape[1] != 3:
+        raise ValueError(f"z_dirs_base must be (N,3), got {z_dirs_base.shape}")
+    if points_base.shape[0] != z_dirs_base.shape[0]:
+        raise ValueError(
+            f"points_base/z_dirs_base size mismatch: {points_base.shape[0]} vs {z_dirs_base.shape[0]}"
+        )
+
     scale = float(position_scale)
     yaw = np.deg2rad(float(base_to_world_yaw_deg))
     c = float(np.cos(yaw))
@@ -157,11 +191,16 @@ def _write_targets_yaml(
         ],
         dtype=np.float64,
     )
-    z_world = rot_z @ np.array([zx, zy, zz], dtype=np.float64)
 
     lines: list[str] = ["targets:"]
-    for i in range(points_world.shape[0]):
-        p = rot_z @ np.asarray(points_world[i], dtype=np.float64)
+    for i in range(points_base.shape[0]):
+        p = rot_z @ np.asarray(points_base[i], dtype=np.float64)
+        z_world = rot_z @ np.asarray(z_dirs_base[i], dtype=np.float64)
+        z_norm = float(np.linalg.norm(z_world))
+        if z_norm > 1e-12:
+            z_world = z_world / z_norm
+        else:
+            z_world = np.array([0.0, 0.0, 1.0], dtype=np.float64)
         ox = scale * float(p[0])
         oy = scale * float(p[1])
         oz = scale * float(p[2])
@@ -200,6 +239,11 @@ class FieldsNode(Node):
         self.declare_parameter("beads_per_step", 7)
         self.declare_parameter("bead_separation_mm", 16.0)
         self.declare_parameter("bead_height_mm", 12.0)
+        self.declare_parameter("candidate_mode_default", "z_lift")
+        self.declare_parameter("orient_with_tangent_default", False)
+        self.declare_parameter("tangent_sign_default", 1.0)
+        self.declare_parameter("clamp_to_cone_default", False)
+        self.declare_parameter("cone_max_tilt_deg_default", 40.0)
         self.declare_parameter("target_zx", 0.03)
         self.declare_parameter("target_zy", -0.01)
         self.declare_parameter("target_zz", 1.00)
@@ -452,6 +496,31 @@ class FieldsNode(Node):
             if beads_per_step_used < 0:
                 raise ValueError(f"beads_per_step must be >= 0, got {beads_per_step_used}")
 
+            candidate_mode = str(req.candidate_mode).strip().lower()
+            if not candidate_mode:
+                candidate_mode = str(self.get_parameter("candidate_mode_default").value).strip().lower() or "z_lift"
+            if candidate_mode not in ("z_lift", "gradient_lift"):
+                raise ValueError(
+                    f"Unsupported candidate_mode: '{candidate_mode}'. "
+                    "Use 'z_lift' or 'gradient_lift'."
+                )
+
+            orient_with_tangent = bool(req.orient_with_tangent)
+            if not orient_with_tangent:
+                orient_with_tangent = bool(self.get_parameter("orient_with_tangent_default").value)
+
+            tangent_sign = float(req.tangent_sign)
+            if not np.isfinite(tangent_sign) or abs(tangent_sign) < 1e-9:
+                tangent_sign = float(self.get_parameter("tangent_sign_default").value)
+
+            clamp_to_cone = bool(req.clamp_to_cone)
+            if not clamp_to_cone:
+                clamp_to_cone = bool(self.get_parameter("clamp_to_cone_default").value)
+
+            cone_max_tilt_deg = float(req.cone_max_tilt_deg)
+            if not np.isfinite(cone_max_tilt_deg) or cone_max_tilt_deg <= 0.0:
+                cone_max_tilt_deg = float(self.get_parameter("cone_max_tilt_deg_default").value)
+
             targets_zx = float(req.target_zx)
             targets_zy = float(req.target_zy)
             targets_zz = float(req.target_zz)
@@ -460,7 +529,14 @@ class FieldsNode(Node):
             target_position_scale = float(req.target_position_scale)
             if target_position_scale <= 0.0:
                 target_position_scale = float(self.get_parameter("target_position_scale").value)
-            target_base_to_world_yaw_deg = float(self.get_parameter("target_base_to_world_yaw_deg").value)
+            target_base_to_world_yaw_deg = float(req.base_to_world_yaw_deg)
+            if not np.isfinite(target_base_to_world_yaw_deg):
+                target_base_to_world_yaw_deg = float(self.get_parameter("target_base_to_world_yaw_deg").value)
+            if (
+                abs(target_base_to_world_yaw_deg) < 1e-12
+                and abs(float(self.get_parameter("target_base_to_world_yaw_deg").value)) > 1e-12
+            ):
+                target_base_to_world_yaw_deg = float(self.get_parameter("target_base_to_world_yaw_deg").value)
             if not np.isfinite(target_base_to_world_yaw_deg):
                 raise ValueError("target_base_to_world_yaw_deg must be a finite value.")
 
@@ -473,9 +549,10 @@ class FieldsNode(Node):
                 min_spacing=1e-3 * bead_separation_mm_used,
                 point_valid_mask=None,
                 extra_points=None,
-                candidate_mode="z_lift",
+                candidate_mode=candidate_mode,
                 lift_height=1e-3 * bead_height_mm_used,
                 field_faces=field_faces,
+                walk_tangent_sign=tangent_sign,
             )
             candidate_points = candidates.points
 
@@ -517,17 +594,45 @@ class FieldsNode(Node):
                     raise RuntimeError(f"Failed to write candidates PLY: {debug_candidates_path}")
                 candidate_written = str(debug_candidates_path)
 
-            _write_targets_yaml(
-                out_yaml=targets_yaml_path,
-                points_world=candidate_points,
-                z_dir=(targets_zx, targets_zy, targets_zz),
-                position_scale=target_position_scale,
-                base_to_world_yaw_deg=target_base_to_world_yaw_deg,
-            )
+            if orient_with_tangent and candidate_points.shape[0] > 0:
+                surface_points = np.asarray(candidates.surface_points, dtype=np.float64)
+                if surface_points.shape != candidate_points.shape:
+                    surface_points = np.asarray(candidate_points, dtype=np.float64)
+                tangent_dir, _binormal_dir, _normal_dir = sample_tangent_axes_on_surface_from_scalar(
+                    query_points=surface_points,
+                    mesh_vertices=pose.field_vertices_world,
+                    mesh_faces=field_faces,
+                    vertex_scalar=heat_norm,
+                    tangent_sign=float(tangent_sign),
+                )
+                z_dirs_base = np.asarray(tangent_dir, dtype=np.float64)
+                if clamp_to_cone:
+                    z_dirs_base = clamp_vectors_to_cone(
+                        z_dirs_base,
+                        max_tilt_deg=float(cone_max_tilt_deg),
+                        cone_axis=(0.0, 0.0, 1.0),
+                    )
+                _write_targets_yaml_with_z_vectors(
+                    out_yaml=targets_yaml_path,
+                    points_base=np.asarray(candidate_points, dtype=np.float64),
+                    z_dirs_base=np.asarray(z_dirs_base, dtype=np.float64),
+                    position_scale=target_position_scale,
+                    base_to_world_yaw_deg=target_base_to_world_yaw_deg,
+                )
+            else:
+                _write_targets_yaml(
+                    out_yaml=targets_yaml_path,
+                    points_base=np.asarray(candidate_points, dtype=np.float64),
+                    z_dir=(targets_zx, targets_zy, targets_zz),
+                    position_scale=target_position_scale,
+                    base_to_world_yaw_deg=target_base_to_world_yaw_deg,
+                )
 
             res.success = True
             res.message = (
-                f"Generated z_lift candidates. scan_meshes={len(scan_paths)} "
+                f"Generated candidates. mode={candidate_mode} "
+                f"orient_with_tangent={orient_with_tangent} "
+                f"clamp_to_cone={clamp_to_cone} scan_meshes={len(scan_paths)} "
                 f"viable={int(np.count_nonzero(pose.viable))} "
                 f"contour_segments={int(contour_lines.shape[0])} "
                 f"candidates={int(candidate_points.shape[0])}"
