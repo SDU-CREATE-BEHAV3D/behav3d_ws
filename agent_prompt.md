@@ -19,7 +19,7 @@ The launch file brings up these runtime roles:
 - UR driver and controllers (UR20 workcell).
 - MoveIt `move_group`.
 - `behav3d_motion_bridge` (planning + pose + planning-scene services).
-- Orbbec camera driver (Femto Bolt).
+- Orbbec camera driver (Femto Mega).
 - `behav3d_print` (extrusion actions + print services).
 - `behav3d_sense` (capture service and session storage).
 - Reconstruction services via `behav3d_sense/launch/reconstruct_services.launch.py`:

@@ -376,16 +376,38 @@ def run(
     if np.any(pose.has_hit):
         phi_min = float(np.nanmin(pose.phi[pose.has_hit]))
         phi_max = float(np.nanmax(pose.phi[pose.has_hit]))
-        base_max = float(np.nanmax(pose.base_dz[pose.has_hit]))
+        contact_min = float(np.nanmin(pose.base_dz[pose.has_hit]))
+        contact_max = float(np.nanmax(pose.base_dz[pose.has_hit]))
+        base_local_z = float(np.min(field_vertices_scaled[:, 2]))
+        bbox_diag = float(np.linalg.norm(np.max(field_vertices_scaled, axis=0) - np.min(field_vertices_scaled, axis=0)))
+        base_tol = max(1e-9, 1e-6 * bbox_diag)
+        base_mask = field_vertices_scaled[:, 2] <= (base_local_z + base_tol)
+        base_hit = pose.has_hit & base_mask
+        if np.any(base_hit):
+            base_contact_min = float(np.nanmin(pose.base_dz[base_hit]))
+            base_contact_max = float(np.nanmax(pose.base_dz[base_hit]))
+        else:
+            base_contact_min = float("nan")
+            base_contact_max = float("nan")
     else:
         phi_min = float("nan")
         phi_max = float("nan")
-        base_max = float("nan")
+        contact_min = float("nan")
+        contact_max = float("nan")
+        base_contact_min = float("nan")
+        base_contact_max = float("nan")
     print(
         "phi stats (valid rays): "
         f"count={pose.hit_count}/{pose.phi.shape[0]}, min={phi_min:.6f}, max={phi_max:.6f}"
     )
-    print(f"base constraint (base_z - z_scan <= 0): max={base_max:.6f}")
+    print(
+        "contact dz (field_z - z_scan): "
+        f"min={contact_min:.6f}, max={contact_max:.6f}"
+    )
+    print(
+        "base contact dz (base_field_z - z_scan): "
+        f"min={base_contact_min:.6f}, max={base_contact_max:.6f}"
+    )
     print(f"viable count (phi>{iso_level}): {pose.viable_count}")
     if search_meta:
         print(

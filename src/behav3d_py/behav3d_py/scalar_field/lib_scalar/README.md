@@ -17,11 +17,12 @@ The objective is to keep each stage isolated, testable, and reusable from:
 
 2. `position_field.py`
    - Searches XY placement of the field mesh over the scan geometry.
-   - For each XY candidate `(ox, oy)`, solves feasible Z using:
-     - `base_local_z = min(field_vertices_scaled[:, 2])`
-     - `z_offset = min(z_scan_hit - base_local_z) - base_z_offset`
-   - This enforces base feasibility on hit points:
-     - `base_world_z - z_scan <= 0`
+   - For each XY candidate `(ox, oy)`, solves feasible Z using local base vertices:
+     - identify vertices at the field base level,
+     - require those base vertices to hit the scan,
+     - `z_offset = min(z_scan_base_hit - base_local_z_hit) - base_z_offset`
+   - This makes `base_z_offset` the minimum base penetration:
+     - every base vertex is at least `base_z_offset` below its scan hit.
    - Then computes viability from phi:
      - `phi = z_field - z_scan - clearance`
    - Ranking inside this stage is local to pose search; a global loop-level score can be optimized outside.

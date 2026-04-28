@@ -68,7 +68,7 @@ def compute_phi_mask(
 
     base_world_z = float(np.min(field_vertices_world[:, 2]))
     base_dz = np.full(n, np.inf, dtype=np.float64)
-    base_dz[has_hit] = base_world_z - z_scan[has_hit]
+    base_dz[has_hit] = field_vertices_world[has_hit, 2] - z_scan[has_hit]
 
     return PoseResult(
         offset_xyz=(float(offset_xyz[0]), float(offset_xyz[1]), float(offset_xyz[2])),

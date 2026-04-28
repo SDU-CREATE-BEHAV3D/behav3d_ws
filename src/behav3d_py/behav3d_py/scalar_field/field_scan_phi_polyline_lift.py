@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Alternative pipeline: select print points on phi contour and lift in +Z.
+"""Alternative pipeline: select print candidates on the phi contour.
 
 Compared to the default geodesic-offset method:
 - no geodesic contour offset is computed,
 - candidates are chosen directly on the existing `phi=iso` contour
   using minimum `heat.norm` values interpolated on the triangle surface,
-- selected points are then lifted by print-height along +Z.
+- selected points are post-processed by `generate_print_points` candidate modes.
 
 Positioning modes:
 - `manual` (default): uses `--field-offset-x/y/z`
@@ -133,7 +133,14 @@ def run(
     base_z_offset: float,
     clearance: float,
     iso_level: float,
+    candidate_mode: str,
     print_height_mm: float,
+    walk_distance_mm: float,
+    walk_step_mm: float,
+    walk_max_steps: int,
+    walk_tangent_sign: float,
+    clamp_to_cone: bool,
+    cone_max_tilt_deg: float,
     print_count: int,
     print_min_spacing_mm: float,
     target_z_dir: tuple[float, float, float],
@@ -244,7 +251,10 @@ def run(
     contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
 
     print_height_m = 1e-3 * float(print_height_mm)
+    walk_distance_m = 1e-3 * float(walk_distance_mm)
+    walk_step_m = 1e-3 * float(walk_step_mm)
     print_min_spacing_m = 1e-3 * float(print_min_spacing_mm)
+    mode = str(candidate_mode).strip().lower()
     selected = generate_print_points(
         polyline_points=contour_points,
         polyline_lines=contour_lines,
@@ -252,19 +262,26 @@ def run(
         field_scalar=heat.norm,
         count=int(print_count),
         min_spacing=float(print_min_spacing_m),
-        candidate_mode="z_lift",
+        candidate_mode=mode,
         lift_height=float(print_height_m),
         field_faces=field_faces,
+        walk_distance=float(walk_distance_m),
+        walk_step=float(walk_step_m),
+        walk_max_steps=int(walk_max_steps),
+        walk_tangent_sign=float(walk_tangent_sign),
+        clamp_to_cone=bool(clamp_to_cone),
+        cone_max_tilt_deg=float(cone_max_tilt_deg),
     )
-    lifted_points = selected.points
+    candidate_points = selected.points
     source_points = selected.source_points
     if source_points is None:
-        source_points = lifted_points.copy()
-        source_points[:, 2] -= float(print_height_m)
+        source_points = candidate_points.copy()
+        if mode == "z_lift":
+            source_points[:, 2] -= float(print_height_m)
 
-    if lifted_points.shape[0] > 0:
-        print_colors = np.tile(np.array([1.0, 0.0, 1.0], dtype=np.float64), (lifted_points.shape[0], 1))
-        print_pcd = make_point_cloud(lifted_points, print_colors)
+    if candidate_points.shape[0] > 0:
+        print_colors = np.tile(np.array([1.0, 0.0, 1.0], dtype=np.float64), (candidate_points.shape[0], 1))
+        print_pcd = make_point_cloud(candidate_points, print_colors)
     else:
         print_pcd = None
 
@@ -294,16 +311,38 @@ def run(
     if np.any(pose.has_hit):
         phi_min = float(np.nanmin(pose.phi[pose.has_hit]))
         phi_max = float(np.nanmax(pose.phi[pose.has_hit]))
-        base_max = float(np.nanmax(pose.base_dz[pose.has_hit]))
+        contact_min = float(np.nanmin(pose.base_dz[pose.has_hit]))
+        contact_max = float(np.nanmax(pose.base_dz[pose.has_hit]))
+        base_local_z = float(np.min(field_vertices_scaled[:, 2]))
+        bbox_diag = float(np.linalg.norm(np.max(field_vertices_scaled, axis=0) - np.min(field_vertices_scaled, axis=0)))
+        base_tol = max(1e-9, 1e-6 * bbox_diag)
+        base_mask = field_vertices_scaled[:, 2] <= (base_local_z + base_tol)
+        base_hit = pose.has_hit & base_mask
+        if np.any(base_hit):
+            base_contact_min = float(np.nanmin(pose.base_dz[base_hit]))
+            base_contact_max = float(np.nanmax(pose.base_dz[base_hit]))
+        else:
+            base_contact_min = float("nan")
+            base_contact_max = float("nan")
     else:
         phi_min = float("nan")
         phi_max = float("nan")
-        base_max = float("nan")
+        contact_min = float("nan")
+        contact_max = float("nan")
+        base_contact_min = float("nan")
+        base_contact_max = float("nan")
     print(
         "phi stats (valid rays): "
         f"count={pose.hit_count}/{pose.phi.shape[0]}, min={phi_min:.6f}, max={phi_max:.6f}"
     )
-    print(f"base constraint (base_z - z_scan <= 0): max={base_max:.6f}")
+    print(
+        "contact dz (field_z - z_scan): "
+        f"min={contact_min:.6f}, max={contact_max:.6f}"
+    )
+    print(
+        "base contact dz (base_field_z - z_scan): "
+        f"min={base_contact_min:.6f}, max={base_contact_max:.6f}"
+    )
     print(f"viable count (phi>{iso_level}): {pose.viable_count}")
     if search_meta:
         print(
@@ -320,32 +359,39 @@ def run(
         )
     print(f"contour segments: {contour_lines.shape[0]}")
     print(
-        "phi-polyline lift config: "
+        "phi-polyline candidate config: "
+        f"mode={mode} "
         f"print_height_mm={float(print_height_mm):.3f} "
         f"print_height_m={print_height_m:.6f} "
+        f"walk_distance_mm={float(walk_distance_mm):.3f} "
+        f"walk_step_mm={float(walk_step_mm):.3f} "
+        f"walk_max_steps={int(walk_max_steps)} "
+        f"walk_tangent_sign={float(walk_tangent_sign):+.1f} "
+        f"clamp_to_cone={bool(clamp_to_cone)} "
+        f"cone_max_tilt_deg={float(cone_max_tilt_deg):.3f} "
         f"count={int(print_count)} "
         f"min_spacing_mm={float(print_min_spacing_mm):.3f} "
         f"min_spacing_m={print_min_spacing_m:.6f}"
     )
     print(
-        "lifted point selection: "
-        f"selected={lifted_points.shape[0]} "
+        "candidate point selection: "
+        f"selected={candidate_points.shape[0]} "
         f"available_polyline_vertices={selected.available_vertices}"
     )
-    if lifted_points.shape[0] > 0:
+    if candidate_points.shape[0] > 0:
         print(
             "selected heat_norm stats: "
             f"min={float(np.min(selected.scalar_values)):.6f} "
             f"max={float(np.max(selected.scalar_values)):.6f}"
         )
-        for i in range(lifted_points.shape[0]):
+        for i in range(candidate_points.shape[0]):
             p0 = source_points[i]
-            p1 = lifted_points[i]
+            p1 = candidate_points[i]
             v = float(selected.scalar_values[i])
             print(
                 f"print_point[{i}]: "
                 f"src=({float(p0[0]):.6f},{float(p0[1]):.6f},{float(p0[2]):.6f}) "
-                f"lifted=({float(p1[0]):.6f},{float(p1[1]):.6f},{float(p1[2]):.6f}) "
+                f"candidate=({float(p1[0]):.6f},{float(p1[1]):.6f},{float(p1[2]):.6f}) "
                 f"heat_norm={v:.6f}"
             )
 
@@ -367,20 +413,20 @@ def run(
         out_print_ply.parent.mkdir(parents=True, exist_ok=True)
         ok = o3d.io.write_point_cloud(str(out_print_ply), print_pcd)
         if not ok:
-            raise RuntimeError(f"Failed to write lifted print points point cloud: {out_print_ply}")
-        print(f"saved lifted print points: {out_print_ply}")
+            raise RuntimeError(f"Failed to write candidate print points point cloud: {out_print_ply}")
+        print(f"saved candidate print points: {out_print_ply}")
 
     if out_targets_yaml is not None:
         write_targets_yaml(
             out_yaml=out_targets_yaml,
-            points_world=lifted_points,
+            points_world=candidate_points,
             z_dir=target_z_dir,
             position_scale=float(target_position_scale),
         )
         print(
             "saved targets yaml: "
             f"{out_targets_yaml} "
-            f"(points={lifted_points.shape[0]}, scale={float(target_position_scale):.2f})"
+            f"(points={candidate_points.shape[0]}, scale={float(target_position_scale):.2f})"
         )
 
     if visualize:
@@ -412,13 +458,13 @@ def run(
         if contour_lines.shape[0] > 0:
             print("phi contour shown in cyan")
         if print_pcd is not None:
-            print("lifted print points shown in magenta")
+            print("candidate print points shown in magenta")
         o3d.visualization.draw_geometries(geometries)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Alternative method: select print points on phi contour and lift in +Z."
+        description="Alternative method: select print candidates on phi contour."
     )
     parser.add_argument("--field-mesh", type=Path, default=DEFAULT_FIELD_MESH)
     parser.add_argument("--scan-mesh", type=Path, default=DEFAULT_SCAN_MESH)
@@ -478,11 +524,24 @@ def main() -> None:
     parser.add_argument("--clearance", type=float, default=0.0003)
     parser.add_argument("--iso-level", type=float, default=0.0)
     parser.add_argument(
+        "--candidate-mode",
+        type=str,
+        choices=("z_lift", "gradient_lift", "gradient_walk"),
+        default="z_lift",
+        help="Post-process mode passed to generate_print_points.",
+    )
+    parser.add_argument(
         "--print-height-mm",
         type=float,
         default=12.0,
-        help="Lift applied in +Z after selecting points on existing phi contour.",
+        help="Distance for z_lift/gradient_lift after selecting points on existing phi contour.",
     )
+    parser.add_argument("--walk-distance-mm", type=float, default=12.0)
+    parser.add_argument("--walk-step-mm", type=float, default=1.0)
+    parser.add_argument("--walk-max-steps", type=int, default=32)
+    parser.add_argument("--walk-tangent-sign", type=float, default=1.0)
+    parser.add_argument("--clamp-to-cone", action="store_true")
+    parser.add_argument("--cone-max-tilt-deg", type=float, default=45.0)
     parser.add_argument("--print-count", type=int, default=7)
     parser.add_argument("--print-min-spacing-mm", type=float, default=16.0)
     parser.add_argument("--target-zx", type=float, default=0.03)
@@ -523,7 +582,14 @@ def main() -> None:
         base_z_offset=args.base_z_offset,
         clearance=args.clearance,
         iso_level=args.iso_level,
+        candidate_mode=args.candidate_mode,
         print_height_mm=args.print_height_mm,
+        walk_distance_mm=args.walk_distance_mm,
+        walk_step_mm=args.walk_step_mm,
+        walk_max_steps=args.walk_max_steps,
+        walk_tangent_sign=args.walk_tangent_sign,
+        clamp_to_cone=args.clamp_to_cone,
+        cone_max_tilt_deg=args.cone_max_tilt_deg,
         print_count=args.print_count,
         print_min_spacing_mm=args.print_min_spacing_mm,
         target_z_dir=(args.target_zx, args.target_zy, args.target_zz),

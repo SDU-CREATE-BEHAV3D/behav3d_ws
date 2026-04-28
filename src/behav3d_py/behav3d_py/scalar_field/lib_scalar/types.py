@@ -43,7 +43,7 @@ class PoseResult:
     has_hit: np.ndarray
     phi: np.ndarray
     viable: np.ndarray
-    base_dz: np.ndarray
+    base_dz: np.ndarray  # local field_z - z_scan on hit points
     base_world_z: float
     hit_count: int
     viable_count: int

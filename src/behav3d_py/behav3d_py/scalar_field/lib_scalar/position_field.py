@@ -3,14 +3,13 @@
 
 This module builds feasible pose candidates and chooses a local best candidate.
 
-Base rule enforced here:
-    base_world_z - z_scan <= 0
-with:
-    base_world_z = min(field_vertices_world[:, 2])
+Base contact rule enforced here:
+    max(base_world_z - z_scan) == -base_z_offset
+on hit base vertices.
 
 In practice:
 - Candidates are sampled in XY.
-- For each candidate, Z is solved from the base rule.
+- For each candidate, Z is solved from the local base vertices.
 - Viability metrics are computed from phi.
 
 The global score of your full loop can still be defined outside this module.
@@ -78,10 +77,12 @@ def position_field(
     - We raycast scan heights `z_scan` at those XY positions.
     - If `require_full_hit=True`, every field point must hit scan geometry.
 
-    Base-feasible Z solve:
-    - `base_local_z = min(field_vertices_scaled[:, 2])`
-    - `z_offset = min(z_scan_hit - base_local_z) - base_z_offset`
-    - This guarantees base non-penetration on hit points.
+    Base-contact Z solve:
+    - find vertices at the local base level,
+    - require all base vertices to hit the scan,
+    - `z_offset = min(z_scan_base_hit - base_local_z_hit) - base_z_offset`
+    - this makes the highest base point sit `base_z_offset` below the scan,
+      so every base vertex is at least that far under the scan.
 
     Local ranking used in this method:
     - `phi = z_field - z_scan - clearance`
@@ -94,6 +95,10 @@ def position_field(
     """
     n = field_vertices_scaled.shape[0]
     base_local_z = float(np.min(field_vertices_scaled[:, 2]))
+    bbox_diag = float(np.linalg.norm(np.max(field_vertices_scaled, axis=0) - np.min(field_vertices_scaled, axis=0)))
+    base_tol = max(1e-9, 1e-6 * bbox_diag)
+    base_mask = field_vertices_scaled[:, 2] <= (base_local_z + base_tol)
+    base_count = int(np.count_nonzero(base_mask))
     best_result: PoseResult | None = None
     best_key = None
     tested = 0
@@ -113,8 +118,14 @@ def position_field(
             if require_full_hit and hit_count < n:
                 continue
 
-            # Highest Z that keeps the base under (or touching) scan on all hit points.
-            z_offset = float(np.min(z_scan[has_hit] - base_local_z) - float(base_z_offset))
+            base_hit = has_hit & base_mask
+            if int(np.count_nonzero(base_hit)) < base_count:
+                continue
+
+            # Lower until the last/highest base contact is base_z_offset under scan.
+            z_offset = float(
+                np.min(z_scan[base_hit] - field_vertices_scaled[base_hit, 2]) - float(base_z_offset)
+            )
             field_world = probe.copy()
             field_world[:, 2] = field_vertices_scaled[:, 2] + z_offset
 
@@ -126,8 +137,8 @@ def position_field(
 
             base_world_z = float(base_local_z + z_offset)
             base_dz = np.full(n, np.inf, dtype=np.float64)
-            base_dz[has_hit] = base_world_z - z_scan[has_hit]
-            base_ok = bool(np.all(base_dz[has_hit] <= 1e-9))
+            base_dz[has_hit] = field_world[has_hit, 2] - z_scan[has_hit]
+            base_ok = bool(np.all(base_dz[base_hit] <= (-float(base_z_offset) + 1e-9)))
             if not base_ok:
                 continue
             accepted += 1
