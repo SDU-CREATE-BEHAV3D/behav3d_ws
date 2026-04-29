@@ -11,7 +11,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 
-from .src.yaml_session import YamlSession
+from .src.print_session import PrintSession
 
 
 class PrintPathSequenceNode(Node):
@@ -31,7 +31,7 @@ class PrintPathSequenceNode(Node):
         self.declare_parameter("axis_radius", 0.003)
         self.declare_parameter("clear_markers_before", True)
 
-        self.session = YamlSession(self)
+        self.session = PrintSession(self)
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
 
@@ -69,26 +69,49 @@ class PrintPathSequenceNode(Node):
             self.session.run_sync(self.session.motion.setSpd(float(print_vel_scale), enqueue=False), timeout_s=timeout_s)
             self.session.run_sync(self.session.motion.setEef("extruder_tcp", enqueue=False), timeout_s=timeout_s)
 
-            res = self.session.run_yaml_print_path(
-                yaml_path=yaml_path,
-                frame_id=frame_id,
-                print_speed=print_speed,
-                approach_z_offset_m=approach_z_offset_m,
-                approach_vel_scale=approach_vel_scale,
-                print_vel_scale=print_vel_scale,
-                timeout_s=timeout_s,
-                publish_markers=publish_markers,
-                axis_length=axis_length,
-                axis_radius=axis_radius,
-                clear_markers_before=clear_markers_before,
-            )
+            segments = self.session.parse_yaml_segments(yaml_path=yaml_path, frame_id=frame_id)
+            if segments:
+                res = self.session.run_print_segments(
+                    segments=segments,
+                    print_speed=print_speed,
+                    approach_z_offset_m=approach_z_offset_m,
+                    approach_vel_scale=approach_vel_scale,
+                    print_vel_scale=print_vel_scale,
+                    accel_scale=accel_scale,
+                    timeout_s=timeout_s,
+                    publish_markers=publish_markers,
+                    axis_length=axis_length,
+                    axis_radius=axis_radius,
+                    clear_markers_before=clear_markers_before,
+                )
+            else:
+                targets = self.session.parse_yaml_targets(yaml_path=yaml_path, frame_id=frame_id)
+                res = self.session.run_print_path_targets(
+                    targets=targets,
+                    print_speed=print_speed,
+                    approach_z_offset_m=approach_z_offset_m,
+                    approach_vel_scale=approach_vel_scale,
+                    print_vel_scale=print_vel_scale,
+                    accel_scale=accel_scale,
+                    timeout_s=timeout_s,
+                    publish_markers=publish_markers,
+                    axis_length=axis_length,
+                    axis_radius=axis_radius,
+                    clear_markers_before=clear_markers_before,
+                )
             if not res.get("ok", False):
                 log.error(
                     f"[print_path_sequence] Print path failed at stage={res.get('stage')}: "
                     f"{res.get('error', 'unknown')}"
                 )
             else:
-                log.info(f"[print_path_sequence] Print path completed over {res.get('targets')} targets.")
+                if segments:
+                    log.info(
+                        f"[print_path_sequence] Print segments completed: "
+                        f"{res.get('printed', 0)}/{res.get('segments', 0)} segments."
+                    )
+                else:
+                    log.info(f"[print_path_sequence] Print path completed over {res.get('targets')} targets.")
 
             self.session.run_sync(self.session.motion.home(enqueue=False), timeout_s=timeout_s)
         except Exception as exc:

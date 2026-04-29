@@ -69,6 +69,30 @@ def _plane_string(point: np.ndarray, z_dir: np.ndarray, position_scale: float) -
     return f'O({ox:.2f},{oy:.2f},{oz:.2f}) Z({float(z[0]):.2f},{float(z[1]):.2f},{float(z[2]):.2f})'
 
 
+def _yaw_rotation(base_to_world_yaw_deg: float) -> np.ndarray:
+    yaw = np.deg2rad(float(base_to_world_yaw_deg))
+    c = float(np.cos(yaw))
+    s = float(np.sin(yaw))
+    return np.array(
+        [
+            [c, -s, 0.0],
+            [s, c, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _apply_yaw(points: np.ndarray, z_dirs: np.ndarray, base_to_world_yaw_deg: float) -> tuple[np.ndarray, np.ndarray]:
+    points_in = _validate_points(points, "points")
+    z_dirs_in = _normalize_dirs(z_dirs)
+    if abs(float(base_to_world_yaw_deg)) <= 1e-12:
+        return points_in.copy(), z_dirs_in
+
+    rot = _yaw_rotation(float(base_to_world_yaw_deg))
+    return points_in @ rot.T, _normalize_dirs(z_dirs_in @ rot.T)
+
+
 def orient_points_with_tangent(
     points: np.ndarray,
     field_vertices_world: np.ndarray,
@@ -151,10 +175,10 @@ def write_point_targets_yaml(
     points_world: np.ndarray,
     z_dirs_world: np.ndarray,
     position_scale: float,
+    base_to_world_yaw_deg: float = 0.0,
 ) -> None:
     """Write flat target YAML with one plane per point."""
-    points = _validate_points(points_world, "points_world")
-    z_dirs = _normalize_dirs(z_dirs_world)
+    points, z_dirs = _apply_yaw(points_world, z_dirs_world, float(base_to_world_yaw_deg))
     if points.shape[0] != z_dirs.shape[0]:
         raise ValueError(f"points/z_dirs size mismatch: {points.shape[0]} vs {z_dirs.shape[0]}")
 
@@ -176,6 +200,7 @@ def write_fixed_z_targets_yaml(
     points_world: np.ndarray,
     z_dir: tuple[float, float, float],
     position_scale: float,
+    base_to_world_yaw_deg: float = 0.0,
 ) -> None:
     """Write flat target YAML with a shared fixed Z direction."""
     points = _validate_points(points_world, "points_world")
@@ -183,13 +208,20 @@ def write_fixed_z_targets_yaml(
         np.asarray([[float(z_dir[0]), float(z_dir[1]), float(z_dir[2])]], dtype=np.float64),
         (points.shape[0], 1),
     )
-    write_point_targets_yaml(out_yaml, points, z_dirs, position_scale)
+    write_point_targets_yaml(
+        out_yaml,
+        points,
+        z_dirs,
+        position_scale,
+        base_to_world_yaw_deg=float(base_to_world_yaw_deg),
+    )
 
 
 def write_line_targets_yaml(
     out_yaml: Path,
     targets: OrientedLineTargets,
     position_scale: float,
+    base_to_world_yaw_deg: float = 0.0,
 ) -> None:
     """Write paired line targets as nested segment start/end planes."""
     out_yaml.parent.mkdir(parents=True, exist_ok=True)
@@ -197,16 +229,27 @@ def write_line_targets_yaml(
         out_yaml.write_text("segments: []\n", encoding="utf-8")
         return
 
+    start_points, start_z_dirs = _apply_yaw(
+        targets.start_points,
+        targets.start_z_dirs,
+        float(base_to_world_yaw_deg),
+    )
+    end_points, end_z_dirs = _apply_yaw(
+        targets.end_points,
+        targets.end_z_dirs,
+        float(base_to_world_yaw_deg),
+    )
+
     lines: list[str] = ["segments:"]
     for i in range(targets.count):
         start_plane = _plane_string(
-            targets.start_points[i],
-            targets.start_z_dirs[i],
+            start_points[i],
+            start_z_dirs[i],
             float(position_scale),
         )
         end_plane = _plane_string(
-            targets.end_points[i],
-            targets.end_z_dirs[i],
+            end_points[i],
+            end_z_dirs[i],
             float(position_scale),
         )
         lines.append(f"  - index: {i}")

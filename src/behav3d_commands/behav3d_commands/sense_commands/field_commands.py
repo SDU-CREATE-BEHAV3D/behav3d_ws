@@ -74,6 +74,10 @@ class FieldCommands:
         beads_per_step: int = 7,
         bead_separation_mm: float = 16.0,
         bead_height_mm: float = 12.0,
+        walk_distance_mm: float = 12.0,
+        walk_step_mm: float = 1.0,
+        walk_max_steps: int = 32,
+        walk_start_fraction: float = 0.25,
         orient_with_tangent: bool = False,
         tangent_sign: float = 1.0,
         clamp_to_cone: bool = False,
@@ -98,6 +102,10 @@ class FieldCommands:
                 "beads_per_step": int(beads_per_step),
                 "bead_separation_mm": float(bead_separation_mm),
                 "bead_height_mm": float(bead_height_mm),
+                "walk_distance_mm": float(walk_distance_mm),
+                "walk_step_mm": float(walk_step_mm),
+                "walk_max_steps": int(walk_max_steps),
+                "walk_start_fraction": float(walk_start_fraction),
                 "orient_with_tangent": bool(orient_with_tangent),
                 "tangent_sign": float(tangent_sign),
                 "clamp_to_cone": bool(clamp_to_cone),
@@ -194,6 +202,14 @@ class FieldCommands:
         req.beads_per_step = int(payload.get("beads_per_step", 7))
         req.bead_separation_mm = float(payload.get("bead_separation_mm", 16.0))
         req.bead_height_mm = float(payload.get("bead_height_mm", 12.0))
+        if hasattr(req, "walk_distance_mm"):
+            req.walk_distance_mm = float(payload.get("walk_distance_mm", 12.0))
+        if hasattr(req, "walk_step_mm"):
+            req.walk_step_mm = float(payload.get("walk_step_mm", 1.0))
+        if hasattr(req, "walk_max_steps"):
+            req.walk_max_steps = int(payload.get("walk_max_steps", 32))
+        if hasattr(req, "walk_start_fraction"):
+            req.walk_start_fraction = float(payload.get("walk_start_fraction", 0.25))
         req.orient_with_tangent = bool(payload.get("orient_with_tangent", False))
         req.tangent_sign = float(payload.get("tangent_sign", 1.0))
         req.clamp_to_cone = bool(payload.get("clamp_to_cone", False))
@@ -209,7 +225,12 @@ class FieldCommands:
             f"field_state_path='{req.field_state_path}' scan_mesh_paths={len(req.scan_mesh_paths)} "
             f"output_dir='{req.output_dir}' candidate_mode='{req.candidate_mode}' "
             f"beads_per_step={req.beads_per_step} bead_separation_mm={req.bead_separation_mm:.3f} "
-            f"bead_height_mm={req.bead_height_mm:.3f} orient_with_tangent={req.orient_with_tangent} "
+            f"bead_height_mm={req.bead_height_mm:.3f} "
+            f"walk_distance_mm={float(getattr(req, 'walk_distance_mm', 0.0)):.3f} "
+            f"walk_step_mm={float(getattr(req, 'walk_step_mm', 0.0)):.3f} "
+            f"walk_max_steps={int(getattr(req, 'walk_max_steps', 0))} "
+            f"walk_start_fraction={float(getattr(req, 'walk_start_fraction', 0.0)):.3f} "
+            f"orient_with_tangent={req.orient_with_tangent} "
             f"clamp_to_cone={req.clamp_to_cone}"
         )
 

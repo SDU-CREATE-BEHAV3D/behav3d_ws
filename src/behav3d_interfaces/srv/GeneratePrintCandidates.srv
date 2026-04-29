@@ -8,6 +8,10 @@ string candidate_mode
 int32 beads_per_step
 float64 bead_separation_mm
 float64 bead_height_mm
+float64 walk_distance_mm
+float64 walk_step_mm
+int32 walk_max_steps
+float64 walk_start_fraction
 bool orient_with_tangent
 float64 tangent_sign
 bool clamp_to_cone

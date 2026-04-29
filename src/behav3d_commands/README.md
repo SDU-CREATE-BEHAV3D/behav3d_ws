@@ -96,10 +96,14 @@ cand_res = session.run_sync(
         field_state_path=init_res["metrics"]["field_state_path"],
         scan_mesh_paths=["@session/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl"],
         output_dir="@session/field_loop/cycle_0000/candidates",
-        candidate_mode="gradient_lift",            # z_lift | gradient_lift
+        candidate_mode="gradient_lift",            # z_lift | gradient_lift | gradient_walk
         beads_per_step=7,
         bead_separation_mm=16.0,
         bead_height_mm=12.0,
+        walk_distance_mm=12.0,                     # gradient_walk only
+        walk_step_mm=1.0,
+        walk_max_steps=32,
+        walk_start_fraction=0.25,
         orient_with_tangent=True,                  # tangent-based frame orientation
         tangent_sign=1.0,                          # +1 or -1 gradient direction
         clamp_to_cone=True,                        # optional orientation clamp around +Z
@@ -123,10 +127,12 @@ Returned metrics include:
 Notes:
 - If `session_path` is provided, `use_latest` is forced to `False`.
 - Candidate generation mode is selected in the service request:
-  `candidate_mode="z_lift"` or `candidate_mode="gradient_lift"`.
-- Python-side scalar experiments may support additional modes such as
-  `gradient_walk`, but those are not exposed through this ROS command surface
-  until `fields_node` and the service contract are updated.
+  `candidate_mode="z_lift"`, `candidate_mode="gradient_lift"`, or
+  `candidate_mode="gradient_walk"`.
+- `gradient_walk` uses the walk parameters above and writes nested
+  `segments: [{start, end}]` YAML for line printing. The flat `targets:` YAML
+  shape is still used by `z_lift` and `gradient_lift`. Segment endpoints are
+  tangent-oriented even if `orient_with_tangent` is left false.
 - YAML target frame reorientation (`base_link -> world`) is handled in
   `fields_node` during target generation (`base_to_world_yaw_deg`).
 

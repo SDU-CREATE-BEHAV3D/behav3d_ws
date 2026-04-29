@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple
 
@@ -13,6 +14,13 @@ try:
     import yaml
 except Exception:  # pragma: no cover - handled explicitly at runtime
     yaml = None
+
+
+@dataclass(frozen=True)
+class TargetSegment:
+    index: int
+    start: PoseStamped
+    end: PoseStamped
 
 
 class YamlSession(behav3d_commands.Session):
@@ -308,8 +316,15 @@ class YamlSession(behav3d_commands.Session):
             raise RuntimeError("PyYAML is not available. Install python3-yaml.")
 
         path = self._resolve_yaml_path(yaml_path)
-        with path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+        data = self._load_yaml_data(path)
+
+        if isinstance(data, dict) and isinstance(data.get("segments"), list):
+            segments = self._parse_segments_data(data, frame_id=str(frame_id or "world"))
+            out: List[PoseStamped] = []
+            for seg in segments:
+                out.append(seg.start)
+                out.append(seg.end)
+            return out
 
         items = self._extract_target_items(data)
 
@@ -325,6 +340,84 @@ class YamlSession(behav3d_commands.Session):
 
         ordered.sort(key=lambda row: (row[0], row[1]))
         return [ps for _, _, ps in ordered]
+
+    def parse_yaml_segments(
+        self,
+        *,
+        yaml_path: str,
+        frame_id: str = "world",
+    ) -> List[TargetSegment]:
+        """
+        Parse `segments` YAML into ordered start/end PoseStamped pairs.
+
+        Supported segment item shapes:
+        - {index: 0, start: {plane: "..."}, end: {plane: "..."}}
+        - {index: 0, start_index: 0, end_index: 1} with a sibling `targets` list
+        """
+        if yaml is None:
+            raise RuntimeError("PyYAML is not available. Install python3-yaml.")
+
+        path = self._resolve_yaml_path(yaml_path)
+        data = self._load_yaml_data(path)
+        if not isinstance(data, dict) or not isinstance(data.get("segments"), list):
+            return []
+        return self._parse_segments_data(data, frame_id=str(frame_id or "world"))
+
+    @staticmethod
+    def _load_yaml_data(path: Path) -> Any:
+        with path.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
+
+    @staticmethod
+    def _parse_segments_data(data: dict, frame_id: str) -> List[TargetSegment]:
+        target_map: dict[int, PoseStamped] = {}
+        if isinstance(data.get("targets"), list):
+            for pos, item in enumerate(data["targets"]):
+                idx, ps = YamlSession._parse_target_item(
+                    item=item,
+                    fallback_index=pos,
+                    frame_id=frame_id,
+                )
+                if idx is not None:
+                    target_map[int(idx)] = ps
+
+        ordered: List[Tuple[int, int, TargetSegment]] = []
+        for pos, item in enumerate(data.get("segments", [])):
+            if not isinstance(item, dict):
+                raise ValueError(f"Segment entry must be a map. Got: {item}")
+
+            idx_raw = item.get("index", pos)
+            idx = int(idx_raw) if idx_raw is not None else pos
+            if "start" in item and "end" in item:
+                _start_idx, start = YamlSession._parse_target_item(
+                    item=item["start"],
+                    fallback_index=2 * pos,
+                    frame_id=frame_id,
+                )
+                _end_idx, end = YamlSession._parse_target_item(
+                    item=item["end"],
+                    fallback_index=2 * pos + 1,
+                    frame_id=frame_id,
+                )
+            elif "start_index" in item and "end_index" in item:
+                start_key = int(item["start_index"])
+                end_key = int(item["end_index"])
+                if start_key not in target_map or end_key not in target_map:
+                    raise ValueError(
+                        "Segment start_index/end_index references require matching entries in 'targets'. "
+                        f"Missing start={start_key} or end={end_key}."
+                    )
+                start = target_map[start_key]
+                end = target_map[end_key]
+            else:
+                raise ValueError(
+                    "Segment entry missing supported fields. Use start/end targets or start_index/end_index."
+                )
+
+            ordered.append((idx, pos, TargetSegment(index=idx, start=start, end=end)))
+
+        ordered.sort(key=lambda row: (row[0], row[1]))
+        return [seg for _, _, seg in ordered]
 
     @staticmethod
     def _resolve_yaml_path(yaml_path: str) -> Path:

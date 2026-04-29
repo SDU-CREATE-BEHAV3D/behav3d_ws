@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Run with:
-ros2 run behav3d_orchestrator print_field_oriented_sequence
+ros2 run behav3d_orchestrator print_field_oriented_sequence_v2
 
 Runtime YAML (hot-reload each cycle):
-ros2 run behav3d_orchestrator print_field_oriented_sequence --ros-args \
+ros2 run behav3d_orchestrator print_field_oriented_sequence_v2 --ros-args \
   -p runtime_config_path:=/home/lab/behav3d_ws/src/behav3d_orchestrator/config/print_field_oriented_sequence_config.yaml
 """
 
@@ -27,9 +27,18 @@ except ImportError:  # pragma: no cover
     yaml = None
 
 
-class PrintFieldOrientedSequenceNode(Node):
-    def __init__(self, *, node_name: str = "print_field_oriented_sequence"):
-        super().__init__(str(node_name or "print_field_oriented_sequence"))
+class PrintFieldOrientedSequenceV2Node(Node):
+    """
+    Field-oriented print loop v2.
+
+    v2 keeps the scan/reconstruction/field loop flow in this sequence, but
+    delegates print execution to PrintSession:
+    - flat `targets:` YAML prints as dots,
+    - nested `segments:` YAML prints as line paths.
+    """
+
+    def __init__(self):
+        super().__init__("print_field_oriented_sequence_v2")
 
         # Runtime config control
         self.declare_parameter("runtime_config_path", "")
@@ -44,7 +53,9 @@ class PrintFieldOrientedSequenceNode(Node):
     def _run(self):
         log = self.get_logger()
 
-        runtime_config_path = str(self.get_parameter("runtime_config_path").value).strip()
+        runtime_config_path = self._resolve_runtime_config_path(
+            str(self.get_parameter("runtime_config_path").value).strip()
+        )
         cfg = self._load_runtime_config(runtime_config_path)
 
         home_before_scan = self._cfg_bool(cfg, "home_before_scan")
@@ -146,6 +157,13 @@ class PrintFieldOrientedSequenceNode(Node):
         oriented_clamp_to_cone = self._cfg_bool(cfg, "oriented_clamp_to_cone")
         oriented_cone_max_tilt_deg = self._cfg_float(cfg, "oriented_cone_max_tilt_deg")
         oriented_base_to_world_yaw_deg = self._cfg_float(cfg, "oriented_base_to_world_yaw_deg")
+        segment_print_speed = self._cfg_int(cfg, "segment_print_speed")
+        segment_approach_z_offset_m = self._cfg_float(cfg, "segment_approach_z_offset_m")
+        segment_travel_z_offset_m = self._cfg_float(cfg, "segment_travel_z_offset_m")
+        segment_approach_vel_scale = self._cfg_float(cfg, "segment_approach_vel_scale")
+        segment_travel_vel_scale = self._cfg_float(cfg, "segment_travel_vel_scale")
+        segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
+        segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
         max_cycles = self._cfg_int(cfg, "max_cycles")
         prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
 
@@ -157,6 +175,7 @@ class PrintFieldOrientedSequenceNode(Node):
             f"run_generate_candidates={run_generate_candidates}, max_cycles={max_cycles}, "
             f"candidate_mode={candidate_mode}, "
             f"walk_distance_mm={candidate_walk_distance_mm:.1f}, "
+            f"segment_print_speed={segment_print_speed}, segment_print_v={segment_print_vel_scale:.3f}, "
             f"oriented_targets_enable={oriented_targets_enable}, "
             f"clamp_to_cone={oriented_clamp_to_cone}, cone_max_tilt_deg={oriented_cone_max_tilt_deg:.1f}, "
             f"skip_bootstrap_scan_and_init={skip_bootstrap_scan_and_init}, "
@@ -540,14 +559,13 @@ class PrintFieldOrientedSequenceNode(Node):
             # -----------------------------------------------------------------
             print_cycle_index = 0
             while rclpy.ok():
-                if runtime_config_path:
-                    try:
-                        cfg = self._load_runtime_config(runtime_config_path)
-                    except Exception as exc:
-                        log.warn(
-                            "[print_field_oriented] Runtime config reload failed; keeping previous config. "
-                            f"error='{exc}'"
-                        )
+                try:
+                    cfg = self._load_runtime_config(runtime_config_path)
+                except Exception as exc:
+                    log.warn(
+                        "[print_field_oriented] Runtime config reload failed; keeping previous config. "
+                        f"path='{runtime_config_path}' error='{exc}'"
+                    )
 
                 max_cycles = self._cfg_int(cfg, "max_cycles")
                 prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
@@ -581,6 +599,13 @@ class PrintFieldOrientedSequenceNode(Node):
                 oriented_clamp_to_cone = self._cfg_bool(cfg, "oriented_clamp_to_cone")
                 oriented_cone_max_tilt_deg = self._cfg_float(cfg, "oriented_cone_max_tilt_deg")
                 oriented_base_to_world_yaw_deg = self._cfg_float(cfg, "oriented_base_to_world_yaw_deg")
+                segment_print_speed = self._cfg_int(cfg, "segment_print_speed")
+                segment_approach_z_offset_m = self._cfg_float(cfg, "segment_approach_z_offset_m")
+                segment_travel_z_offset_m = self._cfg_float(cfg, "segment_travel_z_offset_m")
+                segment_approach_vel_scale = self._cfg_float(cfg, "segment_approach_vel_scale")
+                segment_travel_vel_scale = self._cfg_float(cfg, "segment_travel_vel_scale")
+                segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
+                segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
                 layer_scan_width = self._cfg_float(cfg, "layer_scan_width")
                 layer_scan_height = self._cfg_float(cfg, "layer_scan_height")
                 layer_scan_nx = self._cfg_int(cfg, "layer_scan_nx")
@@ -754,6 +779,13 @@ class PrintFieldOrientedSequenceNode(Node):
                 if preview_segments:
                     print_res = self.print_session.run_print_segments(
                         segments=preview_segments,
+                        print_speed=segment_print_speed,
+                        approach_z_offset_m=segment_approach_z_offset_m,
+                        travel_z_offset_m=segment_travel_z_offset_m,
+                        approach_vel_scale=segment_approach_vel_scale,
+                        travel_vel_scale=segment_travel_vel_scale,
+                        print_vel_scale=segment_print_vel_scale,
+                        accel_scale=segment_accel_scale,
                         timeout_s=timeout_s,
                     )
                 else:
@@ -926,18 +958,10 @@ class PrintFieldOrientedSequenceNode(Node):
             rclpy.shutdown()
 
     def _load_runtime_config(self, config_path: str) -> Dict[str, Any]:
-        path_text = str(config_path).strip()
-        if not path_text:
-            raise ValueError(
-                "runtime_config_path is empty. Provide a YAML config path via "
-                "ROS parameter runtime_config_path."
-            )
         if yaml is None:
             raise RuntimeError("PyYAML is not available; cannot load runtime YAML config.")
 
-        path = Path(path_text).expanduser()
-        if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
+        path = Path(str(config_path).strip()).expanduser()
         if not path.is_file():
             raise FileNotFoundError(f"Runtime config file not found: {path}")
 
@@ -953,6 +977,19 @@ class PrintFieldOrientedSequenceNode(Node):
                 "(expected ros__parameters block or plain key/value map)."
             )
         return dict(params_map)
+
+    def _resolve_runtime_config_path(self, config_path: str) -> str:
+        path_text = str(config_path).strip()
+        if path_text:
+            path = Path(path_text).expanduser()
+            if not path.is_absolute():
+                path = (Path.cwd() / path).resolve()
+            return str(path)
+        return self._default_runtime_config_path()
+
+    @staticmethod
+    def _default_runtime_config_path() -> str:
+        return "/home/lab/behav3d_ws/src/behav3d_orchestrator/config/print_field_oriented_sequence_config.yaml"
 
     def _extract_runtime_param_map(self, raw: Any) -> Dict[str, Any]:
         if not isinstance(raw, dict):
@@ -1079,7 +1116,7 @@ class PrintFieldOrientedSequenceNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = PrintFieldOrientedSequenceNode()
+    node = PrintFieldOrientedSequenceV2Node()
     try:
         rclpy.spin(node)
     finally:

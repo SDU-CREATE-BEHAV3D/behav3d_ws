@@ -4,7 +4,7 @@ Reusable library for the scalar-field pipeline used in `behav3d_py/scalar_field`
 
 The objective is to keep each stage isolated, testable, and reusable from:
 - standalone scripts,
-- future ROS nodes/services,
+- ROS nodes/services,
 - future planning and print-path modules.
 
 ## Pipeline Stages
@@ -202,6 +202,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
 
 - Standalone Python scripts and `lib_scalar` support `gradient_walk`, line
   segment targets, and target-orientation visualization.
-- ROS `fields_node`/`behav3d_commands` currently expose only `z_lift` and
-  `gradient_lift`; `gradient_walk` is intentionally still Python-side until
-  the ROS contract is updated.
+- ROS `fields_node`/`behav3d_commands` expose `z_lift`, `gradient_lift`, and
+  `gradient_walk` through `GeneratePrintCandidates`.
+- `gradient_walk` emits nested `segments:` YAML with `start`/`end` planes.
+  The orchestrator `YamlSession` can parse both this segment schema and the
+  older flat `targets:` schema.
