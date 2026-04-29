@@ -14,6 +14,7 @@ import heapq
 
 import numpy as np
 
+from .agent_walk import AgentWalkConfig, run_agent_walk
 from .geometry import (
     project_points_to_surface,
     sample_tangent_axes_on_surface_from_scalar,
@@ -218,58 +219,6 @@ def _dijkstra_with_limit(
     return dist
 
 
-def _gradient_walk_points(
-    source_points: np.ndarray,
-    field_vertices_world: np.ndarray,
-    field_faces: np.ndarray,
-    field_scalar: np.ndarray,
-    *,
-    target_distance: float,
-    step_size: float,
-    max_steps: int,
-    tangent_sign: float,
-) -> np.ndarray:
-    if source_points.shape[0] == 0:
-        return np.zeros((0, 3), dtype=np.float64)
-
-    target = max(0.0, float(target_distance))
-    if target <= 0.0:
-        return project_points_to_surface(source_points, field_vertices_world, field_faces)
-
-    step = max(1e-6, float(step_size))
-    n_steps = max(1, int(max_steps))
-    eps = 1e-9
-
-    src = project_points_to_surface(source_points, field_vertices_world, field_faces)
-    cur = src.copy()
-    reached = np.zeros((src.shape[0],), dtype=bool)
-
-    for _ in range(n_steps):
-        disp_now = np.linalg.norm(cur - src, axis=1)
-        remaining = target - disp_now
-        reached = reached | (remaining <= eps)
-        active = np.flatnonzero(~reached)
-        if active.size == 0:
-            break
-
-        t_dir, _b_dir, _n_dir = sample_tangent_axes_on_surface_from_scalar(
-            query_points=cur[active],
-            mesh_vertices=field_vertices_world,
-            mesh_faces=field_faces,
-            vertex_scalar=field_scalar,
-            tangent_sign=float(tangent_sign),
-        )
-        local_step = np.minimum(step, np.maximum(remaining[active], 0.0))
-        trial = cur[active] + local_step[:, None] * t_dir
-        trial_proj = project_points_to_surface(trial, field_vertices_world, field_faces)
-        cur[active] = trial_proj
-
-        disp = np.linalg.norm(cur - src, axis=1)
-        reached = disp >= (target - eps)
-
-    return cur
-
-
 def _gradient_lift_points(
     source_points: np.ndarray,
     field_vertices_world: np.ndarray,
@@ -299,63 +248,6 @@ def _gradient_lift_points(
     return source_points + h * t_dir
 
 
-def _clamp_direction_to_cone(
-    direction: np.ndarray,
-    *,
-    z_axis: np.ndarray,
-    cos_max: float,
-    sin_max: float,
-) -> np.ndarray:
-    n = float(np.linalg.norm(direction))
-    if n <= 1e-12:
-        return z_axis.copy()
-    u = direction / n
-    c = float(np.dot(u, z_axis))
-    if c >= cos_max:
-        return u
-    p = u - c * z_axis
-    pn = float(np.linalg.norm(p))
-    if pn <= 1e-12:
-        p = np.array([1.0, 0.0, 0.0], dtype=np.float64)
-    else:
-        p = p / pn
-    return cos_max * z_axis + sin_max * p
-
-
-def _clamp_points_to_cone_final(
-    source_points: np.ndarray,
-    walked_points: np.ndarray,
-    *,
-    field_vertices_world: np.ndarray,
-    field_faces: np.ndarray,
-    cone_max_tilt_deg: float,
-) -> np.ndarray:
-    if source_points.shape[0] == 0:
-        return walked_points.copy()
-
-    z_axis = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-    max_tilt_rad = np.deg2rad(float(np.clip(cone_max_tilt_deg, 0.0, 179.9)))
-    cos_max = float(np.cos(max_tilt_rad))
-    sin_max = float(np.sin(max_tilt_rad))
-
-    disp = walked_points - source_points
-    disp_norm = np.linalg.norm(disp, axis=1)
-    clamped_targets = walked_points.copy()
-
-    for i in range(source_points.shape[0]):
-        if float(disp_norm[i]) <= 1e-12:
-            continue
-        u_clamped = _clamp_direction_to_cone(
-            disp[i],
-            z_axis=z_axis,
-            cos_max=cos_max,
-            sin_max=sin_max,
-        )
-        clamped_targets[i] = source_points[i] + float(disp_norm[i]) * u_clamped
-
-    return project_points_to_surface(clamped_targets, field_vertices_world, field_faces)
-
-
 def generate_print_points(
     polyline_points: np.ndarray,
     polyline_lines: np.ndarray,
@@ -374,8 +266,10 @@ def generate_print_points(
     walk_step: float = 1e-3,
     walk_max_steps: int = 32,
     walk_tangent_sign: float = 1.0,
+    walk_start_fraction: float = 0.25,
     clamp_to_cone: bool = False,
     cone_max_tilt_deg: float = 45.0,
+    agent_phi_scalar: np.ndarray | None = None,
 ) -> PrintPointSet:
     """Select print points and optionally post-process candidate locations.
 
@@ -390,6 +284,10 @@ def generate_print_points(
     - `gradient_walk`: walk on field surface along scalar tangent direction
       until euclidean displacement from source reaches `walk_distance`
       (or `walk_max_steps` is reached).
+      The simple agent walk also keeps source/final spacing at 8 mm and can
+      reject final points with `phi < 4 mm` when `agent_phi_scalar` is passed.
+      It also exposes a projected segment start at `walk_start_fraction`
+      along `source -> output`.
       Optional clamp:
       - if `clamp_to_cone=True`, the final displacement `source -> output`
         is clamped to a cone around world `+Z` (semi-angle `cone_max_tilt_deg`)
@@ -423,6 +321,7 @@ def generate_print_points(
             augmented_vertices=0,
             source_points=np.zeros((0, 3), dtype=np.float64),
             surface_points=np.zeros((0, 3), dtype=np.float64),
+            segment_start_points=np.zeros((0, 3), dtype=np.float64),
         )
 
     if point_valid_mask is not None:
@@ -484,6 +383,7 @@ def generate_print_points(
     source_points = unique_points[selected_arr].copy()
     out_points = source_points.copy()
     surface_points = source_points.copy()
+    segment_start_points = source_points.copy()
     if mode == "z_lift":
         h = float(lift_height)
         if h < 0.0:
@@ -504,24 +404,26 @@ def generate_print_points(
     elif mode == "gradient_walk":
         if field_faces is None:
             raise ValueError("field_faces is required for candidate_mode='gradient_walk'")
-        out_points = _gradient_walk_points(
+        agent_result = run_agent_walk(
             source_points=source_points,
             field_vertices_world=field_vertices_world,
             field_faces=np.asarray(field_faces, dtype=np.int32),
             field_scalar=field_scalar,
-            target_distance=float(walk_distance),
-            step_size=float(walk_step),
-            max_steps=int(walk_max_steps),
-            tangent_sign=float(walk_tangent_sign),
-        )
-        if bool(clamp_to_cone):
-            out_points = _clamp_points_to_cone_final(
-                source_points=source_points,
-                walked_points=out_points,
-                field_vertices_world=field_vertices_world,
-                field_faces=np.asarray(field_faces, dtype=np.int32),
+            config=AgentWalkConfig(
+                target_distance=float(walk_distance),
+                step_size=float(walk_step),
+                max_steps=int(walk_max_steps),
+                tangent_sign=float(walk_tangent_sign),
+                segment_start_fraction=float(walk_start_fraction),
+                clamp_to_cone=bool(clamp_to_cone),
                 cone_max_tilt_deg=float(cone_max_tilt_deg),
-            )
+            ),
+            phi_scalar=agent_phi_scalar,
+        )
+        selected_arr = selected_arr[agent_result.accepted_indices]
+        source_points = agent_result.source_points
+        segment_start_points = agent_result.segment_start_points
+        out_points = agent_result.points
         surface_points = out_points.copy()
 
     return PrintPointSet(
@@ -535,4 +437,5 @@ def generate_print_points(
         augmented_vertices=int(added_vertices),
         source_points=source_points,
         surface_points=surface_points,
+        segment_start_points=segment_start_points,
     )

@@ -52,7 +52,19 @@ from lib_scalar.extract_phi_contour import extract_phi_contour
 from lib_scalar.generate_print_points import generate_print_points
 from lib_scalar.geometry import load_triangle_mesh_arrays, load_triangle_mesh_legacy
 from lib_scalar.position_field import default_xy_search_bounds, make_axis_samples, position_field
-from lib_scalar.viz import compute_scene_bounds, make_line_set, make_point_cloud, yellow_to_red_colors
+from lib_scalar.print_targets import (
+    build_oriented_line_targets,
+    write_fixed_z_targets_yaml,
+    write_line_targets_yaml,
+)
+from lib_scalar.viz import (
+    compute_scene_bounds,
+    make_line_set,
+    make_point_cloud,
+    make_segment_line_set,
+    make_target_orientation_sticks,
+    yellow_to_red_colors,
+)
 
 
 DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
@@ -79,30 +91,6 @@ def subdivide_field_mesh_loop(
     v_sub = np.asarray(mesh_sub.vertices, dtype=np.float64)
     f_sub = np.asarray(mesh_sub.triangles, dtype=np.int32)
     return v_sub, f_sub
-
-
-def write_targets_yaml(
-    out_yaml: Path,
-    points_world: np.ndarray,
-    z_dir: tuple[float, float, float],
-    position_scale: float,
-) -> None:
-    """Write targets YAML with legacy plane-string format."""
-    out_yaml.parent.mkdir(parents=True, exist_ok=True)
-    zx, zy, zz = float(z_dir[0]), float(z_dir[1]), float(z_dir[2])
-    scale = float(position_scale)
-
-    lines: list[str] = ["targets:"]
-    for i in range(points_world.shape[0]):
-        p = points_world[i]
-        ox = scale * float(p[0])
-        oy = scale * float(p[1])
-        oz = scale * float(p[2])
-        plane = f'O({ox:.2f},{oy:.2f},{oz:.2f}) Z({zx:.2f},{zy:.2f},{zz:.2f})'
-        lines.append(f"  - index: {i}")
-        lines.append(f'    plane: "{plane}"')
-
-    out_yaml.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def run(
@@ -139,6 +127,7 @@ def run(
     walk_step_mm: float,
     walk_max_steps: int,
     walk_tangent_sign: float,
+    walk_start_fraction: float,
     clamp_to_cone: bool,
     cone_max_tilt_deg: float,
     print_count: int,
@@ -269,8 +258,10 @@ def run(
         walk_step=float(walk_step_m),
         walk_max_steps=int(walk_max_steps),
         walk_tangent_sign=float(walk_tangent_sign),
+        walk_start_fraction=float(walk_start_fraction),
         clamp_to_cone=bool(clamp_to_cone),
         cone_max_tilt_deg=float(cone_max_tilt_deg),
+        agent_phi_scalar=pose.phi,
     )
     candidate_points = selected.points
     source_points = selected.source_points
@@ -278,12 +269,37 @@ def run(
         source_points = candidate_points.copy()
         if mode == "z_lift":
             source_points[:, 2] -= float(print_height_m)
+    segment_start_points = selected.segment_start_points
+    if segment_start_points is None or segment_start_points.shape != candidate_points.shape:
+        segment_start_points = source_points.copy()
 
     if candidate_points.shape[0] > 0:
         print_colors = np.tile(np.array([1.0, 0.0, 1.0], dtype=np.float64), (candidate_points.shape[0], 1))
         print_pcd = make_point_cloud(candidate_points, print_colors)
     else:
         print_pcd = None
+    if candidate_points.shape[0] > 0 and segment_start_points.shape == candidate_points.shape:
+        segment_ls = make_segment_line_set(segment_start_points, candidate_points, color=(1.0, 0.55, 0.0))
+        segment_start_colors = np.tile(
+            np.array([1.0, 0.55, 0.0], dtype=np.float64),
+            (segment_start_points.shape[0], 1),
+        )
+        segment_start_pcd = make_point_cloud(segment_start_points, segment_start_colors)
+    else:
+        segment_ls = None
+        segment_start_pcd = None
+    line_targets = None
+    if mode == "gradient_walk":
+        line_targets = build_oriented_line_targets(
+            start_points=segment_start_points,
+            end_points=candidate_points,
+            field_vertices_world=pose.field_vertices_world,
+            field_faces=field_faces,
+            field_scalar=heat.norm,
+            tangent_sign=float(walk_tangent_sign),
+            clamp_to_cone=bool(clamp_to_cone),
+            cone_max_tilt_deg=float(cone_max_tilt_deg),
+        )
 
     print(f"field_mesh: {field_mesh_path}")
     print(f"scan_mesh: {scan_mesh_path}")
@@ -367,6 +383,7 @@ def run(
         f"walk_step_mm={float(walk_step_mm):.3f} "
         f"walk_max_steps={int(walk_max_steps)} "
         f"walk_tangent_sign={float(walk_tangent_sign):+.1f} "
+        f"walk_start_fraction={float(walk_start_fraction):.3f} "
         f"clamp_to_cone={bool(clamp_to_cone)} "
         f"cone_max_tilt_deg={float(cone_max_tilt_deg):.3f} "
         f"count={int(print_count)} "
@@ -386,12 +403,14 @@ def run(
         )
         for i in range(candidate_points.shape[0]):
             p0 = source_points[i]
-            p1 = candidate_points[i]
+            p1 = segment_start_points[i]
+            pf = candidate_points[i]
             v = float(selected.scalar_values[i])
             print(
                 f"print_point[{i}]: "
                 f"src=({float(p0[0]):.6f},{float(p0[1]):.6f},{float(p0[2]):.6f}) "
-                f"candidate=({float(p1[0]):.6f},{float(p1[1]):.6f},{float(p1[2]):.6f}) "
+                f"start=({float(p1[0]):.6f},{float(p1[1]):.6f},{float(p1[2]):.6f}) "
+                f"final=({float(pf[0]):.6f},{float(pf[1]):.6f},{float(pf[2]):.6f}) "
                 f"heat_norm={v:.6f}"
             )
 
@@ -417,16 +436,25 @@ def run(
         print(f"saved candidate print points: {out_print_ply}")
 
     if out_targets_yaml is not None:
-        write_targets_yaml(
-            out_yaml=out_targets_yaml,
-            points_world=candidate_points,
-            z_dir=target_z_dir,
-            position_scale=float(target_position_scale),
-        )
+        if line_targets is not None:
+            write_line_targets_yaml(
+                out_yaml=out_targets_yaml,
+                targets=line_targets,
+                position_scale=float(target_position_scale),
+            )
+            yaml_note = f"segments={line_targets.count}"
+        else:
+            write_fixed_z_targets_yaml(
+                out_yaml=out_targets_yaml,
+                points_world=candidate_points,
+                z_dir=target_z_dir,
+                position_scale=float(target_position_scale),
+            )
+            yaml_note = f"points={candidate_points.shape[0]}"
         print(
             "saved targets yaml: "
             f"{out_targets_yaml} "
-            f"(points={candidate_points.shape[0]}, scale={float(target_position_scale):.2f})"
+            f"({yaml_note}, scale={float(target_position_scale):.2f})"
         )
 
     if visualize:
@@ -441,6 +469,13 @@ def run(
             geometries.append(contour_ls)
         if print_pcd is not None:
             geometries.append(print_pcd)
+        if segment_ls is not None:
+            geometries.append(segment_ls)
+        if segment_start_pcd is not None:
+            geometries.append(segment_start_pcd)
+        if line_targets is not None and line_targets.count > 0:
+            target_points, target_z_dirs = line_targets.flattened_points_and_z_dirs()
+            geometries.append(make_target_orientation_sticks(target_points, target_z_dirs))
 
         axis_size_val = float(axis_size)
         if axis_size_val == 0.0:
@@ -459,6 +494,10 @@ def run(
             print("phi contour shown in cyan")
         if print_pcd is not None:
             print("candidate print points shown in magenta")
+        if segment_ls is not None:
+            print("print target segments shown in orange")
+        if line_targets is not None and line_targets.count > 0:
+            print("target orientations shown as 8 mm green sticks")
         o3d.visualization.draw_geometries(geometries)
 
 
@@ -540,6 +579,7 @@ def main() -> None:
     parser.add_argument("--walk-step-mm", type=float, default=1.0)
     parser.add_argument("--walk-max-steps", type=int, default=32)
     parser.add_argument("--walk-tangent-sign", type=float, default=1.0)
+    parser.add_argument("--walk-start-fraction", type=float, default=0.25)
     parser.add_argument("--clamp-to-cone", action="store_true")
     parser.add_argument("--cone-max-tilt-deg", type=float, default=45.0)
     parser.add_argument("--print-count", type=int, default=7)
@@ -588,6 +628,7 @@ def main() -> None:
         walk_step_mm=args.walk_step_mm,
         walk_max_steps=args.walk_max_steps,
         walk_tangent_sign=args.walk_tangent_sign,
+        walk_start_fraction=args.walk_start_fraction,
         clamp_to_cone=args.clamp_to_cone,
         cone_max_tilt_deg=args.cone_max_tilt_deg,
         print_count=args.print_count,

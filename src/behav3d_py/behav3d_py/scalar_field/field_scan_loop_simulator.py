@@ -4,7 +4,7 @@
 Stage flow per loop iteration:
 1) Position field over current scan (only first step)
 2) Keep that field pose fixed and recompute phi vs updated scan
-3) Generate print candidates (`geodesic` or `z_lift`)
+3) Generate print candidates (`geodesic`, `z_lift`, `gradient_lift`, or `gradient_walk`)
 4) Enforce bead separation only inside current step
 5) Add selected beads as cylinders (or spheres) to scan mesh
 
@@ -44,7 +44,15 @@ from lib_scalar.loop_simulation import (
     generate_step_candidates,
     position_field_with_attempts,
 )
-from lib_scalar.viz import compute_scene_bounds, make_line_set, make_point_cloud, yellow_to_red_colors
+from lib_scalar.print_targets import build_oriented_line_targets
+from lib_scalar.viz import (
+    compute_scene_bounds,
+    make_line_set,
+    make_point_cloud,
+    make_segment_line_set,
+    make_target_orientation_sticks,
+    yellow_to_red_colors,
+)
 
 
 DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
@@ -87,6 +95,10 @@ def save_step_outputs(
     offset_points: np.ndarray,
     offset_lines: np.ndarray,
     selected_points: np.ndarray,
+    source_points: np.ndarray | None = None,
+    segment_start_points: np.ndarray | None = None,
+    target_points: np.ndarray | None = None,
+    target_z_dirs: np.ndarray | None = None,
 ) -> None:
     """Write debug artifacts for a single loop step."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -113,6 +125,46 @@ def save_step_outputs(
         selected_pcd = make_point_cloud(selected_points, colors)
         o3d.io.write_point_cloud(str(output_dir / f"{tag}_print_points.ply"), selected_pcd)
 
+    if (
+        source_points is not None
+        and source_points.shape == selected_points.shape
+        and selected_points.shape[0] > 0
+    ):
+        source_colors = np.tile(np.array([0.0, 1.0, 1.0], dtype=np.float64), (source_points.shape[0], 1))
+        source_pcd = make_point_cloud(source_points, source_colors)
+        o3d.io.write_point_cloud(str(output_dir / f"{tag}_print_sources.ply"), source_pcd)
+
+        line_set = make_segment_line_set(source_points, selected_points, color=(1.0, 1.0, 0.0))
+        o3d.io.write_line_set(str(output_dir / f"{tag}_print_source_to_candidate.ply"), line_set)
+
+    if (
+        segment_start_points is not None
+        and segment_start_points.shape == selected_points.shape
+        and selected_points.shape[0] > 0
+    ):
+        start_colors = np.tile(
+            np.array([1.0, 0.55, 0.0], dtype=np.float64),
+            (segment_start_points.shape[0], 1),
+        )
+        start_pcd = make_point_cloud(segment_start_points, start_colors)
+        o3d.io.write_point_cloud(str(output_dir / f"{tag}_print_segment_starts.ply"), start_pcd)
+
+        segment_set = make_segment_line_set(segment_start_points, selected_points, color=(1.0, 0.55, 0.0))
+        o3d.io.write_line_set(str(output_dir / f"{tag}_print_segments.ply"), segment_set)
+
+    if (
+        target_points is not None
+        and target_z_dirs is not None
+        and target_points.shape == target_z_dirs.shape
+        and target_points.shape[0] > 0
+    ):
+        orientation_mesh = make_target_orientation_sticks(target_points, target_z_dirs)
+        if len(orientation_mesh.triangles) > 0:
+            o3d.io.write_triangle_mesh(
+                str(output_dir / f"{tag}_target_orientations.ply"),
+                orientation_mesh,
+            )
+
 
 def wait_next_terminal(step_index: int) -> bool:
     """Wait for user next/quit command in terminal mode."""
@@ -136,6 +188,10 @@ def show_step_window(
     offset_points: np.ndarray,
     offset_lines: np.ndarray,
     selected_points: np.ndarray,
+    source_points: np.ndarray | None,
+    segment_start_points: np.ndarray | None,
+    target_points: np.ndarray | None,
+    target_z_dirs: np.ndarray | None,
     axis_size: float,
 ) -> bool:
     """Visualize one loop step and wait for N/Q key.
@@ -186,6 +242,49 @@ def show_step_window(
         selected_pcd = make_point_cloud(selected_points, colors)
         vis.add_geometry(selected_pcd)
 
+    if (
+        source_points is not None
+        and source_points.shape == selected_points.shape
+        and selected_points.shape[0] > 0
+    ):
+        source_colors = np.tile(np.array([0.0, 1.0, 1.0], dtype=np.float64), (source_points.shape[0], 1))
+        source_pcd = make_point_cloud(source_points, source_colors)
+        source_to_candidate = make_segment_line_set(
+            source_points,
+            selected_points,
+            color=(1.0, 1.0, 0.0),
+        )
+        vis.add_geometry(source_to_candidate)
+        vis.add_geometry(source_pcd)
+
+    if (
+        segment_start_points is not None
+        and segment_start_points.shape == selected_points.shape
+        and selected_points.shape[0] > 0
+    ):
+        start_colors = np.tile(
+            np.array([1.0, 0.55, 0.0], dtype=np.float64),
+            (segment_start_points.shape[0], 1),
+        )
+        start_pcd = make_point_cloud(segment_start_points, start_colors)
+        print_segments = make_segment_line_set(
+            segment_start_points,
+            selected_points,
+            color=(1.0, 0.55, 0.0),
+        )
+        vis.add_geometry(print_segments)
+        vis.add_geometry(start_pcd)
+
+    if (
+        target_points is not None
+        and target_z_dirs is not None
+        and target_points.shape == target_z_dirs.shape
+        and target_points.shape[0] > 0
+    ):
+        orientation_mesh = make_target_orientation_sticks(target_points, target_z_dirs)
+        if len(orientation_mesh.triangles) > 0:
+            vis.add_geometry(orientation_mesh)
+
     bb_min, bb_max = compute_scene_bounds(field_vertices_world, np.asarray(scan_mesh.vertices, dtype=np.float64))
     bb_diag = float(np.linalg.norm(bb_max - bb_min))
     bb_center = 0.5 * (bb_min + bb_max)
@@ -222,10 +321,19 @@ def run(
     beads_per_step: int,
     bead_separation_mm: float,
     bead_height_mm: float,
+    walk_distance_mm: float,
+    walk_step_mm: float,
+    walk_max_steps: int,
+    walk_tangent_sign: float,
+    walk_start_fraction: float,
+    clamp_to_cone: bool,
+    cone_max_tilt_deg: float,
     bead_shape: str,
     positioning_attempts: int,
     search_step_x: float,
     search_step_y: float,
+    search_allow_partial_hit: bool,
+    base_z_offset: float,
     axis_size: float,
     visualize: bool,
 ) -> None:
@@ -270,11 +378,12 @@ def run(
                 heat_norm=heat.norm,
                 clearance=float(clearance),
                 iso_level=float(ISO_LEVEL),
-                base_z_offset=float(BASE_Z_OFFSET),
+                base_z_offset=float(base_z_offset),
                 search_step_x=float(search_step_x),
                 search_step_y=float(search_step_y),
                 positioning_attempts=int(positioning_attempts),
                 search_max_candidates=int(SEARCH_MAX_CANDIDATES),
+                require_full_hit=not bool(search_allow_partial_hit),
             )
             locked_offset_xyz = pose.offset_xyz
             print(
@@ -307,10 +416,18 @@ def run(
             field_faces=field_faces,
             field_vertices_world=pose.field_vertices_world,
             heat_norm=heat.norm,
+            phi=pose.phi,
             mode=str(candidate_mode),
             beads_per_step=int(beads_per_step),
             bead_separation_mm=float(bead_separation_mm),
             bead_height_mm=float(bead_height_mm),
+            walk_distance_mm=float(walk_distance_mm),
+            walk_step_mm=float(walk_step_mm),
+            walk_max_steps=int(walk_max_steps),
+            walk_tangent_sign=float(walk_tangent_sign),
+            walk_start_fraction=float(walk_start_fraction),
+            clamp_to_cone=bool(clamp_to_cone),
+            cone_max_tilt_deg=float(cone_max_tilt_deg),
         )
 
         print(
@@ -321,6 +438,26 @@ def run(
             f"offset_z_valid={candidate.z_valid_count} "
             f"selected={candidate.points.shape[0]}"
         )
+
+        target_points = np.zeros((0, 3), dtype=np.float64)
+        target_z_dirs = np.zeros((0, 3), dtype=np.float64)
+        if (
+            str(candidate_mode).strip().lower() == "gradient_walk"
+            and candidate.segment_start_points is not None
+            and candidate.segment_start_points.shape == candidate.points.shape
+            and candidate.points.shape[0] > 0
+        ):
+            line_targets = build_oriented_line_targets(
+                start_points=candidate.segment_start_points,
+                end_points=candidate.points,
+                field_vertices_world=pose.field_vertices_world,
+                field_faces=field_faces,
+                field_scalar=heat.norm,
+                tangent_sign=float(walk_tangent_sign),
+                clamp_to_cone=bool(clamp_to_cone),
+                cone_max_tilt_deg=float(cone_max_tilt_deg),
+            )
+            target_points, target_z_dirs = line_targets.flattened_points_and_z_dirs()
 
         save_step_outputs(
             output_dir=output_dir,
@@ -333,6 +470,10 @@ def run(
             offset_points=contour.offset_points,
             offset_lines=contour.offset_lines,
             selected_points=candidate.points,
+            source_points=candidate.source_points,
+            segment_start_points=candidate.segment_start_points,
+            target_points=target_points,
+            target_z_dirs=target_z_dirs,
         )
 
         if visualize:
@@ -347,6 +488,10 @@ def run(
                 offset_points=contour.offset_points,
                 offset_lines=contour.offset_lines,
                 selected_points=candidate.points,
+                source_points=candidate.source_points,
+                segment_start_points=candidate.segment_start_points,
+                target_points=target_points,
+                target_z_dirs=target_z_dirs,
                 axis_size=axis_size,
             )
         else:
@@ -402,7 +547,7 @@ def main() -> None:
     parser.add_argument(
         "--candidate-mode",
         type=str,
-        choices=("geodesic", "z_lift"),
+        choices=("geodesic", "z_lift", "gradient_lift", "gradient_walk"),
         default="geodesic",
     )
     parser.add_argument("--offset-distance-mm", type=float, default=12.0)
@@ -410,6 +555,13 @@ def main() -> None:
     parser.add_argument("--beads-per-step", type=int, default=7)
     parser.add_argument("--bead-separation-mm", type=float, default=16.0)
     parser.add_argument("--bead-height-mm", type=float, default=12.0)
+    parser.add_argument("--walk-distance-mm", type=float, default=12.0)
+    parser.add_argument("--walk-step-mm", type=float, default=1.0)
+    parser.add_argument("--walk-max-steps", type=int, default=32)
+    parser.add_argument("--walk-tangent-sign", type=float, default=1.0)
+    parser.add_argument("--walk-start-fraction", type=float, default=0.25)
+    parser.add_argument("--clamp-to-cone", action="store_true")
+    parser.add_argument("--cone-max-tilt-deg", type=float, default=45.0)
     parser.add_argument(
         "--bead-shape",
         type=str,
@@ -419,6 +571,8 @@ def main() -> None:
     parser.add_argument("--positioning-attempts", type=int, default=3)
     parser.add_argument("--search-step-x", type=float, default=0.01)
     parser.add_argument("--search-step-y", type=float, default=0.01)
+    parser.add_argument("--search-allow-partial-hit", action="store_true")
+    parser.add_argument("--base-z-offset", type=float, default=BASE_Z_OFFSET)
     parser.add_argument("--axis-size", type=float, default=0.0)
     parser.add_argument("--no-vis", action="store_true")
     args = parser.parse_args()
@@ -439,10 +593,19 @@ def main() -> None:
         beads_per_step=args.beads_per_step,
         bead_separation_mm=args.bead_separation_mm,
         bead_height_mm=args.bead_height_mm,
+        walk_distance_mm=args.walk_distance_mm,
+        walk_step_mm=args.walk_step_mm,
+        walk_max_steps=args.walk_max_steps,
+        walk_tangent_sign=args.walk_tangent_sign,
+        walk_start_fraction=args.walk_start_fraction,
+        clamp_to_cone=args.clamp_to_cone,
+        cone_max_tilt_deg=args.cone_max_tilt_deg,
         bead_shape=args.bead_shape,
         positioning_attempts=args.positioning_attempts,
         search_step_x=args.search_step_x,
         search_step_y=args.search_step_y,
+        search_allow_partial_hit=args.search_allow_partial_hit,
+        base_z_offset=args.base_z_offset,
         axis_size=args.axis_size,
         visualize=not args.no_vis,
     )

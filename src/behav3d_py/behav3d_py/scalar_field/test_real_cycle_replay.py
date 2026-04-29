@@ -265,6 +265,7 @@ def run(
         # so point locations stay consistent across candidate modes.
         clamp_to_cone=False,
         cone_max_tilt_deg=float(cone_max_tilt_deg),
+        agent_phi_scalar=pose.phi,
     )
 
     selected_surface_points = selected.surface_points

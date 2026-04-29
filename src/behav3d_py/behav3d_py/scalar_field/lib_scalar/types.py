@@ -65,3 +65,4 @@ class PrintPointSet:
     augmented_vertices: int = 0
     source_points: np.ndarray | None = None
     surface_points: np.ndarray | None = None
+    segment_start_points: np.ndarray | None = None

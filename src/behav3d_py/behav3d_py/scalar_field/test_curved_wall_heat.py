@@ -21,7 +21,7 @@ from lib_scalar.geometry import (
     load_triangle_mesh_arrays,
     sample_tangent_axes_on_surface_from_scalar,
 )
-from lib_scalar.viz import make_point_cloud, yellow_to_red_colors
+from lib_scalar.viz import make_point_cloud, make_target_orientation_sticks, yellow_to_red_colors
 
 
 DEFAULT_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
@@ -84,67 +84,6 @@ def _sample_vectors(
     return p0, p1
 
 
-def _rotation_from_z(direction: np.ndarray) -> np.ndarray:
-    """Rotation matrix that maps +Z to a target unit direction."""
-    z = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-    d = np.asarray(direction, dtype=np.float64)
-    d /= max(np.linalg.norm(d), 1e-12)
-    c = float(np.dot(z, d))
-    if c > 1.0 - 1e-12:
-        return np.eye(3, dtype=np.float64)
-    if c < -1.0 + 1e-12:
-        return np.array(
-            [
-                [1.0, 0.0, 0.0],
-                [0.0, -1.0, 0.0],
-                [0.0, 0.0, -1.0],
-            ],
-            dtype=np.float64,
-        )
-
-    axis = np.cross(z, d)
-    s = max(np.linalg.norm(axis), 1e-12)
-    axis /= s
-    ax = np.array(
-        [
-            [0.0, -axis[2], axis[1]],
-            [axis[2], 0.0, -axis[0]],
-            [-axis[1], axis[0], 0.0],
-        ],
-        dtype=np.float64,
-    )
-    return np.eye(3, dtype=np.float64) + ax * s + (ax @ ax) * (1.0 - c)
-
-
-def _build_vector_tubes(
-    start: np.ndarray,
-    end: np.ndarray,
-    *,
-    radius: float,
-    color: tuple[float, float, float],
-) -> o3d.geometry.TriangleMesh:
-    """Build thicker vector glyphs using short cylinders."""
-    mesh = o3d.geometry.TriangleMesh()
-    if start.shape[0] == 0:
-        return mesh
-
-    r = max(1e-9, float(radius))
-    for i in range(start.shape[0]):
-        p0 = start[i]
-        p1 = end[i]
-        d = p1 - p0
-        length = float(np.linalg.norm(d))
-        if length <= 1e-12:
-            continue
-        tube = o3d.geometry.TriangleMesh.create_cylinder(radius=r, height=length, resolution=12, split=1)
-        tube.paint_uniform_color(color)
-        tube.rotate(_rotation_from_z(d), center=np.zeros(3, dtype=np.float64))
-        tube.translate(0.5 * (p0 + p1))
-        mesh += tube
-
-    return mesh
-
-
 def run(
     mesh_path: Path,
     out_ply: Path | None,
@@ -171,7 +110,6 @@ def run(
     colored_pcd = make_point_cloud(mesh_data.vertices, colors)
     bbox_diag = float(np.linalg.norm(np.max(mesh_data.vertices, axis=0) - np.min(mesh_data.vertices, axis=0)))
     vec_scale = max(1e-9, float(vector_scale_ratio) * bbox_diag)
-    vec_radius = max(1e-9, float(vector_radius_ratio) * bbox_diag)
 
     print(f"mesh: {mesh_path}")
     print(f"vertices (used): {mesh_data.vertices.shape[0]}")
@@ -233,11 +171,11 @@ def run(
                     step=vector_step,
                     scale=vec_scale,
                 )
-                grad_tubes = _build_vector_tubes(g0, g1, radius=vec_radius, color=(0.10, 0.95, 0.10))
+                grad_tubes = make_target_orientation_sticks(g0, g1 - g0)
                 geoms.append(grad_tubes)
                 print(
-                    f"gradient tangent vectors (green): mode={sample_mode}, "
-                    f"step={max(1, int(vector_step))}"
+                    f"gradient tangent orientation sticks: mode={sample_mode}, "
+                    f"step={max(1, int(vector_step))}, length=8mm, diameter=1mm"
                 )
 
             if vector_kind in ("orthogonal", "both"):
@@ -247,11 +185,11 @@ def run(
                     step=vector_step,
                     scale=vec_scale,
                 )
-                orth_tubes = _build_vector_tubes(b0, b1, radius=vec_radius, color=(0.20, 0.60, 1.00))
+                orth_tubes = make_target_orientation_sticks(b0, b1 - b0)
                 geoms.append(orth_tubes)
                 print(
-                    f"orthogonal tangent vectors (blue): mode={sample_mode}, "
-                    f"step={max(1, int(vector_step))}"
+                    f"orthogonal tangent orientation sticks: mode={sample_mode}, "
+                    f"step={max(1, int(vector_step))}, length=8mm, diameter=1mm"
                 )
 
         axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)

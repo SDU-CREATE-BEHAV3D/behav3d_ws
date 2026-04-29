@@ -124,6 +124,9 @@ Notes:
 - If `session_path` is provided, `use_latest` is forced to `False`.
 - Candidate generation mode is selected in the service request:
   `candidate_mode="z_lift"` or `candidate_mode="gradient_lift"`.
+- Python-side scalar experiments may support additional modes such as
+  `gradient_walk`, but those are not exposed through this ROS command surface
+  until `fields_node` and the service contract are updated.
 - YAML target frame reorientation (`base_link -> world`) is handled in
   `fields_node` during target generation (`base_to_world_yaw_deg`).
 

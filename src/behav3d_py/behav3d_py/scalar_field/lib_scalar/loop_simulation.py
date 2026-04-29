@@ -43,6 +43,8 @@ class CandidateStage:
     scalar_values: np.ndarray
     available_vertices: int
     z_valid_count: int
+    source_points: np.ndarray | None = None
+    segment_start_points: np.ndarray | None = None
 
 
 def position_field_with_attempts(
@@ -57,6 +59,7 @@ def position_field_with_attempts(
     search_step_y: float,
     positioning_attempts: int,
     search_max_candidates: int,
+    require_full_hit: bool = True,
 ) -> PoseResult:
     """Position field using XY search with bounded retry attempts.
 
@@ -99,7 +102,7 @@ def position_field_with_attempts(
             clearance=float(clearance),
             iso_level=float(iso_level),
             base_z_offset=float(base_z_offset),
-            require_full_hit=True,
+            require_full_hit=bool(require_full_hit),
             verbose=False,
         )
 
@@ -178,17 +181,27 @@ def generate_step_candidates(
     field_faces: np.ndarray,
     field_vertices_world: np.ndarray,
     heat_norm: np.ndarray,
+    phi: np.ndarray | None = None,
     *,
     mode: str,
     beads_per_step: int,
     bead_separation_mm: float,
     bead_height_mm: float,
+    walk_distance_mm: float = 12.0,
+    walk_step_mm: float = 1.0,
+    walk_max_steps: int = 32,
+    walk_tangent_sign: float = 1.0,
+    walk_start_fraction: float = 0.25,
+    clamp_to_cone: bool = False,
+    cone_max_tilt_deg: float = 45.0,
 ) -> CandidateStage:
     """Generate current-step print points.
 
     Modes:
     - geodesic: select on offset contour (with z-valid filter)
     - z_lift: select on phi=0 contour and lift +Z by bead height
+    - gradient_lift: select on phi=0 contour and displace along scalar tangent
+    - gradient_walk: select on phi=0 contour and walk along scalar tangent
     """
 
     sep_m = 1e-3 * float(bead_separation_mm)
@@ -211,6 +224,8 @@ def generate_step_candidates(
             scalar_values=pool.scalar_values,
             available_vertices=int(pool.available_vertices),
             z_valid_count=int(np.count_nonzero(contour.z_valid_mask)),
+            source_points=pool.source_points,
+            segment_start_points=pool.segment_start_points,
         )
 
     if mode_norm == "z_lift":
@@ -232,9 +247,45 @@ def generate_step_candidates(
             scalar_values=pool.scalar_values,
             available_vertices=int(pool.available_vertices),
             z_valid_count=int(pool.available_vertices),
+            source_points=pool.source_points,
+            segment_start_points=pool.segment_start_points,
         )
 
-    raise ValueError(f"Unknown candidate mode: {mode}. Use 'geodesic' or 'z_lift'.")
+    if mode_norm in ("gradient_lift", "gradient_walk"):
+        pool = generate_print_points(
+            polyline_points=contour.contour_points,
+            polyline_lines=contour.contour_lines,
+            field_vertices_world=field_vertices_world,
+            field_scalar=heat_norm,
+            count=select_count,
+            min_spacing=sep_m,
+            point_valid_mask=None,
+            extra_points=None,
+            candidate_mode=mode_norm,
+            lift_height=1e-3 * float(bead_height_mm),
+            field_faces=field_faces,
+            walk_distance=1e-3 * float(walk_distance_mm),
+            walk_step=1e-3 * float(walk_step_mm),
+            walk_max_steps=int(walk_max_steps),
+            walk_tangent_sign=float(walk_tangent_sign),
+            walk_start_fraction=float(walk_start_fraction),
+            clamp_to_cone=bool(clamp_to_cone),
+            cone_max_tilt_deg=float(cone_max_tilt_deg),
+            agent_phi_scalar=phi,
+        )
+        return CandidateStage(
+            points=pool.points,
+            scalar_values=pool.scalar_values,
+            available_vertices=int(pool.available_vertices),
+            z_valid_count=int(pool.available_vertices),
+            source_points=pool.source_points,
+            segment_start_points=pool.segment_start_points,
+        )
+
+    raise ValueError(
+        f"Unknown candidate mode: {mode}. "
+        "Use 'geodesic', 'z_lift', 'gradient_lift', or 'gradient_walk'."
+    )
 
 
 def apply_simulated_beads(

@@ -218,6 +218,9 @@ Field command usage notes:
 - `candidate_mode` currently supports `z_lift` and `gradient_lift`.
 - If `orient_with_tangent=true`, target orientation is sampled from the scalar tangent field; optional orientation clamp is applied with `clamp_to_cone` and `cone_max_tilt_deg`.
 - Base-link to world target reorientation is applied inside `fields_node` at YAML generation time (`base_to_world_yaw_deg`, default falls back to node parameter `target_base_to_world_yaw_deg`).
+- Python-only scalar experiments in `lib_scalar` may support additional modes
+  such as `gradient_walk`; do not assume those are exposed through this ROS
+  command surface until `fields_node` and `GeneratePrintCandidates` are updated.
 
 Fields node implementation:
 - `src/behav3d_sense/behav3d_sense/fields_node.py`

@@ -60,6 +60,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `yellow_to_red_colors(norm_scalar)`
      - `make_point_cloud(points, colors)`
      - `make_line_set(points, lines, color)`
+     - `make_segment_line_set(start_points, end_points, color)`
+     - `make_target_orientation_sticks(points, z_dirs)`
      - `compute_scene_bounds(...)`
 
 6. `geometry.py`
@@ -94,12 +96,16 @@ The objective is to keep each stage isolated, testable, and reusable from:
        local tangent gradient direction.
      - `gradient_walk`: walk over field surface tangentially to scalar gradient
        until euclidean displacement reaches `walk_distance`.
-       - Uses per-point remaining step (`min(step_size, remaining_distance)`) to
-         avoid overshoot from fixed-step integration.
-       - Optional directional limit for gradient walk:
-         - `clamp_to_cone=True` constrains the final displacement
-           (`source_point -> output_point`) to a cone around world `+Z`.
-         - `cone_max_tilt_deg` sets the cone semi-angle.
+       - Delegates the walk to `agent_walk.py`.
+       - Keeps source, projected print-line start, and final points in the
+         returned `PrintPointSet`.
+       - `walk_start_fraction` controls the normalized `source -> final`
+         interpolation used for the projected print-line start (`0.25` by
+         default).
+       - Applies simple agent filters:
+         - source-source minimum distance: 8 mm,
+         - final-final minimum distance: 8 mm,
+         - optional final `phi >= 4 mm` when a phi scalar is provided.
    - Scalar sampling behavior:
      - if `field_faces` is provided and scalar length matches field vertices, scalar
        is sampled on polyline points by triangle interpolation (`sample_vertex_scalar_on_surface`),
@@ -107,6 +113,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Returns `PrintPointSet`, including:
      - `points`: final points for the selected mode,
      - `source_points`: points selected on the original polyline,
+     - `segment_start_points`: projected print-line start points,
      - `surface_points`: mode-aware surface points (useful before lift/projection).
    - Main API:
      - `generate_print_points(...) -> PrintPointSet`
@@ -119,12 +126,45 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - generate print points with selectable mode:
        - `geodesic`: from geodesic offset contour (+ z-valid filter),
        - `z_lift`: from `phi=0` contour + vertical lift,
+       - `gradient_lift`: from `phi=0` contour + tangent lift,
+       - `gradient_walk`: from `phi=0` contour + simple agent walk,
      - update scan mesh by adding simulated bead solids (default cylinder).
    - Main APIs:
      - `position_field_with_attempts(...) -> PoseResult`
      - `compute_offset_contour_stage(...) -> ContourStage`
      - `generate_step_candidates(...) -> CandidateStage`
      - `apply_simulated_beads(...) -> (scan_mesh, bead_centers)`
+
+10. `agent_walk.py`
+   - Simple surface-walk agent used by `candidate_mode='gradient_walk'`.
+   - Walks from selected source points along the scalar tangent field.
+   - Exposes each accepted origin, projected print-line start (`p1`, default
+     at 25% of `source -> final`), and final point (`pf`).
+   - Filters accepted agents by source spacing, final spacing, and optional
+     final phi clearance.
+   - Main APIs:
+     - `AgentWalkConfig`
+     - `run_agent_walk(...) -> AgentWalkResult`
+
+11. `print_targets.py`
+   - Builds oriented point or line targets from candidate geometry.
+   - Projects target points to the field surface, samples scalar-tangent
+     orientation, optionally clamps target Z directions to a cone, and writes
+     point YAML or nested line-segment YAML. Target-orientation visualization is standardized through
+     `viz.make_target_orientation_sticks(...)` as fixed 8 mm x 1 mm rods.
+   - Line target YAML schema:
+     ```yaml
+     segments:
+       - index: 0
+         start:
+           plane: "O(...) Z(...)"
+         end:
+           plane: "O(...) Z(...)"
+     ```
+   - Main APIs:
+     - `build_oriented_line_targets(...) -> OrientedLineTargets`
+     - `write_line_targets_yaml(...)`
+     - `write_fixed_z_targets_yaml(...)`
 
 ## Design Notes
 
@@ -136,8 +176,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
 - Cone clamping can be applied in two different places:
   - point-position clamp in `generate_print_points(..., clamp_to_cone=True)`
     for limiting candidate displacement direction in `gradient_walk`.
-  - orientation clamp in caller scripts via
-    `geometry.clamp_vectors_to_cone(...)` for limiting tangent/frame tilt
+  - orientation clamp in `print_targets.py` via
+    `geometry.clamp_vectors_to_cone(...)` for limiting target-frame tilt
     without moving candidate positions.
 - Full-loop/global objective design remains external to this library.
 - Loop simulation keeps bead accumulation local to the simulator layer, so
@@ -157,3 +197,11 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - from `phi=0` contour + tangent lift (`candidate_mode='gradient_lift'`), or
    - from contour with surface walk (`candidate_mode='gradient_walk'`).
 8. Export and visualize.
+
+## Current Exposure Notes
+
+- Standalone Python scripts and `lib_scalar` support `gradient_walk`, line
+  segment targets, and target-orientation visualization.
+- ROS `fields_node`/`behav3d_commands` currently expose only `z_lift` and
+  `gradient_lift`; `gradient_walk` is intentionally still Python-side until
+  the ROS contract is updated.
