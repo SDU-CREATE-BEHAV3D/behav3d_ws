@@ -81,7 +81,7 @@ print_field_oriented_sequence:
     candidate_output_dir: "@session/field_loop/cycle_0001"
     candidate_request_timeout_s: 120.0
     candidate_mode: gradient_walk
-    candidate_beads_per_step: 3
+    candidate_beads_per_step: 2
     candidate_bead_separation_mm: 16.0
     candidate_bead_height_mm: 12.0
     candidate_walk_distance_mm: 12.0
@@ -106,9 +106,9 @@ print_field_oriented_sequence:
     segment_print_speed: 900
     segment_approach_z_offset_m: 0.40
     segment_travel_z_offset_m: 0.04
-    segment_approach_vel_scale: 0.50
-    segment_travel_vel_scale: 0.50
+    segment_approach_vel_scale: 0.2
+    segment_travel_vel_scale: 0.2
     segment_print_vel_scale: 0.003
-    segment_accel_scale: 0.05
+    segment_accel_scale: 0.01
     max_cycles: 0
     prompt_before_next_cycle: true
