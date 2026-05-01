@@ -110,5 +110,6 @@ print_field_oriented_sequence:
     segment_travel_vel_scale: 0.2
     segment_print_vel_scale: 0.003
     segment_accel_scale: 0.01
+    segment_target_print_speed_mm_s: 2.0
     max_cycles: 0
     prompt_before_next_cycle: true

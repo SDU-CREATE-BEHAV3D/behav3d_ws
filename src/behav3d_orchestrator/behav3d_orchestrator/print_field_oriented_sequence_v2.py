@@ -164,6 +164,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         segment_travel_vel_scale = self._cfg_float(cfg, "segment_travel_vel_scale")
         segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
         segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
+        segment_target_print_speed_mm_s = self._cfg_float(cfg, "segment_target_print_speed_mm_s")
         max_cycles = self._cfg_int(cfg, "max_cycles")
         prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
 
@@ -176,6 +177,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"candidate_mode={candidate_mode}, "
             f"walk_distance_mm={candidate_walk_distance_mm:.1f}, "
             f"segment_print_speed={segment_print_speed}, segment_print_v={segment_print_vel_scale:.3f}, "
+            f"segment_target_print_speed_mm_s={segment_target_print_speed_mm_s:.3f}, "
             f"oriented_targets_enable={oriented_targets_enable}, "
             f"clamp_to_cone={oriented_clamp_to_cone}, cone_max_tilt_deg={oriented_cone_max_tilt_deg:.1f}, "
             f"skip_bootstrap_scan_and_init={skip_bootstrap_scan_and_init}, "
@@ -606,6 +608,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 segment_travel_vel_scale = self._cfg_float(cfg, "segment_travel_vel_scale")
                 segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
                 segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
+                segment_target_print_speed_mm_s = self._cfg_float(cfg, "segment_target_print_speed_mm_s")
                 layer_scan_width = self._cfg_float(cfg, "layer_scan_width")
                 layer_scan_height = self._cfg_float(cfg, "layer_scan_height")
                 layer_scan_nx = self._cfg_int(cfg, "layer_scan_nx")
@@ -786,6 +789,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         travel_vel_scale=segment_travel_vel_scale,
                         print_vel_scale=segment_print_vel_scale,
                         accel_scale=segment_accel_scale,
+                        target_print_speed_mm_s=segment_target_print_speed_mm_s,
                         timeout_s=timeout_s,
                     )
                 else:

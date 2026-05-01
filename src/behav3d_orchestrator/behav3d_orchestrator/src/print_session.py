@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import math
+import time
 from typing import Callable, Optional, Sequence
 
 from geometry_msgs.msg import PoseStamped
+from trajectory_msgs.msg import JointTrajectory
 
 from .yaml_session import TargetSegment, YamlSession
 
@@ -327,6 +330,7 @@ class PrintSession(YamlSession):
         travel_vel_scale: float = 0.10,
         print_vel_scale: float = 0.01,
         accel_scale: float = 0.05,
+        target_print_speed_mm_s: float = 0.0,
         eef_link: str = "extruder_tcp",
         timeout_s: Optional[float] = None,
         publish_markers: bool = False,
@@ -436,18 +440,33 @@ class PrintSession(YamlSession):
                     )
                     continue
 
-                plan_res = self.run_sync(
-                    self.motion.plan(
-                        pose=seg.end,
-                        motion="LIN",
-                        vel_scale=float(print_vel_scale),
-                        enqueue=False,
-                    ),
+                plan_res = self._plan_print_segment(
+                    segment=seg,
+                    seed_vel_scale=float(print_vel_scale),
+                    seed_accel_scale=float(accel_scale),
+                    target_print_speed_mm_s=float(target_print_speed_mm_s),
                     timeout_s=timeout_s,
                 )
                 if not plan_res.get("ok", False):
-                    res = {"ok": False, "stage": "plan_segment", "error": plan_res.get("error", "unknown")}
+                    res = {
+                        "ok": False,
+                        "stage": str(plan_res.get("stage", "plan_segment")),
+                        "error": plan_res.get("error", "unknown"),
+                    }
                 else:
+                    metrics = plan_res.get("metrics", {})
+                    if float(target_print_speed_mm_s) > 0.0:
+                        log.info(
+                            "[print_session:segments] Tuned segment "
+                            f"{seg.index}: target_speed={float(target_print_speed_mm_s):.3f}mm/s "
+                            f"distance={float(metrics.get('distance_m', 0.0)):.6f}m "
+                            f"target_duration={float(metrics.get('target_duration_s', 0.0)):.3f}s "
+                            f"planned_duration={float(metrics.get('planned_duration_s', 0.0)):.3f}s "
+                            f"error={float(metrics.get('duration_error_s', 0.0)):+.3f}s "
+                            f"v={float(metrics.get('vel_scale', print_vel_scale)):.5f} "
+                            f"a={float(metrics.get('accel_scale', accel_scale)):.5f} "
+                            f"attempts={int(metrics.get('attempts', 1))}"
+                        )
                     on_res = self.run_sync(
                         self.extruder.setExtruder(True, speed=int(print_speed), enqueue=False),
                         timeout_s=timeout_s,
@@ -540,6 +559,176 @@ class PrintSession(YamlSession):
                 except TimeoutError:
                     log.warn("[print_session:segments] Failed to force extruder OFF at cleanup.")
 
+    def _plan_print_segment(
+        self,
+        *,
+        segment: TargetSegment,
+        seed_vel_scale: float,
+        seed_accel_scale: float,
+        target_print_speed_mm_s: float,
+        timeout_s: Optional[float],
+    ) -> dict:
+        if float(target_print_speed_mm_s) <= 0.0:
+            plan_res = self.run_sync(
+                self.motion.plan(
+                    pose=segment.end,
+                    motion="LIN",
+                    vel_scale=float(seed_vel_scale),
+                    accel_scale=float(seed_accel_scale),
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
+            )
+            if not plan_res.get("ok", False):
+                return {"ok": False, "stage": "plan_segment", "error": plan_res.get("error", "unknown")}
+            return {"ok": True, "stage": "plan_segment", "metrics": dict(plan_res.get("metrics", {}))}
+
+        return self._plan_print_segment_for_target_speed(
+            segment=segment,
+            seed_vel_scale=seed_vel_scale,
+            seed_accel_scale=seed_accel_scale,
+            target_print_speed_mm_s=target_print_speed_mm_s,
+            timeout_s=timeout_s,
+        )
+
+    def _plan_print_segment_for_target_speed(
+        self,
+        *,
+        segment: TargetSegment,
+        seed_vel_scale: float,
+        seed_accel_scale: float,
+        target_print_speed_mm_s: float,
+        timeout_s: Optional[float],
+    ) -> dict:
+        max_iterations = 5
+        relative_tolerance = 0.05
+        min_scale = 0.001
+        max_scale = 1.0
+
+        distance_m = self._euclidean_distance(segment.start, segment.end)
+        target_duration_s = distance_m / (float(target_print_speed_mm_s) * 1e-3)
+        vel = self._clamp(float(seed_vel_scale), min_scale, max_scale)
+        accel = self._clamp(float(seed_accel_scale), min_scale, max_scale)
+
+        best: Optional[dict] = None
+        converged = False
+        limit_reached = False
+        for attempt_i in range(max_iterations):
+            attempt = self._plan_print_segment_attempt(
+                segment=segment,
+                vel_scale=vel,
+                accel_scale=accel,
+                timeout_s=timeout_s,
+            )
+            if not attempt.get("ok", False):
+                return attempt
+
+            planned_duration_s = float(attempt["metrics"]["planned_duration_s"])
+            duration_error_s = planned_duration_s - target_duration_s
+            relative_error = (
+                abs(duration_error_s) / target_duration_s if target_duration_s > 1e-9 else 0.0
+            )
+            attempt["metrics"].update(
+                {
+                    "distance_m": distance_m,
+                    "target_duration_s": target_duration_s,
+                    "duration_error_s": duration_error_s,
+                    "relative_error": relative_error,
+                    "target_print_speed_mm_s": float(target_print_speed_mm_s),
+                    "attempts": attempt_i + 1,
+                }
+            )
+
+            if best is None or abs(duration_error_s) < abs(float(best["metrics"]["duration_error_s"])):
+                best = attempt
+
+            if relative_error <= relative_tolerance:
+                converged = True
+                break
+
+            if target_duration_s <= 1e-9 or planned_duration_s <= 1e-9:
+                break
+
+            ratio = planned_duration_s / target_duration_s
+            next_vel = self._clamp(vel * ratio, min_scale, max_scale)
+            next_accel = self._clamp(accel * ratio, min_scale, max_scale)
+            if abs(next_vel - vel) < 1e-9 and abs(next_accel - accel) < 1e-9:
+                limit_reached = True
+                break
+            vel = next_vel
+            accel = next_accel
+
+        if best is None:
+            return {
+                "ok": False,
+                "stage": "plan_segment_target_speed",
+                "error": "target-speed segment planning produced no valid plan",
+            }
+
+        metrics = best["metrics"]
+        metrics["converged"] = bool(converged)
+        metrics["limit_reached"] = bool(limit_reached)
+        if not converged:
+            return {
+                "ok": False,
+                "stage": "plan_segment_target_speed",
+                "error": (
+                    f"could not converge to target speed {target_print_speed_mm_s:.3f}mm/s "
+                    f"within {100.0 * relative_tolerance:.1f}% "
+                    f"(best_duration={float(metrics['planned_duration_s']):.3f}s, "
+                    f"target_duration={target_duration_s:.3f}s, "
+                    f"v={float(metrics['vel_scale']):.5f}, a={float(metrics['accel_scale']):.5f}, "
+                    f"limit_reached={limit_reached})"
+                ),
+                "metrics": metrics,
+            }
+
+        setattr(self.motion, "_planned_jt", best["trajectory"])
+        setattr(self.motion, "_planned_meta", metrics)
+        return {"ok": True, "stage": "plan_segment_target_speed", "metrics": metrics}
+
+    def _plan_print_segment_attempt(
+        self,
+        *,
+        segment: TargetSegment,
+        vel_scale: float,
+        accel_scale: float,
+        timeout_s: Optional[float],
+    ) -> dict:
+        plan_t0 = time.monotonic()
+        plan_res = self.run_sync(
+            self.motion.plan(
+                pose=segment.end,
+                motion="LIN",
+                vel_scale=float(vel_scale),
+                accel_scale=float(accel_scale),
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+        plan_wall_s = time.monotonic() - plan_t0
+        if not plan_res.get("ok", False):
+            return {"ok": False, "stage": "plan_segment", "error": plan_res.get("error", "unknown")}
+
+        jt = getattr(self.motion, "_planned_jt", None)
+        metrics = dict(plan_res.get("metrics", {}))
+        metrics.update(
+            {
+                "plan_wall_s": plan_wall_s,
+                "planned_duration_s": self._trajectory_duration_s(jt),
+                "trajectory_points": len(jt.points) if isinstance(jt, JointTrajectory) else 0,
+                "joint_path_rad": self._joint_path_distance(jt),
+                "vel_scale": float(vel_scale),
+                "accel_scale": float(accel_scale),
+            }
+        )
+        return {
+            "ok": True,
+            "stage": "plan_segment",
+            "trajectory": jt,
+            "metrics": metrics,
+        }
+
     def run_print_yaml_auto(
         self,
         *,
@@ -566,3 +755,38 @@ class PrintSession(YamlSession):
         out.pose.orientation.z = float(ps.pose.orientation.z)
         out.pose.orientation.w = float(ps.pose.orientation.w)
         return out
+
+    @staticmethod
+    def _euclidean_distance(a: PoseStamped, b: PoseStamped) -> float:
+        dx = float(b.pose.position.x) - float(a.pose.position.x)
+        dy = float(b.pose.position.y) - float(a.pose.position.y)
+        dz = float(b.pose.position.z) - float(a.pose.position.z)
+        return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    @staticmethod
+    def _trajectory_duration_s(jt: object) -> float:
+        if not isinstance(jt, JointTrajectory) or not jt.points:
+            return 0.0
+        t = jt.points[-1].time_from_start
+        return float(t.sec) + 1e-9 * float(t.nanosec)
+
+    @staticmethod
+    def _joint_path_distance(jt: object) -> float:
+        if not isinstance(jt, JointTrajectory) or len(jt.points) < 2:
+            return 0.0
+        total = 0.0
+        prev = list(jt.points[0].positions)
+        for point in jt.points[1:]:
+            cur = list(point.positions)
+            if len(cur) != len(prev):
+                prev = cur
+                continue
+            total += math.sqrt(sum((float(c) - float(p)) ** 2 for p, c in zip(prev, cur)))
+            prev = cur
+        return total
+
+    @staticmethod
+    def _clamp(value: float, low: float, high: float) -> float:
+        lo = min(float(low), float(high))
+        hi = max(float(low), float(high))
+        return max(lo, min(hi, float(value)))
