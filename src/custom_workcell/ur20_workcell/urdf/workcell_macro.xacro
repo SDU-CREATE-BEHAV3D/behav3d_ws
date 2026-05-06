@@ -98,12 +98,12 @@
     <link name="clay_extruder">
       <visual>
         <geometry>
-          <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam_calibrated_v4.dae"/>
+          <mesh filename="package://ur20_workcell/meshes/ram_extruder_v2_simplified.dae"/>
         </geometry>
       </visual>
       <collision>
         <geometry>
-         <mesh filename="package://ur20_workcell/meshes/clay_extruder_cam_calibrated_v4.dae"/>
+         <mesh filename="package://ur20_workcell/meshes/ram_extruder_v2_simplified.dae"/>
         </geometry>
       </collision>
     </link>
@@ -121,8 +121,8 @@
       <child link="femto_color_optical_calib"/>
       <!-- Origin is tool0 -> camera (meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
-      <origin xyz="-0.059070068624449495 0.17914822584247272 0.09389743100591508" 
-               rpy="0.5929766178458789 -1.5588222818238573 -2.1542935523812377"/>
+      <origin xyz="-0.03402996922467966 0.2970228148142489 -0.04855763948018441" 
+               rpy="1.5799620345834504 -0.00404503983534954 -3.1063953966275766"/>
     </joint>
 
     <!-- Fixed frame for calibrated camera pose relative to tool0 -->
@@ -133,8 +133,8 @@
       <child link="femto_ir_optical_calib"/>
       <!-- Origin is tool0 -> camera (meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
-      <origin xyz="-0.06063506182578694 0.18168392383222384 0.0611143068526563" 
-               rpy="0.10416277338198654 -1.5588723769304802 -1.7749299646347731"/>
+      <origin xyz="-0.004171269533157492 0.3005070159435434 -0.05050934664329281" 
+               rpy="1.4706191997841613 -0.011294149359347028 -3.108643277714379"/>
     </joint>
     <!-- Fixed frame for calibrated Extruder tcp pose relative to tool0 -->
     <link name="extruder_tcp"/>
@@ -144,7 +144,7 @@
       <child link="extruder_tcp"/>
       <!-- Origin is tool0 -> extruder(meters, radians). 
           RPY is extrinsic X-Y-Z (roll, pitch, yaw) as in URDF. -->
-      <origin xyz="0.04733 0.28151 0.06228"
+      <origin xyz="-0.00391 0.47471 0.08024"
               rpy="1.5641113421 0.0 0.0"/>
     </joint>
     <!--This will create the specific robot-->
@@ -165,7 +165,7 @@
       parent="${ur_type}_tool0"
       use_nominal_extrinsics="true"
     >
-      <origin xyz="-0.03816 0.1486 0.062017" rpy="-1.5707964 0 1.5707964" />
+      <origin xyz="0 0.260 -0.03" rpy="3.14159 0 1.5707964" />
     </xacro:femto_bolt>
 
   </xacro:macro>
