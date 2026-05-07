@@ -166,3 +166,73 @@ const bool DIR_COUNTERCLOCKWISE = HIGH;
 
 If the backoff moves toward the switch instead of away from it, swap those two
 constants and re-upload.
+
+## Ram extruder Controllino setup
+
+`ino_files/StepperModbus_ram` is a Controllino MAXI Automation variant of the
+existing `StepperModbus` sketch for the ram extruder.
+
+It keeps the same ROS/Modbus contract as `StepperModbus`:
+
+```text
+Coils 0..4   -> D00..D04
+Coil 10      -> EXTRUDE_MAN
+Coil 11      -> PRG_STATE
+Coil 12      -> EXTRUDE_PRG
+Coil 13      -> QUEUE_PUSH
+Coil 14      -> CANCEL_ALL
+HR1          -> step_rate_hz
+HR2          -> cfsMultiplier
+HR3|HR4      -> 32-bit requested steps
+IR0|IR1      -> 32-bit remaining steps (steps_accum)
+```
+
+Current Controllino wiring for the ram variant:
+
+```text
+D07 -> STEP
+D04 -> DIR
+D05 -> ENA (active LOW)
+R8  -> driver power relay
+DI0 -> NC limit switch input
+```
+
+Recommended limit-switch wiring on the Controllino MAXI:
+
+```text
++24V ---- NC switch ---- DI0
+```
+
+With that wiring:
+
+```text
+DI0 HIGH = switch normal/closed
+DI0 LOW  = limit active, open switch, or broken wire
+```
+
+The current `StepperModbus_ram` behavior is:
+
+```text
+Debounce:                10 ms software debounce
+Limit backoff distance:  4 mm
+Soft zero:               set after the 4 mm backoff completes
+Total soft travel:       305 mm from soft zero
+Steps per mm:            6400
+Soft limit max steps:    305 * 6400 = 1,952,000
+```
+
+The soft-limit direction assumption matches the tested Nano wiring:
+
+```text
+DIR LOW  = move away from the limit switch
+DIR HIGH = move toward the limit switch
+```
+
+If the physical direction is inverted on the Controllino build, update:
+
+```cpp
+DIR_AWAY_FROM_LIMIT_STATE
+DIR_TOWARD_LIMIT_STATE
+```
+
+in `ino_files/StepperModbus_ram/ModbusFunc.ino`.
