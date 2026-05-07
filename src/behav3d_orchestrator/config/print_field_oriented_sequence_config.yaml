@@ -101,9 +101,9 @@ print_field_oriented_sequence:
     oriented_targets_enable: true
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
-    oriented_cone_max_tilt_deg: 36.0
+    oriented_cone_max_tilt_deg: 40.0
     oriented_base_to_world_yaw_deg: 180.0
-    segment_print_speed: 900
+    segment_print_speed: 1200
     segment_approach_z_offset_m: 0.40
     segment_travel_z_offset_m: 0.04
     segment_approach_vel_scale: 0.2
