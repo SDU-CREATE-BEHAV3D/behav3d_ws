@@ -2,6 +2,7 @@
 builtin_interfaces/Duration duration
 int32 speed
 bool use_previous_speed
+bool reverse
 
 ---
 # Result

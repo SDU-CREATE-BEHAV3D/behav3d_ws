@@ -165,6 +165,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
         segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
         segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
         segment_target_print_speed_mm_s = self._cfg_float(cfg, "segment_target_print_speed_mm_s")
+        post_segment_wait_s = self._cfg_float(cfg, "post_segment_wait_s")
+        post_segment_retract_s = self._cfg_float(cfg, "post_segment_retract_s")
+        post_segment_retract_speed = self._cfg_int(cfg, "post_segment_retract_speed")
         max_cycles = self._cfg_int(cfg, "max_cycles")
         prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
 
@@ -178,6 +181,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"walk_distance_mm={candidate_walk_distance_mm:.1f}, "
             f"segment_print_speed={segment_print_speed}, segment_print_v={segment_print_vel_scale:.3f}, "
             f"segment_target_print_speed_mm_s={segment_target_print_speed_mm_s:.3f}, "
+            f"post_segment_wait_s={post_segment_wait_s:.3f}, "
+            f"post_segment_retract_s={post_segment_retract_s:.3f}, "
+            f"post_segment_retract_speed={post_segment_retract_speed}, "
             f"oriented_targets_enable={oriented_targets_enable}, "
             f"clamp_to_cone={oriented_clamp_to_cone}, cone_max_tilt_deg={oriented_cone_max_tilt_deg:.1f}, "
             f"skip_bootstrap_scan_and_init={skip_bootstrap_scan_and_init}, "
@@ -609,6 +615,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
                 segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
                 segment_target_print_speed_mm_s = self._cfg_float(cfg, "segment_target_print_speed_mm_s")
+                post_segment_wait_s = self._cfg_float(cfg, "post_segment_wait_s")
+                post_segment_retract_s = self._cfg_float(cfg, "post_segment_retract_s")
+                post_segment_retract_speed = self._cfg_int(cfg, "post_segment_retract_speed")
                 layer_scan_width = self._cfg_float(cfg, "layer_scan_width")
                 layer_scan_height = self._cfg_float(cfg, "layer_scan_height")
                 layer_scan_nx = self._cfg_int(cfg, "layer_scan_nx")
@@ -790,6 +799,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         print_vel_scale=segment_print_vel_scale,
                         accel_scale=segment_accel_scale,
                         target_print_speed_mm_s=segment_target_print_speed_mm_s,
+                        post_segment_wait_s=post_segment_wait_s,
+                        post_segment_retract_s=post_segment_retract_s,
+                        post_segment_retract_speed=post_segment_retract_speed,
                         timeout_s=timeout_s,
                     )
                 else:

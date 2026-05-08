@@ -2,6 +2,8 @@ bool set_speed
 int32 speed
 bool set_extrude
 bool extrude_on
+bool set_reverse
+bool reverse
 ---
 bool success
 string message

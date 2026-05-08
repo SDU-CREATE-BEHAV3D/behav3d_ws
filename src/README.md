@@ -101,7 +101,7 @@ Python action server that wraps `PlanAndExecute` on top of the motion bridge.
 ### `behav3d_print`
 Python Modbus extruder control and print actions.
 - `PrintNode` (`behav3d_print/print_node.py`):
-  - Modbus controls: `set_extrude(...)`, `set_speed(...)`, `enqueue_steps(...)`
+  - Modbus controls: `set_extrude(...)`, `set_speed(...)`, `set_direction(...)`, `enqueue_steps(...)`
   - Low-level helpers: `_write_u32(...)`, `_pulse_coil(...)`, `_read_steps_remaining_now()`
   - ROS callbacks: `_poll()`, `_on_update_config(...)`, `_on_get_status(...)`
   - Actions: `_exec_print_time(...)`, `_exec_print_steps(...)`

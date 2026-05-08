@@ -331,6 +331,9 @@ class PrintSession(YamlSession):
         print_vel_scale: float = 0.01,
         accel_scale: float = 0.05,
         target_print_speed_mm_s: float = 0.0,
+        post_segment_wait_s: float = 0.0,
+        post_segment_retract_s: float = 0.0,
+        post_segment_retract_speed: int = 0,
         eef_link: str = "extruder_tcp",
         timeout_s: Optional[float] = None,
         publish_markers: bool = False,
@@ -364,6 +367,12 @@ class PrintSession(YamlSession):
         failed_segments: list[dict] = []
         printed_targets: list[PoseStamped] = []
         extruder_on = False
+
+        def _step_timeout(extra_s: float) -> Optional[float]:
+            if timeout_s is None:
+                return None
+            return max(float(timeout_s), float(extra_s))
+
         try:
             self.run_sync(self.motion.setLIN(enqueue=False), timeout_s=timeout_s)
             self.run_sync(self.motion.setAcc(float(accel_scale), enqueue=False), timeout_s=timeout_s)
@@ -468,7 +477,12 @@ class PrintSession(YamlSession):
                             f"attempts={int(metrics.get('attempts', 1))}"
                         )
                     on_res = self.run_sync(
-                        self.extruder.setExtruder(True, speed=int(print_speed), enqueue=False),
+                        self.extruder.setExtruder(
+                            True,
+                            speed=int(print_speed),
+                            reverse=False,
+                            enqueue=False,
+                        ),
                         timeout_s=timeout_s,
                     )
                     if not on_res.get("ok", False):
@@ -488,6 +502,39 @@ class PrintSession(YamlSession):
                             else:
                                 extruder_on = False
                                 res = {"ok": True}
+
+                                if float(post_segment_wait_s) > 0.0:
+                                    wait_res = self.run_sync(
+                                        self.util.wait(float(post_segment_wait_s), enqueue=False),
+                                        timeout_s=_step_timeout(float(post_segment_wait_s) + 2.0),
+                                    )
+                                    if not wait_res.get("ok", False):
+                                        res = {
+                                            "ok": False,
+                                            "stage": "post_segment_wait",
+                                            "error": wait_res.get("error", "unknown"),
+                                        }
+
+                                if (
+                                    res.get("ok", False)
+                                    and float(post_segment_retract_s) > 0.0
+                                    and int(post_segment_retract_speed) > 0
+                                ):
+                                    retract_res = self.run_sync(
+                                        self.extruder.print_time(
+                                            secs=float(post_segment_retract_s),
+                                            speed=int(post_segment_retract_speed),
+                                            reverse=True,
+                                            enqueue=False,
+                                        ),
+                                        timeout_s=_step_timeout(float(post_segment_retract_s) + 3.0),
+                                    )
+                                    if not retract_res.get("ok", False):
+                                        res = {
+                                            "ok": False,
+                                            "stage": "post_segment_retract",
+                                            "error": retract_res.get("error", "unknown"),
+                                        }
 
                 if not res.get("ok", False):
                     if extruder_on:
