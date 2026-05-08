@@ -82,11 +82,11 @@ print_field_oriented_sequence:
     candidate_request_timeout_s: 120.0
     candidate_mode: gradient_walk
     candidate_beads_per_step: 7
-    candidate_bead_separation_mm: 16.0
-    candidate_bead_height_mm: 12.0
-    candidate_walk_distance_mm: 12.0
+    candidate_bead_separation_mm: 18.0
+    candidate_bead_height_mm: 14.0
+    candidate_walk_distance_mm: 10.0
     candidate_walk_step_mm: 0.5
-    candidate_walk_max_steps: 32
+    candidate_walk_max_steps: 60
     candidate_walk_start_fraction: 0.45
     candidate_target_zx: 0.03
     candidate_target_zy: -0.01
@@ -101,18 +101,18 @@ print_field_oriented_sequence:
     oriented_targets_enable: true
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
-    oriented_cone_max_tilt_deg: 40.0
+    oriented_cone_max_tilt_deg: 36.0
     oriented_base_to_world_yaw_deg: 180.0
-    segment_print_speed: 2900
+    segment_print_speed: 2950
     segment_approach_z_offset_m: 0.40
-    segment_travel_z_offset_m: 0.2
+    segment_travel_z_offset_m: 0.05
     segment_approach_vel_scale: 0.4
     segment_travel_vel_scale: 0.4
-    segment_print_vel_scale: 0.003
-    segment_accel_scale: 0.01
-    segment_target_print_speed_mm_s: 2.8
+    segment_print_vel_scale: 0.01
+    segment_accel_scale: 0.2
+    segment_target_print_speed_mm_s: 2.6
     post_segment_wait_s: 1.5
-    post_segment_retract_s: 1.0
-    post_segment_retract_speed: 6500
+    post_segment_retract_s: 0.7
+    post_segment_retract_speed: 7000
     max_cycles: 0
     prompt_before_next_cycle: true
