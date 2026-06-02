@@ -24,6 +24,8 @@ def build_targets(
     samples: int,
     z_jitter: float = 0.0,
     order_start_xyz: Optional[Sequence[float]] = None,
+    orientation_mode: str = "look_at",
+    orientation_pose: Optional[PoseStamped] = None,
 ) -> list[PoseStamped]:
     if not isinstance(target, PoseStamped):
         raise TypeError("target must be geometry_msgs.msg.PoseStamped")
@@ -35,12 +37,31 @@ def build_targets(
     poses: list[PoseStamped] = []
     rz_adjust = R.from_rotvec([0.0, 0.0, -math.pi / 2.0])
 
+    mode = str(orientation_mode or "look_at").strip().lower()
+    fixed_rotation = None
+    reference_rotation = None
+    if mode in ("fixed", "current", "current_eef", "target"):
+        fixed_source = orientation_pose if orientation_pose is not None else target
+        _, fixed_rotation = target_origin_rotation(fixed_source)
+    elif mode in ("look_at_current_roll", "look_at_keep_roll", "look_at_min_roll"):
+        reference_source = orientation_pose if orientation_pose is not None else target
+        _, reference_rotation = target_origin_rotation(reference_source)
+
     for d in dirs_local:
         p_loc = float(distance) * d
-        z_axis = d if TOOL_PLUS_Z_POINTS_OUTWARD else -d
-        R_loc = rotation_from_z_axis(z_axis, x_guess=np.array([1.0, 0.0, 0.0])) * rz_adjust
         p_w = p_t + R_t.apply(p_loc)
-        R_w = R_t * R_loc
+
+        if fixed_rotation is not None:
+            R_w = fixed_rotation
+        elif reference_rotation is not None:
+            z_axis = d if TOOL_PLUS_Z_POINTS_OUTWARD else -d
+            z_axis_w = R_t.apply(z_axis)
+            x_guess_w = reference_rotation.as_matrix()[:, 0]
+            R_w = rotation_from_z_axis(z_axis_w, x_guess=x_guess_w)
+        else:
+            z_axis = d if TOOL_PLUS_Z_POINTS_OUTWARD else -d
+            R_loc = rotation_from_z_axis(z_axis, x_guess=np.array([1.0, 0.0, 0.0])) * rz_adjust
+            R_w = R_t * R_loc
 
         if float(z_jitter) > 0.0:
             ray_dir = p_t - p_w

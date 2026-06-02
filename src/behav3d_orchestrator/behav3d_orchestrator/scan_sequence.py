@@ -71,6 +71,8 @@ class ScanSequenceNode(Node):
         self.declare_parameter("fibonacci_cap_deg", 45.0)
         self.declare_parameter("fibonacci_samples", 12)
         self.declare_parameter("fibonacci_z_jitter", 0.0)
+        self.declare_parameter("fibonacci_use_tf_target_orientation", False)
+        self.declare_parameter("fibonacci_orientation_mode", "look_at")
 
         self.declare_parameter("half_center_x", 0.0)
         self.declare_parameter("half_center_y", 0.80)
@@ -82,6 +84,19 @@ class ScanSequenceNode(Node):
         self.declare_parameter("half_n_angle", 7)
         self.declare_parameter("half_n_height", 3)
         self.declare_parameter("half_row_major", False)
+        self.declare_parameter("half_orientation_mode", "look_at_current_roll")
+        self.declare_parameter("half_use_line_axis", True)
+        self.declare_parameter("half_axis_start_x", -0.27)
+        self.declare_parameter("half_axis_start_y", 0.85)
+        self.declare_parameter("half_axis_start_z", 0.55)
+        self.declare_parameter("half_axis_end_x", -0.07)
+        self.declare_parameter("half_axis_end_y", 0.85)
+        self.declare_parameter("half_axis_end_z", 0.55)
+        self.declare_parameter("half_n_axis", 3)
+        self.declare_parameter("half_arc_center_dx", 0.0)
+        self.declare_parameter("half_arc_center_dy", 0.0)
+        self.declare_parameter("half_arc_center_dz", 1.0)
+        self.declare_parameter("half_roll_deg", 0.0)
 
         self.declare_parameter("run_reconstruction", False)
         self.declare_parameter("reconstruct_device", "CPU:0")
@@ -194,17 +209,58 @@ class ScanSequenceNode(Node):
 
         if scan_type in ("fibonacci", "fib"):
             target = self._target_pose(frame_id)
+            orientation_pose = None
+            if bool(self.get_parameter("fibonacci_use_tf_target_orientation").value):
+                target = self._target_with_current_eef_orientation(target, frame_id)
+            orientation_mode = str(self.get_parameter("fibonacci_orientation_mode").value).strip() or "look_at"
+            if orientation_mode.lower() in (
+                "fixed",
+                "current",
+                "current_eef",
+                "look_at_current_roll",
+                "look_at_keep_roll",
+                "look_at_min_roll",
+            ):
+                orientation_pose = self._current_eef_pose(frame_id)
             return self.session.run_fibonacci_scan(
                 target=target,
                 distance=float(self.get_parameter("fibonacci_distance").value),
                 cap_rad=math.radians(float(self.get_parameter("fibonacci_cap_deg").value)),
                 samples=int(self.get_parameter("fibonacci_samples").value),
                 z_jitter=float(self.get_parameter("fibonacci_z_jitter").value),
+                orientation_mode=orientation_mode,
+                orientation_pose=orientation_pose,
                 capture_folder=capture_folder,
                 **common,
             )
 
         if scan_type in ("half_cylinder", "half-cylinder", "half"):
+            half_orientation_mode = str(self.get_parameter("half_orientation_mode").value).strip() or "look_at"
+            half_orientation_pose = None
+            if half_orientation_mode.lower() in (
+                "fixed",
+                "current",
+                "current_eef",
+                "look_at_current_roll",
+                "look_at_keep_roll",
+                "look_at_min_roll",
+            ):
+                half_orientation_pose = self._current_eef_pose(frame_id)
+            axis_start_xyz = None
+            axis_end_xyz = None
+            n_axis = None
+            if bool(self.get_parameter("half_use_line_axis").value):
+                axis_start_xyz = (
+                    float(self.get_parameter("half_axis_start_x").value),
+                    float(self.get_parameter("half_axis_start_y").value),
+                    float(self.get_parameter("half_axis_start_z").value),
+                )
+                axis_end_xyz = (
+                    float(self.get_parameter("half_axis_end_x").value),
+                    float(self.get_parameter("half_axis_end_y").value),
+                    float(self.get_parameter("half_axis_end_z").value),
+                )
+                n_axis = int(self.get_parameter("half_n_axis").value)
             return self.session.run_half_cylinder_scan(
                 capture_folder=capture_folder,
                 center_x=float(self.get_parameter("half_center_x").value),
@@ -218,10 +274,45 @@ class ScanSequenceNode(Node):
                 n_height=int(self.get_parameter("half_n_height").value),
                 frame_id=frame_id,
                 row_major=bool(self.get_parameter("half_row_major").value),
+                orientation_mode=half_orientation_mode,
+                orientation_pose=half_orientation_pose,
+                axis_start_xyz=axis_start_xyz,
+                axis_end_xyz=axis_end_xyz,
+                n_axis=n_axis,
+                arc_center_direction=(
+                    float(self.get_parameter("half_arc_center_dx").value),
+                    float(self.get_parameter("half_arc_center_dy").value),
+                    float(self.get_parameter("half_arc_center_dz").value),
+                ),
+                roll_deg=float(self.get_parameter("half_roll_deg").value),
                 **common,
             )
 
         raise ValueError("scan_type must be one of: grid_sweep, fibonacci, half_cylinder")
+
+    def _target_with_current_eef_orientation(self, target, frame_id: str):
+        tf_pose = self._current_eef_pose(frame_id)
+        if tf_pose is not None:
+            target.pose.orientation = tf_pose.pose.orientation
+        else:
+            self.get_logger().warn("[scan_sequence] TF target orientation unavailable; using target quaternion params.")
+        return target
+
+    def _current_eef_pose(self, frame_id: str):
+        eef_link = str(self.get_parameter("eef_link").value).strip() or "femto_color_optical_calib"
+        timeout_s = self._param_optional_float("timeout_s")
+        res = self.session.run_sync(
+            self.session.camera.get_pose(
+                eef=eef_link,
+                base_frame=str(frame_id or "world"),
+                use_tf=True,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+        if res.get("ok", False) and "pose" in res:
+            return res["pose"]
+        return None
 
     def _common_scan_kwargs(self, timeout_s: Optional[float]) -> dict:
         prompt = str(self.get_parameter("prompt").value).strip() or None

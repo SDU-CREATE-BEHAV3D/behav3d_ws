@@ -301,6 +301,8 @@ class ScanSession(Session):
         samples: int,
         z_jitter: float = 0.0,
         order_start_xyz: Optional[Sequence[float]] = None,
+        orientation_mode: str = "look_at",
+        orientation_pose: Optional[PoseStamped] = None,
     ) -> list[PoseStamped]:
         if not isinstance(target, PoseStamped):
             raise TypeError("target must be geometry_msgs.msg.PoseStamped")
@@ -314,6 +316,8 @@ class ScanSession(Session):
             samples=int(samples),
             z_jitter=float(z_jitter),
             order_start_xyz=order_start_xyz,
+            orientation_mode=str(orientation_mode or "look_at"),
+            orientation_pose=orientation_pose,
         )
 
     def run_fibonacci_scan(
@@ -326,8 +330,14 @@ class ScanSession(Session):
         capture_folder: Optional[str],
         z_jitter: float = 0.0,
         order_start_xyz: Optional[Sequence[float]] = None,
+        orientation_mode: str = "look_at",
+        orientation_pose: Optional[PoseStamped] = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        do_home = bool(kwargs.pop("do_home", False))
+        timeout_s = kwargs.get("timeout_s", None)
+        if do_home:
+            self.run_sync(self.motion.home(enqueue=False), timeout_s=timeout_s)
         targets = self.build_fibonacci_targets(
             target=target,
             distance=distance,
@@ -335,6 +345,8 @@ class ScanSession(Session):
             samples=samples,
             z_jitter=z_jitter,
             order_start_xyz=order_start_xyz,
+            orientation_mode=orientation_mode,
+            orientation_pose=orientation_pose,
         )
         return self.run_scan_targets(targets=targets, capture_folder=capture_folder, **kwargs)
 
@@ -352,7 +364,17 @@ class ScanSession(Session):
         n_height: int,
         frame_id: str = "world",
         row_major: bool = False,
+        orientation_mode: str = "look_at",
+        orientation_pose: Optional[PoseStamped] = None,
+        axis_start_xyz: Optional[Sequence[float]] = None,
+        axis_end_xyz: Optional[Sequence[float]] = None,
+        n_axis: Optional[int] = None,
+        arc_center_direction: Sequence[float] = (0.0, 0.0, 1.0),
+        roll_deg: float = 0.0,
     ) -> list[PoseStamped]:
+        axis_start = _coerce_xyz_triplet(axis_start_xyz, fallback=(0.0, 0.0, 0.0)) if axis_start_xyz is not None else None
+        axis_end = _coerce_xyz_triplet(axis_end_xyz, fallback=(0.0, 0.0, 0.0)) if axis_end_xyz is not None else None
+        arc_center = _coerce_xyz_triplet(arc_center_direction, fallback=(0.0, 0.0, 1.0))
         return half_cylinder.build_targets(
             center_x=float(center_x),
             center_y=float(center_y),
@@ -365,6 +387,13 @@ class ScanSession(Session):
             n_height=int(n_height),
             frame_id=str(frame_id or "world"),
             row_major=bool(row_major),
+            orientation_mode=str(orientation_mode or "look_at"),
+            orientation_pose=orientation_pose,
+            axis_start_xyz=axis_start,
+            axis_end_xyz=axis_end,
+            n_axis=n_axis,
+            arc_center_direction=arc_center,
+            roll_deg=float(roll_deg),
         )
 
     def run_half_cylinder_scan(
@@ -373,6 +402,17 @@ class ScanSession(Session):
         capture_folder: Optional[str],
         **kwargs: Any,
     ) -> dict[str, Any]:
+        do_home = bool(kwargs.pop("do_home", False))
+        timeout_s = kwargs.get("timeout_s", None)
+        if do_home:
+            self.run_sync(self.motion.home(enqueue=False), timeout_s=timeout_s)
+        orientation_mode = str(kwargs.pop("orientation_mode", "look_at") or "look_at")
+        orientation_pose = kwargs.pop("orientation_pose", None)
+        axis_start_xyz = kwargs.pop("axis_start_xyz", None)
+        axis_end_xyz = kwargs.pop("axis_end_xyz", None)
+        n_axis = kwargs.pop("n_axis", None)
+        arc_center_direction = kwargs.pop("arc_center_direction", (0.0, 0.0, 1.0))
+        roll_deg = kwargs.pop("roll_deg", 0.0)
         targets = self.build_half_cylinder_targets(
             center_x=kwargs.pop("center_x"),
             center_y=kwargs.pop("center_y"),
@@ -385,6 +425,13 @@ class ScanSession(Session):
             n_height=kwargs.pop("n_height", 3),
             frame_id=kwargs.pop("frame_id", "world"),
             row_major=kwargs.pop("row_major", False),
+            orientation_mode=orientation_mode,
+            orientation_pose=orientation_pose,
+            axis_start_xyz=axis_start_xyz,
+            axis_end_xyz=axis_end_xyz,
+            n_axis=n_axis,
+            arc_center_direction=arc_center_direction,
+            roll_deg=float(roll_deg),
         )
         return self.run_scan_targets(targets=targets, capture_folder=capture_folder, **kwargs)
 
