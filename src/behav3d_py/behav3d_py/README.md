@@ -13,8 +13,8 @@ This is the Python API surface for the ROS 2 `behav3d_py` package. The focus is 
 Public methods:
 - `home(duration_s=10.0, on_move_done=None)`: enqueue a joint trajectory to the hard-coded HOME.
 - `goto(x, y, z, rx=None, ry=None, rz=None, eef=None, vel_scale=None, accel_scale=None, exec=True, on_move_done=None, start_print=None, motion=None)`: plan and optionally execute a PTP/LIN move.
-- `printTime(secs, speed, use_previous_speed=False, on_done=None)`: enqueue the `PrintTime` action.
-- `printSteps(steps, speed, use_previous_speed=False, on_done=None)`: enqueue the `PrintSteps` action.
+- `printTime(secs, speed, reverse=False, use_previous_speed=False, on_done=None)`: enqueue the `PrintTime` action.
+- `printSteps(steps, speed, reverse=False, use_previous_speed=False, on_done=None)`: enqueue the `PrintSteps` action.
 - `setPTP()`, `setLIN()`: set default motion mode.
 - `setEef(name)`, `setSpd(val)`, `setAcc(val)`: update defaults used by `goto()`.
 - `wait(secs, on_done=None)`: delay in the FIFO.

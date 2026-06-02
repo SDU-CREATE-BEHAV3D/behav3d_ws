@@ -11,7 +11,7 @@ There are **two orchestration layers** in this workspace:
 
 1. **YAML runner (`behav3d_py.SequenceParser`)**  
    This file documents that YAML format. YAML commands are parsed into calls on `behav3d_py.Commands`, which uses a **single FIFO queue**.  
-   - **Queued commands** (`home`, `goto`, `printTime`, `printSteps`, `wait`, `pose/getPose`, `capture`, `input`, `reconstruct`) run strictly in order.  
+   - **Queued commands** (`home`, `goto`, `printTime`, `printSteps`, `wait`, `pose/getPose`, `capture`, `input`) run strictly in order.  
    - **Setters** (`setPTP`, `setLIN`, `setEef`, `setSpd`, `setAcc`) apply **immediately** and affect subsequent commands.  
    - **There is no explicit `exec` command in YAML.** Planning and execution are controlled by `goto.exec`.
 
@@ -20,6 +20,8 @@ There are **two orchestration layers** in this workspace:
    - Use `run_sync(...)` when you need **deterministic blocking** (plan → exec → capture).  
    - Use `run_group([...])` when you need **parallel actions** (e.g., move + extrude).  
    - Use `enqueue=False` to build items for `run_group` or for blocking `run_sync`.
+   - Planning-scene mesh updates for obstacle avoidance are currently **Session API only** via `Session.camera.update_planning_scene_mesh(...)`; there is no YAML syntax for them in `SequenceParser` yet.
+   - For reconstructed TSDF meshes, the planning-scene mesh frame should match the RViz world-mesh frame used by `update_world_mesh`. In the current bringup that reference frame is `ur20_base_link`, not the MoveIt planning frame fallback.
 
 If you are writing YAML, focus on the **FIFO behavior** and `goto.exec`.  
 If you are writing Python sessions, use **`run_sync`/`run_group`** to control blocking and concurrency.

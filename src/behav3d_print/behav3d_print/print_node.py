@@ -18,8 +18,11 @@ from behav3d_interfaces.srv import GetPrintStatus
 MODBUS_IP      = "192.168.1.10"
 MODBUS_PORT    = 502
 COIL_EXTRUDE   = 10   # ON/OFF coil
+COIL_DIR       = 4    # direction coil
 REG_SPEED      = 1    # holding register for speed
 POLL_MS        = 500  # For getting info back from the Controllino
+DIR_FORWARD    = True
+DIR_REVERSE    = False
 
 # --- Modbus addresses ---
 COIL_QUEUE_PUSH = 13    # rising-edge enqueue
@@ -37,6 +40,7 @@ class PrintNode(Node):
         self.current_speed = 0          # active speed
         self.current_amount = 0         # target amount (placeholder, not used yet)
         self.extrude_enabled = False    # extruder ON/OFF
+        self.reverse = False            # False=forward/away-from-limit, True=reverse/toward-limit
         self.state = "IDLE"             # IDLE | PRINTING | STOPPED | ERROR
         self._printing = False # internal handle to know if printing is active
         self._force_stop = False    
@@ -55,6 +59,7 @@ class PrintNode(Node):
         # --- Polling timer (500 ms) ---
         self._last_coil = None
         self._last_speed = None
+        self._last_reverse = None
         self.timer = self.create_timer(POLL_MS / 1000.0, self._poll)
 
         # Initial safe state: extruder OFF (delay to avoid early reset during bringup)
@@ -170,6 +175,19 @@ class PrintNode(Node):
             self.get_logger().error(f"Error writing reg {REG_SPEED}: {wr}")
             self.state = "ERROR"
         return ok
+
+    def set_direction(self, reverse: bool) -> bool:
+        """Set extrusion direction via coil 4. reverse=False is the normal print direction."""
+        coil_value = DIR_REVERSE if bool(reverse) else DIR_FORWARD
+        rr = self._mb_call(self.client.write_coil, COIL_DIR, bool(coil_value))
+        ok = (rr is not None) and (not rr.isError())
+        if ok:
+            self.reverse = bool(reverse)
+            self.get_logger().info(f"coil[{COIL_DIR}] <- {coil_value} (reverse={self.reverse})")
+        else:
+            self.get_logger().error(f"Error writing coil {COIL_DIR}: {rr}")
+            self.state = "ERROR"
+        return ok
     
     # -------- Low-level helpers --------
     def _write_u32(self, reg_lo: int, reg_hi: int, value: int) -> bool:
@@ -231,6 +249,20 @@ class PrintNode(Node):
         else:
             self.get_logger().warning(f"Error reading coil {COIL_EXTRUDE}: {rr}")
 
+        # Read direction coil
+        rd = self._mb_call(self.client.read_coils, COIL_DIR, count=1)
+        if rd is None:
+            return
+        if not rd.isError():
+            dir_coil = bool(rd.bits[0])
+            reverse = (dir_coil == DIR_REVERSE)
+            if reverse != self._last_reverse:
+                self._last_reverse = reverse
+                self.reverse = reverse
+                self.get_logger().info(f"coil[{COIL_DIR}] => {dir_coil} (reverse={reverse})")
+        else:
+            self.get_logger().warning(f"Error reading coil {COIL_DIR}: {rd}")
+
         # Read speed (holding register)
         rs = self._mb_call(self.client.read_holding_registers, REG_SPEED, count=1)
         if rs is None:
@@ -247,12 +279,18 @@ class PrintNode(Node):
 
     # --- service callback ---
     def _on_update_config(self, req: UpdatePrintConfig.Request, res: UpdatePrintConfig.Response):
-        """Apply selective updates to speed and/or extrude using flags."""
+        """Apply selective updates to speed, direction, and/or extrude using flags."""
         # Apply speed if requested
         if req.set_speed:
             if not self.set_speed(req.speed):
                 res.success = False
                 res.message = f"Failed to set speed={req.speed}"
+                return res
+
+        if req.set_reverse:
+            if not self.set_direction(req.reverse):
+                res.success = False
+                res.message = f"Failed to set reverse={req.reverse}"
                 return res
 
         # Apply extrude if requested
@@ -270,6 +308,7 @@ class PrintNode(Node):
         # Read from internal, authoritative state
         res.speed = int(self.current_speed)
         res.extrude_on = bool(self.extrude_enabled)
+        res.reverse = bool(self.reverse)
         res.state = str(self.state)
         return res
 
@@ -292,6 +331,10 @@ class PrintNode(Node):
             if not self.set_speed(target_speed):
                 goal_handle.abort()
                 return PrintTime.Result(success=False, elapsed_ms=0, reason="modbus_speed_error")
+
+        if not self.set_direction(bool(goal.reverse)):
+            goal_handle.abort()
+            return PrintTime.Result(success=False, elapsed_ms=0, reason="modbus_direction_error")
 
         if not self.set_extrude(True):
             goal_handle.abort()
@@ -399,6 +442,10 @@ class PrintNode(Node):
             if not self.set_speed(int(goal.speed)):
                 goal_handle.abort()
                 return PrintSteps.Result(success=False, accepted_steps=0, reason="modbus_speed_error")
+
+        if not self.set_direction(bool(goal.reverse)):
+            goal_handle.abort()
+            return PrintSteps.Result(success=False, accepted_steps=0, reason="modbus_direction_error")
 
         # Ensure ON
         if not self.set_extrude(True):

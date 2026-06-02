@@ -1,3 +1,5 @@
+from glob import glob
+
 from setuptools import setup, find_packages
 
 package_name = 'behav3d_orchestrator'
@@ -16,6 +18,7 @@ setup(
         ('share/ament_index/resource_index/packages',
          ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
     entry_points={
         'console_scripts': [
@@ -26,6 +29,12 @@ setup(
             'print_scan_dots_sequence = behav3d_orchestrator.print_scan_dots_sequencenc:main',
             'print_scan_dots_sequencenc = behav3d_orchestrator.print_scan_dots_sequencenc:main',
             'depth_bias_capture_sequence = behav3d_orchestrator.depth_bias_capture_sequence:main',
+            'print_field_sequence = behav3d_orchestrator.print_field_sequence:main',
+            'print_field_centered_sequence = behav3d_orchestrator.print_field_centered_sequence:main',
+            'print_field_oriented_sequence = behav3d_orchestrator.print_field_oriented_sequence:main',
+            'print_field_oriented_sequence_v2 = behav3d_orchestrator.print_field_oriented_sequence_v2:main',
+            'debug_segment_timing_sequence = behav3d_orchestrator.debug_segment_timing_sequence:main',
+            'interactive_scan_motion_sequence = behav3d_orchestrator.interactive_scan_motion_sequence:main',
         ],
     },
 )

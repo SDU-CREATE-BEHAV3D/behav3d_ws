@@ -18,8 +18,8 @@ Launch file: `src/behav3d_bringup/launch/print_move.launch.py`
 The launch file brings up these runtime roles:
 - UR driver and controllers (UR20 workcell).
 - MoveIt `move_group`.
-- `behav3d_motion_bridge` (planning + pose services).
-- Orbbec camera driver (Femto Bolt).
+- `behav3d_motion_bridge` (planning + pose + planning-scene services).
+- Orbbec camera driver (Femto Mega).
 - `behav3d_print` (extrusion actions + print services).
 - `behav3d_sense` (capture service and session storage).
 - Reconstruction services via `behav3d_sense/launch/reconstruct_services.launch.py`:
@@ -30,6 +30,9 @@ The launch file brings up these runtime roles:
   - world-state publishing (`/behav3d/world_state`, `/behav3d/get_world_state`)
   - mesh update service (`/behav3d/update_world_mesh`)
   - RViz mesh marker publication (`/visualization_marker`)
+- `behav3d_fields` (`behav3d_sense/fields_node.py`) for:
+  - `/behav3d/init_field_from_scan`
+  - `/behav3d/generate_print_candidates`
 
 ---
 
@@ -38,7 +41,7 @@ The launch file brings up these runtime roles:
 Primary entry point: `behav3d_commands.Session` in `src/behav3d_commands/behav3d_commands/session.py`.
 
 Key concepts:
-- `Session` owns a `SessionQueue`, a `CommandRouter`, and four command sets: motion, camera, extruder, util.
+- `Session` owns a `SessionQueue`, a `CommandRouter`, and five command sets: motion, camera, field, extruder, util.
 - Each command returns a `QueueItem` when `enqueue=False` and enqueues by default when `enqueue=True`.
 - `SessionQueue` supports FIFO execution and best-effort parallel groups (`run_group`).
 - `run_sync` blocks the caller until `on_done` fires. It must not be called from the ROS executor thread; use a worker thread or a multi-threaded executor.
@@ -125,11 +128,11 @@ Implementation: `src/behav3d_commands/behav3d_commands/sense_commands/camera_com
 Underlying ROS interfaces:
 - Service `/capture` (`Capture`)
 - Service `/behav3d/get_link_pose` (`GetLinkPose`)
-- Service `/reconstruct_mesh` (`ReconstructMesh`)
 - Service `/reconstruct/color_to_depth` (`ColorToDepth`)
 - Service `/reconstruct/tsdf_cropped` (`TsdfCropped`)
 - Service `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`)
 - Service `/behav3d/update_world_mesh` (`UpdateWorldMesh`)
+- Service `/behav3d/update_planning_scene_mesh` (`UpdatePlanningSceneMesh`)
 
 Camera commands:
 
@@ -137,12 +140,12 @@ Camera commands:
 | --- | --- | --- | --- |
 | `capture()` | Capture RGB/Depth/IR (+ optional pose). | `rgb`, `depth`, `ir`, `pose`, `folder` | If `folder` is provided, `set_folder=True`. |
 | `get_pose()` | Get link pose in a base frame. | `eef`, `base_frame`, `use_tf` | If `use_tf=True`, bypasses MoveIt and reads TF. |
-| `reconstruct()` | Run TSDF reconstruction. | `use_latest`, `session_path` | Starts a background reconstruction job. |
 | `reconstruct_color_to_depth()` | Run color-to-depth alignment stage. | `use_latest`, `session_path`, `scan_folder`, `visualize` | Calls `/reconstruct/color_to_depth`. |
 | `reconstruct_color_to_depth_grid_sweep()` | Color-to-depth for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize` | Default `scan_folder="grid_sweep"`. |
 | `reconstruct_tsdf_cropped()` | Run TSDF cropped stage. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Calls `/reconstruct/tsdf_cropped`. |
 | `reconstruct_tsdf_grid_sweep()` | TSDF cropped for grid sweep captures. | `use_latest`, `session_path`, `scan_folder`, `visualize`, `device` | Default `scan_folder="grid_sweep"`. |
-| `update_world_mesh()` | Update RViz mesh marker from explicit or inferred reconstruction outputs. | `use_latest`, `session_path`, `mesh_path`, `ply_path`, `prefer`, `wait_timeout_s` | Calls `/behav3d/update_world_mesh`. Prefer explicit `mesh_path`/`ply_path` from TSDF response. |
+| `update_world_mesh()` | Update RViz world geometry from explicit or inferred reconstruction outputs. | `use_latest`, `session_path`, `mesh_path`, `ply_path`, `prefer`, `wait_timeout_s` | Calls `/behav3d/update_world_mesh`. `prefer="mesh"` publishes `MESH_RESOURCE`; `prefer="ply"` publishes colored PLY markers (`POINTS`/`TRIANGLE_LIST`) for debugging when available. Prefer explicit `mesh_path`/`ply_path` from TSDF response. |
+| `update_planning_scene_mesh()` | Update MoveIt planning-scene collision geometry from reconstructed mesh outputs. | `use_latest`, `session_path`, `mesh_path`, `object_id`, `frame_id`, `wait_timeout_s` | Calls `/behav3d/update_planning_scene_mesh`. Prefer explicit `mesh_path` from TSDF response. Re-using the same `object_id` replaces the previous obstacle mesh. If `frame_id` is empty, the motion bridge uses the MoveIt planning frame. For reconstructed TSDF meshes, `frame_id` should normally match the RViz world-mesh frame (`behav3d_world.mesh_frame_id`, currently `ur20_base_link`). |
 
 Reconstruction command usage notes:
 - Stage order for mesh flow: `reconstruct_color_to_depth*` first, then `reconstruct_tsdf_*`.
@@ -156,6 +159,13 @@ Reconstruction command usage notes:
 - Current protocol stores only `color_in_depth_*.png` for alignment (heavy debug files are not saved by default).
 - No reconstruction history snapshot duplication is used; outputs are kept in the active scan-folder reconstruction path.
 - For `update_world_mesh`, if explicit `mesh_path`/`ply_path` is provided, use those; do not rely on fallback discovery unless necessary.
+- For `update_planning_scene_mesh`, if explicit `mesh_path` is provided, use it; do not rely on fallback discovery unless necessary.
+- `update_planning_scene_mesh` applies the mesh as a MoveIt `CollisionObject` for obstacle avoidance; this is separate from RViz visualization in `update_world_mesh`.
+- `update_world_mesh` is the frame/alignment reference for reconstructed geometry. The planning-scene mesh should use the same frame interpretation as the RViz world mesh.
+- Verified behavior: if `update_world_mesh` publishes in `ur20_base_link` but `update_planning_scene_mesh` is added in `world`, the collision mesh can appear correct in RViz yet be offset in MoveIt. In that case motions may seem to pass through the obstacle.
+- Verified behavior: when the planning-scene collision mesh is added in the same frame as the RViz world mesh (`ur20_base_link` in the current bringup), the obstacle blocks planning as expected.
+- Current limitation: there is no explicit Behav3D command/service yet to remove a planning-scene collision mesh by `object_id`. Re-using the same `object_id` replaces the obstacle mesh, but clearing it explicitly still requires a future API addition.
+- TODO: add a planning-scene removal service in `behav3d_motion_bridge` (expected implementation: `PlanningSceneInterface.removeCollisionObjects([object_id])`) and wrap it in `behav3d_commands`.
 - `tsdf_object_extract` is currently exposed as a ROS service only (`/reconstruct/tsdf_object_extract`); it is launched in bringup but not wrapped as a `CameraCommands` method yet.
 - TSDF depth bias correction is currently applied internally in `src/behav3d_sense/behav3d_sense/reconstruct/TSDF_cpu_cropped.py` via `DEPTH_BIAS_MM` (current tuned value: `-5.1` mm). This bias is not part of the `/reconstruct/tsdf_cropped` service request contract.
 
@@ -165,7 +175,9 @@ Reconstruction + world-mesh protocol (current):
 3. Run `reconstruct_color_to_depth*` with the same `scan_folder` and wait for fresh `color_in_depth` outputs.
 4. Run `reconstruct_tsdf_*` with the same `scan_folder` and read returned `mesh_path` and `rgb_ply_path`.
 5. Call `update_world_mesh` using explicit `mesh_path`/`ply_path` and `prefer` (`mesh` or `ply`).
-6. World node stages a timestamped mesh copy in `/tmp/behav3d_world_mesh_cache` before publish, which avoids RViz stale-resource caching on repeated updates.
+6. Call `update_planning_scene_mesh` using explicit `mesh_path` if the reconstructed surface should be used for MoveIt obstacle avoidance.
+7. Use the same frame for planning-scene insertion as for RViz world-mesh publication. In the current bringup, `behav3d_world` publishes the reconstructed mesh in `ur20_base_link`, so `update_planning_scene_mesh(frame_id="ur20_base_link")` is the expected default.
+8. World node stages a timestamped mesh copy in `/tmp/behav3d_world_mesh_cache` before publish, which avoids RViz stale-resource caching on repeated updates.
 
 Capture folder semantics (as implemented in `behav3d_sense`):
 - `""` or `"."` uses current capture directory.
@@ -180,6 +192,39 @@ Capture session root:
 - Override with `BEHAV3D_CAPTURES_ROOT`.
 
 Implementation: `src/behav3d_sense/behav3d_sense/sense_node.py`, `src/behav3d_sense/behav3d_sense/reconstruction.py`, and `src/behav3d_sense/behav3d_sense/reconstruct/reconstruct_services.py`
+
+---
+
+**Command Surface: Field**
+
+Implementation: `src/behav3d_commands/behav3d_commands/sense_commands/field_commands.py`
+
+Underlying ROS interfaces:
+- Service `/behav3d/init_field_from_scan` (`InitFieldFromScan`)
+- Service `/behav3d/generate_print_candidates` (`GeneratePrintCandidates`)
+
+Field commands:
+
+| Command | Purpose | Key Parameters | Notes |
+| --- | --- | --- | --- |
+| `init_field_from_scan()` | Build and position the scalar field once from scan mesh + field mesh. | `use_latest`, `session_path`, `scan_mesh_paths[]`, `field_mesh_path`, `state_output_dir` | Produces `field_state_init.npz` and debug `field_masked_init.ply`; returns positioned offset `(x,y,z)`. |
+| `generate_print_candidates()` | Evaluate current scan against initialized field and produce print candidates. | `use_latest`, `session_path`, `field_state_path`, `scan_mesh_paths[]`, `output_dir`, `candidate_mode`, `beads_per_step`, `bead_separation_mm`, `bead_height_mm`, `orient_with_tangent`, `tangent_sign`, `clamp_to_cone`, `cone_max_tilt_deg`, `base_to_world_yaw_deg`, `target_zx/zy/zz`, `target_position_scale` | Produces cycle debug artifacts + final `targets.yaml` using the selected candidate mode (`z_lift` or `gradient_lift`) and optional tangent orientation. |
+
+Field command usage notes:
+- If `session_path` is non-empty, command layer forces `use_latest=False` (explicit path wins).
+- `scan_mesh_paths` can be omitted; the service resolves default TSDF mesh inside the session.
+- `field_state_path` can be omitted in `generate_print_candidates`; the service resolves latest `field_state_init.npz`.
+- Targets YAML is written in robot plane format `O(x,y,z) Z(i,j,k)` with position scaled by `target_position_scale` (default mm).
+- `candidate_mode` currently supports `z_lift` and `gradient_lift`.
+- If `orient_with_tangent=true`, target orientation is sampled from the scalar tangent field; optional orientation clamp is applied with `clamp_to_cone` and `cone_max_tilt_deg`.
+- Base-link to world target reorientation is applied inside `fields_node` at YAML generation time (`base_to_world_yaw_deg`, default falls back to node parameter `target_base_to_world_yaw_deg`).
+- Python-only scalar experiments in `lib_scalar` may support additional modes
+  such as `gradient_walk`; do not assume those are exposed through this ROS
+  command surface until `fields_node` and `GeneratePrintCandidates` are updated.
+
+Fields node implementation:
+- `src/behav3d_sense/behav3d_sense/fields_node.py`
+- Services exposed: `/behav3d/init_field_from_scan`, `/behav3d/generate_print_candidates`
 
 ---
 
@@ -212,12 +257,14 @@ Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 - `/behav3d/plan_pilz_ptp` (`PlanPilzPtp`) via `behav3d_motion_bridge`
 - `/behav3d/plan_pilz_lin` (`PlanPilzLin`) via `behav3d_motion_bridge`
 - `/behav3d/get_link_pose` (`GetLinkPose`) via `behav3d_motion_bridge`
+- `/behav3d/update_planning_scene_mesh` (`UpdatePlanningSceneMesh`) via `behav3d_motion_bridge`
 - `/capture` (`Capture`) via `behav3d_sense`
-- `/reconstruct_mesh` (`ReconstructMesh`) via `behav3d_sense/reconstruction`
 - `/reconstruct/color_to_depth` (`ColorToDepth`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/reconstruct/tsdf_cropped` (`TsdfCropped`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/reconstruct/tsdf_object_extract` (`TsdfObjectExtract`) via `behav3d_sense/reconstruct/reconstruct_services.py`
 - `/behav3d/update_world_mesh` (`UpdateWorldMesh`) via `behav3d_sense/world_node.py`
+- `/behav3d/init_field_from_scan` (`InitFieldFromScan`) via `behav3d_sense/fields_node.py`
+- `/behav3d/generate_print_candidates` (`GeneratePrintCandidates`) via `behav3d_sense/fields_node.py`
 - `update_print_config` (`UpdatePrintConfig`) via `behav3d_print`
 - `get_print_status` (`GetPrintStatus`) via `behav3d_print`
 - `/behav3d/publish_targets` (`PublishTargets`) via `behav3d_motion_bridge`
@@ -274,11 +321,16 @@ Why this pattern is ideal:
 
 **Additional Orchestration Patterns (Current)**
 
-YAML-driven orchestration in `behav3d_orchestrator`:
+Orchestration entry points in `behav3d_orchestrator`:
 - Entry points:
   - `ros2 run behav3d_orchestrator yaml_target_sequence`
   - `ros2 run behav3d_orchestrator print_path_sequence`
-- Session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
+  - `ros2 run behav3d_orchestrator print_dots_sequence`
+  - `ros2 run behav3d_orchestrator print_scan_dots_sequence` (legacy alias: `print_scan_dots_sequencenc`)
+  - `ros2 run behav3d_orchestrator depth_bias_capture_sequence`
+  - `ros2 run behav3d_orchestrator print_field_sequence`
+  - `ros2 run behav3d_orchestrator print_field_centered_sequence`
+- YAML-specific session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
 - `parse_yaml_targets(...)` supports:
   - `{index: N, xyz: [x, y, z]}`
   - `{index: N, x: ..., y: ..., z: ...}`

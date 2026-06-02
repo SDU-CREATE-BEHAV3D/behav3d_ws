@@ -9,7 +9,7 @@ from rclpy.node import Node
 from .command import Command
 from .queue import QueueItem, SessionQueue
 from .motion_commands import MotionCommands
-from .sense_commands import CameraCommands
+from .sense_commands import CameraCommands, FieldCommands
 from .print_commands import ExtruderCommands
 from .util_commands import UtilCommands
 
@@ -55,6 +55,7 @@ class Session:
 
         self.motion = MotionCommands(node, queue=self._queue, controller_action=controller_action)
         self.camera = CameraCommands(node, queue=self._queue)
+        self.field = FieldCommands(node, queue=self._queue)
         self.extruder = ExtruderCommands(node, queue=self._queue)
         self.util = UtilCommands(node, queue=self._queue)
 
@@ -64,6 +65,7 @@ class Session:
     def _register_default_commands(self) -> None:
         self.motion.register(self._router)
         self.camera.register(self._router)
+        self.field.register(self._router)
         self.extruder.register(self._router)
         self.util.register(self._router)
 

@@ -101,7 +101,7 @@ Python action server that wraps `PlanAndExecute` on top of the motion bridge.
 ### `behav3d_print`
 Python Modbus extruder control and print actions.
 - `PrintNode` (`behav3d_print/print_node.py`):
-  - Modbus controls: `set_extrude(...)`, `set_speed(...)`, `enqueue_steps(...)`
+  - Modbus controls: `set_extrude(...)`, `set_speed(...)`, `set_direction(...)`, `enqueue_steps(...)`
   - Low-level helpers: `_write_u32(...)`, `_pulse_coil(...)`, `_read_steps_remaining_now()`
   - ROS callbacks: `_poll()`, `_on_update_config(...)`, `_on_get_status(...)`
   - Actions: `_exec_print_time(...)`, `_exec_print_steps(...)`
@@ -132,6 +132,7 @@ Capture pipeline and reconstruction service.
 - `WorldNode` (`behav3d_sense/world_node.py`):
   - World-state interfaces: `/behav3d/world_state`, `/behav3d/get_world_state`
   - Mesh visualization service: `/behav3d/update_world_mesh` (publishes marker on `/visualization_marker`)
+  - PLY support for debugging: when `prefer="ply"`, publishes colored `POINTS`/`TRIANGLE_LIST` markers (with fallback to mesh resource).
 
 ### `custom_workcell`
 UR20 workcell URDFs, meshes, calibration YAMLs, and MoveIt configurations.
@@ -162,6 +163,7 @@ Publishes a mesh marker for RViz.
 - Standardize package naming and node names across Python and C++ stacks (avoid one-off demos).
 - Consolidate repeated capture/session logic between `behav3d_sense` and `behav3d_cpp`.
 - Move hard-coded parameters into ROS params or YAML configs (paths, IPs, frames).
+- TODO (loop/debug UX): redesign world-marker API to support explicit `append/remove/clear` commands (rviz_visual_tools-style) instead of relying on global accumulate params.
 - Split core vs demo packages (e.g., `behav3d_core/*`, `behav3d_demos/*`) for clarity.
 - Add a top-level `ARCHITECTURE.md` with system diagram, data flow, and dependency map.
 - Define a common message/manifest schema document under `docs/` and link to it.

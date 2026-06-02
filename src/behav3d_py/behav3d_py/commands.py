@@ -25,7 +25,7 @@ OnMoveDone = Optional[Callable[[Dict[str, Any]], None]]
 
 class Commands:
     """
-
+    DEPRECATED VERSION OF COMMAND INTERFACE
     Async command orchestrator managing motion, printing, sensing, and utility actions through a unified FIFO queue.
 
     Public API:
@@ -157,6 +157,7 @@ class Commands:
             *,
             secs: float,
             speed: int,
+            reverse: bool = False,
             use_previous_speed: bool = False,
             on_done: OnMoveDone = None):
         """
@@ -166,6 +167,7 @@ class Commands:
         self._enqueue("print_time", {
             "secs": float(secs),
             "speed": int(speed),
+            "reverse": bool(reverse),
             "use_prev": bool(use_previous_speed),
             "on_done": on_done
         })
@@ -174,6 +176,7 @@ class Commands:
             *,
             steps: int,
             speed: int,
+            reverse: bool = False,
             use_previous_speed: bool = False,
             on_done: OnMoveDone = None):
         """
@@ -182,6 +185,7 @@ class Commands:
         self._enqueue("print_steps", {
             "steps": int(steps),
             "speed": int(speed),
+            "reverse": bool(reverse),
             "use_prev": bool(use_previous_speed),
             "on_done": on_done
         })
@@ -484,6 +488,7 @@ class Commands:
         """Execute PrintTime action (process op) in FIFO."""
         secs = p["secs"]
         speed = p["speed"]
+        reverse = bool(p.get("reverse", False))
         use_prev = p["use_prev"]
         on_done = p.get("on_done")
 
@@ -496,9 +501,12 @@ class Commands:
         goal.duration.sec = int(secs)
         goal.duration.nanosec = int((secs - int(secs)) * 1e9)
         goal.speed = int(speed)
+        goal.reverse = bool(reverse)
         goal.use_previous_speed = bool(use_prev)
 
-        self.node.get_logger().info(f"PRINT: sending goal secs={secs:.2f} speed={speed} use_prev={use_prev}")
+        self.node.get_logger().info(
+            f"PRINT: sending goal secs={secs:.2f} speed={speed} reverse={reverse} use_prev={use_prev}"
+        )
         fut = self._print_ac.send_goal_async(goal)  # omit feedback for now; add later if needed
 
         def _on_goal_response(gf):
@@ -534,6 +542,7 @@ class Commands:
         """Execute PrintSteps action (process op) in FIFO."""
         steps = p["steps"]
         speed = p["speed"]
+        reverse = bool(p.get("reverse", False))
         use_prev = p["use_prev"]
         on_done = p.get("on_done")
 
@@ -547,10 +556,11 @@ class Commands:
         goal = PrintSteps.Goal()
         goal.steps = int(steps)
         goal.speed = int(speed)
+        goal.reverse = bool(reverse)
         goal.use_previous_speed = bool(use_prev)
 
         self.node.get_logger().info(
-            f"PRINT_STEPS: sending goal steps={steps} speed={speed} use_prev={use_prev}"
+            f"PRINT_STEPS: sending goal steps={steps} speed={speed} reverse={reverse} use_prev={use_prev}"
         )
 
         fut = self._print_steps_ac.send_goal_async(goal)  # feedback omitted for now

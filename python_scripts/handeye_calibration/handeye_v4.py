@@ -5,6 +5,8 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 import cv2
 import copy
 import numpy as np
+from itertools import combinations
+from math import comb
 from utils.session import Session
 from utils.manifest import read_manifest, load_robot_poses_decomposed,load_robot_poses, construct_image_paths
 from utils.image_loader import load_ir_image, preprocess_percentile_ir, preprocess_threshold_ir, load_color_image
@@ -15,10 +17,13 @@ from utils.extrinsics import load_extrinsics
 DEBUG_IR = False
 DEBUG_COLOR = False
 VALIDATION = True
+USE_SUBSET_SOLVER = True
+MIN_SUBSET_CAPTURES = 10
+MAX_EXHAUSTIVE_COMBINATIONS = 1000
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/260226_130512"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/260506_132318"
 
-scan_folder = "manual_caps"
+scan_folder = "scan"
 
 my_session = Session(SESSION_PATH, scan_folder)
 
@@ -158,6 +163,139 @@ def detect_charuco(img, K, D, board, dictionary, axis_len=0.1, refine_corners_ke
 
     # TODO: Maybe implement? cv::aruco::drawDetectedCornersCharuco(imageCopy, charucoCorners, charucoIds, color); *https://docs.opencv.org/3.4/df/d4a/tutorial_charuco_detection.html*
 
+
+def subset_by_indices(seq, indices):
+    return [seq[i] for i in indices]
+
+
+def compute_loop_closure_translation_error(T_base_tool0_subset, T_cam_board_subset, r_tool0_cam, t_tool0_cam):
+    T_tool0_cam = compose_T(r_tool0_cam, t_tool0_cam)
+    T_base_board_all = []
+
+    for i, T_base_tool0 in enumerate(T_base_tool0_subset):
+        T_base_cam = T_base_tool0 @ T_tool0_cam
+        T_base_board = T_base_cam @ T_cam_board_subset[i]
+        T_base_board_all.append(T_base_board)
+
+    if len(T_base_board_all) < 2:
+        return float("inf")
+
+    T_board_base = np.linalg.inv(T_base_board_all[0])
+    closure = T_board_base @ T_base_board_all[-1]
+    return float(np.linalg.norm(closure[:3, 3]))
+
+
+def evaluate_handeye_subset(indices, r_base_tool0_keep, t_base_tool0_keep, T_base_tool0_keep,
+                            r_cam_board_list, t_cam_board_list, T_cam_board_list, method):
+    idx = tuple(indices)
+
+    r_base_subset = subset_by_indices(r_base_tool0_keep, idx)
+    t_base_subset = subset_by_indices(t_base_tool0_keep, idx)
+    T_base_subset = subset_by_indices(T_base_tool0_keep, idx)
+    r_cam_subset = subset_by_indices(r_cam_board_list, idx)
+    t_cam_subset = subset_by_indices(t_cam_board_list, idx)
+    T_cam_subset = subset_by_indices(T_cam_board_list, idx)
+
+    try:
+        r_tool0_cam, t_tool0_cam = cv2.calibrateHandEye(
+            r_base_subset, t_base_subset,
+            r_cam_subset, t_cam_subset,
+            method=method_map[method]
+        )
+    except cv2.error:
+        return None
+
+    loop_closure_translation_error = compute_loop_closure_translation_error(
+        T_base_subset, T_cam_subset, r_tool0_cam, t_tool0_cam
+    )
+
+    return {
+        "indices": idx,
+        "r_tool0_cam": r_tool0_cam,
+        "t_tool0_cam": t_tool0_cam,
+        "loop_closure_translation_error": loop_closure_translation_error,
+    }
+
+
+def solve_best_handeye_subset(r_base_tool0_keep, t_base_tool0_keep, T_base_tool0_keep,
+                              r_cam_board_list, t_cam_board_list, T_cam_board_list,
+                              method, min_captures=10, max_exhaustive_combinations=50000,
+                              label="handeye"):
+    n = len(T_base_tool0_keep)
+    if n < min_captures:
+        raise ValueError(f"{label}: need at least {min_captures} captures, got {n}")
+
+    total_combinations = sum(comb(n, k) for k in range(min_captures, n + 1))
+    best_solution = None
+    tested = 0
+
+    if total_combinations <= max_exhaustive_combinations:
+        search_mode = "exhaustive"
+        for subset_size in range(min_captures, n + 1):
+            for indices in combinations(range(n), subset_size):
+                solution = evaluate_handeye_subset(
+                    indices,
+                    r_base_tool0_keep, t_base_tool0_keep, T_base_tool0_keep,
+                    r_cam_board_list, t_cam_board_list, T_cam_board_list,
+                    method,
+                )
+                if solution is None:
+                    continue
+                tested += 1
+                if best_solution is None or solution["loop_closure_translation_error"] < best_solution["loop_closure_translation_error"]:
+                    best_solution = solution
+    else:
+        search_mode = "greedy_backward"
+        current_indices = tuple(range(n))
+        best_solution = evaluate_handeye_subset(
+            current_indices,
+            r_base_tool0_keep, t_base_tool0_keep, T_base_tool0_keep,
+            r_cam_board_list, t_cam_board_list, T_cam_board_list,
+            method,
+        )
+        tested += 1
+
+        if best_solution is None:
+            raise RuntimeError(f"{label}: failed to evaluate the full capture set")
+
+        improved = True
+        while improved and len(current_indices) > min_captures:
+            improved = False
+            round_best = best_solution
+            round_best_indices = current_indices
+
+            for drop_pos in range(len(current_indices)):
+                candidate_indices = current_indices[:drop_pos] + current_indices[drop_pos + 1:]
+                solution = evaluate_handeye_subset(
+                    candidate_indices,
+                    r_base_tool0_keep, t_base_tool0_keep, T_base_tool0_keep,
+                    r_cam_board_list, t_cam_board_list, T_cam_board_list,
+                    method,
+                )
+                if solution is None:
+                    continue
+                tested += 1
+                if solution["loop_closure_translation_error"] < round_best["loop_closure_translation_error"]:
+                    round_best = solution
+                    round_best_indices = candidate_indices
+                    improved = True
+
+            if improved:
+                current_indices = round_best_indices
+                best_solution = round_best
+
+    if best_solution is None:
+        raise RuntimeError(f"{label}: no valid hand-eye subset solution found")
+
+    print(
+        f"[{label}] subset solver mode={search_mode} tested={tested} "
+        f"best_n={len(best_solution['indices'])} "
+        f"loop_closure_translation_error_mm={best_solution['loop_closure_translation_error'] * 1000:.3f}"
+    )
+    print(f"[{label}] best subset indices: {list(best_solution['indices'])}")
+
+    return best_solution
+
 def main():
 
 #IR Handeye main ingredients
@@ -181,7 +319,7 @@ def main():
 
     # IR Execute detection and Collect ir pairs 
 
-    skip_idx = {}  # Index to skip
+    skip_idx = {0,16,19,22,23}  # Index to skip
 
     for i, p in enumerate(ir_img_path):
         if i in skip_idx:
@@ -206,6 +344,9 @@ def main():
 # Color charuco detection and Collect color pose pairs 
 
     for i, p in enumerate(color_img_path):
+        if i in skip_idx:
+            continue
+
         img = load_color_image(p)
         charuco_res = detect_charuco(img, color_K, color_D, board, dictionary, axis_len=0.05, refine_corners_kernel=5, debug=DEBUG_COLOR)
         if charuco_res["ok_pose"] and charuco_res["rvec"] is not None and charuco_res["tvec"] is not None:
@@ -222,17 +363,54 @@ def main():
            
 #Handeye solveR
 
-    r_tool0_cam_ir, t_tool0_cam_ir = cv2.calibrateHandEye(
-        r_base_tool0_keep_ir , t_base_tool0_keep_ir ,
-        r_cam_board_list_ir ,   t_cam_board_list_ir ,
-        method=method_map[method]
-    )
+    if USE_SUBSET_SOLVER:
+        ir_solution = solve_best_handeye_subset(
+            r_base_tool0_keep_ir, t_base_tool0_keep_ir, T_base_tool0_keep_ir,
+            r_cam_board_list_ir, t_cam_board_list_ir, T_cam_board_list_ir,
+            method,
+            min_captures=MIN_SUBSET_CAPTURES,
+            max_exhaustive_combinations=MAX_EXHAUSTIVE_COMBINATIONS,
+            label="IR",
+        )
+        ir_indices = ir_solution["indices"]
+        r_tool0_cam_ir = ir_solution["r_tool0_cam"]
+        t_tool0_cam_ir = ir_solution["t_tool0_cam"]
+        r_base_tool0_keep_ir = subset_by_indices(r_base_tool0_keep_ir, ir_indices)
+        t_base_tool0_keep_ir = subset_by_indices(t_base_tool0_keep_ir, ir_indices)
+        T_base_tool0_keep_ir = subset_by_indices(T_base_tool0_keep_ir, ir_indices)
+        r_cam_board_list_ir = subset_by_indices(r_cam_board_list_ir, ir_indices)
+        t_cam_board_list_ir = subset_by_indices(t_cam_board_list_ir, ir_indices)
+        T_cam_board_list_ir = subset_by_indices(T_cam_board_list_ir, ir_indices)
 
-    r_tool0_cam_color, t_tool0_cam_color = cv2.calibrateHandEye(
-        r_base_tool0_keep_color , t_base_tool0_keep_color ,
-        r_cam_board_list_color ,   t_cam_board_list_color ,
-        method=method_map[method]
-    )
+        color_solution = solve_best_handeye_subset(
+            r_base_tool0_keep_color, t_base_tool0_keep_color, T_base_tool0_keep_color,
+            r_cam_board_list_color, t_cam_board_list_color, T_cam_board_list_color,
+            method,
+            min_captures=MIN_SUBSET_CAPTURES,
+            max_exhaustive_combinations=MAX_EXHAUSTIVE_COMBINATIONS,
+            label="COLOR",
+        )
+        color_indices = color_solution["indices"]
+        r_tool0_cam_color = color_solution["r_tool0_cam"]
+        t_tool0_cam_color = color_solution["t_tool0_cam"]
+        r_base_tool0_keep_color = subset_by_indices(r_base_tool0_keep_color, color_indices)
+        t_base_tool0_keep_color = subset_by_indices(t_base_tool0_keep_color, color_indices)
+        T_base_tool0_keep_color = subset_by_indices(T_base_tool0_keep_color, color_indices)
+        r_cam_board_list_color = subset_by_indices(r_cam_board_list_color, color_indices)
+        t_cam_board_list_color = subset_by_indices(t_cam_board_list_color, color_indices)
+        T_cam_board_list_color = subset_by_indices(T_cam_board_list_color, color_indices)
+    else:
+        r_tool0_cam_ir, t_tool0_cam_ir = cv2.calibrateHandEye(
+            r_base_tool0_keep_ir , t_base_tool0_keep_ir ,
+            r_cam_board_list_ir ,   t_cam_board_list_ir ,
+            method=method_map[method]
+        )
+
+        r_tool0_cam_color, t_tool0_cam_color = cv2.calibrateHandEye(
+            r_base_tool0_keep_color , t_base_tool0_keep_color ,
+            r_cam_board_list_color ,   t_cam_board_list_color ,
+            method=method_map[method]
+        )
 #Format to quat and rpy
     ir_quat= rotmat_to_quat_xyzw(r_tool0_cam_ir)
     ir_rpy =rotmat_to_rpy(r_tool0_cam_ir)
@@ -302,4 +480,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

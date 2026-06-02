@@ -2,4 +2,5 @@
 ---
 int32  speed
 bool   extrude_on
+bool   reverse
 string state   # "IDLE" | "PRINTING" | "ERROR" | "STOPPED"

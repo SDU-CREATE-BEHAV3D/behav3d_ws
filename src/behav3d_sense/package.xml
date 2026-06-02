@@ -14,6 +14,7 @@
   <depend>geometry_msgs</depend>
   <depend>visualization_msgs</depend>
   <depend>behav3d_interfaces</depend>
+  <depend>behav3d_py</depend>
   <depend>std_srvs</depend>
 
   <!-- Math & 3D processing dependencies -->

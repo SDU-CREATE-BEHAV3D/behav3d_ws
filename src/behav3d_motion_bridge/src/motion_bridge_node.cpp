@@ -3,9 +3,14 @@
 #include <vector>
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <mutex>
+#include <optional>
+#include <thread>
 #include <unordered_set>
 
+#include <boost/variant/get.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -18,8 +23,11 @@
 #include <moveit/robot_state/conversions.hpp>
 #include <moveit/robot_trajectory/robot_trajectory.hpp>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
+#include <moveit/planning_scene_interface/planning_scene_interface.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <Eigen/Geometry>
+#include <geometric_shapes/mesh_operations.h>
+#include <geometric_shapes/shape_operations.h>
 
 #include <moveit/move_group_interface/move_group_interface.hpp>
 #include <moveit_msgs/msg/display_trajectory.hpp>
@@ -40,10 +48,12 @@
 #include "behav3d_interfaces/srv/get_link_pose.hpp"
 #include "behav3d_interfaces/srv/publish_targets.hpp"
 #include "behav3d_interfaces/srv/delete_markers.hpp"
+#include "behav3d_interfaces/srv/update_planning_scene_mesh.hpp"
 
 using std::placeholders::_1;
 using std::placeholders::_2;
 using namespace std::chrono_literals;
+namespace fs = std::filesystem;
 
 class MotionBridge : public rclcpp::Node
 {
@@ -122,6 +132,11 @@ public:
         "/behav3d/delete_markers",
         std::bind(&MotionBridge::deleteMarkersCallback, this, _1, _2));
 
+    update_planning_scene_mesh_srv_ =
+        this->create_service<behav3d_interfaces::srv::UpdatePlanningSceneMesh>(
+            "/behav3d/update_planning_scene_mesh",
+            std::bind(&MotionBridge::updatePlanningSceneMeshCallback, this, _1, _2));
+
     // Joint state subscription
     joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
         "/joint_states", rclcpp::QoS(100),
@@ -134,12 +149,274 @@ public:
     RCLCPP_INFO(this->get_logger(),
                 "Motion bridge ready: /behav3d/plan_with_moveit, /behav3d/plan_cartesian_path, "
                 "/behav3d/plan_pilz_lin, /behav3d/plan_pilz_ptp, /behav3d/plan_pilz_sequence "
-                "/behav3d/get_link_pose, /behav3d/publish_targets, /behav3d/delete_markers "
+                "/behav3d/get_link_pose, /behav3d/publish_targets, /behav3d/delete_markers, "
+                "/behav3d/update_planning_scene_mesh "
                 "(exec_mode=%s, controller_action=%s, flange_link=%s)",
                 exec_mode_.c_str(), controller_action_name_.c_str(), flange_link_.c_str());
   }
 
 private:
+  static std::string trimCopy(const std::string& value)
+  {
+    const auto begin = value.find_first_not_of(" \t\r\n");
+    if (begin == std::string::npos)
+      return "";
+    const auto end = value.find_last_not_of(" \t\r\n");
+    return value.substr(begin, end - begin + 1);
+  }
+
+  static fs::path normalizePath(const fs::path& path)
+  {
+    return fs::absolute(path).lexically_normal();
+  }
+
+  static fs::path expandUserPath(const std::string& value)
+  {
+    if (value.empty() || value[0] != '~')
+      return fs::path(value);
+
+    if (const char* home = std::getenv("HOME"); home && *home)
+    {
+      std::string suffix = value.size() > 1 ? value.substr(1) : "";
+      while (!suffix.empty() && suffix.front() == '/')
+        suffix.erase(suffix.begin());
+      return fs::path(home) / suffix;
+    }
+    return fs::path(value);
+  }
+
+  fs::path capturesRoot() const
+  {
+    if (const char* env_root = std::getenv("BEHAV3D_CAPTURES_ROOT"); env_root && *env_root)
+      return normalizePath(fs::path(env_root));
+
+    if (const char* home = std::getenv("HOME"); home && *home)
+      return normalizePath(fs::path(home) / "behav3d_ws" / "captures");
+
+    return normalizePath(fs::temp_directory_path() / "behav3d_captures");
+  }
+
+  std::optional<fs::path> getLatestSession(const fs::path& captures_root) const
+  {
+    if (!fs::exists(captures_root) || !fs::is_directory(captures_root))
+      return std::nullopt;
+
+    std::optional<fs::path> latest;
+    fs::file_time_type latest_time;
+    for (const auto& entry : fs::directory_iterator(captures_root))
+    {
+      if (!entry.is_directory())
+        continue;
+
+      if (!latest.has_value() || entry.last_write_time() > latest_time)
+      {
+        latest = entry.path();
+        latest_time = entry.last_write_time();
+      }
+    }
+    return latest ? std::optional<fs::path>(normalizePath(*latest)) : std::nullopt;
+  }
+
+  fs::path resolveSessionPath(const std::string& raw_path, bool use_latest) const
+  {
+    const fs::path captures_root = capturesRoot();
+    const std::string value = trimCopy(raw_path);
+
+    if ((use_latest && value.empty()) || value.empty())
+    {
+      const auto latest = getLatestSession(captures_root);
+      return latest.value_or(captures_root);
+    }
+
+    if (value.rfind("@session", 0) == 0)
+    {
+      fs::path session_root;
+      if (const char* active = std::getenv("BEHAV3D_ACTIVE_SESSION"); active && *active && fs::exists(active))
+      {
+        session_root = normalizePath(fs::path(active));
+      }
+      else
+      {
+        const auto latest = getLatestSession(captures_root);
+        session_root = latest.value_or(captures_root);
+      }
+
+      std::string sub = value.substr(std::string("@session").size());
+      while (!sub.empty() && sub.front() == '/')
+        sub.erase(sub.begin());
+      return sub.empty() ? session_root : normalizePath(session_root / sub);
+    }
+
+    const fs::path path_value = expandUserPath(value);
+    if (path_value.is_absolute())
+      return normalizePath(path_value);
+    return normalizePath(captures_root / path_value);
+  }
+
+  std::optional<fs::path> resolveCandidatePath(const std::string& raw_path, const fs::path& session_dir) const
+  {
+    std::string value = trimCopy(raw_path);
+    if (value.empty())
+      return std::nullopt;
+
+    if (value.rfind("file://", 0) == 0)
+      value = value.substr(7);
+
+    if (value.rfind("@session", 0) == 0)
+      return resolveSessionPath(value, false);
+
+    const fs::path path_value = expandUserPath(value);
+    if (path_value.is_absolute())
+      return normalizePath(path_value);
+    return normalizePath(session_dir / path_value);
+  }
+
+  std::optional<fs::path> latestExistingMeshPath(const fs::path& session_dir) const
+  {
+    if (!fs::exists(session_dir) || !fs::is_directory(session_dir))
+      return std::nullopt;
+
+    static const std::unordered_set<std::string> allowed_names = {
+      "tsdf_surface_mesh.stl",
+      "tsdf_surface_mesh.ply",
+      "tsdf_surface_mesh.obj",
+    };
+
+    std::optional<fs::path> latest;
+    fs::file_time_type latest_time;
+    for (const auto& entry : fs::recursive_directory_iterator(
+             session_dir,
+             fs::directory_options::skip_permission_denied))
+    {
+      if (!entry.is_regular_file())
+        continue;
+      if (allowed_names.find(entry.path().filename().string()) == allowed_names.end())
+        continue;
+
+      if (!latest.has_value() || entry.last_write_time() > latest_time)
+      {
+        latest = entry.path();
+        latest_time = entry.last_write_time();
+      }
+    }
+    return latest ? std::optional<fs::path>(normalizePath(*latest)) : std::nullopt;
+  }
+
+  fs::path defaultMeshPath(const fs::path& session_dir) const
+  {
+    if (const auto latest = latestExistingMeshPath(session_dir); latest.has_value())
+      return *latest;
+
+    const std::vector<fs::path> candidates = {
+      session_dir / "tsdf_surface_mesh.stl",
+      session_dir / "tsdf_surface_mesh.ply",
+      session_dir / "tsdf_surface_mesh.obj",
+    };
+
+    for (const auto& candidate : candidates)
+    {
+      if (fs::exists(candidate) && fs::is_regular_file(candidate))
+        return normalizePath(candidate);
+    }
+    return normalizePath(candidates.front());
+  }
+
+  static std::chrono::system_clock::time_point toSystemClock(fs::file_time_type file_time)
+  {
+    return std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        std::chrono::system_clock::now() + (file_time - fs::file_time_type::clock::now()));
+  }
+
+  bool waitForFile(
+      const fs::path& path,
+      double timeout_s,
+      std::optional<std::chrono::system_clock::time_point> min_write_time) const
+  {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_s);
+    while (true)
+    {
+      if (fs::exists(path) && fs::is_regular_file(path))
+      {
+        if (!min_write_time.has_value())
+          return true;
+
+        try
+        {
+          if (toSystemClock(fs::last_write_time(path)) >= *min_write_time)
+            return true;
+        }
+        catch (const std::exception&)
+        {
+          return true;
+        }
+      }
+
+      if (std::chrono::steady_clock::now() >= deadline)
+        return false;
+
+      std::this_thread::sleep_for(250ms);
+    }
+  }
+
+  bool applyPlanningSceneMesh(
+      const fs::path& mesh_path,
+      const std::string& object_id,
+      const std::string& frame_id,
+      std::string& error,
+      uint32_t& triangle_count) const
+  {
+    triangle_count = 0;
+    const std::string resource = "file://" + mesh_path.string();
+    std::unique_ptr<shapes::Mesh> shape_mesh(shapes::createMeshFromResource(resource));
+    if (!shape_mesh)
+    {
+      error = "Failed to load mesh resource: " + resource;
+      return false;
+    }
+
+    shapes::ShapeMsg shape_msg;
+    if (!shapes::constructMsgFromShape(shape_mesh.get(), shape_msg))
+    {
+      error = "Failed to convert mesh to shape message: " + mesh_path.string();
+      return false;
+    }
+
+    const auto* mesh_msg = boost::get<shape_msgs::msg::Mesh>(&shape_msg);
+    if (mesh_msg == nullptr)
+    {
+      error = "Converted shape was not a triangle mesh: " + mesh_path.string();
+      return false;
+    }
+
+    moveit_msgs::msg::CollisionObject collision_object;
+    collision_object.header.frame_id = frame_id;
+    collision_object.id = object_id;
+    collision_object.operation = moveit_msgs::msg::CollisionObject::ADD;
+    collision_object.meshes.push_back(*mesh_msg);
+
+    geometry_msgs::msg::Pose mesh_pose;
+    mesh_pose.orientation.w = 1.0;
+    collision_object.mesh_poses.push_back(mesh_pose);
+
+    try
+    {
+      moveit::planning_interface::PlanningSceneInterface planning_scene_interface("", false);
+      if (!planning_scene_interface.applyCollisionObject(collision_object))
+      {
+        error = "PlanningSceneInterface.applyCollisionObject returned false";
+        return false;
+      }
+    }
+    catch (const std::exception& exc)
+    {
+      error = std::string("PlanningSceneInterface exception: ") + exc.what();
+      return false;
+    }
+
+    triangle_count = static_cast<uint32_t>(mesh_msg->triangles.size());
+    return true;
+  }
+
   // --- Utilities ---
   moveit::core::RobotState makeStartStateFromJointState(const moveit::core::RobotModelConstPtr &model)
   {
@@ -266,6 +543,87 @@ private:
   void deleteMarkersCallback(
     const std::shared_ptr<behav3d_interfaces::srv::DeleteMarkers::Request> req,
     std::shared_ptr<behav3d_interfaces::srv::DeleteMarkers::Response> res);
+
+  void updatePlanningSceneMeshCallback(
+    const std::shared_ptr<behav3d_interfaces::srv::UpdatePlanningSceneMesh::Request> req,
+    std::shared_ptr<behav3d_interfaces::srv::UpdatePlanningSceneMesh::Response> res)
+  {
+    const auto request_started = std::chrono::system_clock::now();
+    const fs::path session_dir = resolveSessionPath(req->session_path, bool(req->use_latest));
+    res->session_dir = session_dir.string();
+
+    if (!fs::exists(session_dir) || !fs::is_directory(session_dir))
+    {
+      res->success = false;
+      res->message = "Session directory not found: " + session_dir.string();
+      res->resolved_mesh_path = "";
+      res->applied_object_id = "";
+      res->applied_frame_id = "";
+      res->triangle_count = 0;
+      return;
+    }
+
+    fs::path mesh_path = resolveCandidatePath(req->mesh_path, session_dir).value_or(defaultMeshPath(session_dir));
+    res->resolved_mesh_path = mesh_path.string();
+
+    const double wait_timeout_s = std::max(0.0, static_cast<double>(req->wait_timeout_s));
+    const bool has_explicit_path = !trimCopy(req->mesh_path).empty();
+    std::optional<std::chrono::system_clock::time_point> min_write_time;
+    if (!has_explicit_path && wait_timeout_s > 0.0)
+      min_write_time = request_started - 100ms;
+
+    if (!waitForFile(mesh_path, wait_timeout_s, min_write_time))
+    {
+      res->success = false;
+      res->message =
+          "Mesh path not available after " + std::to_string(wait_timeout_s) + "s: " + mesh_path.string();
+      res->applied_object_id = "";
+      res->applied_frame_id = "";
+      res->triangle_count = 0;
+      return;
+    }
+
+    std::string frame_id = trimCopy(req->frame_id);
+    try
+    {
+      if (frame_id.empty())
+      {
+        moveit::planning_interface::MoveGroupInterface mgi(shared_from_this(), "ur_arm");
+        frame_id = mgi.getPlanningFrame();
+      }
+    }
+    catch (const std::exception& exc)
+    {
+      res->success = false;
+      res->message = std::string("Failed to resolve planning frame: ") + exc.what();
+      res->applied_object_id = "";
+      res->applied_frame_id = "";
+      res->triangle_count = 0;
+      return;
+    }
+
+    std::string object_id = trimCopy(req->object_id);
+    if (object_id.empty())
+      object_id = "behav3d_reconstructed_mesh";
+
+    uint32_t triangle_count = 0;
+    std::string error;
+    if (!applyPlanningSceneMesh(mesh_path, object_id, frame_id, error, triangle_count))
+    {
+      res->success = false;
+      res->message = error;
+      res->applied_object_id = "";
+      res->applied_frame_id = "";
+      res->triangle_count = 0;
+      return;
+    }
+
+    res->success = true;
+    res->message = "Applied planning-scene mesh: " + mesh_path.string();
+    res->applied_object_id = object_id;
+    res->applied_frame_id = frame_id;
+    res->triangle_count = triangle_count;
+  }
 
 
   // --- PlanWithMoveIt callback ---
@@ -776,6 +1134,8 @@ private:
   rclcpp::Service<behav3d_interfaces::srv::GetLinkPose>::SharedPtr get_link_pose_srv_;
   rclcpp::Service<behav3d_interfaces::srv::PublishTargets>::SharedPtr publish_targets_srv_;
   rclcpp::Service<behav3d_interfaces::srv::DeleteMarkers>::SharedPtr delete_markers_srv_;
+  rclcpp::Service<behav3d_interfaces::srv::UpdatePlanningSceneMesh>::SharedPtr
+      update_planning_scene_mesh_srv_;
 
   rclcpp_action::Client<FJT>::SharedPtr fjt_client_;
 

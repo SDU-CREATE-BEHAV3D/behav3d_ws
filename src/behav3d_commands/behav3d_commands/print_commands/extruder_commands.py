@@ -41,6 +41,7 @@ class ExtruderCommands:
         *,
         secs: float,
         speed: int,
+        reverse: bool = False,
         offset_s: float = 0.0,
         use_previous_speed: bool = False,
         on_done: OnCommandDone = None,
@@ -52,6 +53,7 @@ class ExtruderCommands:
             {
                 "secs": float(secs),
                 "speed": int(speed),
+                "reverse": bool(reverse),
                 "use_prev": bool(use_previous_speed),
                 "offset_s": float(offset_s),
             },
@@ -65,6 +67,7 @@ class ExtruderCommands:
         *,
         steps: int,
         speed: int,
+        reverse: bool = False,
         offset_s: float = 0.0,
         use_previous_speed: bool = False,
         on_done: OnCommandDone = None,
@@ -76,6 +79,7 @@ class ExtruderCommands:
             {
                 "steps": int(steps),
                 "speed": int(speed),
+                "reverse": bool(reverse),
                 "use_prev": bool(use_previous_speed),
                 "offset_s": float(offset_s),
             },
@@ -89,6 +93,7 @@ class ExtruderCommands:
         on: bool,
         *,
         speed: Optional[int] = None,
+        reverse: Optional[bool] = None,
         on_done: OnCommandDone = None,
         enqueue: bool = True,
     ):
@@ -97,6 +102,7 @@ class ExtruderCommands:
             {
                 "on": bool(on),
                 "speed": (None if speed is None else int(speed)),
+                "reverse": reverse,
             },
             cmd_kind="set_extruder",
             on_done=on_done,
@@ -106,6 +112,7 @@ class ExtruderCommands:
     def _handle_print_time(self, payload: Dict[str, Any], cmd: Command) -> None:
         secs = float(payload.get("secs", 0.0))
         speed = int(payload.get("speed", 0))
+        reverse = bool(payload.get("reverse", False))
         use_prev = bool(payload.get("use_prev", False))
 
         if not self._print_ac.wait_for_server(timeout_sec=2.0):
@@ -116,10 +123,11 @@ class ExtruderCommands:
         goal.duration.sec = int(secs)
         goal.duration.nanosec = int((secs - int(secs)) * 1e9)
         goal.speed = int(speed)
+        goal.reverse = bool(reverse)
         goal.use_previous_speed = bool(use_prev)
 
         self._node.get_logger().info(
-            f"PRINT: sending goal secs={secs:.2f} speed={speed} use_prev={use_prev}"
+            f"PRINT: sending goal secs={secs:.2f} speed={speed} reverse={reverse} use_prev={use_prev}"
         )
         fut = self._print_ac.send_goal_async(goal)
 
@@ -156,6 +164,7 @@ class ExtruderCommands:
     def _handle_print_steps(self, payload: Dict[str, Any], cmd: Command) -> None:
         steps = int(payload.get("steps", 0))
         speed = int(payload.get("speed", 0))
+        reverse = bool(payload.get("reverse", False))
         use_prev = bool(payload.get("use_prev", False))
 
         if not self._print_steps_ac.wait_for_server(timeout_sec=2.0):
@@ -165,10 +174,11 @@ class ExtruderCommands:
         goal = PrintSteps.Goal()
         goal.steps = int(steps)
         goal.speed = int(speed)
+        goal.reverse = bool(reverse)
         goal.use_previous_speed = bool(use_prev)
 
         self._node.get_logger().info(
-            f"PRINT_STEPS: sending goal steps={steps} speed={speed} use_prev={use_prev}"
+            f"PRINT_STEPS: sending goal steps={steps} speed={speed} reverse={reverse} use_prev={use_prev}"
         )
         fut = self._print_steps_ac.send_goal_async(goal)
 
@@ -241,6 +251,7 @@ class ExtruderCommands:
     def _handle_set_extruder(self, payload: Dict[str, Any], cmd: Command) -> None:
         on = bool(payload.get("on", False))
         speed = payload.get("speed", None)
+        reverse = payload.get("reverse", None)
 
         if not self._update_cfg_cli.wait_for_service(timeout_sec=2.0):
             cmd.finish_flag(ok=False, phase="exec", error="update_print_config service not available")
@@ -249,6 +260,8 @@ class ExtruderCommands:
         req = UpdatePrintConfig.Request()
         req.set_extrude = True
         req.extrude_on = bool(on)
+        req.set_reverse = reverse is not None
+        req.reverse = bool(reverse) if reverse is not None else False
 
         if speed is None:
             req.set_speed = False
@@ -258,7 +271,8 @@ class ExtruderCommands:
             req.speed = int(speed)
 
         self._node.get_logger().info(
-            f"SET_EXTRUDER: on={req.extrude_on} set_speed={req.set_speed} speed={req.speed}"
+            f"SET_EXTRUDER: on={req.extrude_on} set_speed={req.set_speed} speed={req.speed} "
+            f"set_reverse={req.set_reverse} reverse={req.reverse}"
         )
 
         fut = self._update_cfg_cli.call_async(req)

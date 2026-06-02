@@ -2,6 +2,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict
 
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from behav3d_interfaces.srv import ColorToDepth, TsdfCropped, TsdfObjectExtract
@@ -33,12 +34,19 @@ def _run_color_to_depth(session_dir: Path, scan_folder: str, visualize: bool, de
     )
 
 
-def _run_tsdf_cropped(session_dir: Path, scan_folder: str, visualize: bool, device: str = None):
+def _run_tsdf_cropped(
+    session_dir: Path,
+    scan_folder: str,
+    visualize: bool,
+    device: str = None,
+    **kwargs,
+):
     return TSDF_cpu_cropped.run(
         session_path=str(session_dir),
         scan_folder_override=scan_folder,
         visualize=visualize,
-        device=device
+        device=device,
+        **kwargs,
     )
 
 
@@ -151,10 +159,11 @@ class _BaseReconstructService(Node):
             return response
 
         expected = self._output_resolver(session_dir, scan_folder) or {}
+        runner_kwargs = self._build_runner_kwargs(request)
         self._running = True
         thread = threading.Thread(
             target=self._run_thread,
-            args=(session_dir, scan_folder, visualize, device),
+            args=(session_dir, scan_folder, visualize, device, runner_kwargs),
             daemon=True
         )
         thread.start()
@@ -164,16 +173,27 @@ class _BaseReconstructService(Node):
         self._apply_output_fields(response, expected)
         return response
 
-    def _run_thread(self, session_dir: Path, scan_folder: str, visualize: bool, device: str):
+    def _run_thread(
+        self,
+        session_dir: Path,
+        scan_folder: str,
+        visualize: bool,
+        device: str,
+        runner_kwargs: Dict[str, Any],
+    ):
         try:
             self.get_logger().info(f"Running reconstruction for {session_dir}")
-            output = self._runner(session_dir, scan_folder, visualize, device)
+            output = self._runner(session_dir, scan_folder, visualize, device, **runner_kwargs)
             if output is not None:
                 self.get_logger().info(f"Reconstruction output: {output}")
         except Exception as exc:
             self.get_logger().error(f"Reconstruction failed: {exc}")
         finally:
             self._running = False
+
+    def _build_runner_kwargs(self, request) -> Dict[str, Any]:
+        _ = request
+        return {}
 
 
 class ColorToDepthService(_BaseReconstructService):
@@ -196,6 +216,52 @@ class TSDFCroppedService(_BaseReconstructService):
             output_resolver=_resolve_tsdf_cropped_outputs,
             srv_type=TsdfCropped,
         )
+        self.declare_parameter("center_crop_enable", bool(TSDF_cpu_cropped.C2D_CENTER_CROP_ENABLE))
+        self.declare_parameter(
+            "center_crop_width",
+            int(TSDF_cpu_cropped.C2D_CENTER_CROP_WIDTH)
+            if TSDF_cpu_cropped.C2D_CENTER_CROP_WIDTH is not None
+            else 0,
+        )
+        self.declare_parameter(
+            "center_crop_height",
+            int(TSDF_cpu_cropped.C2D_CENTER_CROP_HEIGHT)
+            if TSDF_cpu_cropped.C2D_CENTER_CROP_HEIGHT is not None
+            else 0,
+        )
+        self.declare_parameter(
+            "center_crop_apply_to_depth",
+            bool(TSDF_cpu_cropped.C2D_CENTER_CROP_APPLY_TO_DEPTH),
+        )
+        self.declare_parameter("aabb_crop_enable", bool(TSDF_cpu_cropped.CROP_ENABLE))
+        self.declare_parameter(
+            "aabb_crop_min",
+            [float(v) for v in np.asarray(TSDF_cpu_cropped.CROP_MIN, dtype=np.float64).reshape(-1)[:3]],
+        )
+        self.declare_parameter(
+            "aabb_crop_max",
+            [float(v) for v in np.asarray(TSDF_cpu_cropped.CROP_MAX, dtype=np.float64).reshape(-1)[:3]],
+        )
+
+    def _build_runner_kwargs(self, request) -> Dict[str, Any]:
+        _ = request
+
+        crop_min = list(self.get_parameter("aabb_crop_min").value)
+        crop_max = list(self.get_parameter("aabb_crop_max").value)
+        if len(crop_min) < 3:
+            crop_min = [-0.25, -1.1, -1.0]
+        if len(crop_max) < 3:
+            crop_max = [0.3, -0.65, 0.5]
+
+        return {
+            "center_crop_enable": bool(self.get_parameter("center_crop_enable").value),
+            "center_crop_width": int(self.get_parameter("center_crop_width").value),
+            "center_crop_height": int(self.get_parameter("center_crop_height").value),
+            "center_crop_apply_to_depth": bool(self.get_parameter("center_crop_apply_to_depth").value),
+            "aabb_crop_enable": bool(self.get_parameter("aabb_crop_enable").value),
+            "aabb_crop_min": [float(crop_min[0]), float(crop_min[1]), float(crop_min[2])],
+            "aabb_crop_max": [float(crop_max[0]), float(crop_max[1]), float(crop_max[2])],
+        }
 
 
 class TSDFObjectExtractService(_BaseReconstructService):

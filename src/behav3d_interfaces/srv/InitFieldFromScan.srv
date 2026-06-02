@@ -1,0 +1,18 @@
+# Request
+bool use_latest
+string session_path
+string[] scan_mesh_paths
+string field_mesh_path
+string state_output_dir
+---
+# Response
+bool success
+string message
+string session_dir
+string resolved_scan_mesh_path
+string resolved_field_mesh_path
+string field_state_path
+string debug_field_ply_path
+float64 offset_x
+float64 offset_y
+float64 offset_z

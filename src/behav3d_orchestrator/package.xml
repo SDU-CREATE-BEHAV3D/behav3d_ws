@@ -24,6 +24,8 @@
   <depend>control_msgs</depend>
   <depend>behav3d_interfaces</depend>
   <depend>behav3d_commands</depend>
+  <depend>behav3d_examples</depend>
+  <depend>behav3d_py</depend>
   <depend>behav3d_utils</depend>
 
   <export>

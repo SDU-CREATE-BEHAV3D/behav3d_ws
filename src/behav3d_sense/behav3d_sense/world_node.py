@@ -4,20 +4,23 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import numpy as np
+import open3d as o3d
 import yaml
 
 import rclpy
 from behav3d_interfaces.srv import UpdateWorldMesh
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Point, Pose
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
-from std_msgs.msg import String
+from std_msgs.msg import ColorRGBA, String
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import Marker
 
@@ -48,8 +51,13 @@ class WorldNode(Node):
         self.declare_parameter("mesh_source_settle_s", 0.35)
         self.declare_parameter("mesh_stage_dir", "/tmp/behav3d_world_mesh_cache")
         self.declare_parameter("mesh_stage_keep", 20)
-        self.declare_parameter("mesh_accumulate", False)
-        self.declare_parameter("mesh_accumulate_max_markers", 100)
+        self.declare_parameter("mesh_accumulate", True)
+        self.declare_parameter("mesh_accumulate_max_markers", 2)
+        self.declare_parameter("ply_marker_point_size", 0.0015)
+        self.declare_parameter("ply_marker_max_points", 120000)
+        self.declare_parameter("ply_marker_max_triangles", 80000)
+        self.declare_parameter("ply_marker_prefer_points", True)
+        self.declare_parameter("ply_marker_use_colors", True)
 
         self._mesh_frame_id = str(self.get_parameter("mesh_frame_id").value)
         self._mesh_topic = str(self.get_parameter("mesh_topic").value)
@@ -69,6 +77,11 @@ class WorldNode(Node):
         self._mesh_accumulate_max_markers = max(
             1, int(self.get_parameter("mesh_accumulate_max_markers").value)
         )
+        self._ply_marker_point_size = max(1e-6, float(self.get_parameter("ply_marker_point_size").value))
+        self._ply_marker_max_points = max(1, int(self.get_parameter("ply_marker_max_points").value))
+        self._ply_marker_max_triangles = max(1, int(self.get_parameter("ply_marker_max_triangles").value))
+        self._ply_marker_prefer_points = bool(self.get_parameter("ply_marker_prefer_points").value)
+        self._ply_marker_use_colors = bool(self.get_parameter("ply_marker_use_colors").value)
         self._mesh_next_marker_id = 0
         self._mesh_active_marker_ids: List[int] = []
 
@@ -96,6 +109,14 @@ class WorldNode(Node):
         self.get_logger().info(f"Mesh marker topic: {self._mesh_topic} (frame={self._mesh_frame_id})")
         self.get_logger().info(f"Mesh staging dir: {self._mesh_stage_dir}")
         self.get_logger().info(f"Mesh source settle time: {self._mesh_source_settle_s:.2f}s")
+        self.get_logger().info(
+            "PLY marker config: "
+            f"prefer_points={self._ply_marker_prefer_points} "
+            f"use_colors={self._ply_marker_use_colors} "
+            f"point_size={self._ply_marker_point_size:.6f} "
+            f"max_points={self._ply_marker_max_points} "
+            f"max_triangles={self._ply_marker_max_triangles}"
+        )
         self.get_logger().info(
             "Mesh accumulate mode: "
             f"{self._mesh_accumulate} (max markers={self._mesh_accumulate_max_markers})"
@@ -397,19 +418,32 @@ class WorldNode(Node):
         self._refresh_mesh_accumulate_settings()
 
         staged_path = self._stage_mesh_file(path, kind)
+        marker_id = self._reserve_marker_id()
+
+        if suffix == ".ply":
+            ply_marker, render_mode = self._build_ply_marker(staged_path=staged_path, marker_id=marker_id)
+            if ply_marker is not None:
+                self._mesh_pub.publish(ply_marker)
+                if self._mesh_accumulate:
+                    self._mesh_active_marker_ids.append(int(marker_id))
+                    self._trim_accumulated_markers()
+                self._last_mesh_path = path.resolve()
+                self._last_mesh_kind = kind
+                self.get_logger().info(
+                    f"Published world mesh ({kind}/{render_mode}): "
+                    f"source={path.resolve()} staged={staged_path}"
+                )
+                return
+
+            self.get_logger().warn(
+                f"PLY marker decode failed for {staged_path}; falling back to MESH_RESOURCE."
+            )
 
         marker = Marker()
         marker.header.frame_id = self._mesh_frame_id
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.ns = self._mesh_ns
-        if self._mesh_accumulate:
-            marker.id = int(self._mesh_next_marker_id)
-            self._mesh_next_marker_id += 1
-        else:
-            if self._mesh_active_marker_ids:
-                self._clear_accumulated_markers()
-            marker.id = 0
-            self._mesh_next_marker_id = 1
+        marker.id = int(marker_id)
         marker.type = Marker.MESH_RESOURCE
         marker.action = Marker.ADD
         marker.mesh_resource = staged_path.as_uri()
@@ -427,13 +461,152 @@ class WorldNode(Node):
 
         self._mesh_pub.publish(marker)
         if self._mesh_accumulate:
-            self._mesh_active_marker_ids.append(int(marker.id))
+            self._mesh_active_marker_ids.append(int(marker_id))
             self._trim_accumulated_markers()
         self._last_mesh_path = path.resolve()
         self._last_mesh_kind = kind
         self.get_logger().info(
             f"Published world mesh ({kind}): source={path.resolve()} staged={staged_path}"
         )
+
+    def _reserve_marker_id(self) -> int:
+        if self._mesh_accumulate:
+            marker_id = int(self._mesh_next_marker_id)
+            self._mesh_next_marker_id += 1
+            return marker_id
+
+        if self._mesh_active_marker_ids:
+            self._clear_accumulated_markers()
+        self._mesh_next_marker_id = 1
+        return 0
+
+    def _build_base_add_marker(self, marker_id: int) -> Marker:
+        marker = Marker()
+        marker.header.frame_id = self._mesh_frame_id
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = self._mesh_ns
+        marker.id = int(marker_id)
+        marker.action = Marker.ADD
+        marker.pose = Pose()
+        marker.color.r = float(self._mesh_rgba[0])
+        marker.color.g = float(self._mesh_rgba[1])
+        marker.color.b = float(self._mesh_rgba[2])
+        marker.color.a = float(self._mesh_rgba[3])
+        return marker
+
+    def _build_ply_marker(self, staged_path: Path, marker_id: int) -> tuple[Optional[Marker], str]:
+        if self._ply_marker_prefer_points:
+            marker = self._build_ply_points_marker(staged_path, marker_id)
+            if marker is not None:
+                return marker, "points"
+            marker = self._build_ply_triangle_marker(staged_path, marker_id)
+            if marker is not None:
+                return marker, "triangle_list"
+            return None, ""
+
+        marker = self._build_ply_triangle_marker(staged_path, marker_id)
+        if marker is not None:
+            return marker, "triangle_list"
+        marker = self._build_ply_points_marker(staged_path, marker_id)
+        if marker is not None:
+            return marker, "points"
+        return None, ""
+
+    def _build_ply_points_marker(self, staged_path: Path, marker_id: int) -> Optional[Marker]:
+        try:
+            pcd = o3d.io.read_point_cloud(str(staged_path))
+        except Exception as exc:
+            self.get_logger().warn(f"Failed to read PLY point cloud '{staged_path}': {exc}")
+            return None
+
+        points = np.asarray(pcd.points, dtype=np.float64)
+        if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] != 3:
+            return None
+
+        colors: Optional[np.ndarray] = None
+        if pcd.has_colors():
+            c = np.asarray(pcd.colors, dtype=np.float64)
+            if c.shape == points.shape:
+                colors = np.clip(c, 0.0, 1.0)
+
+        if points.shape[0] > self._ply_marker_max_points:
+            stride = int(math.ceil(float(points.shape[0]) / float(self._ply_marker_max_points)))
+            idx = np.arange(0, points.shape[0], stride, dtype=np.int64)[: self._ply_marker_max_points]
+            points = points[idx]
+            if colors is not None:
+                colors = colors[idx]
+
+        marker = self._build_base_add_marker(marker_id)
+        marker.type = Marker.POINTS
+        marker.scale.x = float(self._ply_marker_point_size)
+        marker.scale.y = float(self._ply_marker_point_size)
+        marker.scale.z = float(self._ply_marker_point_size)
+        marker.points = [
+            Point(x=float(p[0]), y=float(p[1]), z=float(p[2]))
+            for p in points
+        ]
+
+        if self._ply_marker_use_colors and colors is not None:
+            alpha = float(self._mesh_rgba[3])
+            marker.colors = [
+                ColorRGBA(r=float(c[0]), g=float(c[1]), b=float(c[2]), a=alpha)
+                for c in colors
+            ]
+
+        return marker
+
+    def _build_ply_triangle_marker(self, staged_path: Path, marker_id: int) -> Optional[Marker]:
+        try:
+            mesh = o3d.io.read_triangle_mesh(str(staged_path))
+        except Exception as exc:
+            self.get_logger().warn(f"Failed to read PLY triangle mesh '{staged_path}': {exc}")
+            return None
+
+        vertices = np.asarray(mesh.vertices, dtype=np.float64)
+        triangles = np.asarray(mesh.triangles, dtype=np.int32)
+        if (
+            vertices.ndim != 2
+            or triangles.ndim != 2
+            or vertices.shape[0] == 0
+            or triangles.shape[0] == 0
+            or vertices.shape[1] != 3
+            or triangles.shape[1] != 3
+        ):
+            return None
+
+        vcolors: Optional[np.ndarray] = None
+        if mesh.has_vertex_colors():
+            c = np.asarray(mesh.vertex_colors, dtype=np.float64)
+            if c.shape[0] == vertices.shape[0] and c.shape[1] == 3:
+                vcolors = np.clip(c, 0.0, 1.0)
+
+        if triangles.shape[0] > self._ply_marker_max_triangles:
+            stride = int(math.ceil(float(triangles.shape[0]) / float(self._ply_marker_max_triangles)))
+            triangles = triangles[::stride][: self._ply_marker_max_triangles]
+
+        marker = self._build_base_add_marker(marker_id)
+        marker.type = Marker.TRIANGLE_LIST
+        marker.scale.x = 1.0
+        marker.scale.y = 1.0
+        marker.scale.z = 1.0
+
+        out_points: List[Point] = []
+        out_colors: List[ColorRGBA] = []
+        alpha = float(self._mesh_rgba[3])
+        use_colors = self._ply_marker_use_colors and (vcolors is not None)
+
+        for tri in triangles:
+            for vid in tri:
+                p = vertices[int(vid)]
+                out_points.append(Point(x=float(p[0]), y=float(p[1]), z=float(p[2])))
+                if use_colors and vcolors is not None:
+                    c = vcolors[int(vid)]
+                    out_colors.append(ColorRGBA(r=float(c[0]), g=float(c[1]), b=float(c[2]), a=alpha))
+
+        marker.points = out_points
+        if use_colors:
+            marker.colors = out_colors
+        return marker
 
     def _refresh_mesh_accumulate_settings(self) -> None:
         mesh_accumulate = bool(self.get_parameter("mesh_accumulate").value)
