@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import math
 import time
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
@@ -13,10 +12,8 @@ from behav3d_utils import target_builder as tb
 from geometry_msgs.msg import PoseStamped
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
-from scipy.spatial.transform import Rotation as R
 
-
-TOOL_PLUS_Z_POINTS_OUTWARD = False
+from .scan_sequences import fibonacci, grid_sweep, half_cylinder
 
 
 class ScanSession(Session):
@@ -187,9 +184,24 @@ class ScanSession(Session):
                 except TimeoutError:
                     log.warn("[scan_session] delete_markers timed out.")
 
+        ok = captures_ok > 0 or (debug and plan_ok > 0)
+        if ok:
+            stage = "done"
+            error = ""
+        elif plan_ok <= 0:
+            stage = "plan"
+            error = "No targets planned successfully."
+        elif exec_ok <= 0:
+            stage = "exec"
+            error = "No planned targets executed successfully."
+        else:
+            stage = "capture"
+            error = "No captures completed successfully."
+
         return {
-            "ok": captures_ok > 0 or debug,
-            "stage": "done",
+            "ok": ok,
+            "stage": stage,
+            "error": error,
             "targets": target_list,
             "plan_ok": plan_ok,
             "exec_ok": exec_ok,
@@ -246,7 +258,7 @@ class ScanSession(Session):
             except TimeoutError:
                 log.warn("[scan_session:grid] Using default orientation; TF lookup timed out.")
 
-        return self._build_grid_targets_from_center(
+        return grid_sweep.build_targets_from_center(
             center=center,
             width=float(width),
             height=float(height),
@@ -258,6 +270,10 @@ class ScanSession(Session):
 
     def run_grid_scan(self, **kwargs: Any) -> dict[str, Any]:
         capture_folder = kwargs.pop("capture_folder", "@session/grid_sweep")
+        do_home = bool(kwargs.pop("do_home", False))
+        timeout_s = kwargs.get("timeout_s", None)
+        if do_home:
+            self.run_sync(self.motion.home(enqueue=False), timeout_s=timeout_s)
         targets = self.build_grid_targets(
             target=kwargs.pop("target", None),
             width=kwargs.pop("width", 1.0),
@@ -272,7 +288,7 @@ class ScanSession(Session):
             frame_id=kwargs.pop("frame_id", "world"),
             eef_link=kwargs.get("eef_link", "femto_color_optical_calib"),
             use_tf_orientation=kwargs.pop("use_tf_orientation", True),
-            timeout_s=kwargs.get("timeout_s", None),
+            timeout_s=timeout_s,
         )
         return self.run_scan_targets(targets=targets, capture_folder=capture_folder, **kwargs)
 
@@ -291,27 +307,14 @@ class ScanSession(Session):
         if int(samples) <= 0:
             return []
 
-        p_t, R_t = _target_origin_rotation(target)
-        dirs_local = _fibonacci_cap_dirs_np(float(cap_rad), int(samples))
-        poses: list[PoseStamped] = []
-        rz_adjust = R.from_rotvec([0.0, 0.0, -math.pi / 2.0])
-
-        for d in dirs_local:
-            p_loc = float(distance) * d
-            z_axis = d if TOOL_PLUS_Z_POINTS_OUTWARD else -d
-            R_loc = _rotation_from_z_axis(z_axis, x_guess=np.array([1.0, 0.0, 0.0])) * rz_adjust
-            p_w = p_t + R_t.apply(p_loc)
-            R_w = R_t * R_loc
-
-            if float(z_jitter) > 0.0:
-                ray_dir = p_t - p_w
-                n_ray = np.linalg.norm(ray_dir)
-                if n_ray > 1e-9:
-                    p_w = p_w + np.random.uniform(-float(z_jitter), float(z_jitter)) * (ray_dir / n_ray)
-
-            poses.append(_pose_from_position_rotation(p_w, R_w, target.header.frame_id or "world"))
-
-        return _order_targets_by_nearest_neighbor(poses, order_start_xyz=order_start_xyz)
+        return fibonacci.build_targets(
+            target=target,
+            distance=float(distance),
+            cap_rad=float(cap_rad),
+            samples=int(samples),
+            z_jitter=float(z_jitter),
+            order_start_xyz=order_start_xyz,
+        )
 
     def run_fibonacci_scan(
         self,
@@ -350,38 +353,19 @@ class ScanSession(Session):
         frame_id: str = "world",
         row_major: bool = False,
     ) -> list[PoseStamped]:
-        if int(n_angle) < 2 or int(n_height) < 1:
-            return []
-        if float(radius) <= 0.0:
-            raise ValueError("radius must be > 0")
-
-        angles = np.linspace(math.radians(float(angle_min_deg)), math.radians(float(angle_max_deg)), int(n_angle))
-        if int(n_height) == 1:
-            z_values = np.array([float(center_z)], dtype=float)
-        else:
-            z_values = np.linspace(float(center_z) - 0.5 * float(height), float(center_z) + 0.5 * float(height), int(n_height))
-
-        out: list[PoseStamped] = []
-        center_xy = np.array([float(center_x), float(center_y)], dtype=float)
-        for iz, z in enumerate(z_values):
-            row: list[PoseStamped] = []
-            for theta in angles:
-                radial = np.array([math.cos(float(theta)), math.sin(float(theta)), 0.0], dtype=float)
-                p = np.array(
-                    [
-                        center_xy[0] + float(radius) * radial[0],
-                        center_xy[1] + float(radius) * radial[1],
-                        float(z),
-                    ],
-                    dtype=float,
-                )
-                z_axis = radial if TOOL_PLUS_Z_POINTS_OUTWARD else -radial
-                R_w = _rotation_from_z_axis(z_axis, x_guess=np.array([0.0, 0.0, 1.0]))
-                row.append(_pose_from_position_rotation(p, R_w, str(frame_id or "world")))
-            if not row_major and iz % 2 == 1:
-                row.reverse()
-            out.extend(row)
-        return out
+        return half_cylinder.build_targets(
+            center_x=float(center_x),
+            center_y=float(center_y),
+            center_z=float(center_z),
+            radius=float(radius),
+            height=float(height),
+            angle_min_deg=float(angle_min_deg),
+            angle_max_deg=float(angle_max_deg),
+            n_angle=int(n_angle),
+            n_height=int(n_height),
+            frame_id=str(frame_id or "world"),
+            row_major=bool(row_major),
+        )
 
     def run_half_cylinder_scan(
         self,
@@ -622,159 +606,6 @@ class ScanSession(Session):
             f"Timed out waiting for reconstruction output '{output_path}' "
             f"to be updated after start_ts={start_ts:.3f}."
         )
-
-    @staticmethod
-    def _build_grid_targets_from_center(
-        *,
-        center: PoseStamped,
-        width: float,
-        height: float,
-        z_off: float,
-        nx: int,
-        ny: int,
-        row_major: bool,
-    ) -> list[PoseStamped]:
-        out: list[PoseStamped] = []
-        dx = float(width) / float(nx - 1)
-        dy = float(height) / float(ny - 1)
-
-        cx = float(center.pose.position.x)
-        cy = float(center.pose.position.y)
-        cz = float(center.pose.position.z)
-        q = center.pose.orientation
-
-        for j in range(int(ny)):
-            row: list[PoseStamped] = []
-            for i in range(int(nx)):
-                row.append(
-                    tb.poseStamped(
-                        cx - 0.5 * float(width) + i * dx,
-                        cy - 0.5 * float(height) + j * dy,
-                        cz + float(z_off),
-                        float(q.x),
-                        float(q.y),
-                        float(q.z),
-                        float(q.w),
-                        center.header.frame_id or "world",
-                    )
-                )
-            if not row_major and j % 2 == 1:
-                row.reverse()
-            out.extend(row)
-        return out
-
-
-def _target_origin_rotation(target: PoseStamped) -> tuple[np.ndarray, R]:
-    p_t = np.array(
-        [target.pose.position.x, target.pose.position.y, target.pose.position.z],
-        dtype=float,
-    )
-    q_t = np.array(
-        [
-            target.pose.orientation.x,
-            target.pose.orientation.y,
-            target.pose.orientation.z,
-            target.pose.orientation.w,
-        ],
-        dtype=float,
-    )
-    qn = np.linalg.norm(q_t)
-    return p_t, (R.identity() if qn < 1e-12 else R.from_quat(q_t / qn))
-
-
-def _rotation_from_z_axis(z_axis: np.ndarray, *, x_guess: np.ndarray) -> R:
-    z = np.asarray(z_axis, dtype=float)
-    nz = np.linalg.norm(z)
-    if nz < 1e-12:
-        raise ValueError("z_axis must be non-zero")
-    z /= nz
-
-    x = np.asarray(x_guess, dtype=float)
-    x = x - np.dot(x, z) * z
-    nx = np.linalg.norm(x)
-    if nx < 1e-9:
-        x = _any_orthonormal(z)
-    else:
-        x /= nx
-    y = np.cross(z, x)
-    y /= max(np.linalg.norm(y), 1e-12)
-    return R.from_matrix(np.column_stack((x, y, z)))
-
-
-def _pose_from_position_rotation(position: np.ndarray, rotation: R, frame_id: str) -> PoseStamped:
-    ps = PoseStamped()
-    ps.header.frame_id = str(frame_id or "world")
-    ps.pose.position.x = float(position[0])
-    ps.pose.position.y = float(position[1])
-    ps.pose.position.z = float(position[2])
-    q = rotation.as_quat()
-    ps.pose.orientation.x = float(q[0])
-    ps.pose.orientation.y = float(q[1])
-    ps.pose.orientation.z = float(q[2])
-    ps.pose.orientation.w = float(q[3])
-    return ps
-
-
-def _fibonacci_cap_dirs_np(cap_rad: float, n: int) -> np.ndarray:
-    if n <= 0:
-        return np.zeros((0, 3), dtype=float)
-    cos_cap = float(np.cos(cap_rad))
-    i = np.arange(n, dtype=float)
-    z = cos_cap + (1.0 - cos_cap) * ((i + 0.5) / n)
-    r_xy = np.sqrt(np.maximum(0.0, 1.0 - z * z))
-    golden = (1.0 + np.sqrt(5.0)) * 0.5
-    lon = 2.0 * np.pi * (i + 0.5) / golden
-    dirs = np.stack([r_xy * np.cos(lon), r_xy * np.sin(lon), z], axis=1)
-    norms = np.linalg.norm(dirs, axis=1, keepdims=True)
-    norms = np.where(norms < 1e-12, 1.0, norms)
-    return dirs / norms
-
-
-def _order_targets_by_nearest_neighbor(
-    targets: Sequence[PoseStamped],
-    *,
-    order_start_xyz: Optional[Sequence[float]] = None,
-) -> list[PoseStamped]:
-    target_list = list(targets)
-    if len(target_list) <= 2:
-        return target_list
-
-    points = np.array(
-        [[ps.pose.position.x, ps.pose.position.y, ps.pose.position.z] for ps in target_list],
-        dtype=float,
-    )
-    remaining = set(range(len(target_list)))
-    ordered_indices: list[int] = []
-
-    if order_start_xyz is not None and len(order_start_xyz) == 3:
-        start = np.asarray(order_start_xyz, dtype=float).reshape(3)
-        current_idx = int(np.argmin(np.sum((points - start) ** 2, axis=1)))
-    else:
-        current_idx = 0
-
-    ordered_indices.append(current_idx)
-    remaining.remove(current_idx)
-    current = points[current_idx]
-
-    while remaining:
-        rem_idx = np.array(sorted(remaining), dtype=int)
-        next_idx = int(rem_idx[int(np.argmin(np.sum((points[rem_idx] - current) ** 2, axis=1)))])
-        ordered_indices.append(next_idx)
-        remaining.remove(next_idx)
-        current = points[next_idx]
-
-    return [target_list[i] for i in ordered_indices]
-
-
-def _any_orthonormal(v: np.ndarray) -> np.ndarray:
-    v = np.asarray(v, dtype=float)
-    idx = int(np.argmin(np.abs(v)))
-    basis = np.zeros(3, dtype=float)
-    basis[idx] = 1.0
-    u = basis - np.dot(basis, v) * v
-    n = np.linalg.norm(u)
-    return u / (n if n > 1e-12 else 1.0)
-
 
 def _coerce_xyz_triplet(values: Sequence[float], *, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
     try:
