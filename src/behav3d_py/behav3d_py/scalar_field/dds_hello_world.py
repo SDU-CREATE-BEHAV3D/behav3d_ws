@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from dds import BeadProfile, DepositionMetadata, Domain, LineDeposit, Simulator, run_cli
+from dds import BeadProfile, DepositionMetadata, Domain, LineDeposit, Simulator
+from dds.cli import run_cli
 from dds.geometry import mesh_surface_area, mesh_volume_estimate, write_mesh
 
 
@@ -101,15 +102,11 @@ def build_demo_deposits(args: Args) -> list[LineDeposit]:
     profile = BeadProfile(width=width, height=height)
     layer0 = DepositionMetadata(
         layer_id=0,
-        material_id="demo-clay",
-        tool_id="T0",
-        user_data={"role": "base"},
+        user_data={"material_id": "demo-clay", "tool_id": "T0", "role": "base"},
     )
     layer1 = DepositionMetadata(
         layer_id=1,
-        material_id="demo-clay",
-        tool_id="T0",
-        user_data={"role": "top"},
+        user_data={"material_id": "demo-clay", "tool_id": "T0", "role": "top"},
     )
 
     z0 = height
@@ -147,14 +144,14 @@ def run_simulation(args: Args):
     for deposit in deposits:
         simulator.add_deposit(deposit)
 
-    return simulator.result(compositions=("max", "sum"), threshold=args.threshold)
+    return simulator.result(compositions=("max", "coverage"), threshold=args.threshold)
 
 
 def write_outputs(args: Args, result) -> None:
     """Write simple outputs for headless inspection."""
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    surface = result.surface_mesh(threshold=args.threshold)
+    surface = result.analysis.surface_mesh(threshold=args.threshold)
     surface_path = write_mesh(args.output_dir / "surface.ply", surface)
     checkpoint_path = result.checkpoint(args.output_dir / "checkpoint.npz")
     bundle_paths = result.save(
@@ -168,10 +165,17 @@ def write_outputs(args: Args, result) -> None:
         },
     )
 
-    occupancy = result.occupancy(threshold=args.threshold)
-    density_max = result.density("max")
-    density_sum = result.density("sum")
-    dep_index = result.analysis_bundle().deposition_index_field()
+    occupancy = result.analysis.occupancy(threshold=args.threshold)
+    density_max = result.field("max")
+    coverage = result.field("coverage")
+    dep_index = result.analysis.deposition_index_field()
+    layer_ids = sorted(
+        {
+            deposit.metadata.layer_id
+            for deposit in result.deposits
+            if deposit.metadata.layer_id is not None
+        }
+    )
 
     print("3DP-DDS hello world")
     print(f"dds surface: {surface_path}")
@@ -180,13 +184,13 @@ def write_outputs(args: Args, result) -> None:
     print(f"grid_shape: {result.domain.grid_shape}")
     print(f"voxel_size_m: {result.domain.voxel_size}")
     print(f"deposits: {len(result.deposits)}")
-    print(f"layers: {result.layer_ids()}")
+    print(f"layers: {tuple(layer_ids)}")
     print(f"occupied_voxels: {int(occupancy.sum())}")
     print(
         f"density_max_range: "
         f"({float(density_max.min()):.3f}, {float(density_max.max()):.3f})"
     )
-    print(f"density_sum_max: {float(density_sum.max()):.3f}")
+    print(f"coverage_max: {float(coverage.max()):.3f}")
     print(f"deposition_index_max: {int(dep_index.max())}")
     print(f"surface_vertices: {surface.n_vertices}")
     print(f"surface_faces: {surface.n_faces}")
