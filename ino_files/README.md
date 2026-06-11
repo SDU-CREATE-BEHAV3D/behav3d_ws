@@ -221,6 +221,15 @@ Steps per mm:            6400
 Soft limit max steps:    305 * 6400 = 1,952,000
 ```
 
+Use this conversion when commanding `print_steps` from ROS:
+
+```text
+1 mm  = 6,400 steps
+2 mm  = 12,800 steps
+4 mm  = 25,600 steps
+10 mm = 64,000 steps
+```
+
 The soft-limit direction assumption matches the tested Nano wiring:
 
 ```text

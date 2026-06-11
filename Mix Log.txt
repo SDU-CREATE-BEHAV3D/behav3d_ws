@@ -1,0 +1,20 @@
+Trial 00  >>>>>>>>>>>>> OK 
+    16mm Nozzle
+    Out of bag clay = 5000g
+    water>          = 400g
+
+
+    16mm Nozzle
+
+Trial 01  >>>>>>>>>>>>> OK    
+    16mm Nozzle
+    Out of bag clay = 5700g
+    water>          = 400g
+
+
+
+
+
+
+NOtes>
+Cone extrusion distance = 2.4cm
