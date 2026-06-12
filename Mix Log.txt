@@ -12,9 +12,17 @@ Trial 01  >>>>>>>>>>>>> OK
     water>          = 400g
 
 
-
-
-
-
-NOtes>
+Notes>
 Cone extrusion distance = 2.4cm
+
+
+Target height / steps matrix
+4000 retract 16mm nozzle 4 secs wait
+
+| Target height (mm) | 5000 steps       | 10000 steps       | 15000 steps       | 20000 steps       | 25000 steps       |
+|--------------------|------------------|-------------------|-------------------|-------------------|-------------------|
+| 5                  | D: 4.8 / H: 37   | D: / H:           | D: / H:           | D: / H:           | D: / H:           |
+| 10                 | D: / H:          | D: 40.6 / H: 11   | D: / H:           | D: / H:           | D: / H:           |
+| 15                 | D: / H:          | D: / H:           | D: 42.5 / H: 15.5 | D: 46.1 / H: 15   | D: / H:           |
+| 20                 | D: / H:          | D: / H:           | D: / H:           | D: 41.5 / H: 20.5 | D: 46.2 / H: 20.5 |
+| 25                 | D: / H:          | D: / H:           | D: / H:           | D: / H:           | D: / H:           |
