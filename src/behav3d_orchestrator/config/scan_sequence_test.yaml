@@ -1,0 +1,116 @@
+scan_sequence:
+  ros__parameters:
+    # Select one:
+    #   grid_sweep
+    #   half_cylinder
+    scan_type: half_cylinder
+
+    # Capture folder for this run. Keep this aligned with scan_folder when
+    # reconstruction is enabled.
+    capture_folder: "@session/scan_test_half"
+    scan_folder: scan_test_half
+
+    # Shared motion/capture settings.
+    frame_id: world
+    eef_link: femto_color_optical_calib
+    motion: PTP
+    do_home: true
+    home_after: false
+    vel_scale: 0.05
+    accel_scale: 0.05
+    timeout_s: 0.0
+    settle_s: 0.5
+    debug: false
+    prompt: ""
+    rgb: true
+    depth: true
+    ir: true
+    pose: true
+    publish_markers: true
+    axis_length: 0.05
+    axis_radius: 0.003
+    clear_markers_before: true
+    clear_markers_after: true
+
+    # Reconstruction and RViz world-mesh visualization.
+    # Set run_reconstruction=false while tuning only target positions/motion.
+    run_reconstruction: true
+    reconstruct_device: CPU:0
+    reconstruct_request_timeout_s: 10.0
+    wait_reconstruction_outputs: true
+    color_to_depth_wait_timeout_s: 60.0
+    tsdf_wait_timeout_s: 180.0
+    update_world_mesh: true
+    tsdf_center_crop_enable: false
+    tsdf_center_crop_width: 300
+    tsdf_center_crop_height: 290
+    tsdf_center_crop_apply_to_depth: false
+    tsdf_aabb_crop_enable: false
+    tsdf_aabb_crop_min: [-0.25, -1.10, -1.00]
+    tsdf_aabb_crop_max: [0.30, -0.65, 0.50]
+
+    # Grid sweep parameters. Active when scan_type=grid_sweep.
+    # Increase/decrease grid_z_off to tune scan height.
+    # If you switch to this mode, also set:
+    #   capture_folder: "@session/scan_test_grid"
+    #   scan_folder: scan_test_grid
+    grid_width: 0.20
+    grid_height: 0.15
+    grid_center_x: -0.17
+    grid_center_y: 0.85
+    grid_center_z: -0.3
+    grid_z_off: 0.60
+    grid_nx: 3
+    grid_ny: 2
+    grid_row_major: false
+    grid_use_tf_orientation: true
+
+    # Half-cylinder line-axis parameters. Active when scan_type=half_cylinder.
+    # The axis line is the feature/edge/centerline you want to scan around.
+    # The middle of the arc is controlled by half_arc_center_d*. With the
+    # default (0,0,1), the center arc viewpoint is above the line and looks down.
+    # half_orientation_mode=look_at uses the line axis as the roll reference,
+    # so target frames stay consistent along the cylinder instead of twisting
+    # from the current EEF roll.
+    # half_roll_deg rotates around camera blue/Z without changing aim direction.
+    half_use_line_axis: true
+    half_axis_start_x: 0.0
+    half_axis_start_y: 0.85
+    half_axis_start_z: 0.0
+    half_axis_end_x: -0.30
+    half_axis_end_y: 0.85
+    half_axis_end_z: 0.0
+    half_radius: 0.60
+    half_angle_min_deg: -30.0
+    half_angle_max_deg: 30.0
+    half_n_angle: 4
+    half_n_axis: 4
+    half_arc_center_dx: 0.0
+    half_arc_center_dy: 0.0
+    half_arc_center_dz: 1.0
+    half_orientation_mode: look_at
+    half_roll_deg: 0.0
+    half_row_major: false
+
+    # Legacy center-based half-cylinder parameters. These are ignored when
+    # half_use_line_axis=true, but kept here so the file exposes all knobs.
+    half_center_x: -0.17
+    half_center_y: 0.85
+    half_center_z: 0.90
+    half_height: 0.0
+
+    # Fibonacci parameters are not part of this test flow right now, but the
+    # runner still declares them. Keep defaults here for completeness.
+    target_x: -0.17
+    target_y: 0.85
+    target_z: 0.55
+    target_qx: 0.0
+    target_qy: 0.0
+    target_qz: 0.0
+    target_qw: 1.0
+    fibonacci_distance: 0.35
+    fibonacci_cap_deg: 10.0
+    fibonacci_samples: 3
+    fibonacci_z_jitter: 0.0
+    fibonacci_use_tf_target_orientation: false
+    fibonacci_orientation_mode: look_at_current_roll

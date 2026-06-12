@@ -84,7 +84,7 @@ class ScanSequenceNode(Node):
         self.declare_parameter("half_n_angle", 7)
         self.declare_parameter("half_n_height", 3)
         self.declare_parameter("half_row_major", False)
-        self.declare_parameter("half_orientation_mode", "look_at_current_roll")
+        self.declare_parameter("half_orientation_mode", "look_at")
         self.declare_parameter("half_use_line_axis", True)
         self.declare_parameter("half_axis_start_x", -0.27)
         self.declare_parameter("half_axis_start_y", 0.85)
