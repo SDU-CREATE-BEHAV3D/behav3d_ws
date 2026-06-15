@@ -143,9 +143,9 @@ class PrintYamlAndScanSequenceNode(Node):
                 )
                 self._publish_yaml_targets(targets, cfg=cfg, timeout_s=timeout_s)
 
-                if self._cfg_bool(cfg, "prompt_before_print"):
+                if self._cfg_bool(cfg, "debug_mode") or self._cfg_bool(cfg, "prompt_before_print"):
                     if self._operator_requested_stop(
-                        f"[print_yaml_and_scan:{cycle_tag}] Press ENTER to print this chunk "
+                        f"[print_yaml_and_scan:{cycle_tag}] Debug gate: press ENTER to continue this cycle "
                         "(type 'q' + ENTER to stop)."
                     ):
                         stopped_by_user = True
