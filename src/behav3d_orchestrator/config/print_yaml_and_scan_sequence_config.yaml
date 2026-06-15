@@ -1,0 +1,86 @@
+print_yaml_and_scan_sequence:
+  ros__parameters:
+    # Flow:
+    #   1) home
+    #   2) print points_per_cycle YAML targets
+    #   3) scan with grid sweep
+    #   4) reconstruct/update world mesh
+    #   5) repeat until YAML targets are complete
+    yaml_path: /home/lab/behav3d_ws/yaml/lamine_baseline_01.yaml
+    frame_id: world
+    points_per_cycle: 7
+    home_before: true
+    home_after: true
+    timeout_s: 0.0
+    prompt_before_print: false
+    prompt_before_scan: false
+
+    # Dot print parameters.
+    print_eef_link: extruder_tcp
+    dot_steps: 23000
+    dot_speed: 3000
+    post_dot_retract_steps: 3000
+    post_dot_retract_speed: 7000
+    approach_z_offset_m: 0.3
+    dot_z_offset_m: 0.04
+    pre_dot_vel_scale: 0.10
+    dot_vel_scale: 0.05
+    print_accel_scale: 0.05
+    dwell_s: 0.4
+    print_publish_markers: true
+    print_axis_length: 0.05
+    print_axis_radius: 0.003
+    print_clear_markers_before: true
+
+    # Scan execution. These match the current scan_sequence.py / ScanSession path.
+    enable_scan: true
+    scan_after_final: false
+    scan_root_folder: "@session/print_yaml_scan"
+    scan_motion: LIN
+    scan_do_home: false
+    scan_eef_link: femto_color_optical_calib
+    scan_vel_scale: 0.05
+    scan_accel_scale: 0.05
+    scan_timeout_s: 0.0
+    scan_settle_s: 0.5
+    scan_debug: false
+    scan_prompt: ""
+    scan_rgb: true
+    scan_depth: true
+    scan_ir: true
+    scan_pose: true
+    scan_publish_markers: true
+    scan_axis_length: 0.05
+    scan_axis_radius: 0.003
+    scan_clear_markers_before: true
+    scan_clear_markers_after: true
+    scan_follow_printed_z: true
+
+    # Grid sweep parameters from scan_sequence_test.yaml.
+    grid_width: 0.50
+    grid_height: 0.15
+    grid_center_x: -0.17
+    grid_center_y: 0.85
+    grid_center_z: -0.30
+    grid_z_off: 0.60
+    grid_nx: 5
+    grid_ny: 2
+    grid_row_major: false
+    grid_use_tf_orientation: true
+
+    # Reconstruction and RViz world-mesh visualization.
+    run_reconstruction: true
+    reconstruct_device: CPU:0
+    reconstruct_request_timeout_s: 10.0
+    wait_reconstruction_outputs: true
+    color_to_depth_wait_timeout_s: 60.0
+    tsdf_wait_timeout_s: 180.0
+    update_world_mesh: true
+    tsdf_center_crop_enable: true
+    tsdf_center_crop_width: 300
+    tsdf_center_crop_height: 290
+    tsdf_center_crop_apply_to_depth: false
+    tsdf_aabb_crop_enable: false
+    tsdf_aabb_crop_min: [-0.25, -1.10, -1.00]
+    tsdf_aabb_crop_max: [0.30, -0.65, 0.50]
+    tsdf_param_update_timeout_s: 8.0

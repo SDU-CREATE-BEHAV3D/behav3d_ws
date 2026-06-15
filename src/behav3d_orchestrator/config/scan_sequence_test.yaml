@@ -3,12 +3,12 @@ scan_sequence:
     # Select one:
     #   grid_sweep
     #   half_cylinder
-    scan_type: half_cylinder
+    scan_type: grid_sweep
 
     # Capture folder for this run. Keep this aligned with scan_folder when
     # reconstruction is enabled.
-    capture_folder: "@session/scan_test_half"
-    scan_folder: scan_test_half
+    capture_folder: "@session/scan_test_grid"
+    scan_folder: scan_test_grid
 
     # Shared motion/capture settings.
     frame_id: world
@@ -41,7 +41,7 @@ scan_sequence:
     color_to_depth_wait_timeout_s: 60.0
     tsdf_wait_timeout_s: 180.0
     update_world_mesh: true
-    tsdf_center_crop_enable: false
+    tsdf_center_crop_enable: true
     tsdf_center_crop_width: 300
     tsdf_center_crop_height: 290
     tsdf_center_crop_apply_to_depth: false
@@ -54,13 +54,13 @@ scan_sequence:
     # If you switch to this mode, also set:
     #   capture_folder: "@session/scan_test_grid"
     #   scan_folder: scan_test_grid
-    grid_width: 0.20
+    grid_width: 0.40
     grid_height: 0.15
     grid_center_x: -0.17
     grid_center_y: 0.85
     grid_center_z: -0.3
     grid_z_off: 0.60
-    grid_nx: 3
+    grid_nx: 5
     grid_ny: 2
     grid_row_major: false
     grid_use_tf_orientation: true
