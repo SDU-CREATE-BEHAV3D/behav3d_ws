@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Toolpath-free bead debug pipeline:
-- Load point cloud
+- Load point cloud or TSDF mesh vertices
 - Fit table plane and move to table frame
 - Build 2.5D height map
 - Build mask + distance transform
@@ -40,8 +40,8 @@ except Exception:
 # In-script parameters
 # -----------------------------------------------------------------------------
 
-default_input_path = "~/Downloads/260227_160709/print_scan_035/reconstruct/tsdf_surface_rgb_colored.ply"
-default_mesh_input_path = ""
+default_input_path = ""
+default_mesh_input_path = "~/Downloads/260227_160709/print_scan_189/reconstruct/tsdf_surface_mesh.stl"
 default_show_3d = True
 default_show_2d = False
 default_viz_frame = "table"  # "table" or "world"
@@ -68,10 +68,10 @@ mask_percentile = 50.0
 morph_kernel_px = 1
 peak_height_support_percentile = 45.0
 peak_min_height_mm = 1.0
-min_peak_distance_mm = 4
+min_peak_distance_mm = 3
 peak_strength_fraction = 0.10
 peak_keep_percentile = 0.0  # keep only top DT peaks by value
-max_num_peaks = 1500
+max_num_peaks = 1800
 
 # 3D display
 peak_marker_radius_mm = 1.6
@@ -177,12 +177,33 @@ def _load_points(input_path: Path) -> np.ndarray:
     return pts
 
 
-def _resolve_mesh_input_path(input_path: Path, mesh_input_path: str | os.PathLike[str] | None) -> Path | None:
+def _load_points_from_mesh(mesh: o3d.geometry.TriangleMesh) -> np.ndarray:
+    pts = np.asarray(mesh.vertices, dtype=np.float64)
+    finite = np.isfinite(pts).all(axis=1)
+    pts = pts[finite]
+    if pts.shape[0] == 0:
+        raise RuntimeError("Input mesh has no finite XYZ vertices.")
+
+    if downsample_voxel_mm > 0.0:
+        tmp = o3d.geometry.PointCloud()
+        tmp.points = o3d.utility.Vector3dVector(pts)
+        tmp = tmp.voxel_down_sample(voxel_size=_mm_to_m(downsample_voxel_mm))
+        pts = np.asarray(tmp.points, dtype=np.float64)
+
+    if pts.shape[0] == 0:
+        raise RuntimeError("No mesh vertices remain after optional downsampling.")
+    return pts
+
+
+def _resolve_mesh_input_path(input_path: Path | None, mesh_input_path: str | os.PathLike[str] | None) -> Path | None:
     if mesh_input_path is not None and str(mesh_input_path).strip():
         mesh_path = Path(mesh_input_path).expanduser().resolve()
         if not mesh_path.exists():
             raise FileNotFoundError(f"Mesh input file not found: {mesh_path}")
         return mesh_path
+
+    if input_path is None:
+        return None
 
     auto_path = (input_path.parent / str(mesh_auto_filename)).expanduser().resolve()
     if auto_path.exists():
@@ -1047,18 +1068,34 @@ def run_first_stage_peak_debug(
     viz_frame="table",
     pause_ms=0,
 ) -> Dict[str, object]:
-    input_path = Path(input_path).expanduser().resolve()
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-    mesh_input_resolved = _resolve_mesh_input_path(input_path, mesh_input_path)
+    input_path_str = str(input_path).strip() if input_path is not None else ""
+    input_path_resolved: Path | None = None
+    if input_path_str:
+        input_path_resolved = Path(input_path_str).expanduser().resolve()
+        if not input_path_resolved.exists():
+            raise FileNotFoundError(f"Input file not found: {input_path_resolved}")
+
+    mesh_input_resolved = _resolve_mesh_input_path(input_path_resolved, mesh_input_path)
+    if input_path_resolved is None and mesh_input_resolved is None:
+        raise FileNotFoundError("No input geometry provided. Set input_path or mesh_input_path.")
 
     viz_frame = str(viz_frame).strip().lower()
     if viz_frame not in {"table", "world"}:
         raise ValueError("viz_frame must be 'table' or 'world'.")
 
-    print(f"[1] Load points: {input_path}")
-    points_world = _load_points(input_path)
-    print(f"  Points loaded: {points_world.shape[0]}")
+    mesh_world_source: o3d.geometry.TriangleMesh | None = None
+    if input_path_resolved is not None:
+        print(f"[1] Load points: {input_path_resolved}")
+        points_world = _load_points(input_path_resolved)
+        point_source = "point_cloud"
+        print(f"  Points loaded: {points_world.shape[0]}")
+    else:
+        assert mesh_input_resolved is not None
+        print(f"[1] Load points from TSDF mesh vertices: {mesh_input_resolved}")
+        mesh_world_source = _load_triangle_mesh(mesh_input_resolved)
+        points_world = _load_points_from_mesh(mesh_world_source)
+        point_source = "mesh_vertices"
+        print(f"  Mesh vertices used as points: {points_world.shape[0]}")
 
     print("[2] Fit table plane + transform to table frame")
     points_table, T_table_from_world, T_world_from_table, plane = _fit_table_frame(points_world)
@@ -1207,7 +1244,11 @@ def run_first_stage_peak_debug(
             )
         else:
             print(f"  Mesh input: {mesh_input_resolved}")
-            mesh_world = _load_triangle_mesh(mesh_input_resolved)
+            mesh_world = (
+                o3d.geometry.TriangleMesh(mesh_world_source)
+                if mesh_world_source is not None
+                else _load_triangle_mesh(mesh_input_resolved)
+            )
             mesh_geoms_table, mesh_summary, mesh_debug, _ = _build_meshes_from_tsdf_mesh(
                 mesh_world,
                 T_table_from_world,
@@ -1290,8 +1331,9 @@ def run_first_stage_peak_debug(
         pass
 
     return {
-        "input_path": str(input_path),
+        "input_path": str(input_path_resolved) if input_path_resolved is not None else None,
         "mesh_input_path": str(mesh_input_resolved) if mesh_input_resolved is not None else None,
+        "point_source": point_source,
         "num_points_loaded": int(points_world.shape[0]),
         "num_points_above_table": int(points_obj_table.shape[0]),
         "num_peaks": int(peaks_xyz_table.shape[0]),
@@ -1335,6 +1377,10 @@ def main() -> None:
     viz_frame = default_viz_frame
     pause_ms = int(default_pause_ms)
     print("Using in-script parameters.")
+    if not str(input_path).strip():
+        print("Primary geometry mode: TSDF mesh vertices only.")
+    else:
+        print("Primary geometry mode: point cloud input.")
 
     result = run_first_stage_peak_debug(
         input_path=input_path,
