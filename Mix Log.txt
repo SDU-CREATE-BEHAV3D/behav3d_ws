@@ -1,15 +1,17 @@
 Trial 00  >>>>>>>>>>>>> OK 
     16mm Nozzle
     Out of bag clay = 5000g
-    water>          = 400g
+    water            = 400g
 
-
-    16mm Nozzle
-
-Trial 01  >>>>>>>>>>>>> OK    
+Trial 01  >>>>>>>>>>>>> Ok, some parts broke sometimes   
     16mm Nozzle
     Out of bag clay = 5700g
-    water>          = 400g
+    water           = 400g
+
+Trial 02  >>>>>>>>>>>>> OK 
+    16mm Nozzle
+    Out of bag clay = 5350g
+    water           = 400g
 
 
 Notes>
