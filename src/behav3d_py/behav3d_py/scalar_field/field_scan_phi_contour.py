@@ -1,5 +1,31 @@
 #!/usr/bin/env python3
-"""Compute phi mask, extract contours, and select print points on offset contour."""
+"""Compute phi mask, extract contours, select print points, and visualize with DDS.
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_phi_contour.py \
+  --field-mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
+  --scan-mesh /home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl \
+  --seed-level 1 --t-coef 2000 \
+  --field-subdivide-iter 1 \
+  --field-scale 0.001 \
+  --field-offset-x -0.17 --field-offset-y -0.92 --field-offset-z -0.05 \
+  --clearance 0.00 \
+  --offset-distance-mm 12 \
+  --offset-geodesic-delta-mm 1.0 \
+  --print-count 7 --print-min-spacing-mm 16 \
+  --axis-size -1
+
+  python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_phi_contour.py \
+  --field-mesh /home/lab/behav3d_ws/mesh/curved_wall_5mm.obj \
+  --scan-mesh /home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl \
+  --seed-level 1 --t-coef 2000 \
+  --field-subdivide-iter 1 \
+  --field-scale 0.001 \
+  --pose-search \
+  --clearance 0.00 \
+  --offset-distance-mm 12 \
+  --offset-geodesic-delta-mm 1.0 \
+  --print-count 7 --print-min-spacing-mm 16 \
+  --axis-size -1
+  """
 
 from __future__ import annotations
 
@@ -283,7 +309,6 @@ def run(
     heat_colors = yellow_to_red_colors(heat.norm)
     masked_colors = heat_colors.copy()
     masked_colors[~pose.viable] = np.array([0.2, 0.2, 0.2], dtype=np.float64)
-    field_pcd = make_point_cloud(pose.field_vertices_world, masked_colors)
 
     offset_distance_m = 1e-3 * float(offset_distance_mm)
     geod_delta_mm = float(offset_geodesic_delta_mm)
@@ -300,9 +325,6 @@ def run(
         toward_unprinted=bool(offset_toward_unprinted),
         offset_t_coef=float(offset_t_coef),
     )
-    contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
-    offset_ls = make_line_set(offset_points, offset_lines, color=(1.0, 0.0, 1.0))
-
     if offset_points.shape[0] > 0:
         offset_z_scan, offset_has_hit = query_scan_z_with_vertical_rays(scene, offset_points, z_top=z_top)
         offset_abs_dz = np.full(offset_points.shape[0], np.inf, dtype=np.float64)
@@ -344,12 +366,6 @@ def run(
         point_valid_mask=offset_valid_by_z,
         extra_points=phi0_bridge_valid,
     )
-    if print_points.points.shape[0] > 0:
-        print_colors = np.tile(np.array([0.0, 1.0, 0.0], dtype=np.float64), (print_points.points.shape[0], 1))
-        print_pcd = make_point_cloud(print_points.points, print_colors)
-    else:
-        print_pcd = None
-
     print(f"field_mesh: {field_mesh_path}")
     print(f"scan_mesh: {scan_mesh_path}")
     print(f"field_scale: {scale}")
@@ -486,6 +502,7 @@ def run(
 
     if out_field_ply is not None:
         out_field_ply.parent.mkdir(parents=True, exist_ok=True)
+        field_pcd = make_point_cloud(pose.field_vertices_world, masked_colors)
         ok = o3d.io.write_point_cloud(str(out_field_ply), field_pcd)
         if not ok:
             raise RuntimeError(f"Failed to write field masked point cloud: {out_field_ply}")
@@ -493,6 +510,7 @@ def run(
 
     if out_contour_ply is not None and contour_lines.shape[0] > 0:
         out_contour_ply.parent.mkdir(parents=True, exist_ok=True)
+        contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
         ok = o3d.io.write_line_set(str(out_contour_ply), contour_ls)
         if not ok:
             raise RuntimeError(f"Failed to write contour line set: {out_contour_ply}")
@@ -500,13 +518,19 @@ def run(
 
     if out_offset_ply is not None and offset_lines.shape[0] > 0:
         out_offset_ply.parent.mkdir(parents=True, exist_ok=True)
+        offset_ls = make_line_set(offset_points, offset_lines, color=(1.0, 0.0, 1.0))
         ok = o3d.io.write_line_set(str(out_offset_ply), offset_ls)
         if not ok:
             raise RuntimeError(f"Failed to write offset contour line set: {out_offset_ply}")
         print(f"saved offset contour lines: {out_offset_ply}")
 
-    if out_print_ply is not None and print_pcd is not None:
+    if out_print_ply is not None and print_points.points.shape[0] > 0:
         out_print_ply.parent.mkdir(parents=True, exist_ok=True)
+        print_colors = np.tile(
+            np.array([0.0, 1.0, 0.0], dtype=np.float64),
+            (print_points.points.shape[0], 1),
+        )
+        print_pcd = make_point_cloud(print_points.points, print_colors)
         ok = o3d.io.write_point_cloud(str(out_print_ply), print_pcd)
         if not ok:
             raise RuntimeError(f"Failed to write print points point cloud: {out_print_ply}")
@@ -526,38 +550,109 @@ def run(
         )
 
     if visualize:
+        from lib_scalar.viz_dds import (
+            add_colored_point_cloud,
+            add_line_segments,
+            add_vector_arrows,
+            add_wire_mesh,
+            make_viewer,
+            show_viewer,
+        )
+
         bb_min, bb_max = compute_scene_bounds(pose.field_vertices_world, scan_vertices)
         bb_diag = float(np.linalg.norm(bb_max - bb_min))
         bb_center = 0.5 * (bb_min + bb_max)
 
-        scan_wire = o3d.geometry.LineSet.create_from_triangle_mesh(scan_mesh_legacy)
-        scan_wire.paint_uniform_color((0.5, 0.5, 0.5))
-        geometries = [field_pcd, scan_wire]
+        scan_faces = np.asarray(scan_mesh_legacy.triangles, dtype=np.int64)
+        viewer = make_viewer(title="BEHAV3D DDS Phi Contour")
+        with viewer.batch():
+            add_colored_point_cloud(
+                viewer,
+                pose.field_vertices_world,
+                masked_colors,
+                name="field_heat_masked",
+                point_size=3.0,
+            )
+            add_wire_mesh(
+                viewer,
+                scan_vertices,
+                scan_faces,
+                name="scan_wire",
+                color="#808080",
+                line_width=1.0,
+            )
+            if contour_lines.shape[0] > 0:
+                add_line_segments(
+                    viewer,
+                    contour_points,
+                    contour_lines,
+                    name="phi0_contour",
+                    color="#00ffff",
+                    line_width=4.0,
+                )
+            if offset_lines.shape[0] > 0:
+                add_line_segments(
+                    viewer,
+                    offset_points,
+                    offset_lines,
+                    name="offset_contour",
+                    color="#ff00ff",
+                    line_width=4.0,
+                )
+            if print_points.points.shape[0] > 0:
+                print_colors_dds = np.tile(
+                    np.array([0.0, 1.0, 0.0], dtype=np.float64),
+                    (print_points.points.shape[0], 1),
+                )
+                add_colored_point_cloud(
+                    viewer,
+                    print_points.points,
+                    print_colors_dds,
+                    name="print_points",
+                    point_size=12.0,
+                    render_as_spheres=True,
+                )
+
         if contour_lines.shape[0] > 0:
-            geometries.append(contour_ls)
+            print("phi contour shown in cyan")
         if offset_lines.shape[0] > 0:
-            geometries.append(offset_ls)
-        if print_pcd is not None:
-            geometries.append(print_pcd)
+            print("offset contour shown in magenta")
+        if print_points.points.shape[0] > 0:
+            print("print points shown in green")
 
         axis_size_val = float(axis_size)
         if axis_size_val == 0.0:
             axis_size_val = max(1e-4, 0.15 * bb_diag)
         if axis_size_val > 0.0:
-            axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=axis_size_val)
-            axes.translate(bb_center)
-            geometries.append(axes)
+            axis_origin = bb_center.reshape(1, 3)
+            add_vector_arrows(
+                viewer,
+                axis_origin,
+                np.array([[axis_size_val, 0.0, 0.0]], dtype=np.float64),
+                name="axis_x",
+                color="#e74c3c",
+            )
+            add_vector_arrows(
+                viewer,
+                axis_origin,
+                np.array([[0.0, axis_size_val, 0.0]], dtype=np.float64),
+                name="axis_y",
+                color="#27ae60",
+            )
+            add_vector_arrows(
+                viewer,
+                axis_origin,
+                np.array([[0.0, 0.0, axis_size_val]], dtype=np.float64),
+                name="axis_z",
+                color="#2980b9",
+            )
 
         print(f"visualize bounds min={bb_min.tolist()} max={bb_max.tolist()} diag={bb_diag:.6f}")
         if axis_size_val > 0.0:
             print(f"axis size used: {axis_size_val:.6f} (axis centered at scene bbox center)")
         else:
             print("axis disabled")
-        if offset_lines.shape[0] > 0:
-            print("offset contour shown in magenta")
-        if print_pcd is not None:
-            print("print points shown in green")
-        o3d.visualization.draw_geometries(geometries)
+        show_viewer(viewer, show_axes=axis_size_val > 0.0)
 
 
 def main() -> None:
@@ -701,7 +796,7 @@ def main() -> None:
         default=0.0,
         help="Axis size for visualization. 0=auto from scene bounds, negative=disable axis.",
     )
-    parser.add_argument("--no-vis", action="store_true")
+    parser.add_argument("--no-vis", action="store_true", help="Disable DDS visualization window.")
     args = parser.parse_args()
 
     run(

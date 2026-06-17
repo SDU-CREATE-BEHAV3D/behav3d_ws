@@ -22,6 +22,7 @@ from lib_scalar.geometry import (
     sample_tangent_axes_on_surface_from_scalar,
 )
 from lib_scalar.viz import make_point_cloud, make_target_orientation_sticks, yellow_to_red_colors
+from lib_scalar.viz_dds import add_colored_point_cloud, add_vector_arrows, make_viewer, show_viewer
 
 
 DEFAULT_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
@@ -96,6 +97,7 @@ def run(
     vector_radius_ratio: float,
     vector_sample_mode: str,
     vector_surface_count: int,
+    viz_engine: str,
     visualize: bool,
 ) -> None:
     mesh_data = load_triangle_mesh_arrays(mesh_path)
@@ -135,6 +137,86 @@ def run(
         if not ok:
             raise RuntimeError(f"Failed to write colored point cloud PLY: {out_ply}")
         print(f"saved colored point cloud: {out_ply}")
+
+    if visualize and str(viz_engine).strip().lower() == "dds":
+        viewer = make_viewer(title=f"curved wall heat: {mesh_path.name}")
+        add_colored_point_cloud(
+            viewer,
+            mesh_data.vertices,
+            colors,
+            name="heat",
+            point_size=4.0,
+            render_as_spheres=False,
+        )
+
+        need_tangent_frame = vector_kind in ("gradient", "orthogonal", "both")
+        if need_tangent_frame:
+            sample_mode = str(vector_sample_mode).strip().lower()
+            if sample_mode == "surface":
+                vec_points = _sample_surface_points_uniform(
+                    mesh_data.vertices,
+                    mesh_data.faces,
+                    int(vector_surface_count),
+                    seed=0,
+                )
+                t_dir, b_dir, _ = sample_tangent_axes_on_surface_from_scalar(
+                    vec_points,
+                    mesh_data.vertices,
+                    mesh_data.faces,
+                    heat.dist,
+                    tangent_sign=1.0,
+                )
+            else:
+                vec_points = mesh_data.vertices
+                t_dir, b_dir, _ = compute_vertex_tangent_axes_from_scalar(
+                    mesh_data.vertices,
+                    mesh_data.faces,
+                    heat.dist,
+                    tangent_sign=1.0,
+                )
+
+            if vector_kind in ("gradient", "both"):
+                g0, g1 = _sample_vectors(
+                    vec_points,
+                    t_dir,
+                    step=vector_step,
+                    scale=vec_scale,
+                )
+                add_vector_arrows(
+                    viewer,
+                    g0,
+                    g1 - g0,
+                    name="gradient_tangent",
+                    color="#21bf73",
+                    opacity=0.95,
+                )
+                print(
+                    f"gradient tangent arrows: mode={sample_mode}, "
+                    f"step={max(1, int(vector_step))}, scale={vec_scale:.6f}"
+                )
+
+            if vector_kind in ("orthogonal", "both"):
+                b0, b1 = _sample_vectors(
+                    vec_points,
+                    b_dir,
+                    step=vector_step,
+                    scale=vec_scale,
+                )
+                add_vector_arrows(
+                    viewer,
+                    b0,
+                    b1 - b0,
+                    name="orthogonal_tangent",
+                    color="#2d7ff9",
+                    opacity=0.95,
+                )
+                print(
+                    f"orthogonal tangent arrows: mode={sample_mode}, "
+                    f"step={max(1, int(vector_step))}, scale={vec_scale:.6f}"
+                )
+
+        show_viewer(viewer)
+        return
 
     if visualize:
         geoms = [colored_pcd]
@@ -237,7 +319,7 @@ def main() -> None:
         type=str,
         choices=("gradient", "orthogonal", "both", "none"),
         default="both",
-        help="Which tangent vector directions to overlay in Open3D.",
+        help="Which tangent vector directions to overlay.",
     )
     parser.add_argument(
         "--vector-step",
@@ -273,7 +355,14 @@ def main() -> None:
     parser.add_argument(
         "--no-vis",
         action="store_true",
-        help="Disable Open3D visualization window.",
+        help="Disable visualization window.",
+    )
+    parser.add_argument(
+        "--viz-engine",
+        type=str,
+        choices=("dds", "open3d"),
+        default="dds",
+        help="Visualization backend.",
     )
     args = parser.parse_args()
 
@@ -289,6 +378,7 @@ def main() -> None:
         vector_radius_ratio=args.vector_radius_ratio,
         vector_sample_mode=str(args.vector_sample_mode).strip().lower(),
         vector_surface_count=args.vector_surface_count,
+        viz_engine=str(args.viz_engine).strip().lower(),
         visualize=not args.no_vis,
     )
 
