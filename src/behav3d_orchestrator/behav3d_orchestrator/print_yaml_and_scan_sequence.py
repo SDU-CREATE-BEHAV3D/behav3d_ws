@@ -70,13 +70,15 @@ class PrintYamlAndScanSequenceNode(Node):
             targets = self.print_session.parse_yaml_targets(yaml_path=yaml_path, frame_id=frame_id)
             if not targets:
                 raise ValueError(f"No valid targets found in YAML: {yaml_path}")
+            plane_types = self._load_yaml_plane_types(yaml_path, target_count=len(targets))
 
             log.info(
                 "[print_yaml_and_scan] Starting sequence: "
                 f"config='{config_path}', yaml='{yaml_path}', frame='{frame_id}', "
                 f"targets={len(targets)}, points_per_cycle={points_per_cycle}, "
                 f"scan_enabled={self._cfg_bool(cfg, 'enable_scan')}, "
-                f"run_reconstruction={self._cfg_bool(cfg, 'run_reconstruction')}"
+                f"run_reconstruction={self._cfg_bool(cfg, 'run_reconstruction')}, "
+                f"plane_types={self._format_plane_type_counts(plane_types)}"
             )
             log.info(
                 "[print_yaml_and_scan] YAML target preview: "
@@ -133,12 +135,14 @@ class PrintYamlAndScanSequenceNode(Node):
                 cycle_count += 1
                 cycle_tag = f"cycle_{cycle_count:04d}"
                 chunk = targets[start_idx:end_idx]
+                chunk_plane_types = plane_types[start_idx:end_idx]
                 next_target_idx = end_idx
 
                 log.info(
                     f"[print_yaml_and_scan] ===== {cycle_tag} print ===== "
                     f"targets={start_idx + 1}..{end_idx}/{len(targets)} "
                     f"chunk_size={len(chunk)} "
+                    f"plane_types={self._format_plane_type_counts(chunk_plane_types)} "
                     f"preview={self._format_target_preview(chunk, max_items=len(chunk))}"
                 )
                 self._publish_yaml_targets(targets, cfg=cfg, timeout_s=timeout_s)
@@ -151,7 +155,12 @@ class PrintYamlAndScanSequenceNode(Node):
                         stopped_by_user = True
                         break
 
-                print_res = self._print_chunk(chunk, cfg=cfg, timeout_s=timeout_s)
+                print_res = self._print_chunk(
+                    chunk,
+                    plane_types=chunk_plane_types,
+                    cfg=cfg,
+                    timeout_s=timeout_s,
+                )
                 if not print_res.get("ok", False):
                     log.error(
                         f"[print_yaml_and_scan] Print failed in {cycle_tag} "
@@ -225,6 +234,7 @@ class PrintYamlAndScanSequenceNode(Node):
         self,
         targets: Sequence[PoseStamped],
         *,
+        plane_types: Sequence[str],
         cfg: Dict[str, Any],
         timeout_s: Optional[float],
     ) -> dict:
@@ -234,7 +244,8 @@ class PrintYamlAndScanSequenceNode(Node):
             return {"ok": False, "stage": "parse_targets", "error": "Need at least 1 target."}
 
         print_eef = self._cfg_str(cfg, "print_eef_link")
-        dot_steps = self._cfg_int(cfg, "dot_steps")
+        dot_steps_n = self._cfg_int(cfg, "dot_steps_n")
+        dot_steps_e = self._cfg_int(cfg, "dot_steps_e")
         dot_speed = self._cfg_int(cfg, "dot_speed")
         retract_steps = self._cfg_int(cfg, "post_dot_retract_steps")
         retract_speed = self._cfg_int(cfg, "post_dot_retract_speed")
@@ -272,7 +283,9 @@ class PrintYamlAndScanSequenceNode(Node):
 
         log.info(
             f"[print_yaml_and_scan] Print context ready: eef='{print_eef}', "
-            f"targets={len(target_list)}, retract_steps={retract_steps}, retract_speed={retract_speed}"
+            f"targets={len(target_list)}, dot_steps_n={dot_steps_n}, dot_steps_e={dot_steps_e}, "
+            f"plane_types={self._format_plane_type_counts(plane_types)}, "
+            f"retract_steps={retract_steps}, retract_speed={retract_speed}"
         )
 
         first_approach = self._with_z_offset(target_list[0], approach_z_offset_m)
@@ -299,6 +312,8 @@ class PrintYamlAndScanSequenceNode(Node):
         failed_targets: list[dict[str, Any]] = []
         printed_targets: list[PoseStamped] = []
         for i, target in enumerate(target_list):
+            plane_type = self._normalize_plane_type(plane_types[i] if i < len(plane_types) else "")
+            dot_steps = dot_steps_e if plane_type == "E" else dot_steps_n
             above = self._with_z_offset(target, dot_z_offset_m)
             above_vel = pre_dot_vel_scale if i == 0 else dot_vel_scale
 
@@ -614,6 +629,45 @@ class PrintYamlAndScanSequenceNode(Node):
         if len(targets) > len(parts):
             parts.append(f"... +{len(targets) - len(parts)}")
         return "[" + ", ".join(parts) + "]"
+
+    def _load_yaml_plane_types(self, yaml_path: str, *, target_count: int) -> list[str]:
+        if yaml is None:
+            raise RuntimeError("PyYAML is not available; cannot load plane_type metadata.")
+
+        path = self.print_session._resolve_yaml_path(yaml_path)
+        data = self.print_session._load_yaml_data(path)
+        items = self.print_session._extract_target_items(data)
+
+        ordered: list[tuple[int, int, str]] = []
+        for pos, item in enumerate(items):
+            if isinstance(item, dict):
+                idx_raw = item.get("index", pos)
+                idx = int(idx_raw) if idx_raw is not None else 1_000_000 + pos
+                plane_type = self._normalize_plane_type(str(item.get("plane_type", "N")))
+            else:
+                idx = 1_000_000 + pos
+                plane_type = "N"
+            ordered.append((idx, pos, plane_type))
+
+        ordered.sort(key=lambda row: (row[0], row[1]))
+        plane_types = [plane_type for _, _, plane_type in ordered]
+        if len(plane_types) < int(target_count):
+            plane_types.extend(["N"] * (int(target_count) - len(plane_types)))
+        elif len(plane_types) > int(target_count):
+            plane_types = plane_types[: int(target_count)]
+        return plane_types
+
+    @staticmethod
+    def _normalize_plane_type(value: str) -> str:
+        text = str(value or "").strip().upper()
+        return "E" if text == "E" else "N"
+
+    @classmethod
+    def _format_plane_type_counts(cls, plane_types: Sequence[str]) -> str:
+        normalized = [cls._normalize_plane_type(item) for item in plane_types]
+        e_count = sum(1 for item in normalized if item == "E")
+        n_count = len(normalized) - e_count
+        return f"E={e_count}, N={n_count}"
 
     def _default_config_path(self) -> str:
         return SRC_CONFIG_PATH

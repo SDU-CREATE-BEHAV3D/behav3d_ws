@@ -6,7 +6,7 @@ print_yaml_and_scan_sequence:
     #   3) scan with grid sweep
     #   4) reconstruct/update world mesh
     #   5) repeat until YAML targets are complete
-    yaml_path: /home/lab/behav3d_ws/yaml/lamine_baseline_02.yaml
+    yaml_path: /home/lab/behav3d_ws/yaml/lamine_doublewall_01.yaml
     frame_id: world
     points_per_cycle: 7
     home_before: true
@@ -18,7 +18,8 @@ print_yaml_and_scan_sequence:
 
     # Dot print parameters.
     print_eef_link: extruder_tcp
-    dot_steps: 25000
+    dot_steps_n: 25000
+    dot_steps_e: 16000
     dot_speed: 2400
     post_dot_retract_steps: 3000
     post_dot_retract_speed: 6000
