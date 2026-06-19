@@ -47,6 +47,9 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Extracts the 3D boundary `phi = iso` by edge interpolation over field triangles.
    - Can also build geodesic offset curves from that boundary.
    - Typical use: `iso = 0` for viable/non-viable boundary.
+   - The offset contour is a heat-method geodesic over the field mesh. It is not
+     a Euclidean offset in free space, and it should be treated as a reference
+     curve when using modes such as `gradient_walk`.
    - Main APIs:
      - `extract_phi_contour(vertices, faces, scalar, iso=0.0)`
      - `extract_offset_phi_contour(vertices, faces, phi, iso_level, offset_distance, ...)`
@@ -56,6 +59,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
 
 5. `viz.py`
    - Converts numeric outputs to Open3D visualization objects.
+   - This remains useful for file outputs and legacy Open3D scripts.
    - Main APIs:
      - `yellow_to_red_colors(norm_scalar)`
      - `make_point_cloud(points, colors)`
@@ -64,7 +68,21 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `make_target_orientation_sticks(points, z_dirs)`
      - `compute_scene_bounds(...)`
 
-6. `geometry.py`
+6. `viz_dds.py`
+   - DDS/PyVista visualization helpers for scalar debug geometry.
+   - Can attach BEHAV3D scalar overlays to an existing DDS workbench plotter.
+   - Used by DDS-oriented scripts to show field points, scan wireframes,
+     contour lines, selected targets, walk segments, and orientation arrows.
+   - Main APIs:
+     - `attach_viewer(plotter)`
+     - `make_viewer(...)`
+     - `add_colored_point_cloud(...)`
+     - `add_wire_mesh(...)`
+     - `add_line_segments(...)`
+     - `add_vector_arrows(...)`
+     - `remove_overlay(...)`
+
+7. `geometry.py`
    - Geometry loading and preparation utilities.
    - Ensures triangle meshes are valid and indexing is compact.
    - Includes scalar sampling on mesh surface using triangle interpolation.
@@ -76,14 +94,14 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `sample_vertex_scalar_on_surface(query_points, mesh_vertices, mesh_faces, vertex_scalar)`
      - `clamp_vectors_to_cone(vectors, max_tilt_deg, cone_axis=(0,0,1))`
 
-7. `types.py`
+8. `types.py`
    - Shared dataclasses used as contracts across stages.
    - `MeshData`: compacted mesh arrays + number of dropped vertices.
    - `HeatField`: raw and normalized scalar + summary stats + seed metadata.
    - `PoseResult`: positioned field, phi values, viability mask, ray-hit stats, search stats.
    - `PrintPointSet`: selected print points and spacing/selection metadata.
 
-8. `generate_print_points.py`
+9. `generate_print_points.py`
    - Unified print-point generator.
    - Base selection always runs on the provided polyline graph:
      - pick the polyline vertex with minimum scalar value,
@@ -118,7 +136,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Main API:
      - `generate_print_points(...) -> PrintPointSet`
 
-9. `loop_simulation.py`
+10. `loop_simulation.py`
    - Utilities for iterative loop simulation before robot execution.
    - Keeps loop stages explicit:
      - position field with bounded retries (`positioning_attempts`),
@@ -129,13 +147,15 @@ The objective is to keep each stage isolated, testable, and reusable from:
        - `gradient_lift`: from `phi=0` contour + tangent lift,
        - `gradient_walk`: from `phi=0` contour + simple agent walk,
      - update scan mesh by adding simulated bead solids (default cylinder).
+   - DDS v2 uses these same field/phi/contour/candidate utilities, but handles
+     bead accumulation outside this module through the DDS simulator.
    - Main APIs:
      - `position_field_with_attempts(...) -> PoseResult`
      - `compute_offset_contour_stage(...) -> ContourStage`
      - `generate_step_candidates(...) -> CandidateStage`
      - `apply_simulated_beads(...) -> (scan_mesh, bead_centers)`
 
-10. `agent_walk.py`
+11. `agent_walk.py`
    - Simple surface-walk agent used by `candidate_mode='gradient_walk'`.
    - Walks from selected source points along the scalar tangent field.
    - Exposes each accepted origin, projected print-line start (`p1`, default
@@ -146,7 +166,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `AgentWalkConfig`
      - `run_agent_walk(...) -> AgentWalkResult`
 
-11. `print_targets.py`
+12. `print_targets.py`
    - Builds oriented point or line targets from candidate geometry.
    - Projects target points to the field surface, samples scalar-tangent
      orientation, optionally clamps target Z directions to a cone, and writes
@@ -171,6 +191,10 @@ The objective is to keep each stage isolated, testable, and reusable from:
 - Field scalar computation and geometric viability are explicitly separated.
 - `position_field` handles local candidate ranking for pose search.
 - Offset generation is geodesic on the mesh, not Euclidean in free space.
+- The magenta offset contour is not necessarily the active print path:
+  - `geodesic` mode selects directly from the offset contour.
+  - `gradient_walk` selects from the `phi=0` contour and walks along the scalar
+    tangent field; the offset contour is visual context/debugging.
 - Candidate generation is centralized in `generate_print_points` (mode-driven),
   instead of split across multiple point-generator modules.
 - Cone clamping can be applied in two different places:
@@ -182,6 +206,10 @@ The objective is to keep each stage isolated, testable, and reusable from:
 - Full-loop/global objective design remains external to this library.
 - Loop simulation keeps bead accumulation local to the simulator layer, so
   field/phi/contour stages remain reusable in ROS integration.
+- DDS bead accumulation is intentionally kept in script/application code
+  (`field_scan_loop_simulator_dds_v2.py`) rather than inside `lib_scalar`.
+  This keeps the scalar library usable without requiring DDS as a core planning
+  dependency.
 
 ## Typical Script-Level Usage
 
@@ -192,16 +220,52 @@ The objective is to keep each stage isolated, testable, and reusable from:
 5. Extract `phi=0` contour.
 6. Extract geodesic offset contour at desired distance (default 12 mm).
 7. Select print points with `generate_print_points`:
-   - from offset contour (`candidate_mode='polyline'`), or
+   - directly from the offset contour (`candidate_mode='polyline'` in the low-level
+     generator, exposed as `mode='geodesic'` in `generate_step_candidates`), or
    - from `phi=0` contour + lift (`candidate_mode='z_lift'`), or
    - from `phi=0` contour + tangent lift (`candidate_mode='gradient_lift'`), or
    - from contour with surface walk (`candidate_mode='gradient_walk'`).
-8. Export and visualize.
+8. Export and visualize with Open3D helpers or DDS/PyVista helpers.
+
+## DDS-Oriented Usage
+
+`lib_scalar` does not own DDS simulation state. DDS-oriented scripts normally:
+
+1. use `lib_scalar` to compute field pose, `phi`, contours, and candidates,
+2. create DDS `PointDeposit` or other DDS deposit primitives from selected
+   candidate geometry,
+3. add those deposits to a DDS `Simulator`,
+4. extract a DDS implicit surface as a proxy mesh,
+5. feed `original scan + proxy mesh` back into the next scalar iteration.
+
+The current DDS loop prototype is:
+
+```text
+../field_scan_loop_simulator_dds_v2.py
+```
+
+That script also attaches BEHAV3D scalar overlays to the DDS workbench:
+
+- scalar field points,
+- scan wire mesh,
+- `phi=0` contour,
+- geodesic offset contour,
+- selected print targets,
+- source points,
+- walk segments,
+- target normal arrows,
+- debug axes.
+
+Those overlays can be toggled with checkboxes in the workbench sidebar.
 
 ## Current Exposure Notes
 
 - Standalone Python scripts and `lib_scalar` support `gradient_walk`, line
   segment targets, and target-orientation visualization.
+- `viz_dds.py` supports DDS/PyVista visualization without replacing the
+  reusable scalar computations.
+- `field_scan_loop_simulator_dds_v2.py` is the current DDS bead-representation
+  prototype and keeps the original Open3D simulator intact.
 - ROS `fields_node`/`behav3d_commands` expose `z_lift`, `gradient_lift`, and
   `gradient_walk` through `GeneratePrintCandidates`.
 - `gradient_walk` emits nested `segments:` YAML with `start`/`end` planes.
