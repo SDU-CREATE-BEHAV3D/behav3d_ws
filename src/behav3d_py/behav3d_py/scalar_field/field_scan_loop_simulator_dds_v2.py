@@ -95,6 +95,23 @@ ISO_LEVEL = 0.0
 BASE_Z_OFFSET = 1e-6
 SEARCH_MAX_CANDIDATES = 30000
 
+SCALAR_OVERLAY_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("field", "Scalar Field", ("field_heat_masked",)),
+    ("scan", "Scan Mesh", ("scan_wire",)),
+    ("phi", "Phi Contour", ("phi_contour",)),
+    ("offset", "Geodesic Offset", ("offset_contour",)),
+    ("targets", "Print Targets", ("selected_points",)),
+    ("sources", "Source Points", ("source_points",)),
+    ("walk", "Walk Segments", ("source_to_candidate", "segment_start_points", "print_segments")),
+    ("normals", "Target Normals", ("target_orientations",)),
+    ("axes", "Debug Axes", ("axis_x", "axis_y", "axis_z")),
+)
+
+
+def default_scalar_overlay_visibility() -> dict[str, bool]:
+    """Default visibility for scalar overlays in the DDS workbench."""
+    return {key: True for key, _, _ in SCALAR_OVERLAY_GROUPS}
+
 
 def subdivide_field_mesh_loop(
     vertices: np.ndarray,
@@ -302,6 +319,71 @@ def compose_scan_with_dds_proxy(
     return scan_with_proxy, occupied, proxy_faces
 
 
+def set_scalar_overlay_name_visible(overlay, name: str, visible: bool) -> None:
+    """Set visibility for either a retained DDS visual or a raw PyVista overlay."""
+    try:
+        overlay.get(name).set_visible(bool(visible))
+        return
+    except KeyError:
+        pass
+
+    actors = getattr(overlay, "_behav3d_overlay_actors", {})
+    actor = actors.get(name)
+    if actor is not None:
+        actor.SetVisibility(bool(visible))
+
+
+def apply_scalar_overlay_visibility(viewer_state: dict[str, object]) -> None:
+    """Apply checkbox state to all scalar overlay actor groups."""
+    overlay = viewer_state.get("overlay")
+    if overlay is None:
+        return
+
+    visibility = viewer_state.setdefault("scalar_overlay_visibility", default_scalar_overlay_visibility())
+    for key, _, names in SCALAR_OVERLAY_GROUPS:
+        visible = bool(visibility.get(key, True))
+        for name in names:
+            set_scalar_overlay_name_visible(overlay, name, visible)
+
+    plotter = getattr(overlay, "plotter", None)
+    if plotter is not None:
+        plotter.render()
+
+
+def install_scalar_overlay_controls(workbench, viewer_state: dict[str, object]) -> None:
+    """Attach BEHAV3D scalar overlay checkboxes to the DDS workbench sidebar."""
+    if viewer_state.get("scalar_overlay_controls") is not None:
+        return
+
+    from PySide6 import QtWidgets
+
+    native_checkbox = getattr(workbench, "world_axes_checkbox", None)
+    overlays_box = native_checkbox.parentWidget() if native_checkbox is not None else None
+    overlays_layout = overlays_box.layout() if overlays_box is not None else None
+    if overlays_layout is None:
+        return
+
+    visibility = viewer_state.setdefault("scalar_overlay_visibility", default_scalar_overlay_visibility())
+    label = QtWidgets.QLabel("BEHAV3D Scalar", overlays_box)
+    overlays_layout.addRow(label)
+
+    controls: dict[str, object] = {}
+    for key, text, _names in SCALAR_OVERLAY_GROUPS:
+        checkbox = QtWidgets.QCheckBox(text, overlays_box)
+        checkbox.setChecked(bool(visibility.get(key, True)))
+
+        def _on_toggled(checked: bool, group_key: str = key) -> None:
+            current = viewer_state.setdefault("scalar_overlay_visibility", default_scalar_overlay_visibility())
+            current[group_key] = bool(checked)
+            apply_scalar_overlay_visibility(viewer_state)
+
+        checkbox.toggled.connect(_on_toggled)
+        overlays_layout.addRow(checkbox)
+        controls[key] = checkbox
+
+    viewer_state["scalar_overlay_controls"] = controls
+
+
 def show_step_window(
     step_index: int,
     viewer_state: dict[str, object],
@@ -361,6 +443,7 @@ def show_step_window(
         overlay = attach_viewer(workbench.plotter)
         viewer_state["workbench"] = workbench
         viewer_state["overlay"] = overlay
+        install_scalar_overlay_controls(workbench, viewer_state)
 
         def _finish(next_step: bool) -> None:
             current = viewer_state.get("decision")
@@ -566,6 +649,8 @@ def show_step_window(
             name="axis_z",
             color="#2980b9",
         )
+
+    apply_scalar_overlay_visibility(viewer_state)
 
     print("[viz] DDS workbench controls: N=apply+next, Q/Esc=stop")
     event_loop = QtCore.QEventLoop()

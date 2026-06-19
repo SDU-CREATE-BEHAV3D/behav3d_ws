@@ -54,14 +54,14 @@ scan_sequence:
     # If you switch to this mode, also set:
     #   capture_folder: "@session/scan_test_grid"
     #   scan_folder: scan_test_grid
-    grid_width: 0.40
-    grid_height: 0.15
+    grid_width: 0.50
+    grid_height: 0.40
     grid_center_x: -0.17
-    grid_center_y: 0.85
-    grid_center_z: -0.3
+    grid_center_y: 1.00
+    grid_center_z: -0.30
     grid_z_off: 0.60
     grid_nx: 5
-    grid_ny: 2
+    grid_ny: 4
     grid_row_major: false
     grid_use_tf_orientation: true
 
