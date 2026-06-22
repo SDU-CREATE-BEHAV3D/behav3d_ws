@@ -805,7 +805,7 @@ def run(
                 positioning_attempts=int(positioning_attempts),
                 search_max_candidates=int(SEARCH_MAX_CANDIDATES),
                 require_full_hit=not bool(search_allow_partial_hit),
-                preferred_center_xy=position_target_xy,
+                preferred_centroid_xy=position_target_xy,
             )
             locked_offset_xyz = pose.offset_xyz
             print(
@@ -813,18 +813,16 @@ def run(
                 f"x={locked_offset_xyz[0]:.6f} y={locked_offset_xyz[1]:.6f} z={locked_offset_xyz[2]:.6f}"
             )
             if position_target_xy is not None:
-                pose_min = np.min(pose.field_vertices_world, axis=0)
-                pose_max = np.max(pose.field_vertices_world, axis=0)
-                pose_center_xy = 0.5 * (pose_min[:2] + pose_max[:2])
+                selected_centroid_xy = np.mean(pose.field_vertices_world[:, :2], axis=0)
                 target_distance = float(
                     np.linalg.norm(
-                        pose_center_xy - np.asarray(position_target_xy, dtype=np.float64)
+                        selected_centroid_xy - np.asarray(position_target_xy, dtype=np.float64)
                     )
                 )
                 print(
-                    "[pose] preferred field center: "
+                    "[pose] preferred field XY centroid: "
                     f"target=({position_target_xy[0]:.6f},{position_target_xy[1]:.6f}) "
-                    f"selected=({pose_center_xy[0]:.6f},{pose_center_xy[1]:.6f}) "
+                    f"selected=({selected_centroid_xy[0]:.6f},{selected_centroid_xy[1]:.6f}) "
                     f"distance_m={target_distance:.6f}"
                 )
         else:
@@ -1095,6 +1093,23 @@ def main() -> None:
         help="Legacy compatibility argument; DDS proxy uses BeadProfile width/height.",
     )
     parser.add_argument("--positioning-attempts", type=int, default=3)
+    parser.add_argument(
+        "--position-target-x",
+        type=float,
+        default=0.0,
+        help="Preferred positioned field vertex-centroid X in world coordinates, in meters.",
+    )
+    parser.add_argument(
+        "--position-target-y",
+        type=float,
+        default=-0.75,
+        help="Preferred positioned field vertex-centroid Y in world coordinates, in meters.",
+    )
+    parser.add_argument(
+        "--no-position-target",
+        action="store_true",
+        help="Disable XY field-center preference and use the legacy pose ranking.",
+    )
     parser.add_argument("--search-step-x", type=float, default=0.01)
     parser.add_argument("--search-step-y", type=float, default=0.01)
     parser.add_argument("--search-allow-partial-hit", action="store_true")
@@ -1148,6 +1163,11 @@ def main() -> None:
     )
     parser.add_argument("--no-vis", action="store_true")
     args = parser.parse_args()
+    position_target_xy = (
+        None
+        if args.no_position_target
+        else (float(args.position_target_x), float(args.position_target_y))
+    )
 
     run(
         field_mesh_path=args.field_mesh,
@@ -1174,6 +1194,7 @@ def main() -> None:
         cone_max_tilt_deg=args.cone_max_tilt_deg,
         bead_shape=args.bead_shape,
         positioning_attempts=args.positioning_attempts,
+        position_target_xy=position_target_xy,
         search_step_x=args.search_step_x,
         search_step_y=args.search_step_y,
         search_allow_partial_hit=args.search_allow_partial_hit,

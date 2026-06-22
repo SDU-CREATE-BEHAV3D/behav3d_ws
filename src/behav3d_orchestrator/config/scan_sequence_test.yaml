@@ -13,7 +13,7 @@ scan_sequence:
     # Shared motion/capture settings.
     frame_id: world
     eef_link: femto_color_optical_calib
-    motion: PTP
+    motion: LIN
     do_home: true
     home_after: false
     vel_scale: 0.05

@@ -69,7 +69,7 @@ def position_field(
     base_z_offset: float,
     require_full_hit: bool,
     verbose: bool,
-    preferred_center_xy: tuple[float, float] | None = None,
+    preferred_centroid_xy: tuple[float, float] | None = None,
 ) -> PoseResult:
     """Search XY candidates and compute a feasible Z from base min-z.
 
@@ -89,8 +89,8 @@ def position_field(
     - `phi = z_field - z_scan - clearance`
     - `viable = phi > iso_level`
     - without an XY preference: `(viable_count, viable_heat, hit_count, z_offset)`
-    - with `preferred_center_xy`: maximize viability first, then minimize the
-      distance between the positioned field bbox center and the preferred XY.
+    - with `preferred_centroid_xy`: maximize viability first, then minimize the
+      distance between the positioned field vertex centroid and the preferred XY.
 
     Note:
     - This is only the local pose-search ranking.
@@ -98,9 +98,7 @@ def position_field(
     """
     n = field_vertices_scaled.shape[0]
     base_local_z = float(np.min(field_vertices_scaled[:, 2]))
-    field_min = np.min(field_vertices_scaled, axis=0)
-    field_max = np.max(field_vertices_scaled, axis=0)
-    field_center_local_xy = 0.5 * (field_min[:2] + field_max[:2])
+    field_centroid_local_xy = np.mean(field_vertices_scaled[:, :2], axis=0)
     bbox_diag = float(np.linalg.norm(np.max(field_vertices_scaled, axis=0) - np.min(field_vertices_scaled, axis=0)))
     base_tol = max(1e-9, 1e-6 * bbox_diag)
     base_mask = field_vertices_scaled[:, 2] <= (base_local_z + base_tol)
@@ -150,14 +148,17 @@ def position_field(
             accepted += 1
 
             # Local ranking inside this search routine.
-            if preferred_center_xy is None:
+            if preferred_centroid_xy is None:
                 key = (viable_count, viable_heat, hit_count, z_offset)
                 target_distance = None
             else:
-                field_center_xy = field_center_local_xy + np.array([ox, oy], dtype=np.float64)
+                field_centroid_xy = field_centroid_local_xy + np.array(
+                    [ox, oy], dtype=np.float64
+                )
                 target_distance = float(
                     np.linalg.norm(
-                        field_center_xy - np.asarray(preferred_center_xy, dtype=np.float64)
+                        field_centroid_xy
+                        - np.asarray(preferred_centroid_xy, dtype=np.float64)
                     )
                 )
                 key = (viable_count, -target_distance, viable_heat, hit_count, z_offset)

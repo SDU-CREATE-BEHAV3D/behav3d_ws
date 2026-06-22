@@ -52,6 +52,7 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
   --beads-per-step 7 --bead-separation-mm 16 \
   --bead-height-mm 12 \
   --positioning-attempts 3 \
+  --position-target-x 0.0 --position-target-y -0.75 \
   --search-step-x 0.01 --search-step-y 0.01 \
   --offset-distance-mm 12 --offset-geodesic-delta-mm 0.6 \
   --dds-domain-source field \
@@ -94,6 +95,17 @@ Performance knobs:
 - `--dds-voxel-size-mm 3.0` reduces DDS grid density.
 - `--dds-surface-step-size 2` reduces marching-cubes proxy cost.
 - `--walk-step-mm 2.0` and `--walk-max-steps 16` reduce agent-walk work.
+
+Position preference:
+
+- DDS v2 defaults to a preferred positioned field vertex centroid at
+  `X=0.0 m`, `Y=-0.75 m`.
+- The pose search still maximizes viable field vertices first. Among poses with
+  equal viability, it minimizes the XY distance from the field vertex centroid
+  to the preferred target before
+  comparing heat/hit/Z metrics.
+- Change it with `--position-target-x` and `--position-target-y` (meters).
+- Use `--no-position-target` to restore the legacy ranking.
 
 ### `field_scan_loop_simulator.py`
 

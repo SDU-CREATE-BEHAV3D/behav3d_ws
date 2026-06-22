@@ -26,6 +26,9 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Then computes viability from phi:
      - `phi = z_field - z_scan - clearance`
    - Ranking inside this stage is local to pose search; a global loop-level score can be optimized outside.
+   - `preferred_centroid_xy=(x, y)` optionally prioritizes the positioned field
+     vertex centroid nearest that world XY after maximizing viable count.
+     Passing `None` preserves the legacy ranking.
    - Main API:
      - `position_field(...) -> PoseResult`
    - Utilities:
