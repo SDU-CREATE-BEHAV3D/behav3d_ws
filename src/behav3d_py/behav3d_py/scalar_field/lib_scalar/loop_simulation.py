@@ -60,6 +60,7 @@ def position_field_with_attempts(
     positioning_attempts: int,
     search_max_candidates: int,
     require_full_hit: bool = True,
+    preferred_center_xy: tuple[float, float] | None = None,
 ) -> PoseResult:
     """Position field using XY search with bounded retry attempts.
 
@@ -78,7 +79,10 @@ def position_field_with_attempts(
     )
 
     best_pose: PoseResult | None = None
-    best_score = -np.inf
+    best_score = None
+    field_min = np.min(field_vertices_scaled, axis=0)
+    field_max = np.max(field_vertices_scaled, axis=0)
+    field_center_local_xy = 0.5 * (field_min[:2] + field_max[:2])
     for attempt in range(attempts):
         grow_x = float(attempt) * float(search_step_x)
         grow_y = float(attempt) * float(search_step_y)
@@ -104,11 +108,19 @@ def position_field_with_attempts(
             base_z_offset=float(base_z_offset),
             require_full_hit=bool(require_full_hit),
             verbose=False,
+            preferred_center_xy=preferred_center_xy,
         )
 
         viable_heat = float(pose.viable_heat if pose.viable_heat is not None else 0.0)
-        score = viable_heat + 1e-9 * float(pose.viable_count)
-        if score > best_score:
+        if preferred_center_xy is None:
+            score = (viable_heat + 1e-9 * float(pose.viable_count),)
+        else:
+            field_center_xy = field_center_local_xy + np.asarray(pose.offset_xyz[:2], dtype=np.float64)
+            target_distance = float(
+                np.linalg.norm(field_center_xy - np.asarray(preferred_center_xy, dtype=np.float64))
+            )
+            score = (float(pose.viable_count), -target_distance, viable_heat)
+        if best_score is None or score > best_score:
             best_pose = pose
             best_score = score
 

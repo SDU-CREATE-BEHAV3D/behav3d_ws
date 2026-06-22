@@ -46,11 +46,13 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
   --walk-start-fraction 0.25 \
   --cone-max-tilt-deg 45 \
   --positioning-attempts 3 \
+  --position-target-x 0.0 --position-target-y -0.75 \
   --search-step-x 0.01 \
   --search-step-y 0.01 \
   --base-z-offset 0.000001 \
   --axis-size -1 \
   --dds-voxel-size-mm 2.0 \
+  --dds-domain-source field \
   --dds-threshold 0.5 \
   --dds-padding-mm 24 \
   --dds-surface-step-size 1 \
@@ -227,19 +229,31 @@ def wait_next_terminal(step_index: int) -> bool:
         print("[loop] invalid input. use 'n' or 'q'.")
 
 
-def build_dds_domain_from_scene(
-    scan_mesh: o3d.geometry.TriangleMesh,
+def build_dds_domain_from_print_zone(
     field_vertices_world: np.ndarray,
+    candidate_points: np.ndarray,
     *,
+    source: str,
+    scan_mesh: o3d.geometry.TriangleMesh | None,
     voxel_size_m: float,
     padding_m: float,
 ):
-    """Build a fixed DDS domain covering scan, field, and bead support."""
+    """Build one fixed DDS domain around the planned print envelope."""
     from dds import Domain
 
-    scan_vertices = np.asarray(scan_mesh.vertices, dtype=np.float64)
     field_vertices = np.asarray(field_vertices_world, dtype=np.float64)
-    bb_min, bb_max = compute_scene_bounds(scan_vertices, field_vertices)
+    candidates = np.asarray(candidate_points, dtype=np.float64)
+    source_norm = str(source).strip().lower()
+    if source_norm not in {"field", "scene"}:
+        raise ValueError(f"Unknown DDS domain source: {source}. Use 'field' or 'scene'.")
+
+    point_sets = [field_vertices, candidates]
+    if source_norm == "scene":
+        if scan_mesh is None:
+            raise ValueError("scan_mesh is required when DDS domain source is 'scene'.")
+        point_sets.append(np.asarray(scan_mesh.vertices, dtype=np.float64))
+
+    bb_min, bb_max = compute_scene_bounds(*point_sets)
     pad = max(float(padding_m), float(voxel_size_m))
     return Domain.from_bounds(
         xmin=float(bb_min[0] - pad),
@@ -251,6 +265,24 @@ def build_dds_domain_from_scene(
         voxel_size=float(voxel_size_m),
         length_unit="m",
     )
+
+
+def validate_deposits_inside_domain(deposits: tuple[object, ...], domain) -> None:
+    """Reject deposits whose support would be clipped by the fixed DDS domain."""
+    domain_min = np.asarray(domain.min_corner, dtype=np.float64)
+    domain_max = np.asarray(domain.max_corner, dtype=np.float64)
+    for deposit_index, deposit in enumerate(deposits):
+        support_min, support_max = deposit.support_bounds(padding=0.0)
+        minimum = np.asarray(support_min.to_tuple(), dtype=np.float64)
+        maximum = np.asarray(support_max.to_tuple(), dtype=np.float64)
+        if np.any(minimum < domain_min) or np.any(maximum > domain_max):
+            raise RuntimeError(
+                "DDS deposit support exceeds the fixed print-zone domain: "
+                f"deposit={deposit_index} support_min={tuple(minimum)} "
+                f"support_max={tuple(maximum)} domain_min={domain.min_corner} "
+                f"domain_max={domain.max_corner}. Increase --dds-padding-mm "
+                "or use --dds-domain-source scene."
+            )
 
 
 def _dds_target(point: np.ndarray, normal: np.ndarray):
@@ -688,6 +720,7 @@ def run(
     cone_max_tilt_deg: float,
     bead_shape: str,
     positioning_attempts: int,
+    position_target_xy: tuple[float, float] | None,
     search_step_x: float,
     search_step_y: float,
     search_allow_partial_hit: bool,
@@ -695,6 +728,7 @@ def run(
     axis_size: float,
     visualize: bool,
     dds_voxel_size_mm: float,
+    dds_domain_source: str,
     dds_threshold: float,
     dds_padding_mm: float,
     dds_surface_step_size: int,
@@ -749,6 +783,8 @@ def run(
         f"bead_height_mm={float(bead_height_mm):.3f} "
         f"dds_bead_width_mm={float(bead_separation_mm + 2.0):.3f} "
         f"dds_voxel_size_mm={float(dds_voxel_size_mm):.3f} "
+        f"dds_domain_source={dds_domain_source} "
+        f"position_target_xy={position_target_xy} "
         f"dds_threshold={float(dds_threshold):.3f}"
     )
 
@@ -769,12 +805,28 @@ def run(
                 positioning_attempts=int(positioning_attempts),
                 search_max_candidates=int(SEARCH_MAX_CANDIDATES),
                 require_full_hit=not bool(search_allow_partial_hit),
+                preferred_center_xy=position_target_xy,
             )
             locked_offset_xyz = pose.offset_xyz
             print(
                 "[pose] locked field offset from step 1: "
                 f"x={locked_offset_xyz[0]:.6f} y={locked_offset_xyz[1]:.6f} z={locked_offset_xyz[2]:.6f}"
             )
+            if position_target_xy is not None:
+                pose_min = np.min(pose.field_vertices_world, axis=0)
+                pose_max = np.max(pose.field_vertices_world, axis=0)
+                pose_center_xy = 0.5 * (pose_min[:2] + pose_max[:2])
+                target_distance = float(
+                    np.linalg.norm(
+                        pose_center_xy - np.asarray(position_target_xy, dtype=np.float64)
+                    )
+                )
+                print(
+                    "[pose] preferred field center: "
+                    f"target=({position_target_xy[0]:.6f},{position_target_xy[1]:.6f}) "
+                    f"selected=({pose_center_xy[0]:.6f},{pose_center_xy[1]:.6f}) "
+                    f"distance_m={target_distance:.6f}"
+                )
         else:
             scene, z_top = make_scan_scene(scan_mesh_current)
             pose = evaluate_fixed_pose(
@@ -845,9 +897,11 @@ def run(
             target_points, target_z_dirs = line_targets.flattened_points_and_z_dirs()
 
         if dds_simulator is None:
-            dds_domain = build_dds_domain_from_scene(
-                scan_mesh=scan_mesh_base,
+            dds_domain = build_dds_domain_from_print_zone(
                 field_vertices_world=pose.field_vertices_world,
+                candidate_points=candidate.points,
+                source=str(dds_domain_source),
+                scan_mesh=scan_mesh_base,
                 voxel_size_m=dds_voxel_size_m,
                 padding_m=max(
                     dds_padding_m,
@@ -857,10 +911,13 @@ def run(
                 ),
             )
             dds_simulator = Simulator(dds_domain)
+            voxel_count = int(np.prod(dds_domain.grid_shape, dtype=np.int64))
+            float_field_mib = voxel_count * np.dtype(np.float64).itemsize / (1024.0**2)
             print(
-                "[dds] domain: "
+                f"[dds] domain source={dds_domain_source}: "
                 f"min={dds_domain.min_corner} max={dds_domain.max_corner} "
-                f"grid_shape={dds_domain.grid_shape} voxel_size={dds_domain.voxel_size}"
+                f"grid_shape={dds_domain.grid_shape} voxel_size={dds_domain.voxel_size} "
+                f"voxels={voxel_count} float_field_mib={float_field_mib:.1f}"
             )
 
         save_step_outputs(
@@ -920,6 +977,7 @@ def run(
         )
 
         assert dds_simulator is not None
+        validate_deposits_inside_domain(step_deposits, dds_simulator.domain)
         dds_simulator.add_deposits(step_deposits)
         dds_result = dds_simulator.result(
             include_coverage=True,
@@ -1049,6 +1107,16 @@ def main() -> None:
         help="DDS dense-grid voxel size in mm for the bead proxy.",
     )
     parser.add_argument(
+        "--dds-domain-source",
+        type=str,
+        choices=("field", "scene"),
+        default="field",
+        help=(
+            "Build the fixed DDS grid from the positioned field/print envelope "
+            "(default) or from the full scan+field scene (legacy)."
+        ),
+    )
+    parser.add_argument(
         "--dds-threshold",
         type=float,
         default=0.5,
@@ -1113,6 +1181,7 @@ def main() -> None:
         axis_size=args.axis_size,
         visualize=not args.no_vis,
         dds_voxel_size_mm=args.dds_voxel_size_mm,
+        dds_domain_source=args.dds_domain_source,
         dds_threshold=args.dds_threshold,
         dds_padding_mm=args.dds_padding_mm,
         dds_surface_step_size=args.dds_surface_step_size,

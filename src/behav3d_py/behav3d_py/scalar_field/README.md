@@ -54,6 +54,7 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
   --positioning-attempts 3 \
   --search-step-x 0.01 --search-step-y 0.01 \
   --offset-distance-mm 12 --offset-geodesic-delta-mm 0.6 \
+  --dds-domain-source field \
   --axis-size -1
 ```
 
@@ -76,6 +77,7 @@ Workbench controls:
 Useful DDS/debug flags:
 
 - `--dds-view-mode surface|occupancy|implicit`
+- `--dds-domain-source field|scene`
 - `--dds-voxel-size-mm 2.0`
 - `--dds-threshold 0.5`
 - `--dds-surface-step-size 1`
@@ -84,6 +86,10 @@ Useful DDS/debug flags:
 
 Performance knobs:
 
+- `--dds-domain-source field` builds one fixed DDS grid from the positioned
+  field and initial print envelope. This is the default and avoids allocating
+  voxels over unrelated regions of the scan.
+- `--dds-domain-source scene` restores the legacy scan+field domain.
 - `--field-subdivide-iter 0` reduces field/contour resolution.
 - `--dds-voxel-size-mm 3.0` reduces DDS grid density.
 - `--dds-surface-step-size 2` reduces marching-cubes proxy cost.
@@ -152,6 +158,10 @@ These files are debugging artifacts and can be regenerated.
 - DDS v2 intersects future scalar iterations against `original scan + DDS proxy
   surface mesh`. It currently does not directly sample DDS occupancy for scalar
   candidate filtering.
+- The DDS domain is created once after the first field pose/candidate stage and
+  remains fixed so deposits and dense fields can be updated incrementally. New
+  deposits are checked against the domain support bounds; increase
+  `--dds-padding-mm` if a future bead falls outside the print envelope.
 
 ## Relationship to YAML/ROS
 
