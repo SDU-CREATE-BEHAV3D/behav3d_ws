@@ -3,12 +3,12 @@ scan_sequence:
     # Select one:
     #   grid_sweep
     #   half_cylinder
-    scan_type: grid_sweep
+    scan_type: half_cylinder
 
     # Capture folder for this run. Keep this aligned with scan_folder when
     # reconstruction is enabled.
-    capture_folder: "@session/scan_test_grid"
-    scan_folder: scan_test_grid
+    capture_folder: "@session/scan_test_half_cylinder"
+    scan_folder: scan_test_half_cylinder
 
     # Shared motion/capture settings.
     frame_id: world
@@ -74,17 +74,17 @@ scan_sequence:
     # from the current EEF roll.
     # half_roll_deg rotates around camera blue/Z without changing aim direction.
     half_use_line_axis: true
-    half_axis_start_x: 0.0
+    half_axis_start_x: 0.15
     half_axis_start_y: 0.85
-    half_axis_start_z: 0.0
-    half_axis_end_x: -0.30
+    half_axis_start_z: -0.20
+    half_axis_end_x: -0.45
     half_axis_end_y: 0.85
-    half_axis_end_z: 0.0
+    half_axis_end_z: -0.20
     half_radius: 0.60
-    half_angle_min_deg: -30.0
-    half_angle_max_deg: 30.0
-    half_n_angle: 4
-    half_n_axis: 4
+    half_angle_min_deg: -35.0
+    half_angle_max_deg: 35.0
+    half_n_angle: 5
+    half_n_axis: 7
     half_arc_center_dx: 0.0
     half_arc_center_dy: 0.0
     half_arc_center_dz: 1.0

@@ -457,79 +457,33 @@ class PrintYamlAndScanSequenceNode(Node):
         scan_root = self._cfg_str(cfg, "scan_root_folder")
         scan_capture_folder = f"{scan_root.rstrip('/')}/{cycle_tag}/scan"
         scan_folder = self._scan_folder_from_capture_folder(scan_capture_folder)
-
-        grid_width = self._cfg_float(cfg, "grid_width")
-        grid_height = self._cfg_float(cfg, "grid_height")
-        grid_center_x = self._cfg_float(cfg, "grid_center_x")
-        grid_center_y = self._cfg_float(cfg, "grid_center_y")
-        grid_center_z = self._cfg_float(cfg, "grid_center_z")
-        grid_z_off = self._cfg_float(cfg, "grid_z_off")
-        grid_nx = self._cfg_int(cfg, "grid_nx")
-        grid_ny = self._cfg_int(cfg, "grid_ny")
-        scan_abs_z = grid_center_z + grid_z_off
-        if self._cfg_bool(cfg, "scan_follow_printed_z"):
-            if printed_targets:
-                highest_printed_z = max(float(ps.pose.position.z) for ps in printed_targets)
-                grid_center_z = highest_printed_z
-                scan_abs_z = grid_center_z + grid_z_off
-                z_msg = (
-                    f"adaptive_z=true highest_printed_z={highest_printed_z:.4f}m "
-                    f"=> abs_scan_z={scan_abs_z:.4f}m"
-                )
-            else:
-                z_msg = (
-                    "adaptive_z=true but no printed targets reported; "
-                    f"using configured abs_scan_z={scan_abs_z:.4f}m"
-                )
-        else:
-            z_msg = f"adaptive_z=false abs_scan_z={scan_abs_z:.4f}m"
-
-        log.info(
-            f"[print_yaml_and_scan] ===== scan_for_{cycle_tag} ===== "
-            f"scan_capture='{scan_capture_folder}' scan_folder='{scan_folder}' "
-            f"grid={grid_nx}x{grid_ny} size={1000.0 * grid_width:.1f}x"
-            f"{1000.0 * grid_height:.1f}mm "
-            f"center=({grid_center_x:.4f}, {grid_center_y:.4f}, {grid_center_z:.4f}) "
-            f"z_off={grid_z_off:.4f}m "
-            f"use_tf_orientation={self._cfg_bool(cfg, 'grid_use_tf_orientation')} "
-            f"{z_msg}"
-        )
+        scan_type = self._cfg_str(cfg, "scan_type").strip().lower()
 
         if not self._prepare_scan_context(timeout_s=timeout_s):
             return False
 
-        scan_res = self.scan_session.run_grid_scan(
-            capture_folder=scan_capture_folder,
-            width=grid_width,
-            height=grid_height,
-            center_x=grid_center_x,
-            center_y=grid_center_y,
-            center_z=grid_center_z,
-            z_off=grid_z_off,
-            nx=grid_nx,
-            ny=grid_ny,
-            row_major=self._cfg_bool(cfg, "grid_row_major"),
-            frame_id=self._cfg_str(cfg, "frame_id"),
-            use_tf_orientation=self._cfg_bool(cfg, "grid_use_tf_orientation"),
-            motion=self._cfg_str(cfg, "scan_motion"),
-            eef_link=self._cfg_str(cfg, "scan_eef_link"),
-            do_home=self._cfg_bool(cfg, "scan_do_home"),
-            vel_scale=self._cfg_float(cfg, "scan_vel_scale"),
-            accel_scale=self._cfg_float(cfg, "scan_accel_scale"),
-            timeout_s=timeout_s,
-            settle_s=self._cfg_float(cfg, "scan_settle_s"),
-            prompt=self._cfg_str_allow_empty(cfg, "scan_prompt") or None,
-            debug=self._cfg_bool(cfg, "scan_debug"),
-            rgb=self._cfg_bool(cfg, "scan_rgb"),
-            depth=self._cfg_bool(cfg, "scan_depth"),
-            ir=self._cfg_bool(cfg, "scan_ir"),
-            pose=self._cfg_bool(cfg, "scan_pose"),
-            publish_markers=self._cfg_bool(cfg, "scan_publish_markers"),
-            axis_length=self._cfg_float(cfg, "scan_axis_length"),
-            axis_radius=self._cfg_float(cfg, "scan_axis_radius"),
-            clear_markers_before=self._cfg_bool(cfg, "scan_clear_markers_before"),
-            clear_markers_after=self._cfg_bool(cfg, "scan_clear_markers_after"),
-        )
+        if scan_type in ("grid", "grid_sweep"):
+            scan_res = self._run_grid_scan(
+                cfg=cfg,
+                capture_folder=scan_capture_folder,
+                scan_folder=scan_folder,
+                cycle_tag=cycle_tag,
+                timeout_s=timeout_s,
+                printed_targets=printed_targets,
+            )
+        elif scan_type in ("half_cylinder", "half-cylinder", "half"):
+            scan_res = self._run_half_cylinder_scan(
+                cfg=cfg,
+                capture_folder=scan_capture_folder,
+                scan_folder=scan_folder,
+                cycle_tag=cycle_tag,
+                timeout_s=timeout_s,
+                printed_targets=printed_targets,
+            )
+        else:
+            log.error("[print_yaml_and_scan] scan_type must be one of: grid_sweep, half_cylinder")
+            return False
+
         if not scan_res.get("ok", False):
             log.error(
                 f"[print_yaml_and_scan] Scan failed for {cycle_tag} "
@@ -579,6 +533,166 @@ class PrintYamlAndScanSequenceNode(Node):
         )
         return True
 
+    def _run_grid_scan(
+        self,
+        *,
+        cfg: Dict[str, Any],
+        capture_folder: str,
+        scan_folder: str,
+        cycle_tag: str,
+        timeout_s: Optional[float],
+        printed_targets: Sequence[PoseStamped],
+    ) -> dict:
+        log = self.get_logger()
+        grid_width = self._cfg_float(cfg, "grid_width")
+        grid_height = self._cfg_float(cfg, "grid_height")
+        grid_center_x = self._cfg_float(cfg, "grid_center_x")
+        grid_center_y = self._cfg_float(cfg, "grid_center_y")
+        grid_center_z = self._cfg_float(cfg, "grid_center_z")
+        grid_z_off = self._cfg_float(cfg, "grid_z_off")
+        grid_nx = self._cfg_int(cfg, "grid_nx")
+        grid_ny = self._cfg_int(cfg, "grid_ny")
+        scan_abs_z = grid_center_z + grid_z_off
+        if self._cfg_bool(cfg, "scan_follow_printed_z"):
+            if printed_targets:
+                highest_printed_z = max(float(ps.pose.position.z) for ps in printed_targets)
+                grid_center_z = highest_printed_z
+                scan_abs_z = grid_center_z + grid_z_off
+                z_msg = (
+                    f"adaptive_z=true highest_printed_z={highest_printed_z:.4f}m "
+                    f"=> abs_scan_z={scan_abs_z:.4f}m"
+                )
+            else:
+                z_msg = (
+                    "adaptive_z=true but no printed targets reported; "
+                    f"using configured abs_scan_z={scan_abs_z:.4f}m"
+                )
+        else:
+            z_msg = f"adaptive_z=false abs_scan_z={scan_abs_z:.4f}m"
+
+        log.info(
+            f"[print_yaml_and_scan] ===== scan_for_{cycle_tag} grid_sweep ===== "
+            f"scan_capture='{capture_folder}' scan_folder='{scan_folder}' "
+            f"grid={grid_nx}x{grid_ny} size={1000.0 * grid_width:.1f}x"
+            f"{1000.0 * grid_height:.1f}mm "
+            f"center=({grid_center_x:.4f}, {grid_center_y:.4f}, {grid_center_z:.4f}) "
+            f"z_off={grid_z_off:.4f}m "
+            f"use_tf_orientation={self._cfg_bool(cfg, 'grid_use_tf_orientation')} "
+            f"{z_msg}"
+        )
+
+        return self.scan_session.run_grid_scan(
+            capture_folder=capture_folder,
+            width=grid_width,
+            height=grid_height,
+            center_x=grid_center_x,
+            center_y=grid_center_y,
+            center_z=grid_center_z,
+            z_off=grid_z_off,
+            nx=grid_nx,
+            ny=grid_ny,
+            row_major=self._cfg_bool(cfg, "grid_row_major"),
+            frame_id=self._cfg_str(cfg, "frame_id"),
+            use_tf_orientation=self._cfg_bool(cfg, "grid_use_tf_orientation"),
+            **self._scan_common_kwargs(cfg=cfg, timeout_s=timeout_s),
+        )
+
+    def _run_half_cylinder_scan(
+        self,
+        *,
+        cfg: Dict[str, Any],
+        capture_folder: str,
+        scan_folder: str,
+        cycle_tag: str,
+        timeout_s: Optional[float],
+        printed_targets: Sequence[PoseStamped],
+    ) -> dict:
+        log = self.get_logger()
+        frame_id = self._cfg_str(cfg, "frame_id")
+        half_orientation_mode = self._cfg_str(cfg, "half_orientation_mode")
+        half_orientation_pose = None
+        if half_orientation_mode.strip().lower() in (
+            "fixed",
+            "current",
+            "current_eef",
+            "look_at_current_roll",
+            "look_at_keep_roll",
+            "look_at_min_roll",
+        ):
+            half_orientation_pose = self._current_eef_pose(frame_id=frame_id, cfg=cfg, timeout_s=timeout_s)
+
+        half_center_z = self._cfg_float(cfg, "half_center_z")
+        axis_start_xyz = None
+        axis_end_xyz = None
+        n_axis = None
+        z_msg = "adaptive_z=false"
+        if self._cfg_bool(cfg, "half_use_line_axis"):
+            axis_start_xyz = [
+                self._cfg_float(cfg, "half_axis_start_x"),
+                self._cfg_float(cfg, "half_axis_start_y"),
+                self._cfg_float(cfg, "half_axis_start_z"),
+            ]
+            axis_end_xyz = [
+                self._cfg_float(cfg, "half_axis_end_x"),
+                self._cfg_float(cfg, "half_axis_end_y"),
+                self._cfg_float(cfg, "half_axis_end_z"),
+            ]
+            n_axis = self._cfg_int(cfg, "half_n_axis")
+            if self._cfg_bool(cfg, "scan_follow_printed_z"):
+                if printed_targets:
+                    highest_printed_z = max(float(ps.pose.position.z) for ps in printed_targets)
+                    axis_start_xyz[2] = highest_printed_z
+                    axis_end_xyz[2] = highest_printed_z
+                    z_msg = f"adaptive_z=true highest_printed_z={highest_printed_z:.4f}m => axis_z={highest_printed_z:.4f}m"
+                else:
+                    z_msg = "adaptive_z=true but no printed targets reported; using configured axis_z"
+        elif self._cfg_bool(cfg, "scan_follow_printed_z"):
+            if printed_targets:
+                highest_printed_z = max(float(ps.pose.position.z) for ps in printed_targets)
+                half_center_z = highest_printed_z
+                z_msg = f"adaptive_z=true highest_printed_z={highest_printed_z:.4f}m => center_z={half_center_z:.4f}m"
+            else:
+                z_msg = "adaptive_z=true but no printed targets reported; using configured center_z"
+
+        log.info(
+            f"[print_yaml_and_scan] ===== scan_for_{cycle_tag} half_cylinder ===== "
+            f"scan_capture='{capture_folder}' scan_folder='{scan_folder}' "
+            f"radius={self._cfg_float(cfg, 'half_radius'):.4f}m "
+            f"angles=({self._cfg_float(cfg, 'half_angle_min_deg'):.1f},"
+            f"{self._cfg_float(cfg, 'half_angle_max_deg'):.1f})deg "
+            f"n_angle={self._cfg_int(cfg, 'half_n_angle')} "
+            f"n_axis={n_axis if n_axis is not None else self._cfg_int(cfg, 'half_n_height')} "
+            f"use_line_axis={self._cfg_bool(cfg, 'half_use_line_axis')} "
+            f"{z_msg}"
+        )
+
+        return self.scan_session.run_half_cylinder_scan(
+            capture_folder=capture_folder,
+            center_x=self._cfg_float(cfg, "half_center_x"),
+            center_y=self._cfg_float(cfg, "half_center_y"),
+            center_z=half_center_z,
+            radius=self._cfg_float(cfg, "half_radius"),
+            height=self._cfg_float(cfg, "half_height"),
+            angle_min_deg=self._cfg_float(cfg, "half_angle_min_deg"),
+            angle_max_deg=self._cfg_float(cfg, "half_angle_max_deg"),
+            n_angle=self._cfg_int(cfg, "half_n_angle"),
+            n_height=self._cfg_int(cfg, "half_n_height"),
+            frame_id=frame_id,
+            row_major=self._cfg_bool(cfg, "half_row_major"),
+            orientation_mode=half_orientation_mode,
+            orientation_pose=half_orientation_pose,
+            axis_start_xyz=axis_start_xyz,
+            axis_end_xyz=axis_end_xyz,
+            n_axis=n_axis,
+            arc_center_direction=[
+                self._cfg_float(cfg, "half_arc_center_dx"),
+                self._cfg_float(cfg, "half_arc_center_dy"),
+                self._cfg_float(cfg, "half_arc_center_dz"),
+            ],
+            roll_deg=self._cfg_float(cfg, "half_roll_deg"),
+            **self._scan_common_kwargs(cfg=cfg, timeout_s=timeout_s),
+        )
+
     def _operator_requested_stop(self, prompt: str) -> bool:
         res = self.print_session.run_sync(
             self.print_session.util.input(prompt=prompt, enqueue=False),
@@ -586,6 +700,43 @@ class PrintYamlAndScanSequenceNode(Node):
         )
         value = str(res.get("metrics", {}).get("value", "")).strip().lower()
         return value == "q"
+
+    def _scan_common_kwargs(self, *, cfg: Dict[str, Any], timeout_s: Optional[float]) -> Dict[str, Any]:
+        return {
+            "motion": self._cfg_str(cfg, "scan_motion"),
+            "eef_link": self._cfg_str(cfg, "scan_eef_link"),
+            "do_home": self._cfg_bool(cfg, "scan_do_home"),
+            "vel_scale": self._cfg_float(cfg, "scan_vel_scale"),
+            "accel_scale": self._cfg_float(cfg, "scan_accel_scale"),
+            "timeout_s": timeout_s,
+            "settle_s": self._cfg_float(cfg, "scan_settle_s"),
+            "prompt": self._cfg_str_allow_empty(cfg, "scan_prompt") or None,
+            "debug": self._cfg_bool(cfg, "scan_debug"),
+            "rgb": self._cfg_bool(cfg, "scan_rgb"),
+            "depth": self._cfg_bool(cfg, "scan_depth"),
+            "ir": self._cfg_bool(cfg, "scan_ir"),
+            "pose": self._cfg_bool(cfg, "scan_pose"),
+            "publish_markers": self._cfg_bool(cfg, "scan_publish_markers"),
+            "axis_length": self._cfg_float(cfg, "scan_axis_length"),
+            "axis_radius": self._cfg_float(cfg, "scan_axis_radius"),
+            "clear_markers_before": self._cfg_bool(cfg, "scan_clear_markers_before"),
+            "clear_markers_after": self._cfg_bool(cfg, "scan_clear_markers_after"),
+        }
+
+    def _current_eef_pose(self, *, frame_id: str, cfg: Dict[str, Any], timeout_s: Optional[float]):
+        res = self.scan_session.run_sync(
+            self.scan_session.camera.get_pose(
+                eef=self._cfg_str(cfg, "scan_eef_link"),
+                base_frame=str(frame_id or "world"),
+                use_tf=True,
+                enqueue=False,
+            ),
+            timeout_s=timeout_s,
+        )
+        if res.get("ok", False) and "pose" in res:
+            return res["pose"]
+        self.get_logger().warn("[print_yaml_and_scan] Current EEF pose unavailable; using scan session defaults.")
+        return None
 
     def _prepare_scan_context(self, *, timeout_s: Optional[float]) -> bool:
         off_res = self.print_session.run_sync(
