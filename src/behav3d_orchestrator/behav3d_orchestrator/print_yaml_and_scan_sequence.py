@@ -184,7 +184,9 @@ class PrintYamlAndScanSequenceNode(Node):
                     has_more_targets or self._cfg_bool(cfg, "scan_after_final")
                 )
                 if not should_scan:
-                    if self._cfg_bool(cfg, "enable_scan"):
+                    if not self._cfg_bool(cfg, "enable_scan"):
+                        log.info(f"[print_yaml_and_scan] {cycle_tag} scan skipped because enable_scan=false.")
+                    elif self._cfg_bool(cfg, "enable_scan"):
                         log.info(
                             f"[print_yaml_and_scan] {cycle_tag} is final chunk; "
                             "scan skipped because scan_after_final=false."
