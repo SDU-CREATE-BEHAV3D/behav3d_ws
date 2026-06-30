@@ -23,20 +23,30 @@ Loop flow:
 5. Recompute `phi` against the current scan proxy.
 6. Extract `phi=0` contour and geodesic offset contour.
 7. Generate candidates with the selected mode.
-8. Add selected candidate end points to a DDS `Simulator` as point deposits.
-9. Extract the DDS implicit surface as a mesh proxy.
-10. Merge that proxy with the original scan for the next scalar iteration.
+8. Write the accepted step as `segments:` target YAML.
+9. Read that same segment YAML back and add each segment `end` target to a DDS
+   `Simulator` as a point deposit, using the YAML target Z direction as the DDS
+   deposit normal.
+10. Extract the DDS implicit surface as a mesh proxy.
+11. Merge that proxy with the original scan for the next scalar iteration.
 
 Important behavior:
 
-- DDS receives only the selected candidate end points as deposits.
+- Accepted steps are saved as `step_##/segments.yaml` using the same nested
+  segment contract as the print path. DDS consumes the `end` target from that
+  YAML, not the raw in-memory candidate arrays.
+- DDS receives only segment end points as deposits. `gradient_walk` and
+  `gradient_lift` write tangent-based target Z directions; modes without
+  explicit target orientation fall back to world `+Z`.
 - `gradient_walk` segments are visualization/debug tool paths; they do not
   become DDS bead geometry.
 - The magenta geodesic offset line is a diagnostic/reference line. In
   `gradient_walk`, candidates are selected from the `phi=0` contour and walked
   over the scalar field, so the magenta line is not the print path.
-- The simulator does not read YAML segments. Its candidates are generated at
-  runtime from the scan, field, heat scalar, and selected candidate mode.
+- The simulator still generates candidates at runtime from the scan, field,
+  heat scalar, and selected candidate mode. After a step is accepted, it
+  serializes those candidates as segment YAML and uses that YAML contract to
+  build DDS deposits.
 - `--bead-shape` is kept only as a legacy compatibility argument. DDS v2 uses
   the DDS `BeadProfile` width/height and point deposits.
 
@@ -146,17 +156,16 @@ src/behav3d_py/behav3d_py/scalar_field/output/
 
 Typical DDS v2 outputs:
 
-- `step_##_field_masked.ply`
-- `step_##_phi_contour.ply`
-- `step_##_offset_contour.ply`
-- `step_##_print_points.ply`
-- `step_##_print_segments.ply`
+- `step_##/segments.yaml`
+- `step_##/scan_with_dds_proxy.ply`
+- `step_##/dds_bundle/` when `--save-dds-step-bundles` is enabled
 - `loop_sim_scan_with_dds_proxy.ply`
 - `loop_sim_dds_surface.ply`
 - `loop_sim_dds_bundle/`
 - `loop_sim_all_print_points.ply`
 
-These files are debugging artifacts and can be regenerated.
+Per-step PLY debug overlays are visualized in the DDS workbench but are not
+written by default.
 
 ## Conceptual Notes
 

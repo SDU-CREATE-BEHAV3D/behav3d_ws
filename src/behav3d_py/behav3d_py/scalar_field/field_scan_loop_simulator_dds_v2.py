@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -79,13 +80,14 @@ from lib_scalar.loop_simulation import (
     generate_step_candidates,
     position_field_with_attempts,
 )
-from lib_scalar.print_targets import build_oriented_line_targets
+from lib_scalar.print_targets import (
+    OrientedLineTargets,
+    build_oriented_line_targets,
+    write_line_targets_yaml,
+)
 from lib_scalar.viz import (
     compute_scene_bounds,
-    make_line_set,
     make_point_cloud,
-    make_segment_line_set,
-    make_target_orientation_sticks,
     yellow_to_red_colors,
 )
 
@@ -96,6 +98,7 @@ OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 ISO_LEVEL = 0.0
 BASE_Z_OFFSET = 1e-6
 SEARCH_MAX_CANDIDATES = 30000
+TARGET_POSITION_SCALE = 1000.0
 
 SCALAR_OVERLAY_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("field", "Scalar Field", ("field_heat_masked",)),
@@ -134,88 +137,6 @@ def subdivide_field_mesh_loop(
     v_sub = np.asarray(mesh_sub.vertices, dtype=np.float64)
     f_sub = np.asarray(mesh_sub.triangles, dtype=np.int32)
     return v_sub, f_sub
-
-
-def save_step_outputs(
-    output_dir: Path,
-    step_index: int,
-    field_vertices_world: np.ndarray,
-    heat_colors: np.ndarray,
-    viable_mask: np.ndarray,
-    contour_points: np.ndarray,
-    contour_lines: np.ndarray,
-    offset_points: np.ndarray,
-    offset_lines: np.ndarray,
-    selected_points: np.ndarray,
-    source_points: np.ndarray | None = None,
-    segment_start_points: np.ndarray | None = None,
-    target_points: np.ndarray | None = None,
-    target_z_dirs: np.ndarray | None = None,
-) -> None:
-    """Write debug artifacts for a single loop step."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    tag = f"step_{step_index:02d}"
-
-    heat_pcd = make_point_cloud(field_vertices_world, heat_colors)
-    o3d.io.write_point_cloud(str(output_dir / f"{tag}_field_heat.ply"), heat_pcd)
-
-    masked_colors = heat_colors.copy()
-    masked_colors[~viable_mask] = np.array([0.2, 0.2, 0.2], dtype=np.float64)
-    field_pcd = make_point_cloud(field_vertices_world, masked_colors)
-    o3d.io.write_point_cloud(str(output_dir / f"{tag}_field_masked.ply"), field_pcd)
-
-    if contour_lines.shape[0] > 0:
-        contour_ls = make_line_set(contour_points, contour_lines, color=(0.0, 1.0, 1.0))
-        o3d.io.write_line_set(str(output_dir / f"{tag}_phi_contour.ply"), contour_ls)
-
-    if offset_lines.shape[0] > 0:
-        offset_ls = make_line_set(offset_points, offset_lines, color=(1.0, 0.0, 1.0))
-        o3d.io.write_line_set(str(output_dir / f"{tag}_offset_contour.ply"), offset_ls)
-
-    if selected_points.shape[0] > 0:
-        colors = np.tile(np.array([0.0, 1.0, 0.0], dtype=np.float64), (selected_points.shape[0], 1))
-        selected_pcd = make_point_cloud(selected_points, colors)
-        o3d.io.write_point_cloud(str(output_dir / f"{tag}_print_points.ply"), selected_pcd)
-
-    if (
-        source_points is not None
-        and source_points.shape == selected_points.shape
-        and selected_points.shape[0] > 0
-    ):
-        source_colors = np.tile(np.array([0.0, 1.0, 1.0], dtype=np.float64), (source_points.shape[0], 1))
-        source_pcd = make_point_cloud(source_points, source_colors)
-        o3d.io.write_point_cloud(str(output_dir / f"{tag}_print_sources.ply"), source_pcd)
-
-        line_set = make_segment_line_set(source_points, selected_points, color=(1.0, 1.0, 0.0))
-        o3d.io.write_line_set(str(output_dir / f"{tag}_print_source_to_candidate.ply"), line_set)
-
-    if (
-        segment_start_points is not None
-        and segment_start_points.shape == selected_points.shape
-        and selected_points.shape[0] > 0
-    ):
-        start_colors = np.tile(
-            np.array([1.0, 0.55, 0.0], dtype=np.float64),
-            (segment_start_points.shape[0], 1),
-        )
-        start_pcd = make_point_cloud(segment_start_points, start_colors)
-        o3d.io.write_point_cloud(str(output_dir / f"{tag}_print_segment_starts.ply"), start_pcd)
-
-        segment_set = make_segment_line_set(segment_start_points, selected_points, color=(1.0, 0.55, 0.0))
-        o3d.io.write_line_set(str(output_dir / f"{tag}_print_segments.ply"), segment_set)
-
-    if (
-        target_points is not None
-        and target_z_dirs is not None
-        and target_points.shape == target_z_dirs.shape
-        and target_points.shape[0] > 0
-    ):
-        orientation_mesh = make_target_orientation_sticks(target_points, target_z_dirs)
-        if len(orientation_mesh.triangles) > 0:
-            o3d.io.write_triangle_mesh(
-                str(output_dir / f"{tag}_target_orientations.ply"),
-                orientation_mesh,
-            )
 
 
 def wait_next_terminal(step_index: int) -> bool:
@@ -298,10 +219,153 @@ def _dds_target(point: np.ndarray, normal: np.ndarray):
     return DepositionTarget(position=tuple(float(v) for v in p), normal=tuple(float(v) for v in n))
 
 
+@dataclass(frozen=True)
+class SegmentTargetSet:
+    """Parsed start/end target segments in world meters."""
+
+    start_points: np.ndarray
+    end_points: np.ndarray
+    start_z_dirs: np.ndarray
+    end_z_dirs: np.ndarray
+
+    @property
+    def count(self) -> int:
+        return int(self.end_points.shape[0])
+
+
+def _fixed_z_line_targets(
+    start_points: np.ndarray,
+    end_points: np.ndarray,
+    z_dir: tuple[float, float, float] = (0.0, 0.0, 1.0),
+) -> OrientedLineTargets:
+    starts = np.asarray(start_points, dtype=np.float64)
+    ends = np.asarray(end_points, dtype=np.float64)
+    if starts.shape != ends.shape:
+        raise ValueError(f"start/end shape mismatch: {starts.shape} vs {ends.shape}")
+    z = np.asarray(z_dir, dtype=np.float64)
+    z_norm = float(np.linalg.norm(z))
+    if z_norm <= 1e-12:
+        z = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    else:
+        z = z / z_norm
+    z_dirs = np.tile(z, (ends.shape[0], 1))
+    return OrientedLineTargets(
+        start_points=starts,
+        end_points=ends,
+        start_z_dirs=z_dirs,
+        end_z_dirs=z_dirs,
+    )
+
+
+def build_candidate_segment_targets(
+    *,
+    candidate_points: np.ndarray,
+    segment_start_points: np.ndarray | None,
+    candidate_mode: str,
+    field_vertices_world: np.ndarray,
+    field_faces: np.ndarray,
+    field_scalar: np.ndarray,
+    tangent_sign: float,
+    clamp_to_cone: bool,
+    cone_max_tilt_deg: float,
+) -> OrientedLineTargets:
+    """Build the segment YAML contract from current scalar candidates."""
+
+    ends = np.asarray(candidate_points, dtype=np.float64)
+    if (
+        segment_start_points is not None
+        and np.asarray(segment_start_points).shape == ends.shape
+    ):
+        starts = np.asarray(segment_start_points, dtype=np.float64)
+    else:
+        starts = ends.copy()
+
+    if ends.shape[0] == 0:
+        empty = np.zeros((0, 3), dtype=np.float64)
+        return OrientedLineTargets(empty, empty, empty, empty)
+
+    mode = str(candidate_mode).strip().lower()
+    if mode in ("gradient_lift", "gradient_walk"):
+        return build_oriented_line_targets(
+            start_points=starts,
+            end_points=ends,
+            field_vertices_world=field_vertices_world,
+            field_faces=field_faces,
+            field_scalar=field_scalar,
+            tangent_sign=float(tangent_sign),
+            clamp_to_cone=bool(clamp_to_cone),
+            cone_max_tilt_deg=float(cone_max_tilt_deg),
+        )
+
+    return _fixed_z_line_targets(starts, ends)
+
+
+def _parse_plane_target(
+    item: object,
+    *,
+    position_scale: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    from dds.formats.yaml import parse_plane_string
+
+    if not isinstance(item, dict) or "plane" not in item:
+        raise ValueError(f"Segment target entry must contain a plane string. Got: {item}")
+    components = parse_plane_string(str(item["plane"]))
+    origin = np.asarray(components["O"], dtype=np.float64) / float(position_scale)
+    z_dir = np.asarray(components.get("Z", (0.0, 0.0, 1.0)), dtype=np.float64)
+    return origin, z_dir
+
+
+def load_segment_targets_yaml(
+    yaml_path: Path,
+    *,
+    position_scale: float,
+) -> SegmentTargetSet:
+    """Load the BEHAV3D `segments:` YAML contract in world meters."""
+
+    try:
+        import yaml  # type: ignore[import-untyped]
+    except ImportError as exc:
+        raise ImportError("PyYAML is required to load segment target YAML.") from exc
+
+    scale = float(position_scale)
+    if scale <= 0.0:
+        raise ValueError(f"position_scale must be > 0, got {position_scale}")
+
+    with Path(yaml_path).open("r", encoding="utf-8") as file:
+        payload = yaml.safe_load(file)
+    if not isinstance(payload, dict) or not isinstance(payload.get("segments"), list):
+        raise ValueError(f"YAML file must contain a top-level segments list: {yaml_path}")
+
+    rows: list[tuple[int, int, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
+    for ordinal, item in enumerate(payload["segments"]):
+        if not isinstance(item, dict):
+            raise ValueError(f"Segment entry {ordinal} must be a mapping.")
+        if "start" not in item or "end" not in item:
+            raise ValueError(f"Segment entry {ordinal} must contain start and end targets.")
+
+        index = int(item.get("index", ordinal))
+        start_point, start_z = _parse_plane_target(item["start"], position_scale=scale)
+        end_point, end_z = _parse_plane_target(item["end"], position_scale=scale)
+        rows.append((index, ordinal, start_point, end_point, start_z, end_z))
+
+    rows.sort(key=lambda row: (row[0], row[1]))
+    if not rows:
+        empty = np.zeros((0, 3), dtype=np.float64)
+        return SegmentTargetSet(empty, empty, empty, empty)
+
+    return SegmentTargetSet(
+        start_points=np.vstack([row[2] for row in rows]),
+        end_points=np.vstack([row[3] for row in rows]),
+        start_z_dirs=np.vstack([row[4] for row in rows]),
+        end_z_dirs=np.vstack([row[5] for row in rows]),
+    )
+
+
 def build_dds_step_deposits(
     candidate_points: np.ndarray,
     *,
     profile,
+    candidate_normals: np.ndarray | None = None,
 ) -> tuple[object, ...]:
     """Convert current scalar candidates into point deposits.
 
@@ -310,11 +374,23 @@ def build_dds_step_deposits(
     """
     from dds import PointDeposit
 
-    bead_normal = np.array([0.0, 0.0, 1.0], dtype=np.float64)
     points = np.asarray(candidate_points, dtype=np.float64)
+    if candidate_normals is None:
+        normals = np.tile(
+            np.array([0.0, 0.0, 1.0], dtype=np.float64),
+            (points.shape[0], 1),
+        )
+    else:
+        normals = np.asarray(candidate_normals, dtype=np.float64)
+        if normals.shape != points.shape:
+            raise ValueError(
+                "candidate_normals must match candidate_points shape: "
+                f"{normals.shape} vs {points.shape}"
+            )
+
     deposits = []
-    for point in points:
-        target = _dds_target(point, bead_normal)
+    for point, normal in zip(points, normals, strict=True):
+        target = _dds_target(point, normal)
         deposits.append(PointDeposit(target=target, profile=profile))
     return tuple(deposits)
 
@@ -734,6 +810,7 @@ def run(
     dds_surface_step_size: int,
     dds_view_mode: str,
     save_dds_step_bundles: bool,
+    target_position_scale: float,
 ) -> None:
     from dds import BeadProfile, Simulator
 
@@ -774,6 +851,8 @@ def run(
         raise ValueError(f"dds_threshold must be in [0, 1], got {dds_threshold}")
     if int(dds_surface_step_size) < 1:
         raise ValueError(f"dds_surface_step_size must be >= 1, got {dds_surface_step_size}")
+    if float(target_position_scale) <= 0.0:
+        raise ValueError(f"target_position_scale must be > 0, got {target_position_scale}")
 
     print(
         "[config] "
@@ -785,6 +864,7 @@ def run(
         f"dds_voxel_size_mm={float(dds_voxel_size_mm):.3f} "
         f"dds_domain_source={dds_domain_source} "
         f"position_target_xy={position_target_xy} "
+        f"target_position_scale={float(target_position_scale):.3f} "
         f"dds_threshold={float(dds_threshold):.3f}"
     )
 
@@ -874,25 +954,20 @@ def run(
             f"selected={candidate.points.shape[0]}"
         )
 
-        target_points = np.zeros((0, 3), dtype=np.float64)
-        target_z_dirs = np.zeros((0, 3), dtype=np.float64)
-        if (
-            str(candidate_mode).strip().lower() == "gradient_walk"
-            and candidate.segment_start_points is not None
-            and candidate.segment_start_points.shape == candidate.points.shape
-            and candidate.points.shape[0] > 0
-        ):
-            line_targets = build_oriented_line_targets(
-                start_points=candidate.segment_start_points,
-                end_points=candidate.points,
-                field_vertices_world=pose.field_vertices_world,
-                field_faces=field_faces,
-                field_scalar=heat.norm,
-                tangent_sign=float(walk_tangent_sign),
-                clamp_to_cone=bool(clamp_to_cone),
-                cone_max_tilt_deg=float(cone_max_tilt_deg),
-            )
-            target_points, target_z_dirs = line_targets.flattened_points_and_z_dirs()
+        line_targets = build_candidate_segment_targets(
+            candidate_points=candidate.points,
+            segment_start_points=candidate.segment_start_points,
+            candidate_mode=str(candidate_mode),
+            field_vertices_world=pose.field_vertices_world,
+            field_faces=field_faces,
+            field_scalar=heat.norm,
+            tangent_sign=float(walk_tangent_sign),
+            clamp_to_cone=bool(clamp_to_cone),
+            cone_max_tilt_deg=float(cone_max_tilt_deg),
+        )
+        target_points, target_z_dirs = line_targets.flattened_points_and_z_dirs()
+        step_dir = output_dir / f"step_{step_index:02d}"
+        step_segments_yaml = step_dir / "segments.yaml"
 
         if dds_simulator is None:
             dds_domain = build_dds_domain_from_print_zone(
@@ -917,23 +992,6 @@ def run(
                 f"grid_shape={dds_domain.grid_shape} voxel_size={dds_domain.voxel_size} "
                 f"voxels={voxel_count} float_field_mib={float_field_mib:.1f}"
             )
-
-        save_step_outputs(
-            output_dir=output_dir,
-            step_index=step,
-            field_vertices_world=pose.field_vertices_world,
-            heat_colors=heat_colors,
-            viable_mask=pose.viable,
-            contour_points=contour.contour_points,
-            contour_lines=contour.contour_lines,
-            offset_points=contour.offset_points,
-            offset_lines=contour.offset_lines,
-            selected_points=candidate.points,
-            source_points=candidate.source_points,
-            segment_start_points=candidate.segment_start_points,
-            target_points=target_points,
-            target_z_dirs=target_z_dirs,
-        )
 
         if visualize:
             assert dds_simulator is not None
@@ -969,9 +1027,29 @@ def run(
             print("[loop] No valid candidates left; stopping early.")
             break
 
+        write_line_targets_yaml(
+            out_yaml=step_segments_yaml,
+            targets=line_targets,
+            position_scale=float(target_position_scale),
+        )
+        print(
+            f"[targets] step {step_index}: saved/applied segment YAML: "
+            f"{step_segments_yaml} segments={line_targets.count}"
+        )
+        applied_segments = load_segment_targets_yaml(
+            step_segments_yaml,
+            position_scale=float(target_position_scale),
+        )
+        if applied_segments.count != candidate.points.shape[0]:
+            raise RuntimeError(
+                "Applied segment YAML count does not match selected candidates: "
+                f"{applied_segments.count} vs {candidate.points.shape[0]}"
+            )
+
         step_deposits = build_dds_step_deposits(
-            candidate.points,
+            applied_segments.end_points,
             profile=dds_profile,
+            candidate_normals=applied_segments.end_z_dirs,
         )
 
         assert dds_simulator is not None
@@ -987,6 +1065,9 @@ def run(
             threshold=float(dds_threshold),
             mesh_step_size=int(dds_surface_step_size),
         )
+        step_scan_path = step_dir / "scan_with_dds_proxy.ply"
+        if not o3d.io.write_triangle_mesh(str(step_scan_path), scan_mesh_current):
+            raise RuntimeError(f"Failed to write step scan + DDS proxy mesh: {step_scan_path}")
         print(
             f"[dds] step {step_index}: "
             f"added_deposits={len(step_deposits)} "
@@ -995,8 +1076,9 @@ def run(
             f"proxy_faces={proxy_faces} "
             f"implicit_max={float(dds_result.implicit_field.max()):.3f}"
         )
+        print(f"[dds] saved step scan + DDS proxy mesh: {step_scan_path}")
         if save_dds_step_bundles:
-            bundle_dir = output_dir / f"step_{step:02d}_dds_bundle"
+            bundle_dir = step_dir / "dds_bundle"
             dds_result.save(
                 bundle_dir,
                 metadata={
@@ -1116,6 +1198,12 @@ def main() -> None:
     parser.add_argument("--base-z-offset", type=float, default=BASE_Z_OFFSET)
     parser.add_argument("--axis-size", type=float, default=0.0)
     parser.add_argument(
+        "--target-position-scale",
+        type=float,
+        default=TARGET_POSITION_SCALE,
+        help="Scale used when writing step segment YAML positions. Default 1000 writes meters as mm.",
+    )
+    parser.add_argument(
         "--dds-voxel-size-mm",
         type=float,
         default=2.0,
@@ -1208,6 +1296,7 @@ def main() -> None:
         dds_surface_step_size=args.dds_surface_step_size,
         dds_view_mode=args.dds_view_mode,
         save_dds_step_bundles=args.save_dds_step_bundles,
+        target_position_scale=args.target_position_scale,
     )
 
 

@@ -235,11 +235,13 @@ The objective is to keep each stage isolated, testable, and reusable from:
 `lib_scalar` does not own DDS simulation state. DDS-oriented scripts normally:
 
 1. use `lib_scalar` to compute field pose, `phi`, contours, and candidates,
-2. create DDS `PointDeposit` or other DDS deposit primitives from selected
-   candidate geometry,
-3. add those deposits to a DDS `Simulator`,
-4. extract a DDS implicit surface as a proxy mesh,
-5. feed `original scan + proxy mesh` back into the next scalar iteration.
+2. write accepted candidates through the same `segments:` target YAML contract
+   used by the print path,
+3. read that YAML back to create DDS `PointDeposit` or other DDS deposit
+   primitives from segment endpoints and target Z directions,
+4. add those deposits to a DDS `Simulator`,
+5. extract a DDS implicit surface as a proxy mesh,
+6. feed `original scan + proxy mesh` back into the next scalar iteration.
 
 The current DDS loop prototype is:
 
