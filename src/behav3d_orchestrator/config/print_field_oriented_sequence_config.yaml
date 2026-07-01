@@ -5,7 +5,8 @@ print_field_oriented_sequence:
     home_after: false
     timeout_s: 0.0
     debug_mode: false
-    prompt_before_print: true
+    prompt_before_print: false
+    prompt_before_scan: false
     enable_scan: true
 
     # Initial table grid sweep
@@ -73,7 +74,7 @@ print_field_oriented_sequence:
     grid_width: 0.50
     grid_height: 0.15
     grid_center_x: -0.20
-    grid_center_y: 0.75
+    grid_center_y: 0.85
     grid_center_z: -0.30
     grid_z_off: 0.60
     grid_nx: 5
@@ -118,7 +119,7 @@ print_field_oriented_sequence:
     field_base_z_offset: 0.005
     field_use_position_target: true
     field_position_target_x: -0.20
-    field_position_target_y: 0.80
+    field_position_target_y: 0.85
     skip_bootstrap_scan_and_init: false
     resume_field_state_path: ""
     resume_scan_mesh_path: ""
@@ -133,7 +134,7 @@ print_field_oriented_sequence:
     candidate_output_dir: "@session/field_loop/cycle_0001"
     candidate_request_timeout_s: 120.0
     candidate_mode: z_lift
-    candidate_beads_per_step: 2
+    candidate_beads_per_step: 5
     candidate_bead_separation_mm: 38.0
     candidate_bead_height_mm: 19.0
     # If gradient walk mode

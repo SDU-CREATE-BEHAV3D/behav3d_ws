@@ -62,6 +62,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         timeout_s = self._cfg_optional_timeout(cfg, "timeout_s")
         debug_mode = self._cfg_bool(cfg, "debug_mode")
         prompt_before_print = self._cfg_bool(cfg, "prompt_before_print")
+        prompt_before_scan = self._cfg_bool(cfg, "prompt_before_scan")
         enable_scan = self._cfg_bool(cfg, "enable_scan")
 
         frame_id = self._cfg_str(cfg, "frame_id")
@@ -208,6 +209,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         log.info(
             "Starting print_field_oriented sequence: "
             f"scan_type={scan_type}, enable_scan={enable_scan}, debug_mode={debug_mode}, "
+            f"prompt_before_scan={prompt_before_scan}, "
             f"initial_grid=({scan_nx}x{scan_ny}), "
             f"cycle_grid=({grid_nx}x{grid_ny}), "
             f"run_reconstruction={run_reconstruction}, run_field_init={run_field_init}, "
@@ -368,6 +370,13 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         f"z_off={cycle_scan_z_off:.4f}m => abs_scan_z={abs_scan_z:.4f}m "
                         f"use_tf_orientation={pre_scan_use_tf_orientation}"
                     )
+
+                    if not self._prompt_before_scan_if_enabled(
+                        enabled=prompt_before_scan,
+                        label=f"pre_scan_for_{cycle_tag}",
+                    ):
+                        log.info("[print_field_oriented] Stopped by user before pre-scan.")
+                        return
 
                     pre_scan_targets = self._run_configured_scan(
                         cfg=cfg,
@@ -614,6 +623,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
                 debug_mode = self._cfg_bool(cfg, "debug_mode")
                 prompt_before_print = self._cfg_bool(cfg, "prompt_before_print")
+                prompt_before_scan = self._cfg_bool(cfg, "prompt_before_scan")
                 enable_scan = self._cfg_bool(cfg, "enable_scan")
                 scan_type = self._cfg_str(cfg, "scan_type")
                 candidate_use_latest = self._cfg_bool(cfg, "candidate_use_latest")
@@ -971,6 +981,13 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     )
                     scan_targets = []
                 else:
+                    if not self._prompt_before_scan_if_enabled(
+                        enabled=prompt_before_scan,
+                        label=f"scan_for_{next_cycle_tag}",
+                    ):
+                        log.info("[print_field_oriented] Stopped by user before scan.")
+                        break
+
                     scan_targets = self._run_configured_scan(
                         cfg=cfg,
                         scan_type=scan_type,
@@ -1142,6 +1159,22 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"executed={res.get('exec_ok', 0)}, captures={res.get('captures_ok', 0)}"
         )
         return targets
+
+    def _prompt_before_scan_if_enabled(self, *, enabled: bool, label: str) -> bool:
+        if not bool(enabled):
+            return True
+        res = self.session.run_sync(
+            self.session.util.input(
+                prompt=(
+                    f"[print_field_oriented:{label}] Press ENTER to scan "
+                    "(type 'q' + ENTER to stop)."
+                ),
+                enqueue=False,
+            ),
+            timeout_s=None,
+        )
+        value = str(res.get("metrics", {}).get("value", "")).strip().lower()
+        return value != "q"
 
     def _scan_common_kwargs(self, *, cfg: Dict[str, Any], timeout_s: Optional[float]) -> Dict[str, Any]:
         return {
