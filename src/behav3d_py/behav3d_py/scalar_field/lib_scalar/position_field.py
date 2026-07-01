@@ -9,7 +9,7 @@ on hit base vertices.
 
 In practice:
 - Candidates are sampled in XY.
-- For each candidate, Z is solved from the local base vertices.
+- For each candidate, Z is solved from vertices inside the local base band.
 - Viability metrics are computed from phi.
 
 The global score of your full loop can still be defined outside this module.
@@ -79,7 +79,8 @@ def position_field(
     - If `require_full_hit=True`, every field point must hit scan geometry.
 
     Base-contact Z solve:
-    - find vertices at the local base level,
+    - find vertices in the local base band:
+      `z <= min_z + max(base_z_offset, tiny_mesh_tolerance)`,
     - require all base vertices to hit the scan,
     - `z_offset = min(z_scan_base_hit - base_local_z_hit) - base_z_offset`
     - this makes the highest base point sit `base_z_offset` below the scan,
@@ -100,7 +101,9 @@ def position_field(
     base_local_z = float(np.min(field_vertices_scaled[:, 2]))
     field_centroid_local_xy = np.mean(field_vertices_scaled[:, :2], axis=0)
     bbox_diag = float(np.linalg.norm(np.max(field_vertices_scaled, axis=0) - np.min(field_vertices_scaled, axis=0)))
-    base_tol = max(1e-9, 1e-6 * bbox_diag)
+    if float(base_z_offset) < 0.0:
+        raise ValueError(f"base_z_offset must be >= 0, got {base_z_offset}")
+    base_tol = max(1e-9, 1e-6 * bbox_diag, float(base_z_offset))
     base_mask = field_vertices_scaled[:, 2] <= (base_local_z + base_tol)
     base_count = int(np.count_nonzero(base_mask))
     best_result: PoseResult | None = None

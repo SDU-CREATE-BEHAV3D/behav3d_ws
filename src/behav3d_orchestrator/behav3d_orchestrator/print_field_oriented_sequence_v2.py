@@ -135,6 +135,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         fields_node_name = self._cfg_str(cfg, "fields_node_name")
         field_position_param_timeout_s = self._cfg_float(cfg, "field_position_param_timeout_s")
         field_require_full_hit = self._cfg_bool(cfg, "field_require_full_hit")
+        field_base_z_offset = self._cfg_float(cfg, "field_base_z_offset")
         field_use_position_target = self._cfg_bool(cfg, "field_use_position_target")
         field_position_target_x = self._cfg_float(cfg, "field_position_target_x")
         field_position_target_y = self._cfg_float(cfg, "field_position_target_y")
@@ -211,6 +212,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"candidate_mode={candidate_mode}, "
             f"field_position_target_enabled={field_use_position_target}, "
             f"field_require_full_hit={field_require_full_hit}, "
+            f"field_base_z_offset={field_base_z_offset:.4f}, "
             f"field_position_target=({field_position_target_x:.3f},{field_position_target_y:.3f}), "
             f"print_mode={print_mode}, dot_steps={dot_steps}, "
             f"walk_distance_mm={candidate_walk_distance_mm:.1f}, "
@@ -477,6 +479,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     self._set_fields_node_positioning_params(
                         fields_node_name=fields_node_name,
                         require_full_hit=field_require_full_hit,
+                        base_z_offset=field_base_z_offset,
                         use_position_target=field_use_position_target,
                         position_target_x=field_position_target_x,
                         position_target_y=field_position_target_y,
@@ -1236,6 +1239,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         *,
         fields_node_name: str,
         require_full_hit: bool,
+        base_z_offset: float,
         use_position_target: bool,
         position_target_x: float,
         position_target_y: float,
@@ -1257,6 +1261,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
         params = [
             Parameter("require_full_hit", value=bool(require_full_hit)),
+            Parameter("base_z_offset", value=float(base_z_offset)),
             Parameter("use_position_target", value=bool(use_position_target)),
             Parameter("position_target_x", value=float(position_target_x)),
             Parameter("position_target_y", value=float(position_target_y)),
@@ -1288,6 +1293,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             "[print_field_oriented] Field positioning params set: "
             f"node={node_name} use_target={bool(use_position_target)} "
             f"require_full_hit={bool(require_full_hit)} "
+            f"base_z_offset={float(base_z_offset):.6f} "
             f"target=({float(position_target_x):.6f}, {float(position_target_y):.6f})"
         )
 

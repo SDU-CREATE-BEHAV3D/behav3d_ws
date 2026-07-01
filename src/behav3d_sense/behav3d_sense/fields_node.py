@@ -265,10 +265,15 @@ class FieldsNode(Node):
 
             use_position_target = bool(self.get_parameter("use_position_target").value)
             position_target_xy = None
+            position_target_world_xy = None
             if use_position_target:
-                position_target_xy = (
+                position_target_world_xy = (
                     float(self.get_parameter("position_target_x").value),
                     float(self.get_parameter("position_target_y").value),
+                )
+                position_target_xy = (
+                    -float(position_target_world_xy[0]),
+                    -float(position_target_world_xy[1]),
                 )
 
             position = position_field_with_attempts(
@@ -295,7 +300,8 @@ class FieldsNode(Node):
                 )
                 self.get_logger().info(
                     "Field pose target: "
-                    f"target=({position_target_xy[0]:.6f}, {position_target_xy[1]:.6f}) "
+                    f"world=({position_target_world_xy[0]:.6f}, {position_target_world_xy[1]:.6f}) "
+                    f"analysis=({position_target_xy[0]:.6f}, {position_target_xy[1]:.6f}) "
                     f"selected_centroid=({field_centroid_xy[0]:.6f}, {field_centroid_xy[1]:.6f}) "
                     f"distance={target_distance:.6f}m"
                 )
@@ -332,6 +338,10 @@ class FieldsNode(Node):
                 position_target_enabled=np.asarray([1 if position_target_xy is not None else 0], dtype=np.uint8),
                 position_target_xy=np.asarray(
                     position_target_xy if position_target_xy is not None else (np.nan, np.nan),
+                    dtype=np.float64,
+                ),
+                position_target_world_xy=np.asarray(
+                    position_target_world_xy if position_target_world_xy is not None else (np.nan, np.nan),
                     dtype=np.float64,
                 ),
                 positioned_centroid_xy=np.asarray(field_centroid_xy, dtype=np.float64),

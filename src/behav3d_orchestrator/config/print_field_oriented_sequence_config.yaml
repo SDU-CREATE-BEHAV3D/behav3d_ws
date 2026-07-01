@@ -108,6 +108,7 @@ print_field_oriented_sequence:
     fields_node_name: /behav3d_fields
     field_position_param_timeout_s: 5.0
     field_require_full_hit: true
+    field_base_z_offset: 0.005
     field_use_position_target: true
     field_position_target_x: -0.20
     field_position_target_y: 0.80
