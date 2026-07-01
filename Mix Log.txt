@@ -28,3 +28,22 @@ Target height / steps matrix
 | 15                 | D: / H:          | D: / H:           | D: 42.5 / H: 15.5 | D: 46.1 / H: 15   | D: / H:           |
 | 20                 | D: / H:          | D: / H:           | D: / H:           | D: 41.5 / H: 20.5 | D: 46.2 / H: 20.5 |
 | 25                 | D: / H:          | D: / H:           | D: / H:           | D: / H:           | D: / H:           |
+
+
+Material Water Content Experiment
+////////////////////////////////////////
+
+Out of bag (Pottery passage/264)
+Container: 
+Before dry:  50g 
+After dry:    
+
+Air dry discarded 
+Container: 
+Before dry:  50g 
+After dry:    
+
+mixed material 4 days old in bucket
+Container: 
+Before dry:  50g 
+After dry:   

@@ -165,6 +165,10 @@ class FieldsNode(Node):
         self.declare_parameter("search_step_y", 0.01)
         self.declare_parameter("search_max_candidates", 20000)
         self.declare_parameter("positioning_attempts", 3)
+        self.declare_parameter("require_full_hit", True)
+        self.declare_parameter("use_position_target", False)
+        self.declare_parameter("position_target_x", 0.0)
+        self.declare_parameter("position_target_y", -0.75)
         self.declare_parameter("base_z_offset", 1e-6)
         self.declare_parameter("state_filename", "field_state_init.npz")
         self.declare_parameter("debug_field_ply_filename", "field_masked_init.ply")
@@ -259,6 +263,14 @@ class FieldsNode(Node):
                 raise ValueError(f"field_scale must be > 0, got {field_scale}")
             field_vertices_scaled = field_vertices * field_scale
 
+            use_position_target = bool(self.get_parameter("use_position_target").value)
+            position_target_xy = None
+            if use_position_target:
+                position_target_xy = (
+                    float(self.get_parameter("position_target_x").value),
+                    float(self.get_parameter("position_target_y").value),
+                )
+
             position = position_field_with_attempts(
                 scan_mesh=scan_mesh,
                 field_vertices_scaled=field_vertices_scaled,
@@ -270,8 +282,27 @@ class FieldsNode(Node):
                 search_step_y=float(self.get_parameter("search_step_y").value),
                 positioning_attempts=int(self.get_parameter("positioning_attempts").value),
                 search_max_candidates=int(self.get_parameter("search_max_candidates").value),
+                require_full_hit=bool(self.get_parameter("require_full_hit").value),
+                preferred_centroid_xy=position_target_xy,
             )
             viable = np.asarray(position.viable, dtype=bool)
+            field_centroid_xy = np.mean(position.field_vertices_world[:, :2], axis=0)
+            if position_target_xy is not None:
+                target_distance = float(
+                    np.linalg.norm(
+                        field_centroid_xy - np.asarray(position_target_xy, dtype=np.float64)
+                    )
+                )
+                self.get_logger().info(
+                    "Field pose target: "
+                    f"target=({position_target_xy[0]:.6f}, {position_target_xy[1]:.6f}) "
+                    f"selected_centroid=({field_centroid_xy[0]:.6f}, {field_centroid_xy[1]:.6f}) "
+                    f"distance={target_distance:.6f}m"
+                )
+            else:
+                self.get_logger().info(
+                    "Field pose target disabled; using legacy pose-search ranking."
+                )
 
             out_dir = _resolve_output_dir(
                 req.state_output_dir,
@@ -298,6 +329,12 @@ class FieldsNode(Node):
                 seed_level=np.asarray([seed_level], dtype=np.float64),
                 t_coef=np.asarray([t_coef], dtype=np.float64),
                 clearance=np.asarray([float(self.get_parameter("clearance").value)], dtype=np.float64),
+                position_target_enabled=np.asarray([1 if position_target_xy is not None else 0], dtype=np.uint8),
+                position_target_xy=np.asarray(
+                    position_target_xy if position_target_xy is not None else (np.nan, np.nan),
+                    dtype=np.float64,
+                ),
+                positioned_centroid_xy=np.asarray(field_centroid_xy, dtype=np.float64),
             )
 
             colors = yellow_to_red_colors(heat_norm)

@@ -4,10 +4,15 @@ print_field_oriented_sequence:
     home_before_scan: true
     home_after: false
     timeout_s: 0.0
+    debug_mode: false
+    prompt_before_print: true
+    enable_scan: true
 
     # Initial table grid sweep
     frame_id: world
+    scan_type: grid_sweep
     scan_eef_link: femto_color_optical_calib
+    scan_motion: LIN
     scan_use_tf_orientation: true
     scan_width: 0.50
     scan_height: 0.40
@@ -20,12 +25,45 @@ print_field_oriented_sequence:
     scan_row_major: false
     scan_capture_folder: "@session/grid_sweep"
     scan_debug_prompt: false
+    scan_debug: false
     scan_vel_scale: 0.1
     scan_accel_scale: 0.1
+    scan_settle_s: 0.5
+    scan_prompt: ""
+    scan_rgb: true
+    scan_depth: true
+    scan_ir: true
+    scan_pose: true
     scan_publish_markers: true
     scan_axis_length: 0.05
     scan_axis_radius: 0.003
     scan_clear_markers_before: true
+    scan_clear_markers_after: true
+
+    # Half-cylinder scan parameters. Active when scan_type=half_cylinder.
+    half_use_line_axis: true
+    half_axis_start_x: 0.15
+    half_axis_start_y: 0.85
+    half_axis_start_z: -0.20
+    half_axis_end_x: -0.45
+    half_axis_end_y: 0.85
+    half_axis_end_z: -0.20
+    half_radius: 0.60
+    half_angle_min_deg: -35.0
+    half_angle_max_deg: 35.0
+    half_n_angle: 5
+    half_n_axis: 7
+    half_arc_center_dx: 0.0
+    half_arc_center_dy: 0.0
+    half_arc_center_dz: 1.0
+    half_orientation_mode: look_at
+    half_roll_deg: 0.0
+    half_row_major: false
+    half_center_x: -0.17
+    half_center_y: 0.85
+    half_center_z: 0.90
+    half_height: 0.0
+    half_n_height: 3
 
     # Layer scan
     layer_scan_width: 0.30
@@ -64,15 +102,21 @@ print_field_oriented_sequence:
     field_use_latest: true
     field_session_path: "@session"
     field_scan_mesh_path: ""
-    field_mesh_path: /home/lab/behav3d_ws/mesh/Marlon.obj
+    field_mesh_path: /home/lab/behav3d_ws/mesh/doublewall_iterative_loop.obj
     field_state_output_dir: "@session/field_loop/init"
     field_request_timeout_s: 120.0
+    fields_node_name: /behav3d_fields
+    field_position_param_timeout_s: 5.0
+    field_require_full_hit: true
+    field_use_position_target: true
+    field_position_target_x: -0.20
+    field_position_target_y: 0.80
     skip_bootstrap_scan_and_init: false
     resume_field_state_path: ""
     resume_scan_mesh_path: ""
     scan_before_generate_first_cycle: true
 
-    # Candidate generation + print
+    # Candidate generation
     run_generate_candidates: true
     candidate_use_latest: true
     candidate_session_path: "@session"
@@ -80,10 +124,11 @@ print_field_oriented_sequence:
     candidate_scan_mesh_path: ""
     candidate_output_dir: "@session/field_loop/cycle_0001"
     candidate_request_timeout_s: 120.0
-    candidate_mode: gradient_walk
+    candidate_mode: z_lift
     candidate_beads_per_step: 7
-    candidate_bead_separation_mm: 18.0
-    candidate_bead_height_mm: 14.0
+    candidate_bead_separation_mm: 38.0
+    candidate_bead_height_mm: 19.0
+    # If gradient walk mode
     candidate_walk_distance_mm: 10.0
     candidate_walk_step_mm: 0.5
     candidate_walk_max_steps: 60
@@ -98,11 +143,33 @@ print_field_oriented_sequence:
     candidate_marker_axis_length: 0.05
     candidate_marker_axis_radius: 0.003
     candidate_marker_clear_before: true
+
+    # Print selection. Use "dots" for z_lift/simple point deposition,
+    # "segments" for oriented segment printing, or "auto" to follow YAML shape.
+    print_mode: dots
+
+    # Dot print mode. Active when print_mode=dots, or print_mode=auto with targets YAML.
+    dot_eef_link: extruder_tcp
+    dot_steps: 25000
+    dot_speed: 2400
+    dot_approach_z_offset_m: 0.30
+    dot_z_offset_m: 0.04
+    dot_pre_vel_scale: 0.20
+    dot_print_vel_scale: 0.10
+    dot_accel_scale: 0.10
+    dot_dwell_s: 0.4
+    post_dot_retract_steps: 3000
+    post_dot_retract_speed: 7000
+
+    # Oriented target generation. Used by candidate generation when enabled.
     oriented_targets_enable: true
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
     oriented_cone_max_tilt_deg: 36.0
     oriented_base_to_world_yaw_deg: 180.0
+
+    # Segment print mode. Active when print_mode=segments,
+    # or print_mode=auto with segments YAML.
     segment_print_speed: 2950
     segment_approach_z_offset_m: 0.40
     segment_travel_z_offset_m: 0.05

@@ -28,6 +28,8 @@ class PrintSession(YamlSession):
         dot_vel_scale: float = 0.05,
         accel_scale: float = 0.05,
         dwell_s: float = 0.4,
+        post_dot_retract_steps: int = 0,
+        post_dot_retract_speed: int = 0,
         eef_link: str = "extruder_tcp",
         timeout_s: Optional[float] = None,
         pause_gate: Optional[Callable[[], None]] = None,
@@ -151,6 +153,21 @@ class PrintSession(YamlSession):
                     except Exception:
                         pass
                     continue
+
+                if int(post_dot_retract_steps) > 0 and int(post_dot_retract_speed) > 0:
+                    res = self.run_sync(
+                        self.extruder.print_steps(
+                            steps=int(post_dot_retract_steps),
+                            speed=int(post_dot_retract_speed),
+                            reverse=True,
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                    if not res.get("ok", False):
+                        err = str(res.get("error", "unknown"))
+                        failed_targets.append({"index": int(i), "stage": f"retract_{i}", "error": err})
+                        log.warn(f"[print_session:dots] Target {i} printed but retract failed. error='{err}'")
 
                 if float(dwell_s) > 0.0:
                     res = self.run_sync(self.util.wait(float(dwell_s), enqueue=False), timeout_s=timeout_s)
