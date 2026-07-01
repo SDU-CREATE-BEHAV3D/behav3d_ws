@@ -65,14 +65,21 @@ print_field_oriented_sequence:
     half_height: 0.0
     half_n_height: 3
 
-    # Layer scan
-    layer_scan_width: 0.30
-    layer_scan_height: 0.30
-    layer_scan_nx: 3
-    layer_scan_ny: 3
-    layer_scan_row_major: false
-    layer_scan_first_z_off: 0.06
-    layer_scan_z_margin_mm: 550.0
+    # Cycle grid sweep. X/Y and base center are fixed from config.
+    # After a print cycle, scan height is adaptive:
+    #   abs_scan_z = highest_generated_target_z + grid_z_off
+    #   applied z_off = abs_scan_z - grid_center_z
+    # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
+    grid_width: 0.50
+    grid_height: 0.15
+    grid_center_x: -0.20
+    grid_center_y: 0.75
+    grid_center_z: -0.30
+    grid_z_off: 0.60
+    grid_nx: 5
+    grid_ny: 2
+    grid_row_major: false
+    grid_use_tf_orientation: true
     field_center_sign_x: -1.0
     field_center_sign_y: -1.0
     field_center_offset_x: 0.0
@@ -126,7 +133,7 @@ print_field_oriented_sequence:
     candidate_output_dir: "@session/field_loop/cycle_0001"
     candidate_request_timeout_s: 120.0
     candidate_mode: z_lift
-    candidate_beads_per_step: 7
+    candidate_beads_per_step: 2
     candidate_bead_separation_mm: 38.0
     candidate_bead_height_mm: 19.0
     # If gradient walk mode
@@ -163,7 +170,7 @@ print_field_oriented_sequence:
     post_dot_retract_speed: 7000
 
     # Oriented target generation. Used by candidate generation when enabled.
-    oriented_targets_enable: true
+    oriented_targets_enable: false
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
     oriented_cone_max_tilt_deg: 36.0

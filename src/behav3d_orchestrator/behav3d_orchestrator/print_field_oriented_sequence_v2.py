@@ -95,13 +95,16 @@ class PrintFieldOrientedSequenceV2Node(Node):
         scan_clear_markers_before = self._cfg_bool(cfg, "scan_clear_markers_before")
         scan_clear_markers_after = self._cfg_bool(cfg, "scan_clear_markers_after")
 
-        layer_scan_width = self._cfg_float(cfg, "layer_scan_width")
-        layer_scan_height = self._cfg_float(cfg, "layer_scan_height")
-        layer_scan_nx = self._cfg_int(cfg, "layer_scan_nx")
-        layer_scan_ny = self._cfg_int(cfg, "layer_scan_ny")
-        layer_scan_row_major = self._cfg_bool(cfg, "layer_scan_row_major")
-        layer_scan_first_z_off = self._cfg_float(cfg, "layer_scan_first_z_off")
-        layer_scan_z_margin_m = self._cfg_float(cfg, "layer_scan_z_margin_mm") / 1000.0
+        grid_width = self._cfg_float(cfg, "grid_width")
+        grid_height = self._cfg_float(cfg, "grid_height")
+        grid_center_x = self._cfg_float(cfg, "grid_center_x")
+        grid_center_y = self._cfg_float(cfg, "grid_center_y")
+        grid_center_z = self._cfg_float(cfg, "grid_center_z")
+        grid_z_off = self._cfg_float(cfg, "grid_z_off")
+        grid_nx = self._cfg_int(cfg, "grid_nx")
+        grid_ny = self._cfg_int(cfg, "grid_ny")
+        grid_row_major = self._cfg_bool(cfg, "grid_row_major")
+        grid_use_tf_orientation = self._cfg_bool(cfg, "grid_use_tf_orientation")
         field_center_sign_x = self._cfg_float(cfg, "field_center_sign_x")
         field_center_sign_y = self._cfg_float(cfg, "field_center_sign_y")
         field_center_offset_x = self._cfg_float(cfg, "field_center_offset_x")
@@ -206,7 +209,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             "Starting print_field_oriented sequence: "
             f"scan_type={scan_type}, enable_scan={enable_scan}, debug_mode={debug_mode}, "
             f"initial_grid=({scan_nx}x{scan_ny}), "
-            f"layer_grid=({layer_scan_nx}x{layer_scan_ny}), "
+            f"cycle_grid=({grid_nx}x{grid_ny}), "
             f"run_reconstruction={run_reconstruction}, run_field_init={run_field_init}, "
             f"run_generate_candidates={run_generate_candidates}, max_cycles={max_cycles}, "
             f"candidate_mode={candidate_mode}, "
@@ -232,7 +235,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         rgb_ply_path = ""
         field_state_path = str(candidate_field_state_path).strip()
         field_center_xyz: Optional[tuple[float, float, float]] = None
-        last_printed_targets: List[PoseStamped] = []
+        last_generated_targets: List[PoseStamped] = []
         reference_scan_orientation: Optional[tuple[float, float, float, float]] = None
 
         try:
@@ -352,16 +355,16 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     cycle_root = f"@session/field_loop/{cycle_tag}"
                     cycle_scan_capture_folder = f"{cycle_root}/scan"
                     cycle_scan_folder = f"field_loop/{cycle_tag}/scan"
-                    cycle_scan_z_off = float(layer_scan_first_z_off) + float(layer_scan_z_margin_m)
-                    abs_scan_z = float(field_center_xyz[2]) + float(cycle_scan_z_off)
-                    pre_scan_use_tf_orientation = bool(scan_use_tf_orientation)
+                    cycle_scan_z_off = float(grid_z_off)
+                    abs_scan_z = float(grid_center_z) + float(cycle_scan_z_off)
+                    pre_scan_use_tf_orientation = bool(grid_use_tf_orientation)
 
                     log.info(
                         f"[print_field_oriented] ===== pre_scan_for_{cycle_tag} ===== "
                         f"scan_capture='{cycle_scan_capture_folder}' scan_folder='{cycle_scan_folder}' "
-                        f"center=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}) "
-                        f"grid={layer_scan_nx}x{layer_scan_ny} size={1000.0*layer_scan_width:.1f}x"
-                        f"{1000.0*layer_scan_height:.1f}mm "
+                        f"center=({grid_center_x:.4f}, {grid_center_y:.4f}, {grid_center_z:.4f}) "
+                        f"grid={grid_nx}x{grid_ny} size={1000.0*grid_width:.1f}x"
+                        f"{1000.0*grid_height:.1f}mm "
                         f"z_off={cycle_scan_z_off:.4f}m => abs_scan_z={abs_scan_z:.4f}m "
                         f"use_tf_orientation={pre_scan_use_tf_orientation}"
                     )
@@ -370,15 +373,15 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         cfg=cfg,
                         scan_type=scan_type,
                         target=None,
-                        width=layer_scan_width,
-                        height=layer_scan_height,
-                        center_x=float(field_center_xyz[0]),
-                        center_y=float(field_center_xyz[1]),
-                        center_z=float(field_center_xyz[2]),
+                        width=grid_width,
+                        height=grid_height,
+                        center_x=float(grid_center_x),
+                        center_y=float(grid_center_y),
+                        center_z=float(grid_center_z),
                         z_off=cycle_scan_z_off,
-                        nx=layer_scan_nx,
-                        ny=layer_scan_ny,
-                        row_major=layer_scan_row_major,
+                        nx=grid_nx,
+                        ny=grid_ny,
+                        row_major=grid_row_major,
                         use_tf_orientation=pre_scan_use_tf_orientation,
                         capture_folder=cycle_scan_capture_folder,
                         timeout_s=timeout_s,
@@ -666,13 +669,16 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 post_segment_wait_s = self._cfg_float(cfg, "post_segment_wait_s")
                 post_segment_retract_s = self._cfg_float(cfg, "post_segment_retract_s")
                 post_segment_retract_speed = self._cfg_int(cfg, "post_segment_retract_speed")
-                layer_scan_width = self._cfg_float(cfg, "layer_scan_width")
-                layer_scan_height = self._cfg_float(cfg, "layer_scan_height")
-                layer_scan_nx = self._cfg_int(cfg, "layer_scan_nx")
-                layer_scan_ny = self._cfg_int(cfg, "layer_scan_ny")
-                layer_scan_row_major = self._cfg_bool(cfg, "layer_scan_row_major")
-                layer_scan_first_z_off = self._cfg_float(cfg, "layer_scan_first_z_off")
-                layer_scan_z_margin_m = self._cfg_float(cfg, "layer_scan_z_margin_mm") / 1000.0
+                grid_width = self._cfg_float(cfg, "grid_width")
+                grid_height = self._cfg_float(cfg, "grid_height")
+                grid_center_x = self._cfg_float(cfg, "grid_center_x")
+                grid_center_y = self._cfg_float(cfg, "grid_center_y")
+                grid_center_z = self._cfg_float(cfg, "grid_center_z")
+                grid_z_off = self._cfg_float(cfg, "grid_z_off")
+                grid_nx = self._cfg_int(cfg, "grid_nx")
+                grid_ny = self._cfg_int(cfg, "grid_ny")
+                grid_row_major = self._cfg_bool(cfg, "grid_row_major")
+                grid_use_tf_orientation = self._cfg_bool(cfg, "grid_use_tf_orientation")
                 scan_debug_prompt = self._cfg_bool(cfg, "scan_debug_prompt")
                 scan_vel_scale = self._cfg_float(cfg, "scan_vel_scale")
                 scan_accel_scale = self._cfg_float(cfg, "scan_accel_scale")
@@ -905,13 +911,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         "[print_field_oriented] Print dots completed: "
                         f"printed={printed_count} skipped={skipped_count} / targets={print_res.get('targets', 0)}"
                     )
-                printed_targets_res = print_res.get("printed_targets", [])
-                if isinstance(printed_targets_res, list) and printed_targets_res:
-                    last_printed_targets = list(printed_targets_res)
-                elif preview_segments:
-                    last_printed_targets = list(preview_targets[: 2 * printed_count])
-                else:
-                    last_printed_targets = list(preview_targets[:printed_count])
+                last_generated_targets = list(preview_targets)
 
                 print_cycle_index += 1
                 if max_cycles > 0 and print_cycle_index >= max_cycles:
@@ -939,39 +939,18 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 next_cycle_scan_capture_folder = f"{next_cycle_root}/scan"
                 next_cycle_scan_folder = f"field_loop/{next_cycle_tag}/scan"
 
-                center_target = PoseStamped()
-                center_target.header.frame_id = frame_id
-                center_target.pose.position.x = float(field_center_xyz[0])
-                center_target.pose.position.y = float(field_center_xyz[1])
-                center_target.pose.position.z = float(field_center_xyz[2])
-                if reference_scan_orientation is not None:
-                    center_target.pose.orientation.x = float(reference_scan_orientation[0])
-                    center_target.pose.orientation.y = float(reference_scan_orientation[1])
-                    center_target.pose.orientation.z = float(reference_scan_orientation[2])
-                    center_target.pose.orientation.w = float(reference_scan_orientation[3])
-                else:
-                    center_target.pose.orientation.w = 1.0
-
-                if last_printed_targets:
-                    highest_prev_z = max(float(t.pose.position.z) for t in last_printed_targets)
-                    abs_scan_z_from_print = highest_prev_z + float(layer_scan_z_margin_m)
-                    min_abs_scan_z = (
-                        float(field_center_xyz[2])
-                        + float(layer_scan_first_z_off)
-                        + float(layer_scan_z_margin_m)
-                    )
-                    abs_scan_z = max(abs_scan_z_from_print, min_abs_scan_z)
-                    cycle_scan_z_off = abs_scan_z - float(field_center_xyz[2])
+                if last_generated_targets:
+                    highest_prev_z = max(float(t.pose.position.z) for t in last_generated_targets)
+                    abs_scan_z = highest_prev_z + float(grid_z_off)
+                    cycle_scan_z_off = abs_scan_z - float(grid_center_z)
                     z_msg = (
-                        f"highest_prev_z={highest_prev_z:.4f}m + margin={layer_scan_z_margin_m:.4f}m "
-                        f"=> from_print={abs_scan_z_from_print:.4f}m, "
-                        f"min_from_center={min_abs_scan_z:.4f}m "
-                        f"(first_z_off+margin) => abs_scan_z={abs_scan_z:.4f}m "
-                        f"=> z_off={cycle_scan_z_off:.4f}m"
+                        f"highest_generated_z={highest_prev_z:.4f}m + grid_z_off={grid_z_off:.4f}m "
+                        f"=> abs_scan_z={abs_scan_z:.4f}m, "
+                        f"center_z={grid_center_z:.4f}m => applied_z_off={cycle_scan_z_off:.4f}m"
                     )
                 else:
-                    cycle_scan_z_off = float(layer_scan_first_z_off) + float(layer_scan_z_margin_m)
-                    abs_scan_z = float(field_center_xyz[2]) + float(cycle_scan_z_off)
+                    cycle_scan_z_off = float(grid_z_off)
+                    abs_scan_z = float(grid_center_z) + float(cycle_scan_z_off)
                     z_msg = (
                         f"fallback(no printed targets): z_off={cycle_scan_z_off:.4f}m "
                         f"=> abs_scan_z={abs_scan_z:.4f}m"
@@ -981,9 +960,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     f"[print_field_oriented] ===== scan_for_{next_cycle_tag} ===== "
                     f"scan_capture='{next_cycle_scan_capture_folder}' "
                     f"scan_folder='{next_cycle_scan_folder}' "
-                    f"center=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}) "
-                    f"grid={layer_scan_nx}x{layer_scan_ny} size={1000.0*layer_scan_width:.1f}x"
-                    f"{1000.0*layer_scan_height:.1f}mm {z_msg}"
+                    f"center=({grid_center_x:.4f}, {grid_center_y:.4f}, {grid_center_z:.4f}) "
+                    f"grid={grid_nx}x{grid_ny} size={1000.0*grid_width:.1f}x"
+                    f"{1000.0*grid_height:.1f}mm use_tf_orientation={grid_use_tf_orientation} {z_msg}"
                 )
 
                 if not enable_scan:
@@ -995,20 +974,20 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     scan_targets = self._run_configured_scan(
                         cfg=cfg,
                         scan_type=scan_type,
-                        target=center_target,
-                        width=layer_scan_width,
-                        height=layer_scan_height,
-                        center_x=float(field_center_xyz[0]),
-                        center_y=float(field_center_xyz[1]),
-                        center_z=float(field_center_xyz[2]),
+                        target=None,
+                        width=grid_width,
+                        height=grid_height,
+                        center_x=float(grid_center_x),
+                        center_y=float(grid_center_y),
+                        center_z=float(grid_center_z),
                         z_off=cycle_scan_z_off,
-                        nx=layer_scan_nx,
-                        ny=layer_scan_ny,
-                        row_major=layer_scan_row_major,
-                        use_tf_orientation=False,
+                        nx=grid_nx,
+                        ny=grid_ny,
+                        row_major=grid_row_major,
+                        use_tf_orientation=grid_use_tf_orientation,
                         capture_folder=next_cycle_scan_capture_folder,
                         timeout_s=timeout_s,
-                        frame_id=center_target.header.frame_id,
+                        frame_id=frame_id,
                     )
                     if not scan_targets:
                         raise RuntimeError(f"Scan produced 0 targets for scan_for_{next_cycle_tag}.")
