@@ -928,7 +928,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     log.info(f"[print_field_oriented] Reached max_cycles={max_cycles}.")
                     break
 
-                if prompt_before_next_cycle:
+                if prompt_before_scan and prompt_before_next_cycle:
                     next_res = self.session.run_sync(
                         self.session.util.input(
                             prompt=(

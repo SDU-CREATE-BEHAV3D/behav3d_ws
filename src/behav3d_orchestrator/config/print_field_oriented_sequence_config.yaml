@@ -120,10 +120,10 @@ print_field_oriented_sequence:
     field_use_position_target: true
     field_position_target_x: -0.20
     field_position_target_y: 0.85
-    skip_bootstrap_scan_and_init: false
-    resume_field_state_path: ""
-    resume_scan_mesh_path: ""
-    scan_before_generate_first_cycle: true
+    skip_bootstrap_scan_and_init: true
+    resume_field_state_path: /home/lab/behav3d_ws/captures/260702_115633/field_loop/cycle_0000/field_init/field_state_init.npz
+    resume_scan_mesh_path: /home/lab/behav3d_ws/captures/260702_115633/field_loop/cycle_0059/scan/reconstruct/tsdf_surface_mesh.stl
+    scan_before_generate_first_cycle: false
 
     # Candidate generation
     run_generate_candidates: true
@@ -136,7 +136,7 @@ print_field_oriented_sequence:
     candidate_mode: z_lift
     candidate_beads_per_step: 5
     candidate_bead_separation_mm: 38.0
-    candidate_bead_height_mm: 19.0
+    candidate_bead_height_mm: 20.0
     # If gradient walk mode
     candidate_walk_distance_mm: 10.0
     candidate_walk_step_mm: 0.5
