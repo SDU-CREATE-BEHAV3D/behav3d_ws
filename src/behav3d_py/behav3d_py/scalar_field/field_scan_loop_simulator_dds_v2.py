@@ -85,6 +85,11 @@ from lib_scalar.print_targets import (
     build_oriented_line_targets,
     write_line_targets_yaml,
 )
+from lib_scalar.target_rules import (
+    TARGET_NORMAL_FLIP_BEAD_HEIGHT_FRACTION,
+    TARGET_NORMAL_FLIP_DOT_THRESHOLD,
+    apply_secondary_target_rules,
+)
 from lib_scalar.viz import (
     compute_scene_bounds,
     make_point_cloud,
@@ -362,36 +367,66 @@ def load_segment_targets_yaml(
 
 
 def build_dds_step_deposits(
-    candidate_points: np.ndarray,
+    segments: SegmentTargetSet,
     *,
     profile,
-    candidate_normals: np.ndarray | None = None,
+    mode: str,
+    line_fraction: float,
 ) -> tuple[object, ...]:
-    """Convert current scalar candidates into point deposits.
+    """Convert applied segment targets into DDS deposits.
 
-    The scalar gradient-walk segment is a tool-motion/debug overlay. For the DDS
-    proxy bead state we only deposit the selected end/candidate point.
+    - dot: deposit only the segment end/candidate point.
+    - line: sweep one DDS line bead over the final line_fraction of each segment.
     """
-    from dds import PointDeposit
+    from dds import LineDeposit, PointDeposit
 
-    points = np.asarray(candidate_points, dtype=np.float64)
-    if candidate_normals is None:
-        normals = np.tile(
-            np.array([0.0, 0.0, 1.0], dtype=np.float64),
-            (points.shape[0], 1),
+    mode_norm = str(mode).strip().lower()
+    if mode_norm not in {"dot", "line"}:
+        raise ValueError(f"Unknown DDS deposit mode: {mode}. Use 'dot' or 'line'.")
+    line_fraction_value = float(line_fraction)
+    if not 0.0 <= line_fraction_value <= 1.0:
+        raise ValueError(f"line_fraction must be in [0, 1], got {line_fraction}")
+
+    starts = np.asarray(segments.start_points, dtype=np.float64)
+    ends = np.asarray(segments.end_points, dtype=np.float64)
+    start_normals = np.asarray(segments.start_z_dirs, dtype=np.float64)
+    end_normals = np.asarray(segments.end_z_dirs, dtype=np.float64)
+    if not (
+        starts.shape == ends.shape == start_normals.shape == end_normals.shape
+        and starts.ndim == 2
+        and starts.shape[1] == 3
+    ):
+        raise ValueError(
+            "Segment start/end points and normals must all have shape (N, 3): "
+            f"starts={starts.shape} ends={ends.shape} "
+            f"start_normals={start_normals.shape} end_normals={end_normals.shape}"
         )
-    else:
-        normals = np.asarray(candidate_normals, dtype=np.float64)
-        if normals.shape != points.shape:
-            raise ValueError(
-                "candidate_normals must match candidate_points shape: "
-                f"{normals.shape} vs {points.shape}"
-            )
 
     deposits = []
-    for point, normal in zip(points, normals, strict=True):
-        target = _dds_target(point, normal)
-        deposits.append(PointDeposit(target=target, profile=profile))
+    for start, end, start_normal, end_normal in zip(
+        starts,
+        ends,
+        start_normals,
+        end_normals,
+        strict=True,
+    ):
+        if mode_norm == "dot":
+            deposits.append(
+                PointDeposit(
+                    target=_dds_target(end, end_normal),
+                    profile=profile,
+                )
+            )
+        else:
+            material_start = end - line_fraction_value * (end - start)
+            material_start_normal = end_normal + line_fraction_value * (start_normal - end_normal)
+            deposits.append(
+                LineDeposit(
+                    start=_dds_target(material_start, material_start_normal),
+                    end=_dds_target(end, end_normal),
+                    profile=profile,
+                )
+            )
     return tuple(deposits)
 
 
@@ -707,7 +742,7 @@ def show_step_window(
             print_segment_lines,
             name="print_segments",
             color="#ff8c00",
-            line_width=4.0,
+            line_width=7.0,
         )
 
     if (
@@ -794,6 +829,8 @@ def run(
     walk_start_fraction: float,
     clamp_to_cone: bool,
     cone_max_tilt_deg: float,
+    normal_continuity_rule: bool,
+    endpoint_spacing_rule: bool,
     bead_shape: str,
     positioning_attempts: int,
     position_target_xy: tuple[float, float] | None,
@@ -805,6 +842,8 @@ def run(
     visualize: bool,
     dds_voxel_size_mm: float,
     dds_domain_source: str,
+    dds_deposit_mode: str,
+    dds_line_fraction: float,
     dds_threshold: float,
     dds_padding_mm: float,
     dds_surface_step_size: int,
@@ -853,11 +892,21 @@ def run(
         raise ValueError(f"dds_surface_step_size must be >= 1, got {dds_surface_step_size}")
     if float(target_position_scale) <= 0.0:
         raise ValueError(f"target_position_scale must be > 0, got {target_position_scale}")
+    dds_deposit_mode_norm = str(dds_deposit_mode).strip().lower()
+    if dds_deposit_mode_norm not in {"dot", "line"}:
+        raise ValueError(f"dds_deposit_mode must be 'dot' or 'line', got {dds_deposit_mode}")
+    dds_line_fraction_value = float(dds_line_fraction)
+    if not 0.0 <= dds_line_fraction_value <= 1.0:
+        raise ValueError(f"dds_line_fraction must be in [0, 1], got {dds_line_fraction}")
 
     print(
         "[config] "
         f"candidate_mode={candidate_mode} "
+        f"normal_continuity_rule={bool(normal_continuity_rule)} "
+        f"endpoint_spacing_rule={bool(endpoint_spacing_rule)} "
         f"proxy=dds_implicit_surface "
+        f"dds_deposit_mode={dds_deposit_mode_norm} "
+        f"dds_line_fraction={dds_line_fraction_value:.3f} "
         f"legacy_bead_shape_arg={bead_shape} "
         f"bead_height_mm={float(bead_height_mm):.3f} "
         f"dds_bead_width_mm={float(bead_separation_mm + 2.0):.3f} "
@@ -965,6 +1014,28 @@ def run(
             clamp_to_cone=bool(clamp_to_cone),
             cone_max_tilt_deg=float(cone_max_tilt_deg),
         )
+        line_targets, secondary_stats = apply_secondary_target_rules(
+            line_targets,
+            candidate_mode=str(candidate_mode),
+            bead_height_m=1e-3 * float(bead_height_mm),
+            bead_separation_m=1e-3 * float(bead_separation_mm),
+            normal_continuity_rule=bool(normal_continuity_rule),
+            endpoint_spacing_rule=bool(endpoint_spacing_rule),
+        )
+        normal_flip_replaced = int(secondary_stats["normal_continuity_replaced"])
+        endpoint_spacing_removed = int(secondary_stats["endpoint_spacing_removed"])
+        if normal_flip_replaced > 0:
+            print(
+                f"[targets] replaced normal-discontinuity segments: "
+                f"{normal_flip_replaced}/{line_targets.count} "
+                f"dot_threshold={TARGET_NORMAL_FLIP_DOT_THRESHOLD:.3f} "
+                f"extension_fraction={TARGET_NORMAL_FLIP_BEAD_HEIGHT_FRACTION:.3f}"
+            )
+        if endpoint_spacing_removed > 0:
+            print(
+                f"[targets] removed close endpoint segments: "
+                f"{endpoint_spacing_removed} min_distance_m={1e-3 * float(bead_separation_mm):.6f}"
+            )
         target_points, target_z_dirs = line_targets.flattened_points_and_z_dirs()
         step_dir = output_dir / f"step_{step_index:02d}"
         step_segments_yaml = step_dir / "segments.yaml"
@@ -972,7 +1043,7 @@ def run(
         if dds_simulator is None:
             dds_domain = build_dds_domain_from_print_zone(
                 field_vertices_world=pose.field_vertices_world,
-                candidate_points=candidate.points,
+                candidate_points=line_targets.end_points,
                 source=str(dds_domain_source),
                 scan_mesh=scan_mesh_base,
                 voxel_size_m=dds_voxel_size_m,
@@ -1009,9 +1080,9 @@ def run(
                 contour_lines=contour.contour_lines,
                 offset_points=contour.offset_points,
                 offset_lines=contour.offset_lines,
-                selected_points=candidate.points,
+                selected_points=line_targets.end_points,
                 source_points=candidate.source_points,
-                segment_start_points=candidate.segment_start_points,
+                segment_start_points=line_targets.start_points,
                 target_points=target_points,
                 target_z_dirs=target_z_dirs,
                 axis_size=axis_size,
@@ -1023,8 +1094,8 @@ def run(
             print("[loop] Stop requested by user.")
             break
 
-        if candidate.points.shape[0] == 0:
-            print("[loop] No valid candidates left; stopping early.")
+        if line_targets.count == 0:
+            print("[loop] No valid target segments left; stopping early.")
             break
 
         write_line_targets_yaml(
@@ -1040,16 +1111,17 @@ def run(
             step_segments_yaml,
             position_scale=float(target_position_scale),
         )
-        if applied_segments.count != candidate.points.shape[0]:
+        if applied_segments.count != line_targets.count:
             raise RuntimeError(
-                "Applied segment YAML count does not match selected candidates: "
-                f"{applied_segments.count} vs {candidate.points.shape[0]}"
+                "Applied segment YAML count does not match final target segments: "
+                f"{applied_segments.count} vs {line_targets.count}"
             )
 
         step_deposits = build_dds_step_deposits(
-            applied_segments.end_points,
+            applied_segments,
             profile=dds_profile,
-            candidate_normals=applied_segments.end_z_dirs,
+            mode=dds_deposit_mode_norm,
+            line_fraction=dds_line_fraction_value,
         )
 
         assert dds_simulator is not None
@@ -1091,7 +1163,7 @@ def run(
             )
             print(f"[dds] saved step bundle: {bundle_dir}")
 
-        all_selected_points.append(candidate.points)
+        all_selected_points.append(line_targets.end_points)
         step += 1
 
     workbench = viewer_state.get("workbench")
@@ -1168,6 +1240,22 @@ def main() -> None:
     parser.add_argument("--clamp-to-cone", action="store_true")
     parser.add_argument("--cone-max-tilt-deg", type=float, default=45.0)
     parser.add_argument(
+        "--disable-normal-continuity-rule",
+        action="store_true",
+        help=(
+            "Disable the secondary gradient_lift target rule that replaces low "
+            "start/end Z-continuity segments."
+        ),
+    )
+    parser.add_argument(
+        "--disable-endpoint-spacing-rule",
+        action="store_true",
+        help=(
+            "Disable the secondary target rule that removes later targets whose "
+            "end point is closer than --bead-separation-mm to an earlier kept end."
+        ),
+    )
+    parser.add_argument(
         "--bead-shape",
         type=str,
         choices=("cylinder", "sphere"),
@@ -1217,6 +1305,26 @@ def main() -> None:
         help=(
             "Build the fixed DDS grid from the positioned field/print envelope "
             "(default) or from the full scan+field scene (legacy)."
+        ),
+    )
+    parser.add_argument(
+        "--dds-deposit-mode",
+        type=str,
+        choices=("dot", "line"),
+        default="dot",
+        help=(
+            "DDS bead primitive built from each applied YAML segment: "
+            "'dot' deposits only the segment end point, 'line' sweeps from start to end."
+        ),
+    )
+    parser.add_argument(
+        "--dds-line-fraction",
+        type=float,
+        default=1.0,
+        help=(
+            "For --dds-deposit-mode line, deposit only this final fraction of each "
+            "YAML segment. 1.0 uses start->end, 0.5 uses the final half, 0.0 "
+            "collapses to the end point."
         ),
     )
     parser.add_argument(
@@ -1280,6 +1388,8 @@ def main() -> None:
         walk_start_fraction=args.walk_start_fraction,
         clamp_to_cone=args.clamp_to_cone,
         cone_max_tilt_deg=args.cone_max_tilt_deg,
+        normal_continuity_rule=not args.disable_normal_continuity_rule,
+        endpoint_spacing_rule=not args.disable_endpoint_spacing_rule,
         bead_shape=args.bead_shape,
         positioning_attempts=args.positioning_attempts,
         position_target_xy=position_target_xy,
@@ -1291,6 +1401,8 @@ def main() -> None:
         visualize=not args.no_vis,
         dds_voxel_size_mm=args.dds_voxel_size_mm,
         dds_domain_source=args.dds_domain_source,
+        dds_deposit_mode=args.dds_deposit_mode,
+        dds_line_fraction=args.dds_line_fraction,
         dds_threshold=args.dds_threshold,
         dds_padding_mm=args.dds_padding_mm,
         dds_surface_step_size=args.dds_surface_step_size,

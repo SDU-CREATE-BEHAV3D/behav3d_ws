@@ -103,15 +103,15 @@ def orient_points_with_tangent(
     clamp_to_cone: bool = False,
     cone_max_tilt_deg: float = 45.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Project points to surface and orient target Z along scalar tangent."""
+    """Keep target positions fixed and orient target Z along scalar tangent."""
     points_in = _validate_points(points, "points")
     if points_in.shape[0] == 0:
         empty = np.zeros((0, 3), dtype=np.float64)
         return empty, empty
 
-    projected = project_points_to_surface(points_in, field_vertices_world, field_faces)
+    tangent_sample_points = project_points_to_surface(points_in, field_vertices_world, field_faces)
     tangent_dir, _b_dir, _n_dir = sample_tangent_axes_on_surface_from_scalar(
-        query_points=projected,
+        query_points=tangent_sample_points,
         mesh_vertices=field_vertices_world,
         mesh_faces=field_faces,
         vertex_scalar=field_scalar,
@@ -126,7 +126,7 @@ def orient_points_with_tangent(
         )
     else:
         z_dirs = _normalize_dirs(z_dirs)
-    return projected, z_dirs
+    return points_in.copy(), z_dirs
 
 
 def build_oriented_line_targets(

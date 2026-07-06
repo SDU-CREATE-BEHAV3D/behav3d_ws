@@ -172,9 +172,10 @@ The objective is to keep each stage isolated, testable, and reusable from:
 
 12. `print_targets.py`
    - Builds oriented point or line targets from candidate geometry.
-   - Projects target points to the field surface, samples scalar-tangent
-     orientation, optionally clamps target Z directions to a cone, and writes
-     point YAML or nested line-segment YAML. Target-orientation visualization is standardized through
+   - Keeps generated target positions unchanged, samples scalar-tangent
+     orientation from the field surface, optionally clamps target Z directions
+     to a cone, and writes point YAML or nested line-segment YAML.
+     Target-orientation visualization is standardized through
      `viz.make_target_orientation_sticks(...)` as fixed 8 mm x 1 mm rods.
    - Line target YAML schema:
      ```yaml
@@ -187,8 +188,23 @@ The objective is to keep each stage isolated, testable, and reusable from:
      ```
    - Main APIs:
      - `build_oriented_line_targets(...) -> OrientedLineTargets`
+       keeps candidate positions unchanged and samples the field surface only
+       to compute tangent-based target orientation.
      - `write_line_targets_yaml(...)`
      - `write_fixed_z_targets_yaml(...)`
+
+13. `target_rules.py`
+   - Secondary target rules applied after candidate generation and before
+     visualization/YAML/DDS.
+   - Current rules:
+     - normal-continuity replacement for `gradient_lift` targets with
+       `dot(start_Z, end_Z) < 0.5`,
+     - endpoint-spacing pruning for targets whose `end` points are closer than
+       the selected bead spacing.
+   - Main APIs:
+     - `apply_secondary_target_rules(...) -> (OrientedLineTargets, stats)`
+     - `replace_low_continuity_target_segments(...)`
+     - `remove_close_endpoint_targets(...)`
 
 ## Design Notes
 

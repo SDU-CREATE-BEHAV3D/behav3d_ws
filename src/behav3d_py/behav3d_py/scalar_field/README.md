@@ -33,13 +33,28 @@ Loop flow:
 Important behavior:
 
 - Accepted steps are saved as `step_##/segments.yaml` using the same nested
-  segment contract as the print path. DDS consumes the `end` target from that
-  YAML, not the raw in-memory candidate arrays.
-- DDS receives only segment end points as deposits. `gradient_walk` and
-  `gradient_lift` write tangent-based target Z directions; modes without
-  explicit target orientation fall back to world `+Z`.
-- `gradient_walk` segments are visualization/debug tool paths; they do not
-  become DDS bead geometry.
+  segment contract as the print path. DDS deposits are built from that YAML,
+  not the raw in-memory candidate arrays.
+- `--dds-deposit-mode dot` keeps the legacy behavior: DDS receives only each
+  segment `end` target as a point deposit. `--dds-deposit-mode line` sweeps a
+  DDS line deposit from each segment `start` to `end`.
+- `--dds-line-fraction` limits line deposits to the final fraction of each
+  segment. `1.0` is the full segment, `0.5` is the final half, and `0.0`
+  collapses to the end point. The saved target YAML remains unchanged.
+- `gradient_walk` and `gradient_lift` keep generated target positions and write
+  tangent-based target Z directions; modes without explicit target orientation
+  fall back to world `+Z`.
+- Secondary target rules run after candidate generation and before
+  visualization/YAML/DDS.
+- The normal-continuity rule applies to `gradient_lift`: target segments with
+  low start/end `Z(...)` continuity (`dot < 0.5`, more than about 60 degrees
+  apart) are replaced. The new segment keeps the original start point and ends
+  half a bead height past the original segment midpoint along the average target
+  direction. Its `Z(...)` direction is the average target direction. Disable it
+  with `--disable-normal-continuity-rule`.
+- The endpoint-spacing rule removes later targets whose `end` point is closer
+  than `--bead-separation-mm` to an earlier kept `end`. Disable it with
+  `--disable-endpoint-spacing-rule`.
 - The magenta geodesic offset line is a diagnostic/reference line. In
   `gradient_walk`, candidates are selected from the `phi=0` contour and walked
   over the scalar field, so the magenta line is not the print path.

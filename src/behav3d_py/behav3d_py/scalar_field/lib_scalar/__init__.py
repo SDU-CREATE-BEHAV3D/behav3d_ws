@@ -34,6 +34,13 @@ from .print_targets import (
     write_line_targets_yaml,
     write_point_targets_yaml,
 )
+from .target_rules import (
+    TARGET_NORMAL_FLIP_BEAD_HEIGHT_FRACTION,
+    TARGET_NORMAL_FLIP_DOT_THRESHOLD,
+    apply_secondary_target_rules,
+    remove_close_endpoint_targets,
+    replace_low_continuity_target_segments,
+)
 from .compute_heat_field import compute_heat_field
 from .compute_phi_mask import compute_phi_mask, evaluate_fixed_pose, make_scan_scene
 from .position_field import default_xy_search_bounds, make_axis_samples, position_field
@@ -61,6 +68,11 @@ __all__ = [
     "write_point_targets_yaml",
     "write_fixed_z_targets_yaml",
     "write_line_targets_yaml",
+    "TARGET_NORMAL_FLIP_DOT_THRESHOLD",
+    "TARGET_NORMAL_FLIP_BEAD_HEIGHT_FRACTION",
+    "apply_secondary_target_rules",
+    "replace_low_continuity_target_segments",
+    "remove_close_endpoint_targets",
     "load_triangle_mesh_arrays",
     "load_triangle_mesh_legacy",
     "apply_scale_and_offset",
