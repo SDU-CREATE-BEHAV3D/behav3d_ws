@@ -64,6 +64,9 @@ COLCON_IGNORE
 #Captures
 /captures
 
+# Scalar field generated artifacts
+/src/behav3d_py/behav3d_py/scalar_field/output/
+
 # Misc.
 .vscode
 .open3d_venv
