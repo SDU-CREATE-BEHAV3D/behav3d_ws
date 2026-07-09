@@ -36,6 +36,7 @@ print_yaml_and_scan_sequence:
 
     # Scan execution. These match the current scan_sequence.py / ScanSession path.
     enable_scan: false
+    # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
     scan_type: grid_sweep
     scan_after_final: false
     scan_root_folder: "@session/print_yaml_scan"
@@ -72,7 +73,7 @@ print_yaml_and_scan_sequence:
     grid_use_tf_orientation: true
 
     # Half-cylinder line-axis parameters from scan_sequence_test.yaml.
-    # Active when scan_type=half_cylinder.
+    # Active when scan_type=half_cylinder or half_cylinder_side_caps.
     half_use_line_axis: true
     half_axis_start_x: 0.20
     half_axis_start_y: 0.85
@@ -91,6 +92,19 @@ print_yaml_and_scan_sequence:
     half_orientation_mode: look_at
     half_roll_deg: 0.0
     half_row_major: false
+
+    # Side-cap parameters. Active when scan_type=half_cylinder_side_caps.
+    # endcap_radius <= 0 means reuse half_radius.
+    endcap_radius: 0.0
+    endcap_angle_min_deg: -35.0
+    endcap_angle_max_deg: 35.0
+    endcap_n_angle: 3
+    endcap_polar_min_deg: 20.0
+    endcap_polar_max_deg: 60.0
+    endcap_n_polar: 3
+    endcap_include_start: true
+    endcap_include_end: true
+    endcap_row_major: false
 
     # Legacy center-based half-cylinder parameters. Ignored when
     # half_use_line_axis=true, but kept so the sequence exposes all knobs.

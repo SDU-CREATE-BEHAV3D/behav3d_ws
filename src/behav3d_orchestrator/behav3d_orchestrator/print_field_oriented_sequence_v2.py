@@ -1143,8 +1143,70 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 roll_deg=self._cfg_float(cfg, "half_roll_deg"),
                 **common,
             )
+        elif scan_type_norm in (
+            "half_cylinder_side_caps",
+            "half-cylinder-side-caps",
+            "half_cylinder_caps",
+            "half-cylinder-caps",
+            "side_caps",
+        ):
+            if not self._cfg_bool(cfg, "half_use_line_axis"):
+                raise ValueError("half_cylinder_side_caps requires half_use_line_axis=true")
+            orientation_mode = self._cfg_str(cfg, "half_orientation_mode")
+            orientation_pose = None
+            if orientation_mode.strip().lower() in (
+                "fixed",
+                "current",
+                "current_eef",
+                "look_at_current_roll",
+                "look_at_keep_roll",
+                "look_at_min_roll",
+            ):
+                orientation_pose = self._current_eef_pose(cfg=cfg, frame_id=frame_id, timeout_s=timeout_s)
+
+            endcap_radius = self._cfg_float(cfg, "endcap_radius")
+            endcap_n_angle = self._cfg_int(cfg, "endcap_n_angle")
+            res = self.scan_session.run_half_cylinder_side_caps_scan(
+                capture_folder=capture_folder,
+                axis_start_xyz=(
+                    self._cfg_float(cfg, "half_axis_start_x"),
+                    self._cfg_float(cfg, "half_axis_start_y"),
+                    self._cfg_float(cfg, "half_axis_start_z"),
+                ),
+                axis_end_xyz=(
+                    self._cfg_float(cfg, "half_axis_end_x"),
+                    self._cfg_float(cfg, "half_axis_end_y"),
+                    self._cfg_float(cfg, "half_axis_end_z"),
+                ),
+                radius=self._cfg_float(cfg, "half_radius"),
+                angle_min_deg=self._cfg_float(cfg, "half_angle_min_deg"),
+                angle_max_deg=self._cfg_float(cfg, "half_angle_max_deg"),
+                n_angle=self._cfg_int(cfg, "half_n_angle"),
+                n_axis=self._cfg_int(cfg, "half_n_axis"),
+                frame_id=str(frame_id or "world"),
+                row_major=self._cfg_bool(cfg, "half_row_major"),
+                orientation_mode=orientation_mode,
+                orientation_pose=orientation_pose,
+                arc_center_direction=(
+                    self._cfg_float(cfg, "half_arc_center_dx"),
+                    self._cfg_float(cfg, "half_arc_center_dy"),
+                    self._cfg_float(cfg, "half_arc_center_dz"),
+                ),
+                roll_deg=self._cfg_float(cfg, "half_roll_deg"),
+                endcap_radius=None if endcap_radius <= 0.0 else endcap_radius,
+                endcap_angle_min_deg=self._cfg_float(cfg, "endcap_angle_min_deg"),
+                endcap_angle_max_deg=self._cfg_float(cfg, "endcap_angle_max_deg"),
+                endcap_n_angle=None if endcap_n_angle <= 0 else endcap_n_angle,
+                endcap_polar_min_deg=self._cfg_float(cfg, "endcap_polar_min_deg"),
+                endcap_polar_max_deg=self._cfg_float(cfg, "endcap_polar_max_deg"),
+                endcap_n_polar=self._cfg_int(cfg, "endcap_n_polar"),
+                endcap_include_start=self._cfg_bool(cfg, "endcap_include_start"),
+                endcap_include_end=self._cfg_bool(cfg, "endcap_include_end"),
+                endcap_row_major=self._cfg_bool(cfg, "endcap_row_major"),
+                **common,
+            )
         else:
-            raise ValueError("scan_type must be one of: grid_sweep, half_cylinder")
+            raise ValueError("scan_type must be one of: grid_sweep, half_cylinder, half_cylinder_side_caps")
 
         if not res.get("ok", False):
             raise RuntimeError(

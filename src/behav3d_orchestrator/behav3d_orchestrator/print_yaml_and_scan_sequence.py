@@ -482,8 +482,26 @@ class PrintYamlAndScanSequenceNode(Node):
                 timeout_s=timeout_s,
                 printed_targets=printed_targets,
             )
+        elif scan_type in (
+            "half_cylinder_side_caps",
+            "half-cylinder-side-caps",
+            "half_cylinder_caps",
+            "half-cylinder-caps",
+            "side_caps",
+        ):
+            scan_res = self._run_half_cylinder_side_caps_scan(
+                cfg=cfg,
+                capture_folder=scan_capture_folder,
+                scan_folder=scan_folder,
+                cycle_tag=cycle_tag,
+                timeout_s=timeout_s,
+                printed_targets=printed_targets,
+            )
         else:
-            log.error("[print_yaml_and_scan] scan_type must be one of: grid_sweep, half_cylinder")
+            log.error(
+                "[print_yaml_and_scan] scan_type must be one of: "
+                "grid_sweep, half_cylinder, half_cylinder_side_caps"
+            )
             return False
 
         if not scan_res.get("ok", False):
@@ -692,6 +710,113 @@ class PrintYamlAndScanSequenceNode(Node):
                 self._cfg_float(cfg, "half_arc_center_dz"),
             ],
             roll_deg=self._cfg_float(cfg, "half_roll_deg"),
+            **self._scan_common_kwargs(cfg=cfg, timeout_s=timeout_s),
+        )
+
+    def _run_half_cylinder_side_caps_scan(
+        self,
+        *,
+        cfg: Dict[str, Any],
+        capture_folder: str,
+        scan_folder: str,
+        cycle_tag: str,
+        timeout_s: Optional[float],
+        printed_targets: Sequence[PoseStamped],
+    ) -> dict:
+        log = self.get_logger()
+        frame_id = self._cfg_str(cfg, "frame_id")
+        half_orientation_mode = self._cfg_str(cfg, "half_orientation_mode")
+        half_orientation_pose = None
+        if half_orientation_mode.strip().lower() in (
+            "fixed",
+            "current",
+            "current_eef",
+            "look_at_current_roll",
+            "look_at_keep_roll",
+            "look_at_min_roll",
+        ):
+            half_orientation_pose = self._current_eef_pose(frame_id=frame_id, cfg=cfg, timeout_s=timeout_s)
+
+        if not self._cfg_bool(cfg, "half_use_line_axis"):
+            return {
+                "ok": False,
+                "stage": "config",
+                "error": "half_cylinder_side_caps requires half_use_line_axis=true",
+            }
+
+        axis_start_xyz = [
+            self._cfg_float(cfg, "half_axis_start_x"),
+            self._cfg_float(cfg, "half_axis_start_y"),
+            self._cfg_float(cfg, "half_axis_start_z"),
+        ]
+        axis_end_xyz = [
+            self._cfg_float(cfg, "half_axis_end_x"),
+            self._cfg_float(cfg, "half_axis_end_y"),
+            self._cfg_float(cfg, "half_axis_end_z"),
+        ]
+        z_msg = "adaptive_z=false"
+        if self._cfg_bool(cfg, "scan_follow_printed_z"):
+            if printed_targets:
+                highest_printed_z = max(float(ps.pose.position.z) for ps in printed_targets)
+                axis_start_xyz[2] = highest_printed_z
+                axis_end_xyz[2] = highest_printed_z
+                z_msg = f"adaptive_z=true highest_printed_z={highest_printed_z:.4f}m => axis_z={highest_printed_z:.4f}m"
+            else:
+                z_msg = "adaptive_z=true but no printed targets reported; using configured axis_z"
+
+        endcap_radius = self._cfg_float(cfg, "endcap_radius")
+        endcap_n_angle = self._cfg_int(cfg, "endcap_n_angle")
+        endcap_n_angle_eff = self._cfg_int(cfg, "half_n_angle") if endcap_n_angle <= 0 else endcap_n_angle
+        n_main = self._cfg_int(cfg, "half_n_axis") * self._cfg_int(cfg, "half_n_angle")
+        n_caps = (
+            int(self._cfg_bool(cfg, "endcap_include_start"))
+            + int(self._cfg_bool(cfg, "endcap_include_end"))
+        ) * endcap_n_angle_eff * self._cfg_int(cfg, "endcap_n_polar")
+
+        log.info(
+            f"[print_yaml_and_scan] ===== scan_for_{cycle_tag} half_cylinder_side_caps ===== "
+            f"scan_capture='{capture_folder}' scan_folder='{scan_folder}' "
+            f"radius={self._cfg_float(cfg, 'half_radius'):.4f}m "
+            f"cap_radius={(self._cfg_float(cfg, 'half_radius') if endcap_radius <= 0.0 else endcap_radius):.4f}m "
+            f"half_angles=({self._cfg_float(cfg, 'half_angle_min_deg'):.1f},"
+            f"{self._cfg_float(cfg, 'half_angle_max_deg'):.1f})deg "
+            f"cap_angles=({self._cfg_float(cfg, 'endcap_angle_min_deg'):.1f},"
+            f"{self._cfg_float(cfg, 'endcap_angle_max_deg'):.1f})deg "
+            f"cap_polar=({self._cfg_float(cfg, 'endcap_polar_min_deg'):.1f},"
+            f"{self._cfg_float(cfg, 'endcap_polar_max_deg'):.1f})deg "
+            f"main_targets={n_main} cap_targets={n_caps} "
+            f"{z_msg}"
+        )
+
+        return self.scan_session.run_half_cylinder_side_caps_scan(
+            capture_folder=capture_folder,
+            axis_start_xyz=axis_start_xyz,
+            axis_end_xyz=axis_end_xyz,
+            radius=self._cfg_float(cfg, "half_radius"),
+            angle_min_deg=self._cfg_float(cfg, "half_angle_min_deg"),
+            angle_max_deg=self._cfg_float(cfg, "half_angle_max_deg"),
+            n_angle=self._cfg_int(cfg, "half_n_angle"),
+            n_axis=self._cfg_int(cfg, "half_n_axis"),
+            frame_id=frame_id,
+            row_major=self._cfg_bool(cfg, "half_row_major"),
+            orientation_mode=half_orientation_mode,
+            orientation_pose=half_orientation_pose,
+            arc_center_direction=[
+                self._cfg_float(cfg, "half_arc_center_dx"),
+                self._cfg_float(cfg, "half_arc_center_dy"),
+                self._cfg_float(cfg, "half_arc_center_dz"),
+            ],
+            roll_deg=self._cfg_float(cfg, "half_roll_deg"),
+            endcap_radius=None if endcap_radius <= 0.0 else endcap_radius,
+            endcap_angle_min_deg=self._cfg_float(cfg, "endcap_angle_min_deg"),
+            endcap_angle_max_deg=self._cfg_float(cfg, "endcap_angle_max_deg"),
+            endcap_n_angle=None if endcap_n_angle <= 0 else endcap_n_angle,
+            endcap_polar_min_deg=self._cfg_float(cfg, "endcap_polar_min_deg"),
+            endcap_polar_max_deg=self._cfg_float(cfg, "endcap_polar_max_deg"),
+            endcap_n_polar=self._cfg_int(cfg, "endcap_n_polar"),
+            endcap_include_start=self._cfg_bool(cfg, "endcap_include_start"),
+            endcap_include_end=self._cfg_bool(cfg, "endcap_include_end"),
+            endcap_row_major=self._cfg_bool(cfg, "endcap_row_major"),
             **self._scan_common_kwargs(cfg=cfg, timeout_s=timeout_s),
         )
 

@@ -97,6 +97,16 @@ class ScanSequenceNode(Node):
         self.declare_parameter("half_arc_center_dy", 0.0)
         self.declare_parameter("half_arc_center_dz", 1.0)
         self.declare_parameter("half_roll_deg", 0.0)
+        self.declare_parameter("endcap_radius", 0.0)
+        self.declare_parameter("endcap_angle_min_deg", -35.0)
+        self.declare_parameter("endcap_angle_max_deg", 35.0)
+        self.declare_parameter("endcap_n_angle", 5)
+        self.declare_parameter("endcap_polar_min_deg", 15.0)
+        self.declare_parameter("endcap_polar_max_deg", 75.0)
+        self.declare_parameter("endcap_n_polar", 3)
+        self.declare_parameter("endcap_include_start", True)
+        self.declare_parameter("endcap_include_end", True)
+        self.declare_parameter("endcap_row_major", False)
 
         self.declare_parameter("run_reconstruction", False)
         self.declare_parameter("reconstruct_device", "CPU:0")
@@ -288,7 +298,69 @@ class ScanSequenceNode(Node):
                 **common,
             )
 
-        raise ValueError("scan_type must be one of: grid_sweep, fibonacci, half_cylinder")
+        if scan_type in (
+            "half_cylinder_side_caps",
+            "half-cylinder-side-caps",
+            "half_cylinder_caps",
+            "half-cylinder-caps",
+            "side_caps",
+        ):
+            half_orientation_mode = str(self.get_parameter("half_orientation_mode").value).strip() or "look_at"
+            half_orientation_pose = None
+            if half_orientation_mode.lower() in (
+                "fixed",
+                "current",
+                "current_eef",
+                "look_at_current_roll",
+                "look_at_keep_roll",
+                "look_at_min_roll",
+            ):
+                half_orientation_pose = self._current_eef_pose(frame_id)
+            if not bool(self.get_parameter("half_use_line_axis").value):
+                raise ValueError("half_cylinder_side_caps requires half_use_line_axis=true")
+            endcap_radius = float(self.get_parameter("endcap_radius").value)
+            endcap_n_angle = int(self.get_parameter("endcap_n_angle").value)
+            return self.session.run_half_cylinder_side_caps_scan(
+                capture_folder=capture_folder,
+                axis_start_xyz=(
+                    float(self.get_parameter("half_axis_start_x").value),
+                    float(self.get_parameter("half_axis_start_y").value),
+                    float(self.get_parameter("half_axis_start_z").value),
+                ),
+                axis_end_xyz=(
+                    float(self.get_parameter("half_axis_end_x").value),
+                    float(self.get_parameter("half_axis_end_y").value),
+                    float(self.get_parameter("half_axis_end_z").value),
+                ),
+                radius=float(self.get_parameter("half_radius").value),
+                angle_min_deg=float(self.get_parameter("half_angle_min_deg").value),
+                angle_max_deg=float(self.get_parameter("half_angle_max_deg").value),
+                n_angle=int(self.get_parameter("half_n_angle").value),
+                n_axis=int(self.get_parameter("half_n_axis").value),
+                frame_id=frame_id,
+                row_major=bool(self.get_parameter("half_row_major").value),
+                orientation_mode=half_orientation_mode,
+                orientation_pose=half_orientation_pose,
+                arc_center_direction=(
+                    float(self.get_parameter("half_arc_center_dx").value),
+                    float(self.get_parameter("half_arc_center_dy").value),
+                    float(self.get_parameter("half_arc_center_dz").value),
+                ),
+                roll_deg=float(self.get_parameter("half_roll_deg").value),
+                endcap_radius=None if endcap_radius <= 0.0 else endcap_radius,
+                endcap_angle_min_deg=float(self.get_parameter("endcap_angle_min_deg").value),
+                endcap_angle_max_deg=float(self.get_parameter("endcap_angle_max_deg").value),
+                endcap_n_angle=None if endcap_n_angle <= 0 else endcap_n_angle,
+                endcap_polar_min_deg=float(self.get_parameter("endcap_polar_min_deg").value),
+                endcap_polar_max_deg=float(self.get_parameter("endcap_polar_max_deg").value),
+                endcap_n_polar=int(self.get_parameter("endcap_n_polar").value),
+                endcap_include_start=bool(self.get_parameter("endcap_include_start").value),
+                endcap_include_end=bool(self.get_parameter("endcap_include_end").value),
+                endcap_row_major=bool(self.get_parameter("endcap_row_major").value),
+                **common,
+            )
+
+        raise ValueError("scan_type must be one of: grid_sweep, fibonacci, half_cylinder, half_cylinder_side_caps")
 
     def _target_with_current_eef_orientation(self, target, frame_id: str):
         tf_pose = self._current_eef_pose(frame_id)

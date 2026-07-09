@@ -13,7 +13,7 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
 
-from .scan_sequences import fibonacci, grid_sweep, half_cylinder
+from .scan_sequences import fibonacci, grid_sweep, half_cylinder, half_cylinder_side_caps
 
 
 class ScanSession(Session):
@@ -432,6 +432,107 @@ class ScanSession(Session):
             n_axis=n_axis,
             arc_center_direction=arc_center_direction,
             roll_deg=float(roll_deg),
+        )
+        return self.run_scan_targets(targets=targets, capture_folder=capture_folder, **kwargs)
+
+    @staticmethod
+    def build_half_cylinder_side_caps_targets(
+        *,
+        axis_start_xyz: Sequence[float],
+        axis_end_xyz: Sequence[float],
+        radius: float,
+        angle_min_deg: float,
+        angle_max_deg: float,
+        n_angle: int,
+        n_axis: int,
+        frame_id: str = "world",
+        row_major: bool = False,
+        orientation_mode: str = "look_at",
+        orientation_pose: Optional[PoseStamped] = None,
+        arc_center_direction: Sequence[float] = (0.0, 0.0, 1.0),
+        roll_deg: float = 0.0,
+        endcap_radius: Optional[float] = None,
+        endcap_angle_min_deg: Optional[float] = None,
+        endcap_angle_max_deg: Optional[float] = None,
+        endcap_n_angle: Optional[int] = None,
+        endcap_polar_min_deg: float = 15.0,
+        endcap_polar_max_deg: float = 75.0,
+        endcap_n_polar: int = 3,
+        endcap_include_start: bool = True,
+        endcap_include_end: bool = True,
+        endcap_row_major: bool = False,
+    ) -> list[PoseStamped]:
+        axis_start = _coerce_xyz_triplet(axis_start_xyz, fallback=(0.0, 0.0, 0.0))
+        axis_end = _coerce_xyz_triplet(axis_end_xyz, fallback=(0.0, 0.0, 0.0))
+        arc_center = _coerce_xyz_triplet(arc_center_direction, fallback=(0.0, 0.0, 1.0))
+        return half_cylinder_side_caps.build_targets(
+            axis_start_xyz=axis_start,
+            axis_end_xyz=axis_end,
+            radius=float(radius),
+            angle_min_deg=float(angle_min_deg),
+            angle_max_deg=float(angle_max_deg),
+            n_angle=int(n_angle),
+            n_axis=int(n_axis),
+            frame_id=str(frame_id or "world"),
+            row_major=bool(row_major),
+            orientation_mode=str(orientation_mode or "look_at"),
+            orientation_pose=orientation_pose,
+            arc_center_direction=arc_center,
+            roll_deg=float(roll_deg),
+            endcap_radius=endcap_radius,
+            endcap_angle_min_deg=endcap_angle_min_deg,
+            endcap_angle_max_deg=endcap_angle_max_deg,
+            endcap_n_angle=endcap_n_angle,
+            endcap_polar_min_deg=float(endcap_polar_min_deg),
+            endcap_polar_max_deg=float(endcap_polar_max_deg),
+            endcap_n_polar=int(endcap_n_polar),
+            endcap_include_start=bool(endcap_include_start),
+            endcap_include_end=bool(endcap_include_end),
+            endcap_row_major=bool(endcap_row_major),
+        )
+
+    def run_half_cylinder_side_caps_scan(
+        self,
+        *,
+        capture_folder: Optional[str],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        do_home = bool(kwargs.pop("do_home", False))
+        timeout_s = kwargs.get("timeout_s", None)
+        if do_home:
+            self.run_sync(self.motion.home(enqueue=False), timeout_s=timeout_s)
+        orientation_mode = str(kwargs.pop("orientation_mode", "look_at") or "look_at")
+        orientation_pose = kwargs.pop("orientation_pose", None)
+        axis_start_xyz = kwargs.pop("axis_start_xyz", None)
+        axis_end_xyz = kwargs.pop("axis_end_xyz", None)
+        if axis_start_xyz is None or axis_end_xyz is None:
+            raise ValueError("half_cylinder_side_caps requires axis_start_xyz and axis_end_xyz")
+        arc_center_direction = kwargs.pop("arc_center_direction", (0.0, 0.0, 1.0))
+        roll_deg = kwargs.pop("roll_deg", 0.0)
+        targets = self.build_half_cylinder_side_caps_targets(
+            axis_start_xyz=axis_start_xyz,
+            axis_end_xyz=axis_end_xyz,
+            radius=kwargs.pop("radius"),
+            angle_min_deg=kwargs.pop("angle_min_deg", -90.0),
+            angle_max_deg=kwargs.pop("angle_max_deg", 90.0),
+            n_angle=kwargs.pop("n_angle", 7),
+            n_axis=kwargs.pop("n_axis", 3),
+            frame_id=kwargs.pop("frame_id", "world"),
+            row_major=kwargs.pop("row_major", False),
+            orientation_mode=orientation_mode,
+            orientation_pose=orientation_pose,
+            arc_center_direction=arc_center_direction,
+            roll_deg=float(roll_deg),
+            endcap_radius=kwargs.pop("endcap_radius", None),
+            endcap_angle_min_deg=kwargs.pop("endcap_angle_min_deg", None),
+            endcap_angle_max_deg=kwargs.pop("endcap_angle_max_deg", None),
+            endcap_n_angle=kwargs.pop("endcap_n_angle", None),
+            endcap_polar_min_deg=kwargs.pop("endcap_polar_min_deg", 15.0),
+            endcap_polar_max_deg=kwargs.pop("endcap_polar_max_deg", 75.0),
+            endcap_n_polar=kwargs.pop("endcap_n_polar", 3),
+            endcap_include_start=kwargs.pop("endcap_include_start", True),
+            endcap_include_end=kwargs.pop("endcap_include_end", True),
+            endcap_row_major=kwargs.pop("endcap_row_major", False),
         )
         return self.run_scan_targets(targets=targets, capture_folder=capture_folder, **kwargs)
 

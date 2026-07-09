@@ -3,12 +3,13 @@ scan_sequence:
     # Select one:
     #   grid_sweep
     #   half_cylinder
-    scan_type: half_cylinder
+    #   half_cylinder_side_caps
+    scan_type: half_cylinder_side_caps
 
     # Capture folder for this run. Keep this aligned with scan_folder when
     # reconstruction is enabled.
-    capture_folder: "@session/scan_test_half_cylinder"
-    scan_folder: scan_test_half_cylinder
+    capture_folder: "@session/scan_test_half_cylinder_side_caps"
+    scan_folder: scan_test_half_cylinder_side_caps
 
     # Shared motion/capture settings.
     frame_id: world
@@ -65,7 +66,8 @@ scan_sequence:
     grid_row_major: false
     grid_use_tf_orientation: true
 
-    # Half-cylinder line-axis parameters. Active when scan_type=half_cylinder.
+    # Half-cylinder line-axis parameters. Active when scan_type=half_cylinder
+    # or scan_type=half_cylinder_side_caps.
     # The axis line is the feature/edge/centerline you want to scan around.
     # The middle of the arc is controlled by half_arc_center_d*. With the
     # default (0,0,1), the center arc viewpoint is above the line and looks down.
@@ -74,23 +76,40 @@ scan_sequence:
     # from the current EEF roll.
     # half_roll_deg rotates around camera blue/Z without changing aim direction.
     half_use_line_axis: true
-    half_axis_start_x: 0.15
+    half_axis_start_x: 0.10
     half_axis_start_y: 0.85
-    half_axis_start_z: -0.20
-    half_axis_end_x: -0.45
+    half_axis_start_z: 0.05
+    half_axis_end_x: -0.10
     half_axis_end_y: 0.85
-    half_axis_end_z: -0.20
+    half_axis_end_z: 0.05
     half_radius: 0.60
     half_angle_min_deg: -35.0
     half_angle_max_deg: 35.0
-    half_n_angle: 5
-    half_n_axis: 7
+    half_n_angle: 3
+    half_n_axis: 1
     half_arc_center_dx: 0.0
     half_arc_center_dy: 0.0
     half_arc_center_dz: 1.0
     half_orientation_mode: look_at
     half_roll_deg: 0.0
     half_row_major: false
+
+    # Side-cap parameters. Active when scan_type=half_cylinder_side_caps.
+    # The caps add hemispherical sectors outside both ends of the line axis to
+    # scan the side/end faces that the line-axis half-cylinder misses.
+    # endcap_radius <= 0 means reuse half_radius.
+    # polar=0 is the cylinder edge; polar=90 looks from straight outside the
+    # line endpoint. Keep max below 90 if the robot starts twisting near the end.
+    endcap_radius: 0.0
+    endcap_angle_min_deg: -35.0
+    endcap_angle_max_deg: 35.0
+    endcap_n_angle: 3
+    endcap_polar_min_deg: 20.0
+    endcap_polar_max_deg: 60.0
+    endcap_n_polar: 3
+    endcap_include_start: true
+    endcap_include_end: true
+    endcap_row_major: false
 
     # Legacy center-based half-cylinder parameters. These are ignored when
     # half_use_line_axis=true, but kept here so the file exposes all knobs.
