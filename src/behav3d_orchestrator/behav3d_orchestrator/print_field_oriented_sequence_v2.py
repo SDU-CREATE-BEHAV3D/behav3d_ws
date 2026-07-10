@@ -6,6 +6,7 @@ ros2 run behav3d_orchestrator print_field_oriented_sequence_v2
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from pathlib import Path
@@ -56,6 +57,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
         runtime_config_path = self._default_runtime_config_path()
         cfg = self._load_runtime_config(runtime_config_path)
+        run_session_path = self._latest_capture_session_path()
+        run_session_arg = str(run_session_path)
+        first_print_cycle_number = self._first_available_cycle_number(run_session_path)
 
         home_before_scan = self._cfg_bool(cfg, "home_before_scan")
         home_after = self._cfg_bool(cfg, "home_after")
@@ -131,13 +135,14 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
         run_field_init = self._cfg_bool(cfg, "run_field_init")
         field_use_latest = self._cfg_bool(cfg, "field_use_latest")
-        field_session_path = self._cfg_str(cfg, "field_session_path")
+        field_session_path = self._resolve_run_session_token(self._cfg_str(cfg, "field_session_path"), run_session_path)
         field_scan_mesh_path = self._cfg_str_allow_empty(cfg, "field_scan_mesh_path")
         field_mesh_path = self._cfg_str(cfg, "field_mesh_path")
-        field_state_output_dir = self._cfg_str(cfg, "field_state_output_dir")
+        field_state_output_dir = self._resolve_run_session_token(self._cfg_str(cfg, "field_state_output_dir"), run_session_path)
         field_request_timeout_s = self._cfg_float(cfg, "field_request_timeout_s")
         fields_node_name = self._cfg_str(cfg, "fields_node_name")
         field_position_param_timeout_s = self._cfg_float(cfg, "field_position_param_timeout_s")
+        field_seed_level = self._cfg_float(cfg, "field_seed_level")
         field_require_full_hit = self._cfg_bool(cfg, "field_require_full_hit")
         field_base_z_offset = self._cfg_float(cfg, "field_base_z_offset")
         field_use_position_target = self._cfg_bool(cfg, "field_use_position_target")
@@ -150,10 +155,10 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
         run_generate_candidates = self._cfg_bool(cfg, "run_generate_candidates")
         candidate_use_latest = self._cfg_bool(cfg, "candidate_use_latest")
-        candidate_session_path = self._cfg_str(cfg, "candidate_session_path")
+        candidate_session_path = self._resolve_run_session_token(self._cfg_str(cfg, "candidate_session_path"), run_session_path)
         candidate_field_state_path = self._cfg_str_allow_empty(cfg, "candidate_field_state_path")
         candidate_scan_mesh_path = self._cfg_str_allow_empty(cfg, "candidate_scan_mesh_path")
-        candidate_output_dir = self._cfg_str(cfg, "candidate_output_dir")
+        candidate_output_dir = self._resolve_run_session_token(self._cfg_str(cfg, "candidate_output_dir"), run_session_path)
         candidate_request_timeout_s = self._cfg_float(cfg, "candidate_request_timeout_s")
         candidate_mode = self._cfg_str(cfg, "candidate_mode")
         candidate_beads_per_step = self._cfg_int(cfg, "candidate_beads_per_step")
@@ -216,6 +221,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"run_generate_candidates={run_generate_candidates}, max_cycles={max_cycles}, "
             f"candidate_mode={candidate_mode}, "
             f"field_position_target_enabled={field_use_position_target}, "
+            f"field_seed_level={field_seed_level:.4f}, "
             f"field_require_full_hit={field_require_full_hit}, "
             f"field_base_z_offset={field_base_z_offset:.4f}, "
             f"field_position_target=({field_position_target_x:.3f},{field_position_target_y:.3f}), "
@@ -230,6 +236,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"clamp_to_cone={oriented_clamp_to_cone}, cone_max_tilt_deg={oriented_cone_max_tilt_deg:.1f}, "
             f"skip_bootstrap_scan_and_init={skip_bootstrap_scan_and_init}, "
             f"scan_before_generate_first_cycle={scan_before_generate_first_cycle}, "
+            f"run_session='{run_session_arg}', first_cycle={first_print_cycle_number:04d}, "
             f"runtime_config_path='{runtime_config_path}'"
         )
 
@@ -322,7 +329,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     mesh_res = self.session.run_sync(
                         self.session.camera.update_world_mesh(
                             use_latest=False,
-                            session_path=candidate_session_path or field_session_path or "@session",
+                            session_path=candidate_session_path or field_session_path or run_session_arg,
                             mesh_path=mesh_path,
                             ply_path="",
                             prefer="mesh",
@@ -353,8 +360,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 )
 
                 if scan_before_generate_first_cycle:
-                    cycle_tag = "cycle_0001"
-                    cycle_root = f"@session/field_loop/{cycle_tag}"
+                    cycle_tag = f"cycle_{first_print_cycle_number:04d}"
+                    cycle_root = self._run_session_child(run_session_path, f"field_loop/{cycle_tag}")
                     cycle_scan_capture_folder = f"{cycle_root}/scan"
                     cycle_scan_folder = f"field_loop/{cycle_tag}/scan"
                     cycle_scan_z_off = float(grid_z_off)
@@ -407,6 +414,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
                     if run_reconstruction:
                         mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
+                            session_path=run_session_arg,
                             scan_folder=cycle_scan_folder,
                             reconstruct_device=reconstruct_device,
                             reconstruct_request_timeout_s=reconstruct_request_timeout_s,
@@ -427,7 +435,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         )
             else:
                 bootstrap_tag = "cycle_0000"
-                bootstrap_root = f"@session/field_loop/{bootstrap_tag}"
+                bootstrap_root = self._run_session_child(run_session_path, f"field_loop/{bootstrap_tag}")
                 bootstrap_scan_capture_folder = f"{bootstrap_root}/scan"
                 bootstrap_scan_folder = f"field_loop/{bootstrap_tag}/scan"
                 bootstrap_field_state_output_dir = f"{bootstrap_root}/field_init"
@@ -468,6 +476,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
                 if run_reconstruction:
                     mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
+                        session_path=run_session_arg,
                         scan_folder=bootstrap_scan_folder,
                         reconstruct_device=reconstruct_device,
                         reconstruct_request_timeout_s=reconstruct_request_timeout_s,
@@ -490,6 +499,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 if run_field_init:
                     self._set_fields_node_positioning_params(
                         fields_node_name=fields_node_name,
+                        seed_level=field_seed_level,
                         require_full_hit=field_require_full_hit,
                         base_z_offset=field_base_z_offset,
                         use_position_target=field_use_position_target,
@@ -550,7 +560,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         field_vis_res = self.session.run_sync(
                             self.session.camera.update_world_mesh(
                                 use_latest=False,
-                                session_path=field_session_path or "@session",
+                                session_path=field_session_path or run_session_arg,
                                 mesh_path="",
                                 ply_path=debug_field_ply_path,
                                 prefer="ply",
@@ -627,7 +637,10 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 enable_scan = self._cfg_bool(cfg, "enable_scan")
                 scan_type = self._cfg_str(cfg, "scan_type")
                 candidate_use_latest = self._cfg_bool(cfg, "candidate_use_latest")
-                candidate_session_path = self._cfg_str(cfg, "candidate_session_path")
+                candidate_session_path = self._resolve_run_session_token(
+                    self._cfg_str(cfg, "candidate_session_path"),
+                    run_session_path,
+                )
                 candidate_field_state_path = self._cfg_str_allow_empty(cfg, "candidate_field_state_path")
                 candidate_scan_mesh_path = self._cfg_str_allow_empty(cfg, "candidate_scan_mesh_path")
                 candidate_request_timeout_s = self._cfg_float(cfg, "candidate_request_timeout_s")
@@ -702,8 +715,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     log.info(f"[print_field_oriented] Reached max_cycles={max_cycles}.")
                     break
 
-                cycle_tag = f"cycle_{print_cycle_index + 1:04d}"
-                cycle_root = f"@session/field_loop/{cycle_tag}"
+                cycle_number = first_print_cycle_number + print_cycle_index
+                cycle_tag = f"cycle_{cycle_number:04d}"
+                cycle_root = self._run_session_child(run_session_path, f"field_loop/{cycle_tag}")
                 cycle_candidate_output_dir = f"{cycle_root}/candidates"
 
                 scan_mesh_for_candidates = candidate_scan_mesh_path or field_scan_mesh_path or mesh_path
@@ -775,7 +789,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         cycle_vis_res = self.session.run_sync(
                             self.session.camera.preview_field_ply(
                                 use_latest=False,
-                                session_path=candidate_session_path or "@session",
+                                session_path=candidate_session_path or run_session_arg,
                                 field_ply_path=cycle_field_ply,
                                 restore_mesh_path=(
                                     scan_mesh_for_candidates if candidate_restore_scan_mesh_after_field_ply else ""
@@ -933,7 +947,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         self.session.util.input(
                             prompt=(
                                 f"[print_field_oriented:{cycle_tag}] Press ENTER for next cycle "
-                                f"(cycle_{print_cycle_index + 1:04d}) or type 'q' + ENTER to stop."
+                                f"(cycle_{first_print_cycle_number + print_cycle_index:04d}) "
+                                "or type 'q' + ENTER to stop."
                             ),
                             enqueue=False,
                         ),
@@ -944,8 +959,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         log.info("[print_field_oriented] Stopped by user before next cycle.")
                         break
 
-                next_cycle_tag = f"cycle_{print_cycle_index + 1:04d}"
-                next_cycle_root = f"@session/field_loop/{next_cycle_tag}"
+                next_cycle_number = first_print_cycle_number + print_cycle_index
+                next_cycle_tag = f"cycle_{next_cycle_number:04d}"
+                next_cycle_root = self._run_session_child(run_session_path, f"field_loop/{next_cycle_tag}")
                 next_cycle_scan_capture_folder = f"{next_cycle_root}/scan"
                 next_cycle_scan_folder = f"field_loop/{next_cycle_tag}/scan"
 
@@ -1011,6 +1027,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
                 if enable_scan and run_reconstruction:
                     mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
+                        session_path=run_session_arg,
                         scan_folder=next_cycle_scan_folder,
                         reconstruct_device=reconstruct_device,
                         reconstruct_request_timeout_s=reconstruct_request_timeout_s,
@@ -1263,6 +1280,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
     def _run_reconstruction_for_scan(
         self,
         *,
+        session_path: str,
         scan_folder: str,
         reconstruct_device: str,
         reconstruct_request_timeout_s: float,
@@ -1283,7 +1301,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
     ) -> tuple[str, str]:
         rec = self.scan_session.run_reconstruction_for_scan(
             scan_folder=scan_folder,
-            session_path="@session",
+            session_path=session_path,
             reconstruct_device=reconstruct_device,
             reconstruct_request_timeout_s=reconstruct_request_timeout_s,
             wait_reconstruction_outputs=wait_reconstruction_outputs,
@@ -1312,6 +1330,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         self,
         *,
         fields_node_name: str,
+        seed_level: float,
         require_full_hit: bool,
         base_z_offset: float,
         use_position_target: bool,
@@ -1334,6 +1353,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             raise RuntimeError(f"Parameter service for {node_name} not available.")
 
         params = [
+            Parameter("seed_level", value=float(seed_level)),
             Parameter("require_full_hit", value=bool(require_full_hit)),
             Parameter("base_z_offset", value=float(base_z_offset)),
             Parameter("use_position_target", value=bool(use_position_target)),
@@ -1366,6 +1386,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         self.get_logger().info(
             "[print_field_oriented] Field positioning params set: "
             f"node={node_name} use_target={bool(use_position_target)} "
+            f"seed_level={float(seed_level):.6f} "
             f"require_full_hit={bool(require_full_hit)} "
             f"base_z_offset={float(base_z_offset):.6f} "
             f"target=({float(position_target_x):.6f}, {float(position_target_y):.6f})"
@@ -1410,6 +1431,62 @@ class PrintFieldOrientedSequenceV2Node(Node):
     @staticmethod
     def _default_runtime_config_path() -> str:
         return SRC_CONFIG_PATH
+
+    @staticmethod
+    def _captures_root() -> Path:
+        env_root = os.environ.get("BEHAV3D_CAPTURES_ROOT", "").strip()
+        if env_root:
+            return Path(env_root).expanduser().resolve()
+        return (Path.home() / "behav3d_ws" / "captures").resolve()
+
+    def _latest_capture_session_path(self) -> Path:
+        captures_root = self._captures_root()
+        captures_root.mkdir(parents=True, exist_ok=True)
+        dirs = [p for p in captures_root.iterdir() if p.is_dir()]
+        if not dirs:
+            return captures_root
+
+        def _is_timestamp_dir(path: Path) -> bool:
+            name = path.name
+            return (
+                len(name) == 13
+                and name[6] == "_"
+                and name[:6].isdigit()
+                and name[7:].isdigit()
+            )
+
+        timestamp_dirs = [p for p in dirs if _is_timestamp_dir(p)]
+        return max(timestamp_dirs or dirs, key=lambda p: p.name).resolve()
+
+    @staticmethod
+    def _resolve_run_session_token(value: str, run_session_path: Path) -> str:
+        text = str(value or "").strip()
+        if text == "@session":
+            return str(run_session_path)
+        if text.startswith("@session/"):
+            return str((run_session_path / text[len("@session/") :]).resolve())
+        return text
+
+    @staticmethod
+    def _run_session_child(run_session_path: Path, relative_path: str) -> str:
+        return str((run_session_path / str(relative_path).lstrip("/")).resolve())
+
+    @staticmethod
+    def _first_available_cycle_number(run_session_path: Path) -> int:
+        field_loop = run_session_path / "field_loop"
+        if not field_loop.is_dir():
+            return 1
+
+        used: list[int] = []
+        for path in field_loop.iterdir():
+            if not path.is_dir() or not path.name.startswith("cycle_"):
+                continue
+            suffix = path.name[len("cycle_") :]
+            if suffix.isdigit():
+                used.append(int(suffix))
+        if not used:
+            return 1
+        return max(used) + 1
 
     def _extract_runtime_param_map(self, raw: Any) -> Dict[str, Any]:
         if not isinstance(raw, dict):
