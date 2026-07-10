@@ -24,9 +24,8 @@ Loop flow:
 6. Extract `phi=0` contour and geodesic offset contour.
 7. Generate candidates with the selected mode.
 8. Write the accepted step as `segments:` target YAML.
-9. Read that same segment YAML back and add each segment `end` target to a DDS
-   `Simulator` as a point deposit, using the YAML target Z direction as the DDS
-   deposit normal.
+9. Read that same segment YAML back and add DDS deposits from the segment
+   targets. `dot` mode uses each `end`; `line` mode sweeps `start -> end`.
 10. Extract the DDS implicit surface as a mesh proxy.
 11. Merge that proxy with the original scan for the next scalar iteration.
 
@@ -55,6 +54,9 @@ Important behavior:
 - The endpoint-spacing rule removes later targets whose `end` point is closer
   than `--bead-separation-mm` to an earlier kept `end`. Disable it with
   `--disable-endpoint-spacing-rule`.
+- `--bead-separation-mm` controls candidate spacing and endpoint-spacing
+  pruning. `--bead-width-mm` is required and controls DDS
+  `BeadProfile.width`.
 - The magenta geodesic offset line is a diagnostic/reference line. In
   `gradient_walk`, candidates are selected from the `phi=0` contour and walked
   over the scalar field, so the magenta line is not the print path.
@@ -75,7 +77,7 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
   --field-subdivide-iter 1 --field-scale 0.001 \
   --candidate-mode gradient_walk \
   --beads-per-step 7 --bead-separation-mm 16 \
-  --bead-height-mm 12 \
+  --bead-width-mm 18 --bead-height-mm 12 \
   --positioning-attempts 3 \
   --position-target-x 0.0 --position-target-y -0.75 \
   --search-step-x 0.01 --search-step-y 0.01 \
@@ -91,6 +93,7 @@ Workbench controls:
 - DDS native sidebar controls still manage DDS representation.
 - The `BEHAV3D Scalar` overlay checkboxes toggle scalar debug layers:
   - scalar field points,
+  - heat seed points,
   - scan wire mesh,
   - `phi=0` contour,
   - geodesic offset line,

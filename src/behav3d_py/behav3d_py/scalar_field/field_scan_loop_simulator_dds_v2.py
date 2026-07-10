@@ -72,7 +72,11 @@ from pathlib import Path
 import numpy as np
 import open3d as o3d
 
-from lib_scalar.compute_heat_field import compute_heat_field
+from lib_scalar.compute_heat_field import (
+    choose_seed_vertex,
+    choose_seed_vertices_below_level,
+    compute_heat_field,
+)
 from lib_scalar.compute_phi_mask import evaluate_fixed_pose, make_scan_scene
 from lib_scalar.geometry import load_triangle_mesh_arrays, load_triangle_mesh_legacy
 from lib_scalar.loop_simulation import (
@@ -107,6 +111,7 @@ TARGET_POSITION_SCALE = 1000.0
 
 SCALAR_OVERLAY_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("field", "Scalar Field", ("field_heat_masked",)),
+    ("seeds", "Heat Seeds", ("heat_seed_points",)),
     ("scan", "Scan Mesh", ("scan_wire",)),
     ("phi", "Phi Contour", ("phi_contour",)),
     ("offset", "Geodesic Offset", ("offset_contour",)),
@@ -142,6 +147,22 @@ def subdivide_field_mesh_loop(
     v_sub = np.asarray(mesh_sub.vertices, dtype=np.float64)
     f_sub = np.asarray(mesh_sub.triangles, dtype=np.int32)
     return v_sub, f_sub
+
+
+def resolve_heat_seed_indices(
+    vertices: np.ndarray,
+    *,
+    seed: int | None,
+    seed_level: float | None,
+) -> np.ndarray:
+    """Return heat-method seed vertex indices using compute_heat_field rules."""
+    if seed_level is not None:
+        return choose_seed_vertices_below_level(vertices, float(seed_level))
+
+    seed_index = choose_seed_vertex(vertices) if seed is None else int(seed)
+    if seed_index < 0 or seed_index >= int(vertices.shape[0]):
+        raise ValueError(f"Seed index out of range: {seed_index} (num vertices={vertices.shape[0]})")
+    return np.asarray([seed_index], dtype=np.int64)
 
 
 def wait_next_terminal(step_index: int) -> bool:
@@ -536,6 +557,7 @@ def show_step_window(
     field_vertices_world: np.ndarray,
     heat_colors: np.ndarray,
     viable_mask: np.ndarray,
+    seed_points: np.ndarray,
     scan_mesh: o3d.geometry.TriangleMesh,
     contour_points: np.ndarray,
     contour_lines: np.ndarray,
@@ -614,6 +636,7 @@ def show_step_window(
     overlay.clear()
     for name in (
         "field_heat_masked",
+        "heat_seed_points",
         "scan_wire",
         "phi_contour",
         "offset_contour",
@@ -635,6 +658,20 @@ def show_step_window(
         name="field_heat_masked",
         point_size=3.0,
     )
+
+    if seed_points.shape[0] > 0:
+        seed_colors = np.tile(
+            np.array([0.2, 0.55, 1.0], dtype=np.float64),
+            (seed_points.shape[0], 1),
+        )
+        add_colored_point_cloud(
+            overlay,
+            seed_points,
+            seed_colors,
+            name="heat_seed_points",
+            point_size=7.0,
+            render_as_spheres=True,
+        )
 
     scan_vertices = np.asarray(scan_mesh.vertices, dtype=np.float64)
     scan_faces = np.asarray(scan_mesh.triangles, dtype=np.int64)
@@ -821,6 +858,7 @@ def run(
     offset_geodesic_delta_mm: float,
     beads_per_step: int,
     bead_separation_mm: float,
+    bead_width_mm: float,
     bead_height_mm: float,
     walk_distance_mm: float,
     walk_step_mm: float,
@@ -857,6 +895,11 @@ def run(
     base_vertices = field_mesh.vertices
     base_faces = field_mesh.faces
     field_vertices, field_faces = subdivide_field_mesh_loop(base_vertices, base_faces, int(field_subdivide_iter))
+    heat_seed_indices = resolve_heat_seed_indices(
+        field_vertices,
+        seed=seed,
+        seed_level=seed_level,
+    )
     heat = compute_heat_field(
         vertices=field_vertices,
         faces=field_faces,
@@ -878,8 +921,11 @@ def run(
     dds_simulator: Simulator | None = None
     dds_result = None
     viewer_state: dict[str, object] = {}
+    dds_bead_width_mm = float(bead_width_mm)
+    if dds_bead_width_mm <= 0.0:
+        raise ValueError(f"bead_width_mm must be > 0, got {bead_width_mm}")
     dds_profile = BeadProfile(
-        width=1e-3 * float(bead_separation_mm + 2.0),
+        width=1e-3 * dds_bead_width_mm,
         height=1e-3 * float(bead_height_mm),
     )
     dds_voxel_size_m = 1e-3 * float(dds_voxel_size_mm)
@@ -908,8 +954,9 @@ def run(
         f"dds_deposit_mode={dds_deposit_mode_norm} "
         f"dds_line_fraction={dds_line_fraction_value:.3f} "
         f"legacy_bead_shape_arg={bead_shape} "
+        f"bead_separation_mm={float(bead_separation_mm):.3f} "
         f"bead_height_mm={float(bead_height_mm):.3f} "
-        f"dds_bead_width_mm={float(bead_separation_mm + 2.0):.3f} "
+        f"dds_bead_width_mm={dds_bead_width_mm:.3f} "
         f"dds_voxel_size_mm={float(dds_voxel_size_mm):.3f} "
         f"dds_domain_source={dds_domain_source} "
         f"position_target_xy={position_target_xy} "
@@ -1051,7 +1098,7 @@ def run(
                     dds_padding_m,
                     1e-3 * float(offset_distance_mm),
                     1e-3 * float(bead_height_mm),
-                    1e-3 * float(bead_separation_mm + 2.0),
+                    1e-3 * dds_bead_width_mm,
                 ),
             )
             dds_simulator = Simulator(dds_domain)
@@ -1075,6 +1122,7 @@ def run(
                 field_vertices_world=pose.field_vertices_world,
                 heat_colors=heat_colors,
                 viable_mask=pose.viable,
+                seed_points=pose.field_vertices_world[heat_seed_indices],
                 scan_mesh=scan_mesh_current,
                 contour_points=contour.contour_points,
                 contour_lines=contour.contour_lines,
@@ -1231,6 +1279,12 @@ def main() -> None:
     parser.add_argument("--offset-geodesic-delta-mm", type=float, default=0.6)
     parser.add_argument("--beads-per-step", type=int, default=7)
     parser.add_argument("--bead-separation-mm", type=float, default=16.0)
+    parser.add_argument(
+        "--bead-width-mm",
+        type=float,
+        required=True,
+        help="DDS BeadProfile width in mm. Required; independent from --bead-separation-mm.",
+    )
     parser.add_argument("--bead-height-mm", type=float, default=12.0)
     parser.add_argument("--walk-distance-mm", type=float, default=12.0)
     parser.add_argument("--walk-step-mm", type=float, default=1.0)
@@ -1380,6 +1434,7 @@ def main() -> None:
         offset_geodesic_delta_mm=args.offset_geodesic_delta_mm,
         beads_per_step=args.beads_per_step,
         bead_separation_mm=args.bead_separation_mm,
+        bead_width_mm=args.bead_width_mm,
         bead_height_mm=args.bead_height_mm,
         walk_distance_mm=args.walk_distance_mm,
         walk_step_mm=args.walk_step_mm,
