@@ -11,6 +11,7 @@ print_field_oriented_sequence:
 
     # Initial table grid sweep
     frame_id: world
+    # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
     scan_type: grid_sweep
     scan_eef_link: femto_color_optical_calib
     scan_motion: LIN
@@ -41,7 +42,8 @@ print_field_oriented_sequence:
     scan_clear_markers_before: true
     scan_clear_markers_after: true
 
-    # Half-cylinder scan parameters. Active when scan_type=half_cylinder.
+    # Half-cylinder scan parameters. Active when scan_type=half_cylinder
+    # or scan_type=half_cylinder_side_caps.
     half_use_line_axis: true
     half_axis_start_x: 0.15
     half_axis_start_y: 0.85
@@ -65,6 +67,19 @@ print_field_oriented_sequence:
     half_center_z: 0.90
     half_height: 0.0
     half_n_height: 3
+
+    # Side-cap parameters. Active when scan_type=half_cylinder_side_caps.
+    # endcap_radius <= 0 means reuse half_radius.
+    endcap_radius: 0.0
+    endcap_angle_min_deg: -35.0
+    endcap_angle_max_deg: 35.0
+    endcap_n_angle: 3
+    endcap_polar_min_deg: 20.0
+    endcap_polar_max_deg: 60.0
+    endcap_n_polar: 3
+    endcap_include_start: true
+    endcap_include_end: true
+    endcap_row_major: false
 
     # Cycle grid sweep. X/Y and base center are fixed from config.
     # After a print cycle, scan height is adaptive:
