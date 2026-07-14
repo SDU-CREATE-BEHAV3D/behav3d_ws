@@ -63,6 +63,7 @@ Implementation: `src/behav3d_commands/behav3d_commands/motion_commands/motion_co
 
 Underlying ROS interfaces:
 - Services: `/behav3d/plan_pilz_ptp`, `/behav3d/plan_pilz_lin` (`PlanPilzPtp`, `PlanPilzLin`)
+- Service: `/behav3d/plan_pilz_sequence` (`PlanPilzSequence`) for Pilz LIN sequences
 - Action: `/scaled_joint_trajectory_controller/follow_joint_trajectory` (`FollowJointTrajectory`)
 
 Default settings:
@@ -78,8 +79,10 @@ Motion commands and parameters:
 | --- | --- | --- | --- |
 | `home()` | Send a fixed home joint trajectory. | `duration_s` | Uses the controller action directly. |
 | `plan()` | Plan a motion and store trajectory. | `pose` or `x,y,z`, `eef`, `vel_scale`, `accel_scale`, `motion` | Uses Pilz PTP/LIN service; `preview_only=True`. |
+| `plan_sequence()` | Plan and store a Pilz LIN sequence. | `poses`, `eef`, `vel_scale`, `accel_scale`, `blend_radius`, `blend_radii`, `frame_id`, `target_tcp_speed_m_s`, `retime_min_dt_s`, `tcp_sample_spacing_m`, `tcp_speed_threshold_m_s` | Uses `/behav3d/plan_pilz_sequence`; optional constant TCP-speed retime. |
 | `exec()` | Execute last planned trajectory. | none | Fails if no plan stored. |
 | `goto()` | Plan and optionally execute in one step. | `pose` or `x,y,z`, `rx,ry,rz`, `eef`, `vel_scale`, `accel_scale`, `exec`, `motion` | Default `exec=True`. |
+| `goto_sequence()` | Plan and optionally execute a Pilz LIN sequence. | same as `plan_sequence`, plus `exec` | Default `exec=True`. |
 | `setPTP()` | Set default mode to PTP. | none | Updates `motion_mode`. |
 | `setLIN()` | Set default mode to LIN. | none | Updates `motion_mode`. |
 | `setEef(name)` | Set default end-effector link. | `name` | Used for subsequent plans. |
@@ -90,6 +93,33 @@ Pose handling rules:
 - If `pose` is a `PoseStamped`, it is used directly.
 - Otherwise `x,y,z` must be provided; `frame_id` defaults to `"world"`.
 - If any of `rx,ry,rz` is provided, they are treated as RPY (rad) and converted to a quaternion; otherwise orientation is identity.
+
+Pilz sequence / TCP retime rules:
+- Pilz sequence planning uses MoveIt's Pilz Industrial Motion Planner through
+  `sequence_move_group`; the bridge sets each item planner to `LIN`.
+- The sequence request accepts poses in `frame_id` and an EEF link, normally
+  `extruder_tcp`.
+- `blend_radius` is in meters. The final sequence item is forced to zero blend
+  radius.
+- If `target_tcp_speed_m_s > 0`, the bridge retimes the Pilz trajectory for
+  approximately constant TCP speed. The retime does not call IK again; it
+  interpolates robot states along the already planned Pilz trajectory.
+- The current retime mode first resamples the TCP path using
+  `tcp_sample_spacing_m` and then assigns timestamps. The effective sample
+  spacing is `max(tcp_sample_spacing_m, target_tcp_speed_m_s * retime_min_dt_s)`.
+- `retime_min_dt_s` is only a minimum timestamp guard for the controller.
+  Prefer tuning `tcp_sample_spacing_m` for path density and smoothness.
+- `tcp_speed_threshold_m_s` is diagnostic only; it counts slow TCP samples in
+  returned metrics and does not reject a trajectory.
+- `behav3d_motion_bridge` clamps requested TCP retime speed with
+  `max_tcp_speed_m_s` (default `0.350`, i.e. `350 mm/s`). Clamp is logged and
+  does not fail planning.
+- If retime fails and bridge parameter `retime_fallback_on_failure=true`, the
+  original Pilz plan is returned with `tcp_speed_retime_fallback=true`.
+- For separate polylines, transition to the first target with a normal
+  `goto(..., motion="LIN")` or `goto(..., motion="PTP")` outside the sequence;
+  do not include long non-print transitions inside a constant-TCP print
+  sequence.
 
 ---
 
@@ -330,6 +360,7 @@ Orchestration entry points in `behav3d_orchestrator`:
   - `ros2 run behav3d_orchestrator depth_bias_capture_sequence`
   - `ros2 run behav3d_orchestrator print_field_sequence`
   - `ros2 run behav3d_orchestrator print_field_centered_sequence`
+  - `ros2 run behav3d_orchestrator polyline_motion_sequence`
 - YAML-specific session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
 - `parse_yaml_targets(...)` supports:
   - `{index: N, xyz: [x, y, z]}`
@@ -342,6 +373,38 @@ Orchestration entry points in `behav3d_orchestrator`:
   - First target uses a safety approach (+0.40 m in Z) before final move.
 - `run_yaml_print_path(...)` behavior:
   - Parse ordered targets, approach above first target, go to first target, turn extruder ON, plan+exec LIN through all remaining targets, turn extruder OFF, clear markers.
+
+Pilz polyline stress/test flow:
+- Entry point: `ros2 run behav3d_orchestrator polyline_motion_sequence`
+- YAML format is grouped polylines:
+  ```yaml
+  polylines:
+    - index: 0
+      planes:
+        - "O(-300.00,460.00,300.00) Z(0.00,0.00,1.00)"
+        - "O(-200.00,500.00,300.00) Z(0.00,0.00,1.00)"
+  ```
+- Plane positions are always interpreted as millimeters and converted to meters.
+  Do not add a `units` field.
+- The node publishes RViz target markers only for the active polyline.
+- `move_to_polyline_start=true` moves to the first target of each polyline with
+  a normal `goto` using `start_motion` (default `LIN`) and no TCP retime; the
+  Pilz sequence is then planned for the remaining points.
+- If a polyline fails to move, plan, or execute, the node logs the skipped
+  `index` and continues with the next polyline.
+- Typical command for the resampled constant-TCP retime:
+  ```bash
+  ros2 run behav3d_orchestrator polyline_motion_sequence --ros-args \
+    -p yaml_path:=/home/lab/behav3d_ws/yaml/pilz_polyline_dummy.yaml \
+    -p target_speed_mm_s:=80.0 \
+    -p retime_constant_tcp_speed:=true \
+    -p retime_min_dt_s:=0.008 \
+    -p tcp_sample_spacing_mm:=2.0 \
+    -p blend_radius:=0.003 \
+    -p start_motion:=LIN
+  ```
+- Confirm the new retime path by looking for:
+  `TCP resample retime: original_points=... sampled_points=...`.
 
 Fib-cap capture flow in `behav3d_examples`:
 - Main session class: `FibCapSession` in `src/behav3d_examples/behav3d_examples/src/fib_cap_session.py`

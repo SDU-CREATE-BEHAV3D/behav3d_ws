@@ -3,10 +3,13 @@
 #include <vector>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <limits>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <thread>
 #include <unordered_set>
 
@@ -74,6 +77,11 @@ public:
         "/scaled_joint_trajectory_controller/follow_joint_trajectory");
     viz_enabled_ = this->declare_parameter<bool>("viz_enabled", true);
     flange_link_ = this->declare_parameter<std::string>("flange_link", "ur20_tool0");
+    allow_tcp_retime_ = this->declare_parameter<bool>("allow_tcp_retime", true);
+    retime_fallback_on_failure_ = this->declare_parameter<bool>("retime_fallback_on_failure", true);
+    max_tcp_speed_m_s_ = std::max(
+        0.0, this->declare_parameter<double>("max_tcp_speed_m_s", 0.350));
+    log_sequence_joint_stats_ = this->declare_parameter<bool>("log_sequence_joint_stats", true);
 
     // Latched QoS
     rclcpp::QoS latched(1);
@@ -151,8 +159,13 @@ public:
                 "/behav3d/plan_pilz_lin, /behav3d/plan_pilz_ptp, /behav3d/plan_pilz_sequence "
                 "/behav3d/get_link_pose, /behav3d/publish_targets, /behav3d/delete_markers, "
                 "/behav3d/update_planning_scene_mesh "
-                "(exec_mode=%s, controller_action=%s, flange_link=%s)",
-                exec_mode_.c_str(), controller_action_name_.c_str(), flange_link_.c_str());
+                "(exec_mode=%s, controller_action=%s, flange_link=%s, allow_tcp_retime=%s, "
+                "retime_fallback_on_failure=%s, max_tcp_speed=%.3fmm/s, log_sequence_joint_stats=%s)",
+                exec_mode_.c_str(), controller_action_name_.c_str(), flange_link_.c_str(),
+                allow_tcp_retime_ ? "true" : "false",
+                retime_fallback_on_failure_ ? "true" : "false",
+                max_tcp_speed_m_s_ * 1000.0,
+                log_sequence_joint_stats_ ? "true" : "false");
   }
 
 private:
@@ -458,6 +471,397 @@ private:
     if (traj.joint_trajectory.points.empty()) return 0.0;
     const auto &last = traj.joint_trajectory.points.back();
     return last.time_from_start.sec + last.time_from_start.nanosec * 1e-9;
+  }
+
+  static double durationToSec(const builtin_interfaces::msg::Duration& duration)
+  {
+    return static_cast<double>(duration.sec) + static_cast<double>(duration.nanosec) * 1e-9;
+  }
+
+  static void setDurationMsg(double seconds, builtin_interfaces::msg::Duration& out)
+  {
+    const double safe_seconds = std::max(0.0, seconds);
+    out.sec = static_cast<int32_t>(std::floor(safe_seconds));
+    out.nanosec = static_cast<uint32_t>(
+        std::round((safe_seconds - static_cast<double>(out.sec)) * 1e9));
+    if (out.nanosec >= 1000000000u)
+    {
+      out.sec += 1;
+      out.nanosec -= 1000000000u;
+    }
+  }
+
+  static bool allFinite(const std::vector<double>& values)
+  {
+    return std::all_of(values.begin(), values.end(), [](double value) {
+      return std::isfinite(value);
+    });
+  }
+
+  bool validateTrajectoryTimingAndValues(
+      const moveit_msgs::msg::RobotTrajectory& traj_msg,
+      double min_dt_s,
+      std::string& error) const
+  {
+    error.clear();
+    const auto& jt = traj_msg.joint_trajectory;
+    const size_t dof = jt.joint_names.size();
+    if (dof == 0)
+    {
+      error = "trajectory has no joint names";
+      return false;
+    }
+    if (jt.points.empty())
+    {
+      error = "trajectory has no points";
+      return false;
+    }
+
+    const double min_dt = std::max(1e-4, min_dt_s);
+    double previous_time = -1.0;
+    for (size_t i = 0; i < jt.points.size(); ++i)
+    {
+      const auto& point = jt.points[i];
+      const double time_s = durationToSec(point.time_from_start);
+      if (!std::isfinite(time_s) || time_s < 0.0)
+      {
+        error = "trajectory contains invalid timestamp at point " + std::to_string(i);
+        return false;
+      }
+      if (i > 0)
+      {
+        const double dt = time_s - previous_time;
+        if (dt <= 1e-9)
+        {
+          error = "trajectory timestamps are not strictly increasing at point " + std::to_string(i);
+          return false;
+        }
+        if (dt + 1e-9 < min_dt)
+        {
+          std::ostringstream ss;
+          ss << "trajectory dt too small at point " << i << ": " << dt << "s < " << min_dt << "s";
+          error = ss.str();
+          return false;
+        }
+      }
+      previous_time = time_s;
+
+      if (point.positions.size() != dof)
+      {
+        error = "trajectory position dimension mismatch at point " + std::to_string(i);
+        return false;
+      }
+      if (!point.velocities.empty() && point.velocities.size() != dof)
+      {
+        error = "trajectory velocity dimension mismatch at point " + std::to_string(i);
+        return false;
+      }
+      if (!point.accelerations.empty() && point.accelerations.size() != dof)
+      {
+        error = "trajectory acceleration dimension mismatch at point " + std::to_string(i);
+        return false;
+      }
+      if (!allFinite(point.positions) || !allFinite(point.velocities) || !allFinite(point.accelerations))
+      {
+        error = "trajectory contains NaN/Inf at point " + std::to_string(i);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  void logJointVelocityAccelerationStats(
+      const moveit::core::RobotModelConstPtr& robot_model,
+      const moveit_msgs::msg::RobotTrajectory& traj_msg,
+      const std::string& label) const
+  {
+    if (!log_sequence_joint_stats_)
+      return;
+    if (!robot_model)
+    {
+      RCLCPP_WARN(this->get_logger(), "[%s] Joint stats skipped: robot model is null", label.c_str());
+      return;
+    }
+
+    const auto& jt = traj_msg.joint_trajectory;
+    const size_t dof = jt.joint_names.size();
+    if (dof == 0 || jt.points.empty())
+    {
+      RCLCPP_WARN(this->get_logger(), "[%s] Joint stats skipped: empty trajectory", label.c_str());
+      return;
+    }
+
+    const auto model_variable_names = robot_model->getVariableNames();
+    const std::unordered_set<std::string> known_variables(
+        model_variable_names.begin(), model_variable_names.end());
+
+    for (size_t j = 0; j < dof; ++j)
+    {
+      const auto& joint_name = jt.joint_names[j];
+      if (!known_variables.count(joint_name))
+      {
+        RCLCPP_WARN(this->get_logger(),
+                    "[%s] Joint stats skipped for unknown joint=%s",
+                    label.c_str(), joint_name.c_str());
+        continue;
+      }
+
+      double max_abs_velocity = 0.0;
+      double max_abs_accel = 0.0;
+      size_t max_velocity_point = 0;
+      size_t max_accel_point = 0;
+
+      for (size_t i = 0; i < jt.points.size(); ++i)
+      {
+        const auto& point = jt.points[i];
+        if (point.velocities.size() == dof)
+        {
+          const double abs_velocity = std::abs(point.velocities[j]);
+          if (abs_velocity > max_abs_velocity)
+          {
+            max_abs_velocity = abs_velocity;
+            max_velocity_point = i;
+          }
+        }
+
+        if (point.accelerations.size() == dof)
+        {
+          const double abs_accel = std::abs(point.accelerations[j]);
+          if (abs_accel > max_abs_accel)
+          {
+            max_abs_accel = abs_accel;
+            max_accel_point = i;
+          }
+        }
+      }
+
+      const auto& bounds = robot_model->getVariableBounds(joint_name);
+      const double velocity_limit = bounds.velocity_bounded_
+          ? std::max(std::abs(bounds.min_velocity_), std::abs(bounds.max_velocity_))
+          : 0.0;
+      const double accel_limit = bounds.acceleration_bounded_
+          ? std::max(std::abs(bounds.min_acceleration_), std::abs(bounds.max_acceleration_))
+          : 0.0;
+      const double velocity_ratio = velocity_limit > 1e-9 ? max_abs_velocity / velocity_limit : 0.0;
+      const double accel_ratio = accel_limit > 1e-9 ? max_abs_accel / accel_limit : 0.0;
+
+      RCLCPP_WARN(this->get_logger(),
+                  "[%s] Joint stats: joint=%s "
+                  "max_abs_velocity=%.6f limit=%.6f ratio=%.3f point=%zu "
+                  "max_abs_accel=%.6f limit=%.6f ratio=%.3f point=%zu",
+                  label.c_str(),
+                  joint_name.c_str(),
+                  max_abs_velocity, velocity_limit, velocity_ratio, max_velocity_point,
+                  max_abs_accel, accel_limit, accel_ratio, max_accel_point);
+    }
+  }
+
+  bool retimeForConstantTcpSpeed(
+      robot_trajectory::RobotTrajectory& rt,
+      moveit_msgs::msg::RobotTrajectory& traj_msg,
+      const std::string& tip_link,
+      double target_speed_m_s,
+      double min_dt_s,
+      double tcp_sample_spacing_m,
+      std::string& error) const
+  {
+    error.clear();
+    if (target_speed_m_s <= 1e-9)
+      return false;
+
+    const size_t count = rt.getWayPointCount();
+    if (count < 2)
+    {
+      error = "trajectory has fewer than 2 waypoints";
+      return false;
+    }
+
+    const double min_dt = std::max(1e-4, min_dt_s);
+    std::vector<double> cumulative_distances(count, 0.0);
+    for (size_t i = 1; i < count; ++i)
+    {
+      const Eigen::Vector3d p0 = rt.getWayPoint(i - 1).getGlobalLinkTransform(tip_link).translation();
+      const Eigen::Vector3d p1 = rt.getWayPoint(i).getGlobalLinkTransform(tip_link).translation();
+      const double ds = (p1 - p0).norm();
+      cumulative_distances[i] = cumulative_distances[i - 1] + ds;
+    }
+
+    const double total_distance = cumulative_distances.back();
+    if (total_distance <= 1e-9)
+    {
+      error = "trajectory TCP path length is zero";
+      return false;
+    }
+
+    const double requested_spacing = std::max(0.0, tcp_sample_spacing_m);
+    const double effective_spacing = std::max(
+        requested_spacing > 1e-9 ? requested_spacing : target_speed_m_s * min_dt,
+        target_speed_m_s * min_dt);
+
+    std::vector<double> sample_distances;
+    sample_distances.reserve(static_cast<size_t>(std::ceil(total_distance / effective_spacing)) + 2);
+    sample_distances.push_back(0.0);
+    for (double s = effective_spacing; s < total_distance - 1e-9; s += effective_spacing)
+      sample_distances.push_back(s);
+    if (sample_distances.back() < total_distance)
+      sample_distances.push_back(total_distance);
+
+    robot_trajectory::RobotTrajectory sampled_rt(rt.getRobotModel(), rt.getGroup());
+    sampled_rt.addSuffixWayPoint(rt.getFirstWayPoint(), 0.0);
+
+    size_t segment_index = 1;
+    for (size_t sample_i = 1; sample_i < sample_distances.size(); ++sample_i)
+    {
+      const double sample_s = sample_distances[sample_i];
+      while (segment_index + 1 < count && cumulative_distances[segment_index] < sample_s)
+        ++segment_index;
+
+      const double prev_s = cumulative_distances[segment_index - 1];
+      const double next_s = cumulative_distances[segment_index];
+      const double segment_length = next_s - prev_s;
+
+      moveit::core::RobotState sampled_state(rt.getWayPoint(segment_index - 1));
+      if (segment_length > 1e-9 && sample_s < total_distance - 1e-9)
+      {
+        const double alpha = std::clamp((sample_s - prev_s) / segment_length, 0.0, 1.0);
+        rt.getWayPoint(segment_index - 1)
+            .interpolate(rt.getWayPoint(segment_index), alpha, sampled_state, rt.getGroup());
+        sampled_state.update();
+      }
+      else
+      {
+        sampled_state = rt.getWayPoint(segment_index);
+        sampled_state.update();
+      }
+
+      const double ds = sample_distances[sample_i] - sample_distances[sample_i - 1];
+      const double dt = std::max(min_dt, ds / target_speed_m_s);
+      sampled_rt.addSuffixWayPoint(sampled_state, dt);
+    }
+
+    std::vector<double> times(sampled_rt.getWayPointCount(), 0.0);
+    for (size_t i = 1; i < sampled_rt.getWayPointCount(); ++i)
+      times[i] = times[i - 1] + sampled_rt.getWayPointDurationFromPrevious(i);
+
+    sampled_rt.getRobotTrajectoryMsg(traj_msg);
+    auto& points = traj_msg.joint_trajectory.points;
+    if (points.size() != sampled_rt.getWayPointCount())
+    {
+      error = "retimed trajectory point count mismatch";
+      return false;
+    }
+
+    for (size_t i = 0; i < points.size(); ++i)
+      setDurationMsg(times[i], points[i].time_from_start);
+
+    const size_t dof = points.front().positions.size();
+    if (dof == 0)
+    {
+      error = "trajectory points do not contain positions";
+      return false;
+    }
+
+    for (auto& point : points)
+    {
+      point.velocities.assign(dof, 0.0);
+      point.accelerations.assign(dof, 0.0);
+    }
+
+    for (size_t i = 1; i + 1 < points.size(); ++i)
+    {
+      const double dt = times[i + 1] - times[i - 1];
+      if (dt <= 1e-9)
+        continue;
+      for (size_t j = 0; j < dof; ++j)
+        points[i].velocities[j] = (points[i + 1].positions[j] - points[i - 1].positions[j]) / dt;
+    }
+
+    if (points.size() >= 2)
+    {
+      const double dt0 = times[1] - times[0];
+      if (dt0 > 1e-9)
+      {
+        for (size_t j = 0; j < dof; ++j)
+          points[0].accelerations[j] = (points[1].velocities[j] - points[0].velocities[j]) / dt0;
+      }
+
+      for (size_t i = 1; i < points.size(); ++i)
+      {
+        const double dt = times[i] - times[i - 1];
+        if (dt <= 1e-9)
+          continue;
+        for (size_t j = 0; j < dof; ++j)
+          points[i].accelerations[j] = (points[i].velocities[j] - points[i - 1].velocities[j]) / dt;
+      }
+    }
+
+    // Keep endpoints at rest for controller compatibility.
+    std::fill(points.front().velocities.begin(), points.front().velocities.end(), 0.0);
+    std::fill(points.back().velocities.begin(), points.back().velocities.end(), 0.0);
+    std::fill(points.front().accelerations.begin(), points.front().accelerations.end(), 0.0);
+    std::fill(points.back().accelerations.begin(), points.back().accelerations.end(), 0.0);
+    RCLCPP_INFO(this->get_logger(),
+                "[Pilz SEQ] TCP resample retime: original_points=%zu sampled_points=%zu "
+                "path=%.4fm requested_spacing=%.3fmm effective_spacing=%.3fmm target=%.3fmm/s",
+                count,
+                sampled_rt.getWayPointCount(),
+                total_distance,
+                requested_spacing * 1000.0,
+                effective_spacing * 1000.0,
+                target_speed_m_s * 1000.0);
+    return true;
+  }
+
+  struct TcpSpeedStats
+  {
+    double path_length_m = 0.0;
+    double duration_s = 0.0;
+    double min_speed_m_s = 0.0;
+    double mean_speed_m_s = 0.0;
+    double max_speed_m_s = 0.0;
+    uint32_t sample_count = 0;
+    uint32_t low_sample_count = 0;
+  };
+
+  TcpSpeedStats computeTcpSpeedStats(
+      const robot_trajectory::RobotTrajectory& rt,
+      const std::string& tip_link,
+      double low_speed_threshold_m_s) const
+  {
+    TcpSpeedStats stats;
+    if (rt.getWayPointCount() < 2)
+      return stats;
+
+    double min_speed = std::numeric_limits<double>::infinity();
+    double max_speed = 0.0;
+    for (size_t i = 1; i < rt.getWayPointCount(); ++i)
+    {
+      const double dt = rt.getWayPointDurationFromPrevious(i);
+      if (dt <= 1e-9)
+        continue;
+
+      const Eigen::Vector3d p0 = rt.getWayPoint(i - 1).getGlobalLinkTransform(tip_link).translation();
+      const Eigen::Vector3d p1 = rt.getWayPoint(i).getGlobalLinkTransform(tip_link).translation();
+      const double ds = (p1 - p0).norm();
+      const double speed = ds / dt;
+
+      stats.path_length_m += ds;
+      stats.duration_s += dt;
+      min_speed = std::min(min_speed, speed);
+      max_speed = std::max(max_speed, speed);
+      stats.sample_count += 1;
+      if (low_speed_threshold_m_s > 0.0 && speed < low_speed_threshold_m_s)
+        stats.low_sample_count += 1;
+    }
+
+    if (stats.sample_count > 0)
+    {
+      stats.min_speed_m_s = std::isfinite(min_speed) ? min_speed : 0.0;
+      stats.max_speed_m_s = max_speed;
+      stats.mean_speed_m_s = stats.duration_s > 1e-9 ? stats.path_length_m / stats.duration_s : 0.0;
+    }
+    return stats;
   }
 
   void publishEEFPath(const robot_trajectory::RobotTrajectory &rt,
@@ -967,16 +1371,18 @@ private:
       const std::shared_ptr<behav3d_interfaces::srv::PlanPilzSequence::Request> req,
       std::shared_ptr<behav3d_interfaces::srv::PlanPilzSequence::Response> res)
   {
-    if (req->targets.empty())
+    if (req->targets.size() < 2)
     {
-      RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] No targets provided");
+      RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] Need at least 2 targets");
       res->success = false;
+      res->message = "Need at least 2 targets";
       return;
     }
 
     // Use MoveGroupInterface only to query planning frame/model
     moveit::planning_interface::MoveGroupInterface mgi(shared_from_this(), req->group_name);
     const std::string planning_frame = mgi.getPlanningFrame();
+    const std::string target_frame = trimCopy(req->frame_id).empty() ? planning_frame : trimCopy(req->frame_id);
     const std::string eef = req->eef_link.empty() ? flange_link_ : req->eef_link;
 
     // Build current start state message
@@ -993,7 +1399,7 @@ private:
     for (size_t i = 0; i < req->targets.size(); ++i)
     {
       geometry_msgs::msg::PoseStamped ps;
-      ps.header.frame_id = planning_frame;  // stamp in planning frame
+      ps.header.frame_id = target_frame;
       ps.pose = req->targets[i];
 
       moveit_msgs::msg::MotionPlanRequest mpr;
@@ -1002,6 +1408,7 @@ private:
       mpr.planner_id = "LIN";
       mpr.max_velocity_scaling_factor = std::clamp<double>(req->velocity_scale, 0.0, 1.0);
       mpr.max_acceleration_scaling_factor = std::clamp<double>(req->accel_scale, 0.0, 1.0);
+      mpr.allowed_planning_time = 10.0;
 
       if (i == 0)
         mpr.start_state = start_state_msg;
@@ -1013,21 +1420,40 @@ private:
 
       moveit_msgs::msg::MotionSequenceItem item;
       item.req = mpr;
-      item.blend_radius = (i < req->blend_radii.size()) ? std::max(0.0, req->blend_radii[i]) : 0.0;
+      item.blend_radius =
+          (i + 1 == req->targets.size()) ? 0.0 :
+          ((i < req->blend_radii.size()) ? std::max(0.0, req->blend_radii[i]) : 0.0);
 
       seq.items.push_back(item);
     }
+
+    std::string blend_summary;
+    for (size_t i = 0; i < seq.items.size(); ++i)
+    {
+      if (!blend_summary.empty())
+        blend_summary += ", ";
+      blend_summary += std::to_string(seq.items[i].blend_radius);
+    }
+    RCLCPP_INFO(this->get_logger(),
+                "[Pilz SEQ] Request: targets=%zu frame=%s eef=%s v=%.3f a=%.3f blend_radii=[%s]",
+                req->targets.size(), target_frame.c_str(), eef.c_str(),
+                std::clamp<double>(req->velocity_scale, 0.0, 1.0),
+                std::clamp<double>(req->accel_scale, 0.0, 1.0),
+                blend_summary.c_str());
 
     // Use the dedicated action client/node (avoid executor double-add)
     if (!mgs_client_->wait_for_action_server(3s))
     {
       RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] sequence_move_group action not available");
       res->success = false;
+      res->message = "sequence_move_group action not available";
       return;
     }
 
     MGS::Goal goal;
     goal.request = seq;
+    goal.planning_options.planning_scene_diff.is_diff = true;
+    goal.planning_options.planning_scene_diff.robot_state.is_diff = true;
     goal.planning_options.plan_only = true;
     goal.planning_options.look_around = false;
     goal.planning_options.replan = false;
@@ -1038,6 +1464,7 @@ private:
     {
       RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] Action send failed");
       res->success = false;
+      res->message = "Action send failed";
       return;
     }
 
@@ -1046,6 +1473,7 @@ private:
     {
       RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] Goal rejected");
       res->success = false;
+      res->message = "Goal rejected";
       return;
     }
 
@@ -1055,6 +1483,7 @@ private:
     {
       RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] Failed to get result");
       res->success = false;
+      res->message = "Failed to get result";
       return;
     }
 
@@ -1065,28 +1494,178 @@ private:
     {
       RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] Planning failed (code=%d)", resp.error_code.val);
       res->success = false;
+      res->message = "Planning failed (code=" + std::to_string(resp.error_code.val) + ")";
       return;
     }
     if (resp.planned_trajectories.empty())
     {
       RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] No trajectories returned");
       res->success = false;
+      res->message = "No trajectories returned";
       return;
     }
 
-    const auto &planned = resp.planned_trajectories.back();
+    moveit_msgs::msg::RobotTrajectory planned;
+    if (resp.planned_trajectories.size() == 1)
+    {
+      planned = resp.planned_trajectories.front();
+    }
+    else
+    {
+      robot_trajectory::RobotTrajectory combined(robot_model, req->group_name);
+      combined.setRobotTrajectoryMsg(start_state_core, resp.planned_trajectories.front());
+
+      moveit::core::RobotState ref_state = combined.getLastWayPoint();
+      for (size_t i = 1; i < resp.planned_trajectories.size(); ++i)
+      {
+        robot_trajectory::RobotTrajectory segment(robot_model, req->group_name);
+        segment.setRobotTrajectoryMsg(ref_state, resp.planned_trajectories[i]);
+        combined.append(segment, 0.0);
+        ref_state = combined.getLastWayPoint();
+      }
+      combined.getRobotTrajectoryMsg(planned);
+    }
+
+    robot_trajectory::RobotTrajectory rt(robot_model, req->group_name);
+    rt.setRobotTrajectoryMsg(start_state_core, planned);
+    bool tcp_speed_retimed = false;
+    bool tcp_speed_retime_fallback = false;
+    std::string status_message = "Pilz sequence planned";
+    double tcp_speed_threshold_m_s = std::max(0.0, static_cast<double>(req->tcp_speed_threshold_m_s));
+    if (static_cast<double>(req->target_tcp_speed_m_s) > 1e-9)
+    {
+      const double requested_tcp_speed = static_cast<double>(req->target_tcp_speed_m_s);
+      double target_tcp_speed = requested_tcp_speed;
+      if (max_tcp_speed_m_s_ > 0.0 && target_tcp_speed > max_tcp_speed_m_s_)
+      {
+        target_tcp_speed = max_tcp_speed_m_s_;
+        if (tcp_speed_threshold_m_s > 0.0)
+          tcp_speed_threshold_m_s *= target_tcp_speed / requested_tcp_speed;
+        RCLCPP_WARN(this->get_logger(),
+                    "[Pilz SEQ] Requested target_tcp_speed=%.3fmm/s exceeds max_tcp_speed=%.3fmm/s; "
+                    "clamping retime target to %.3fmm/s",
+                    requested_tcp_speed * 1000.0,
+                    max_tcp_speed_m_s_ * 1000.0,
+                    target_tcp_speed * 1000.0);
+      }
+      const double retime_min_dt = std::max(1e-4, static_cast<double>(req->retime_min_dt_s));
+      std::string retime_error;
+      bool retime_allowed = true;
+
+      if (!allow_tcp_retime_)
+      {
+        retime_allowed = false;
+        retime_error = "allow_tcp_retime=false";
+      }
+
+      if (retime_allowed)
+      {
+        moveit_msgs::msg::RobotTrajectory retimed_plan = planned;
+        robot_trajectory::RobotTrajectory retimed_rt(robot_model, req->group_name);
+        retimed_rt.setRobotTrajectoryMsg(start_state_core, retimed_plan);
+
+        tcp_speed_retimed = retimeForConstantTcpSpeed(
+            retimed_rt,
+            retimed_plan,
+            eef,
+            target_tcp_speed,
+            retime_min_dt,
+            static_cast<double>(req->tcp_sample_spacing_m),
+            retime_error);
+
+        if (tcp_speed_retimed)
+        {
+          std::string validation_error;
+          tcp_speed_retimed = validateTrajectoryTimingAndValues(
+              retimed_plan, retime_min_dt, validation_error);
+          if (!tcp_speed_retimed)
+            retime_error = validation_error;
+        }
+
+        if (tcp_speed_retimed)
+        {
+          planned = retimed_plan;
+          rt.setRobotTrajectoryMsg(start_state_core, planned);
+          status_message = "Pilz sequence retimed for target TCP speed";
+          if (target_tcp_speed < requested_tcp_speed)
+            status_message += " (clamped by max_tcp_speed_m_s)";
+          RCLCPP_INFO(this->get_logger(),
+                      "[Pilz SEQ] Retimed trajectory for target_tcp_speed=%.3fmm/s min_dt=%.4fs",
+                      target_tcp_speed * 1000.0,
+                      retime_min_dt);
+        }
+      }
+
+      if (!tcp_speed_retimed)
+      {
+        if (retime_fallback_on_failure_)
+        {
+          tcp_speed_retime_fallback = true;
+          rt.setRobotTrajectoryMsg(start_state_core, planned);
+          status_message = "Constant TCP-speed retime skipped/failed; using original Pilz plan: " + retime_error;
+          RCLCPP_WARN(this->get_logger(),
+                      "[Pilz SEQ] %s",
+                      status_message.c_str());
+        }
+        else
+        {
+          status_message = "Constant TCP-speed retime failed and fallback is disabled: " + retime_error;
+          RCLCPP_ERROR(this->get_logger(),
+                       "[Pilz SEQ] %s",
+                       status_message.c_str());
+          res->success = false;
+          res->message = status_message;
+          return;
+        }
+      }
+    }
+
+    RCLCPP_INFO(this->get_logger(),
+                "[Pilz SEQ] Planned %zu sequence segment(s), combined trajectory points=%zu",
+                resp.planned_trajectories.size(), planned.joint_trajectory.points.size());
+
+    std::string final_validation_error;
+    if (!validateTrajectoryTimingAndValues(planned, 1e-4, final_validation_error))
+    {
+      status_message = "Invalid final trajectory: " + final_validation_error;
+      RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] %s", status_message.c_str());
+      res->success = false;
+      res->message = status_message;
+      return;
+    }
+
+    const auto tcp_stats = computeTcpSpeedStats(rt, eef, tcp_speed_threshold_m_s);
+    logJointVelocityAccelerationStats(robot_model, planned, "Pilz SEQ final trajectory");
+
     last_plan_pub_->publish(planned);
+
+    RCLCPP_INFO(this->get_logger(),
+                "[Pilz SEQ] TCP speed stats: path=%.4fm duration=%.3fs "
+                "min=%.3fmm/s mean=%.3fmm/s max=%.3fmm/s low_samples=%u/%u threshold=%.3fmm/s",
+                tcp_stats.path_length_m, tcp_stats.duration_s,
+                tcp_stats.min_speed_m_s * 1000.0,
+                tcp_stats.mean_speed_m_s * 1000.0,
+                tcp_stats.max_speed_m_s * 1000.0,
+                tcp_stats.low_sample_count, tcp_stats.sample_count,
+                tcp_speed_threshold_m_s * 1000.0);
 
     if (viz_enabled_)
     {
-      robot_trajectory::RobotTrajectory rt(robot_model, req->group_name);
-      rt.setRobotTrajectoryMsg(start_state_core, planned);
       publishEEFPath(rt, eef, planning_frame);
     }
 
-    // Your srv carries only JointTrajectory + success
     res->trajectory = planned.joint_trajectory;
     res->success = true;
+    res->message = status_message;
+    res->tcp_speed_retimed = tcp_speed_retimed;
+    res->tcp_speed_retime_fallback = tcp_speed_retime_fallback;
+    res->tcp_path_length_m = tcp_stats.path_length_m;
+    res->tcp_duration_s = tcp_stats.duration_s;
+    res->tcp_speed_min_m_s = tcp_stats.min_speed_m_s;
+    res->tcp_speed_mean_m_s = tcp_stats.mean_speed_m_s;
+    res->tcp_speed_max_m_s = tcp_stats.max_speed_m_s;
+    res->tcp_speed_sample_count = tcp_stats.sample_count;
+    res->tcp_speed_low_sample_count = tcp_stats.low_sample_count;
 
     if (!req->preview_only)
     {
@@ -1107,7 +1686,7 @@ private:
       {
         moveit::planning_interface::MoveGroupInterface mgi_exec(shared_from_this(), req->group_name);
         moveit::planning_interface::MoveGroupInterface::Plan exec_plan;
-        exec_plan.trajectory = planned;  // RobotTrajectory
+        exec_plan.trajectory = planned;
         auto exec_code = mgi_exec.execute(exec_plan);
         if (!exec_code)
           RCLCPP_WARN(this->get_logger(), "[Pilz SEQ] Execution failed (code=%d)", exec_code.val);
@@ -1120,6 +1699,10 @@ private:
   std::string controller_action_name_;
   bool viz_enabled_;
   std::string flange_link_;
+  bool allow_tcp_retime_;
+  bool retime_fallback_on_failure_;
+  double max_tcp_speed_m_s_;
+  bool log_sequence_joint_stats_;
 
   rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>::SharedPtr display_pub_;
   rclcpp::Publisher<moveit_msgs::msg::RobotTrajectory>::SharedPtr last_plan_pub_;

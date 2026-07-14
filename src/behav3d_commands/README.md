@@ -152,6 +152,72 @@ preview_res = session.run_sync(
 )
 ```
 
+### MotionCommands Pilz sequence and TCP retime
+`MotionCommands` also exposes Pilz sequence planning for polyline-style paths:
+- `session.motion.plan_sequence(...)` plans and stores a sequence trajectory.
+- `session.motion.goto_sequence(...)` plans and optionally executes it.
+
+These commands call `/behav3d/plan_pilz_sequence`, which uses MoveIt's Pilz
+Industrial Motion Planner (`sequence_move_group`) to generate the LIN sequence.
+Optional TCP-speed retiming happens after Pilz planning, without changing the
+Pilz path geometry and without calling IK again.
+
+Minimal blocking example:
+```python
+res = session.run_sync(
+    session.motion.plan_sequence(
+        poses,
+        eef="extruder_tcp",
+        vel_scale=0.05,
+        accel_scale=0.05,
+        blend_radius=0.003,
+        frame_id="world",
+        target_tcp_speed_m_s=0.080,
+        retime_min_dt_s=0.008,
+        tcp_sample_spacing_m=0.002,
+        tcp_speed_threshold_m_s=0.064,
+        enqueue=False,
+    ),
+    timeout_s=30.0,
+)
+if res["ok"]:
+    session.run_sync(session.motion.exec(enqueue=False), timeout_s=30.0)
+```
+
+Key parameters:
+- `blend_radius`: Pilz blend radius in meters. The last sequence item is forced
+  to `0.0` by the bridge.
+- `target_tcp_speed_m_s`: requested TCP speed for constant-speed retime. `0.0`
+  disables TCP retime.
+- `retime_min_dt_s`: minimum controller timestamp spacing; this is a technical
+  guard, not the main smoothing control.
+- `tcp_sample_spacing_m`: TCP resampling spacing before retime. Default command
+  value is `0.002` m (`2 mm`). The bridge uses
+  `max(tcp_sample_spacing_m, target_tcp_speed_m_s * retime_min_dt_s)` as the
+  effective spacing so timestamps do not become too dense.
+- `tcp_speed_threshold_m_s`: diagnostic threshold only. It counts samples below
+  the threshold in metrics; it does not reject or alter the plan.
+
+Returned metrics include:
+- `duration_s`, `points`, `interior_zero_velocity_points`
+- `tcp_path_length_m`, `tcp_duration_s`
+- `tcp_speed_min_mm_s`, `tcp_speed_mean_mm_s`, `tcp_speed_max_mm_s`
+- `tcp_speed_low_sample_count`, `tcp_speed_sample_count`
+- `tcp_speed_retimed`, `tcp_speed_retime_fallback`
+- `tcp_sample_spacing_mm`
+
+Notes:
+- Pilz still owns planning. The retime step only rewrites timing and resamples
+  the already planned Pilz trajectory by interpolating robot states along the
+  Pilz path.
+- If TCP retime fails and `retime_fallback_on_failure=true` in
+  `behav3d_motion_bridge`, the bridge returns the original Pilz plan.
+- The bridge has an internal `max_tcp_speed_m_s` parameter, default `0.350`
+  (`350 mm/s`). Requests above that are clamped, not rejected.
+- For moving between unrelated polylines, use a separate normal LIN/PTP move to
+  the next start target. Do not include long transition moves inside the print
+  sequence if constant TCP speed matters.
+
 ## Result contract
 `on_done` receives a dict with:
 - `ok` (bool), `kind` (str), `phase` (str), `error` (str or None)

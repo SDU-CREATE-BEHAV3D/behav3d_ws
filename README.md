@@ -233,6 +233,34 @@ ros2 topic pub --once /user_input std_msgs/msg/String "{data: 'draw_line'}"
 
 If the demo runs and responds to the command, your installation is complete and working correctly. 🎉
 -----
+
+## 7.5\. Pilz Polyline Sequence Test
+
+After launching the robot, MoveIt, and `behav3d_motion_bridge`, you can run the
+polyline sequence stress test with constant TCP-speed retime:
+
+```bash
+ros2 run behav3d_orchestrator polyline_motion_sequence --ros-args \
+  -p yaml_path:=/home/lab/behav3d_ws/yaml/pilz_polyline_dummy.yaml \
+  -p target_speed_mm_s:=80.0 \
+  -p retime_constant_tcp_speed:=true \
+  -p retime_min_dt_s:=0.008 \
+  -p tcp_sample_spacing_mm:=2.0 \
+  -p blend_radius:=0.003 \
+  -p start_motion:=LIN
+```
+
+Notes:
+- The polyline YAML uses `polylines: [{index, planes}]`.
+- Plane coordinates are always in millimeters.
+- The first target of each polyline is reached with a normal LIN move; the
+  Pilz sequence is planned for the remaining points.
+- The retime keeps TCP speed approximately constant by resampling the Pilz
+  trajectory at `tcp_sample_spacing_mm` before assigning timestamps.
+- Confirm the new retime path in logs with:
+  `TCP resample retime: original_points=... sampled_points=...`.
+
+-----
 ## 8\. How to connect your Orbbec Femto camera for the first time on a Linux system. 
 
 ### Step 1: Check USB Detection

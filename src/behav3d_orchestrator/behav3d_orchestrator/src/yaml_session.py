@@ -23,6 +23,12 @@ class TargetSegment:
     end: PoseStamped
 
 
+@dataclass(frozen=True)
+class TargetPolyline:
+    index: int
+    poses: List[PoseStamped]
+
+
 class YamlSession(behav3d_commands.Session):
     """
     Session helpers for target sequences loaded from YAML.
@@ -318,6 +324,14 @@ class YamlSession(behav3d_commands.Session):
         path = self._resolve_yaml_path(yaml_path)
         data = self._load_yaml_data(path)
 
+        if isinstance(data, dict) and isinstance(data.get("polylines"), list):
+            return self._flatten_polylines(
+                self._parse_polylines_data(data, frame_id=str(frame_id or "world"))
+            )
+
+        if isinstance(data, dict) and isinstance(data.get("path"), list):
+            return self._parse_path_data(data, frame_id=str(frame_id or "world"))
+
         if isinstance(data, dict) and isinstance(data.get("segments"), list):
             segments = self._parse_segments_data(data, frame_id=str(frame_id or "world"))
             out: List[PoseStamped] = []
@@ -340,6 +354,53 @@ class YamlSession(behav3d_commands.Session):
 
         ordered.sort(key=lambda row: (row[0], row[1]))
         return [ps for _, _, ps in ordered]
+
+    def parse_yaml_polylines(
+        self,
+        *,
+        yaml_path: str,
+        frame_id: str = "world",
+    ) -> List[TargetPolyline]:
+        """
+        Parse indexed YAML polylines into ordered pose lists.
+
+        Canonical shape:
+        polylines:
+          - index: 0
+            planes:
+              - "O(x,y,z) Z(i,j,k)"
+              - "O(x,y,z) Z(i,j,k)"
+
+        Each indexed item is one polyline. A `path: [...]` list is also
+        accepted inside each item when per-point maps are preferred.
+        """
+        if yaml is None:
+            raise RuntimeError("PyYAML is not available. Install python3-yaml.")
+
+        path = self._resolve_yaml_path(yaml_path)
+        data = self._load_yaml_data(path)
+        if not isinstance(data, dict):
+            return []
+        if isinstance(data.get("polylines"), list):
+            return self._parse_polylines_data(data, frame_id=str(frame_id or "world"))
+        if isinstance(data.get("path"), list):
+            return [TargetPolyline(index=0, poses=self._parse_path_data(data, frame_id=str(frame_id or "world")))]
+        return []
+
+    def parse_yaml_path(
+        self,
+        *,
+        yaml_path: str,
+        frame_id: str = "world",
+    ) -> List[PoseStamped]:
+        """
+        Parse a YAML polyline file into a flat ordered pose list.
+
+        Prefer `parse_yaml_polylines` when the caller needs to preserve the
+        indexed polyline grouping.
+        """
+        polylines = self.parse_yaml_polylines(yaml_path=yaml_path, frame_id=frame_id)
+        return self._flatten_polylines(polylines)
 
     def parse_yaml_segments(
         self,
@@ -367,6 +428,69 @@ class YamlSession(behav3d_commands.Session):
     def _load_yaml_data(path: Path) -> Any:
         with path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f)
+
+    @staticmethod
+    def _parse_path_data(data: dict, frame_id: str) -> List[PoseStamped]:
+        ordered: List[Tuple[int, int, PoseStamped]] = []
+        for pos, item in enumerate(data.get("path", [])):
+            idx, ps = YamlSession._parse_target_item(
+                item=item,
+                fallback_index=pos,
+                frame_id=frame_id,
+            )
+            order_idx = int(idx) if idx is not None else 1_000_000 + pos
+            ordered.append((order_idx, pos, ps))
+
+        ordered.sort(key=lambda row: (row[0], row[1]))
+        return [ps for _, _, ps in ordered]
+
+    @staticmethod
+    def _parse_polylines_data(data: dict, frame_id: str) -> List[TargetPolyline]:
+        ordered: List[Tuple[int, int, TargetPolyline]] = []
+        for pos, item in enumerate(data.get("polylines", [])):
+            if not isinstance(item, dict):
+                raise ValueError(f"Polyline entry must be a map. Got: {item}")
+
+            idx_raw = item.get("index", pos)
+            idx = int(idx_raw) if idx_raw is not None else pos
+
+            if isinstance(item.get("planes"), list):
+                points = [{"plane": plane} if isinstance(plane, str) else plane for plane in item["planes"]]
+            elif isinstance(item.get("path"), list):
+                points = list(item["path"])
+            else:
+                raise ValueError("Polyline entry missing supported fields. Use 'planes' or 'path'.")
+
+            poses = YamlSession._parse_polyline_points(points, frame_id=frame_id)
+            if len(poses) < 2:
+                raise ValueError(f"Polyline index {idx} requires at least 2 planes/poses. Got {len(poses)}.")
+
+            ordered.append((idx, pos, TargetPolyline(index=idx, poses=poses)))
+
+        ordered.sort(key=lambda row: (row[0], row[1]))
+        return [polyline for _, _, polyline in ordered]
+
+    @staticmethod
+    def _parse_polyline_points(points: Sequence[Any], frame_id: str) -> List[PoseStamped]:
+        ordered: List[Tuple[int, int, PoseStamped]] = []
+        for pos, item in enumerate(points):
+            idx, ps = YamlSession._parse_target_item(
+                item=item,
+                fallback_index=pos,
+                frame_id=frame_id,
+            )
+            order_idx = int(idx) if idx is not None else 1_000_000 + pos
+            ordered.append((order_idx, pos, ps))
+
+        ordered.sort(key=lambda row: (row[0], row[1]))
+        return [ps for _, _, ps in ordered]
+
+    @staticmethod
+    def _flatten_polylines(polylines: Sequence[TargetPolyline]) -> List[PoseStamped]:
+        out: List[PoseStamped] = []
+        for polyline in polylines:
+            out.extend(polyline.poses)
+        return out
 
     @staticmethod
     def _parse_segments_data(data: dict, frame_id: str) -> List[TargetSegment]:

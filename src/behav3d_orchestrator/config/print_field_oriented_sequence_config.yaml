@@ -5,8 +5,8 @@ print_field_oriented_sequence:
     home_after: false
     timeout_s: 0.0
     debug_mode: false
-    prompt_before_print: false
-    prompt_before_scan: false
+    prompt_before_print: true
+    prompt_before_scan: true
     enable_scan: true
 
     # Initial table grid sweep
@@ -16,14 +16,14 @@ print_field_oriented_sequence:
     scan_eef_link: femto_color_optical_calib
     scan_motion: LIN
     scan_use_tf_orientation: true
-    scan_width: 0.50
-    scan_height: 0.40
+    scan_width: 0.70
+    scan_height: 0.50
     scan_center_x: -0.20
     scan_center_y: 0.80
     scan_center_z: 0.0
-    scan_z_off: 0.60
-    scan_nx: 5
-    scan_ny: 4
+    scan_z_off: 0.90
+    scan_nx: 7
+    scan_ny: 5
     scan_row_major: false
     scan_capture_folder: "@session/grid_sweep"
     scan_debug_prompt: false
@@ -86,14 +86,14 @@ print_field_oriented_sequence:
     #   abs_scan_z = highest_generated_target_z + grid_z_off
     #   applied z_off = abs_scan_z - grid_center_z
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
-    grid_width: 0.50
-    grid_height: 0.15
+    grid_width: 1.00
+    grid_height: 0.50
     grid_center_x: -0.20
     grid_center_y: 0.85
     grid_center_z: -0.30
-    grid_z_off: 0.60
-    grid_nx: 5
-    grid_ny: 2
+    grid_z_off: 1.00
+    grid_nx: 7
+    grid_ny: 5
     grid_row_major: false
     grid_use_tf_orientation: true
     field_center_sign_x: -1.0

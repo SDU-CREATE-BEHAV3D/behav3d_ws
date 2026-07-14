@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Sequence
 
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -11,7 +11,7 @@ from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import PoseStamped
 
-from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin
+from behav3d_interfaces.srv import PlanPilzPtp, PlanPilzLin, PlanPilzSequence
 
 from behav3d_commands.command import Command, OnCommandDone
 from behav3d_commands.queue import QueueItem, SessionQueue
@@ -33,6 +33,7 @@ class MotionCommands:
 
         self._ptp_cli = node.create_client(PlanPilzPtp, "/behav3d/plan_pilz_ptp")
         self._lin_cli = node.create_client(PlanPilzLin, "/behav3d/plan_pilz_lin")
+        self._seq_cli = node.create_client(PlanPilzSequence, "/behav3d/plan_pilz_sequence")
 
         self._motion_mode = "PTP"
         self._default_eef = "extruder_tcp"
@@ -73,8 +74,10 @@ class MotionCommands:
     def register(self, router) -> None:
         router.register("home", self._handle_home)
         router.register("plan_motion", self._handle_plan_motion)
+        router.register("plan_sequence", self._handle_plan_sequence)
         router.register("exec_motion", self._handle_exec_motion)
         router.register("goto", self._handle_goto)
+        router.register("goto_sequence", self._handle_goto_sequence)
         router.register("set_motion_mode", self._handle_set_motion_mode)
         router.register("set_eef", self._handle_set_eef)
         router.register("set_spd", self._handle_set_spd)
@@ -169,6 +172,82 @@ class MotionCommands:
                 "motion": motion,
             },
             cmd_kind="plan_motion",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def plan_sequence(
+        self,
+        poses: Sequence[PoseStamped],
+        *,
+        eef: Optional[str] = None,
+        vel_scale: Optional[float] = None,
+        accel_scale: Optional[float] = None,
+        blend_radius: float = 0.0,
+        blend_radii: Optional[Sequence[float]] = None,
+        frame_id: Optional[str] = None,
+        tcp_speed_threshold_m_s: float = 0.0,
+        target_tcp_speed_m_s: float = 0.0,
+        retime_min_dt_s: float = 0.001,
+        tcp_sample_spacing_m: float = 0.002,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "plan_sequence",
+            {
+                "poses": list(poses),
+                "eef": eef,
+                "vel_scale": vel_scale,
+                "accel_scale": accel_scale,
+                "blend_radius": float(blend_radius),
+                "blend_radii": None if blend_radii is None else [float(v) for v in blend_radii],
+                "frame_id": frame_id,
+                "tcp_speed_threshold_m_s": float(tcp_speed_threshold_m_s),
+                "target_tcp_speed_m_s": float(target_tcp_speed_m_s),
+                "retime_min_dt_s": float(retime_min_dt_s),
+                "tcp_sample_spacing_m": float(tcp_sample_spacing_m),
+            },
+            cmd_kind="plan_sequence",
+            on_done=on_done,
+        )
+        return self._queue_or_item(item, enqueue=enqueue)
+
+    def goto_sequence(
+        self,
+        poses: Sequence[PoseStamped],
+        *,
+        eef: Optional[str] = None,
+        vel_scale: Optional[float] = None,
+        accel_scale: Optional[float] = None,
+        blend_radius: float = 0.0,
+        blend_radii: Optional[Sequence[float]] = None,
+        frame_id: Optional[str] = None,
+        tcp_speed_threshold_m_s: float = 0.0,
+        target_tcp_speed_m_s: float = 0.0,
+        retime_min_dt_s: float = 0.001,
+        tcp_sample_spacing_m: float = 0.002,
+        exec: bool = True,
+        on_done: OnCommandDone = None,
+        enqueue: bool = True,
+    ):
+        item = QueueItem(
+            "goto_sequence",
+            {
+                "poses": list(poses),
+                "eef": eef,
+                "vel_scale": vel_scale,
+                "accel_scale": accel_scale,
+                "blend_radius": float(blend_radius),
+                "blend_radii": None if blend_radii is None else [float(v) for v in blend_radii],
+                "frame_id": frame_id,
+                "tcp_speed_threshold_m_s": float(tcp_speed_threshold_m_s),
+                "target_tcp_speed_m_s": float(target_tcp_speed_m_s),
+                "retime_min_dt_s": float(retime_min_dt_s),
+                "tcp_sample_spacing_m": float(tcp_sample_spacing_m),
+                "exec": bool(exec),
+            },
+            cmd_kind="goto_sequence",
             on_done=on_done,
         )
         return self._queue_or_item(item, enqueue=enqueue)
@@ -362,6 +441,133 @@ class MotionCommands:
 
         fut.add_done_callback(_on_planned)
 
+    def plan_sequence_motion(
+        self,
+        *,
+        poses: Sequence[PoseStamped],
+        eef: Optional[str],
+        vel_scale: Optional[float],
+        accel_scale: Optional[float],
+        blend_radius: float,
+        blend_radii: Optional[Sequence[float]],
+        frame_id: Optional[str],
+        tcp_speed_threshold_m_s: float,
+        target_tcp_speed_m_s: float,
+        retime_min_dt_s: float,
+        tcp_sample_spacing_m: float,
+        cmd: Command,
+        on_planned: OnPlanned,
+        finish_on_plan: bool = True,
+    ) -> None:
+        pose_list = list(poses)
+        if len(pose_list) < 2:
+            cmd.finish_flag(ok=False, phase="plan", error="pilz sequence requires at least 2 poses")
+            return
+        if any(not isinstance(ps, PoseStamped) for ps in pose_list):
+            cmd.finish_flag(ok=False, phase="plan", error="pilz sequence poses must be PoseStamped")
+            return
+
+        eef_eff = self._default_eef if eef is None else str(eef)
+        vel_eff = self._clamp_scale(self._default_vel_scale if vel_scale is None else float(vel_scale))
+        accel_eff = self._clamp_scale(self._default_accel_scale if accel_scale is None else float(accel_scale))
+        radii = self._sequence_blend_radii(
+            len(pose_list),
+            blend_radius=float(blend_radius),
+            blend_radii=blend_radii,
+        )
+
+        if not self._seq_cli.wait_for_service(timeout_sec=2.0):
+            cmd.finish_flag(ok=False, phase="plan", error="pilz sequence planner not available")
+            return
+
+        req = PlanPilzSequence.Request()
+        req.group_name = "ur_arm"
+        frame_eff = str(frame_id or pose_list[0].header.frame_id or "world")
+        req.frame_id = frame_eff
+        req.eef_link = eef_eff
+        req.velocity_scale = float(vel_eff)
+        req.accel_scale = float(accel_eff)
+        req.preview_only = True
+        req.targets = [ps.pose for ps in pose_list]
+        req.blend_radii = list(radii)
+        req.tcp_speed_threshold_m_s = max(0.0, float(tcp_speed_threshold_m_s))
+        req.target_tcp_speed_m_s = max(0.0, float(target_tcp_speed_m_s))
+        req.retime_min_dt_s = max(0.0, float(retime_min_dt_s))
+        req.tcp_sample_spacing_m = max(0.0, float(tcp_sample_spacing_m))
+
+        frame_ids = sorted({str(ps.header.frame_id or "") for ps in pose_list})
+        self._node.get_logger().info(
+            f"PLAN(SEQ): planning {len(pose_list)} poses eef={eef_eff} "
+            f"v={vel_eff:.3f} a={accel_eff:.3f} blend={float(blend_radius):.4f} "
+            f"frame={frame_eff} pose_frames={frame_ids}"
+        )
+
+        fut = self._seq_cli.call_async(req)
+
+        def _on_planned(fr):
+            resp = fr.result()
+            if resp is None:
+                cmd.finish_flag(ok=False, phase="plan", error="sequence planning failed (no response)")
+                return
+            if not resp.success:
+                message = str(getattr(resp, "message", "") or "sequence planning failed")
+                cmd.finish_flag(ok=False, phase="plan", error=message)
+                return
+
+            jt: JointTrajectory = resp.trajectory
+            if len(jt.points) == 0:
+                cmd.finish_flag(ok=False, phase="plan", error="empty sequence trajectory")
+                return
+
+            meta = {
+                "points": len(jt.points),
+                "poses": len(pose_list),
+                "mode": "SEQ",
+                "eef": eef_eff,
+                "vel_scale": vel_eff,
+                "accel_scale": accel_eff,
+                "blend_radius": float(blend_radius),
+                "blend_radii": list(radii),
+                "frame_ids": frame_ids,
+                "duration_s": self._trajectory_duration_s(jt),
+                "interior_zero_velocity_points": self._interior_zero_velocity_points(jt),
+                "tcp_path_length_m": float(getattr(resp, "tcp_path_length_m", 0.0)),
+                "tcp_duration_s": float(getattr(resp, "tcp_duration_s", 0.0)),
+                "tcp_speed_min_mm_s": 1000.0 * float(getattr(resp, "tcp_speed_min_m_s", 0.0)),
+                "tcp_speed_mean_mm_s": 1000.0 * float(getattr(resp, "tcp_speed_mean_m_s", 0.0)),
+                "tcp_speed_max_mm_s": 1000.0 * float(getattr(resp, "tcp_speed_max_m_s", 0.0)),
+                "tcp_speed_sample_count": int(getattr(resp, "tcp_speed_sample_count", 0)),
+                "tcp_speed_low_sample_count": int(getattr(resp, "tcp_speed_low_sample_count", 0)),
+                "tcp_speed_threshold_mm_s": 1000.0 * max(0.0, float(tcp_speed_threshold_m_s)),
+                "tcp_speed_retimed": bool(getattr(resp, "tcp_speed_retimed", False)),
+                "tcp_speed_retime_fallback": bool(getattr(resp, "tcp_speed_retime_fallback", False)),
+                "tcp_sample_spacing_mm": 1000.0 * max(0.0, float(tcp_sample_spacing_m)),
+                "message": str(getattr(resp, "message", "") or ""),
+            }
+            self._node.get_logger().info(
+                "PLAN(SEQ): trajectory "
+                f"points={meta['points']} duration={meta['duration_s']:.3f}s "
+                f"interior_zero_velocity_points={meta['interior_zero_velocity_points']} "
+                f"tcp_speed[min/mean/max]="
+                f"{meta['tcp_speed_min_mm_s']:.3f}/"
+                f"{meta['tcp_speed_mean_mm_s']:.3f}/"
+                f"{meta['tcp_speed_max_mm_s']:.3f}mm/s "
+                f"tcp_low_samples={meta['tcp_speed_low_sample_count']}/{meta['tcp_speed_sample_count']} "
+                f"retimed={meta['tcp_speed_retimed']} "
+                f"fallback={meta['tcp_speed_retime_fallback']} "
+                f"tcp_sample_spacing={meta['tcp_sample_spacing_mm']:.3f}mm"
+            )
+            try:
+                on_planned(jt, meta)
+            except Exception as exc:
+                cmd.finish_flag(ok=False, phase="plan", error=f"on_planned exception: {exc}")
+                return
+
+            if finish_on_plan:
+                cmd.finish_flag(ok=True, phase="plan", metrics=meta, planned_only=True)
+
+        fut.add_done_callback(_on_planned)
+
     def exec_follow_traj(self, jt: JointTrajectory, *, cmd: Command) -> None:
         if not self._ctrl.wait_for_server(timeout_sec=2.0):
             cmd.finish_flag(ok=False, phase="exec", error="controller not available")
@@ -370,7 +576,11 @@ class MotionCommands:
         goal = FollowJointTrajectory.Goal()
         goal.trajectory = jt
 
-        self._node.get_logger().info(f"{cmd.kind.upper()}: sending trajectory ({len(jt.points)} pts)...")
+        self._node.get_logger().info(
+            f"{cmd.kind.upper()}: sending trajectory "
+            f"({len(jt.points)} pts, duration={self._trajectory_duration_s(jt):.3f}s, "
+            f"interior_zero_velocity_points={self._interior_zero_velocity_points(jt)})..."
+        )
         send_fut = self._ctrl.send_goal_async(goal)
 
         def _on_goal_sent(f):
@@ -443,6 +653,27 @@ class MotionCommands:
             on_planned=_store_plan,
         )
 
+    def _handle_plan_sequence(self, payload: Dict[str, Any], cmd: Command) -> None:
+        def _store_plan(jt: JointTrajectory, meta: Dict[str, Any]) -> None:
+            self._planned_jt = jt
+            self._planned_meta = meta
+
+        self.plan_sequence_motion(
+            poses=payload.get("poses", []),
+            eef=payload.get("eef"),
+            vel_scale=payload.get("vel_scale"),
+            accel_scale=payload.get("accel_scale"),
+            blend_radius=float(payload.get("blend_radius", 0.0)),
+            blend_radii=payload.get("blend_radii"),
+            frame_id=payload.get("frame_id"),
+            tcp_speed_threshold_m_s=float(payload.get("tcp_speed_threshold_m_s", 0.0)),
+            target_tcp_speed_m_s=float(payload.get("target_tcp_speed_m_s", 0.0)),
+            retime_min_dt_s=float(payload.get("retime_min_dt_s", 0.001)),
+            tcp_sample_spacing_m=float(payload.get("tcp_sample_spacing_m", 0.002)),
+            cmd=cmd,
+            on_planned=_store_plan,
+        )
+
     def _handle_exec_motion(self, payload: Dict[str, Any], cmd: Command) -> None:
         jt = self._planned_jt
         if jt is None:
@@ -468,6 +699,34 @@ class MotionCommands:
             vel_scale=payload.get("vel_scale"),
             accel_scale=payload.get("accel_scale"),
             motion=payload.get("motion"),
+            cmd=cmd,
+            on_planned=_on_planned,
+            finish_on_plan=False,
+        )
+
+    def _handle_goto_sequence(self, payload: Dict[str, Any], cmd: Command) -> None:
+        do_exec = bool(payload.get("exec", True))
+
+        def _on_planned(jt: JointTrajectory, meta: Dict[str, Any]) -> None:
+            self._planned_jt = jt
+            self._planned_meta = meta
+            if not do_exec:
+                cmd.finish_flag(ok=True, phase="plan", metrics=meta, planned_only=True)
+                return
+            self.exec_follow_traj(jt, cmd=cmd)
+
+        self.plan_sequence_motion(
+            poses=payload.get("poses", []),
+            eef=payload.get("eef"),
+            vel_scale=payload.get("vel_scale"),
+            accel_scale=payload.get("accel_scale"),
+            blend_radius=float(payload.get("blend_radius", 0.0)),
+            blend_radii=payload.get("blend_radii"),
+            frame_id=payload.get("frame_id"),
+            tcp_speed_threshold_m_s=float(payload.get("tcp_speed_threshold_m_s", 0.0)),
+            target_tcp_speed_m_s=float(payload.get("target_tcp_speed_m_s", 0.0)),
+            retime_min_dt_s=float(payload.get("retime_min_dt_s", 0.001)),
+            tcp_sample_spacing_m=float(payload.get("tcp_sample_spacing_m", 0.002)),
             cmd=cmd,
             on_planned=_on_planned,
             finish_on_plan=False,
@@ -529,6 +788,44 @@ class MotionCommands:
     @staticmethod
     def _clamp_scale(val: float) -> float:
         return max(0.0, min(1.0, float(val)))
+
+    @staticmethod
+    def _sequence_blend_radii(
+        count: int,
+        *,
+        blend_radius: float,
+        blend_radii: Optional[Sequence[float]],
+    ) -> list[float]:
+        if blend_radii is not None:
+            radii = [max(0.0, float(v)) for v in blend_radii]
+            if len(radii) < count:
+                radii.extend([0.0] * (count - len(radii)))
+            elif len(radii) > count:
+                radii = radii[:count]
+        else:
+            radii = [max(0.0, float(blend_radius)) for _ in range(count)]
+        if radii:
+            radii[-1] = 0.0
+        return radii
+
+    @staticmethod
+    def _trajectory_duration_s(jt: JointTrajectory) -> float:
+        if not isinstance(jt, JointTrajectory) or not jt.points:
+            return 0.0
+        t = jt.points[-1].time_from_start
+        return float(t.sec) + 1e-9 * float(t.nanosec)
+
+    @staticmethod
+    def _interior_zero_velocity_points(jt: JointTrajectory, *, eps: float = 1e-6) -> int:
+        if not isinstance(jt, JointTrajectory) or len(jt.points) <= 2:
+            return 0
+
+        count = 0
+        for point in jt.points[1:-1]:
+            velocities = list(point.velocities)
+            if velocities and all(abs(float(v)) <= eps for v in velocities):
+                count += 1
+        return count
 
     @staticmethod
     def _quat_from_euler(roll: float, pitch: float, yaw: float):

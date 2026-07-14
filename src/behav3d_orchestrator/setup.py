@@ -37,6 +37,7 @@ setup(
             'print_field_oriented_sequence_v2 = behav3d_orchestrator.print_field_oriented_sequence_v2:main',
             'debug_segment_timing_sequence = behav3d_orchestrator.debug_segment_timing_sequence:main',
             'interactive_scan_motion_sequence = behav3d_orchestrator.interactive_scan_motion_sequence:main',
+            'polyline_motion_sequence = behav3d_orchestrator.polyline_motion_sequence:main',
         ],
     },
 )

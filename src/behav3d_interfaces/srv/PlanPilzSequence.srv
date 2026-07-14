@@ -1,12 +1,27 @@
 # Request
 string group_name
+string frame_id
 geometry_msgs/Pose[] targets
 float64[] blend_radii
 float64 velocity_scale
 float64 accel_scale
 string eef_link
 bool preview_only
+float64 tcp_speed_threshold_m_s
+float64 target_tcp_speed_m_s
+float64 retime_min_dt_s
+float64 tcp_sample_spacing_m
 ---
 # Response
 trajectory_msgs/JointTrajectory trajectory
 bool success
+string message
+bool tcp_speed_retimed
+bool tcp_speed_retime_fallback
+float64 tcp_path_length_m
+float64 tcp_duration_s
+float64 tcp_speed_min_m_s
+float64 tcp_speed_mean_m_s
+float64 tcp_speed_max_m_s
+uint32 tcp_speed_sample_count
+uint32 tcp_speed_low_sample_count
