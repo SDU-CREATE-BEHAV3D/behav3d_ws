@@ -10,6 +10,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -21,6 +22,7 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
+from std_msgs.msg import String
 
 try:
     import yaml
@@ -49,8 +51,53 @@ class PrintFieldOrientedSequenceV2Node(Node):
         self.print_session = PrintSession(self)
         self.scan_session = ScanSession(self)
 
+        self._pause_requested = False
+        self._pause_condition = threading.Condition()
+        self._control_sub = self.create_subscription(
+            String,
+            "/print_field_oriented_sequence/control",
+            self._on_control_msg,
+            10,
+        )
+
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
+
+    def _on_control_msg(self, msg: String) -> None:
+        cmd = str(msg.data or "").strip().lower()
+        if cmd != "stop":
+            self.get_logger().warn(
+                f"[print_field_oriented] Ignoring control command '{cmd}'. Use 'stop' to toggle pause."
+            )
+            return
+
+        with self._pause_condition:
+            self._pause_requested = not self._pause_requested
+            paused = self._pause_requested
+            self._pause_condition.notify_all()
+
+        if paused:
+            self.get_logger().warn(
+                "[print_field_oriented] Control stop received: will pause after the current command."
+            )
+        else:
+            self.get_logger().info("[print_field_oriented] Control stop received: resuming.")
+
+    def _wait_if_control_paused(self, label: str) -> bool:
+        with self._pause_condition:
+            if not self._pause_requested:
+                return True
+            self.get_logger().warn(
+                f"[print_field_oriented] Paused at safe point: {label}. "
+                "Send control 'stop' again to resume."
+            )
+            while rclpy.ok() and self._pause_requested:
+                self._pause_condition.wait(timeout=0.25)
+            if not rclpy.ok():
+                return False
+
+        self.get_logger().info(f"[print_field_oriented] Resumed from safe point: {label}.")
+        return True
 
     def _run(self):
         log = self.get_logger()
@@ -61,107 +108,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
         run_session_arg = str(run_session_path)
         first_print_cycle_number = self._first_available_cycle_number(run_session_path)
 
-        home_before_scan = self._cfg_bool(cfg, "home_before_scan")
-        home_after = self._cfg_bool(cfg, "home_after")
-        timeout_s = self._cfg_optional_timeout(cfg, "timeout_s")
-        debug_mode = self._cfg_bool(cfg, "debug_mode")
-        prompt_before_print = self._cfg_bool(cfg, "prompt_before_print")
-        prompt_before_scan = self._cfg_bool(cfg, "prompt_before_scan")
-        enable_scan = self._cfg_bool(cfg, "enable_scan")
+        rt = self._parse_runtime_state(cfg, run_session_path)
 
-        frame_id = self._cfg_str(cfg, "frame_id")
-        scan_eef_link = self._cfg_str(cfg, "scan_eef_link")
-        scan_type = self._cfg_str(cfg, "scan_type")
-        scan_motion = self._cfg_str(cfg, "scan_motion")
-        scan_use_tf_orientation = self._cfg_bool(cfg, "scan_use_tf_orientation")
-        scan_width = self._cfg_float(cfg, "scan_width")
-        scan_height = self._cfg_float(cfg, "scan_height")
-        scan_center_x = self._cfg_float(cfg, "scan_center_x")
-        scan_center_y = self._cfg_float(cfg, "scan_center_y")
-        scan_center_z = self._cfg_float(cfg, "scan_center_z")
-        scan_z_off = self._cfg_float(cfg, "scan_z_off")
-        scan_nx = self._cfg_int(cfg, "scan_nx")
-        scan_ny = self._cfg_int(cfg, "scan_ny")
-        scan_row_major = self._cfg_bool(cfg, "scan_row_major")
-        scan_capture_folder = self._cfg_str(cfg, "scan_capture_folder")
-        scan_debug_prompt = self._cfg_bool(cfg, "scan_debug_prompt")
-        scan_debug = self._cfg_bool(cfg, "scan_debug")
-        scan_vel_scale = self._cfg_float(cfg, "scan_vel_scale")
-        scan_accel_scale = self._cfg_float(cfg, "scan_accel_scale")
-        scan_settle_s = self._cfg_float(cfg, "scan_settle_s")
-        scan_prompt = self._cfg_str_allow_empty(cfg, "scan_prompt")
-        scan_depth = self._cfg_bool(cfg, "scan_depth")
-        scan_ir = self._cfg_bool(cfg, "scan_ir")
-        scan_pose = self._cfg_bool(cfg, "scan_pose")
-        scan_publish_markers = self._cfg_bool(cfg, "scan_publish_markers")
-        scan_axis_length = self._cfg_float(cfg, "scan_axis_length")
-        scan_axis_radius = self._cfg_float(cfg, "scan_axis_radius")
-        scan_clear_markers_before = self._cfg_bool(cfg, "scan_clear_markers_before")
-        scan_clear_markers_after = self._cfg_bool(cfg, "scan_clear_markers_after")
-
-        grid_width = self._cfg_float(cfg, "grid_width")
-        grid_height = self._cfg_float(cfg, "grid_height")
-        grid_center_x = self._cfg_float(cfg, "grid_center_x")
-        grid_center_y = self._cfg_float(cfg, "grid_center_y")
-        grid_center_z = self._cfg_float(cfg, "grid_center_z")
-        grid_z_off = self._cfg_float(cfg, "grid_z_off")
-        grid_nx = self._cfg_int(cfg, "grid_nx")
-        grid_ny = self._cfg_int(cfg, "grid_ny")
-        grid_row_major = self._cfg_bool(cfg, "grid_row_major")
-        grid_use_tf_orientation = self._cfg_bool(cfg, "grid_use_tf_orientation")
-        field_center_sign_x = self._cfg_float(cfg, "field_center_sign_x")
-        field_center_sign_y = self._cfg_float(cfg, "field_center_sign_y")
-        field_center_offset_x = self._cfg_float(cfg, "field_center_offset_x")
-        field_center_offset_y = self._cfg_float(cfg, "field_center_offset_y")
-
-        run_reconstruction = self._cfg_bool(cfg, "run_reconstruction")
-        reconstruct_device = self._cfg_str(cfg, "reconstruct_device")
-        reconstruct_request_timeout_s = self._cfg_float(cfg, "reconstruct_request_timeout_s")
-        wait_reconstruction_outputs = self._cfg_bool(cfg, "wait_reconstruction_outputs")
-        color_to_depth_wait_timeout_s = self._cfg_float(cfg, "color_to_depth_wait_timeout_s")
-        tsdf_wait_timeout_s = self._cfg_float(cfg, "tsdf_wait_timeout_s")
-        mesh_prefer = self._cfg_str(cfg, "mesh_prefer")
-        mesh_update_wait_timeout_s = self._cfg_float(cfg, "mesh_update_wait_timeout_s")
-        mesh_update_request_timeout_s = self._cfg_float(cfg, "mesh_update_request_timeout_s")
-        tsdf_center_crop_enable = self._cfg_bool(cfg, "tsdf_center_crop_enable")
-        tsdf_center_crop_width = self._cfg_int(cfg, "tsdf_center_crop_width")
-        tsdf_center_crop_height = self._cfg_int(cfg, "tsdf_center_crop_height")
-        tsdf_center_crop_apply_to_depth = self._cfg_bool(cfg, "tsdf_center_crop_apply_to_depth")
-        tsdf_aabb_crop_enable = self._cfg_bool(cfg, "tsdf_aabb_crop_enable")
-        tsdf_aabb_crop_min = self._cfg_float_list(cfg, "tsdf_aabb_crop_min")
-        tsdf_aabb_crop_max = self._cfg_float_list(cfg, "tsdf_aabb_crop_max")
-        tsdf_param_update_timeout_s = self._cfg_float(cfg, "tsdf_param_update_timeout_s")
-
-        run_field_init = self._cfg_bool(cfg, "run_field_init")
-        field_use_latest = self._cfg_bool(cfg, "field_use_latest")
-        field_session_path = self._resolve_run_session_token(self._cfg_str(cfg, "field_session_path"), run_session_path)
-        field_scan_mesh_path = self._cfg_str_allow_empty(cfg, "field_scan_mesh_path")
-        field_mesh_path = self._cfg_str(cfg, "field_mesh_path")
-        field_state_output_dir = self._resolve_run_session_token(self._cfg_str(cfg, "field_state_output_dir"), run_session_path)
-        field_request_timeout_s = self._cfg_float(cfg, "field_request_timeout_s")
-        fields_node_name = self._cfg_str(cfg, "fields_node_name")
-        field_position_param_timeout_s = self._cfg_float(cfg, "field_position_param_timeout_s")
-        field_seed_level = self._cfg_float(cfg, "field_seed_level")
-        field_require_full_hit = self._cfg_bool(cfg, "field_require_full_hit")
-        field_base_z_offset = self._cfg_float(cfg, "field_base_z_offset")
-        field_use_position_target = self._cfg_bool(cfg, "field_use_position_target")
-        field_position_target_x = self._cfg_float(cfg, "field_position_target_x")
-        field_position_target_y = self._cfg_float(cfg, "field_position_target_y")
-        skip_bootstrap_scan_and_init = self._cfg_bool(cfg, "skip_bootstrap_scan_and_init")
-        resume_field_state_path = self._cfg_str_allow_empty(cfg, "resume_field_state_path")
-        resume_scan_mesh_path = self._cfg_str_allow_empty(cfg, "resume_scan_mesh_path")
-        scan_before_generate_first_cycle = self._cfg_bool(cfg, "scan_before_generate_first_cycle")
-
-        run_generate_candidates = self._cfg_bool(cfg, "run_generate_candidates")
-        candidate_use_latest = self._cfg_bool(cfg, "candidate_use_latest")
-        candidate_session_path = self._resolve_run_session_token(self._cfg_str(cfg, "candidate_session_path"), run_session_path)
-        candidate_request_timeout_s = self._cfg_float(cfg, "candidate_request_timeout_s")
-        candidate_mode = self._cfg_str(cfg, "candidate_mode")
-        candidate_beads_per_step = self._cfg_int(cfg, "candidate_beads_per_step")
-        candidate_bead_separation_mm = self._cfg_float(cfg, "candidate_bead_separation_mm")
-        candidate_bead_height_mm = self._cfg_float(cfg, "candidate_bead_height_mm")
-        candidate_walk_distance_mm = self._cfg_float(cfg, "candidate_walk_distance_mm")
-        candidate_walk_step_mm = self._cfg_float(cfg, "candidate_walk_step_mm")
         def refresh_runtime_config(reason: str) -> None:
             new_cfg = self._reload_runtime_config_or_keep(
                 current=rt.config,
