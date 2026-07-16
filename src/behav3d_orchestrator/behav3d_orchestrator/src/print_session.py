@@ -43,6 +43,10 @@ class PrintSession(YamlSession):
         if len(target_list) < 1:
             return {"ok": False, "stage": "parse_targets", "error": "Need at least 1 target."}
 
+        def _pause() -> None:
+            if callable(pause_gate):
+                pause_gate()
+
         if publish_markers:
             self.run_sync(
                 self.util.publish_targets(
@@ -62,8 +66,7 @@ class PrintSession(YamlSession):
             if str(eef_link).strip():
                 self.run_sync(self.motion.setEef(str(eef_link).strip(), enqueue=False), timeout_s=timeout_s)
 
-            if callable(pause_gate):
-                pause_gate()
+            _pause()
 
             first_approach = self._with_z_offset(target_list[0], float(approach_z_offset_m))
             res = self.run_sync(
@@ -76,6 +79,7 @@ class PrintSession(YamlSession):
                 ),
                 timeout_s=timeout_s,
             )
+            _pause()
             if not res.get("ok", False):
                 log.warn(
                     "[print_session:dots] Failed initial approach; continuing target-by-target. "
@@ -87,8 +91,7 @@ class PrintSession(YamlSession):
             failed_targets: list[dict] = []
             printed_targets: list[PoseStamped] = []
             for i, target in enumerate(target_list):
-                if callable(pause_gate):
-                    pause_gate()
+                _pause()
 
                 above = self._with_z_offset(target, float(dot_z_offset_m))
                 above_vel = float(pre_dot_vel_scale) if i == 0 else float(dot_vel_scale)
@@ -102,6 +105,7 @@ class PrintSession(YamlSession):
                     ),
                     timeout_s=timeout_s,
                 )
+                _pause()
                 if not res.get("ok", False):
                     skipped += 1
                     err = str(res.get("error", "unknown"))
@@ -119,6 +123,7 @@ class PrintSession(YamlSession):
                     ),
                     timeout_s=timeout_s,
                 )
+                _pause()
                 if not res.get("ok", False):
                     skipped += 1
                     err = str(res.get("error", "unknown"))
@@ -134,6 +139,7 @@ class PrintSession(YamlSession):
                     ),
                     timeout_s=timeout_s,
                 )
+                _pause()
                 if not res.get("ok", False):
                     skipped += 1
                     err = str(res.get("error", "unknown"))
@@ -164,6 +170,7 @@ class PrintSession(YamlSession):
                         ),
                         timeout_s=timeout_s,
                     )
+                    _pause()
                     if not res.get("ok", False):
                         err = str(res.get("error", "unknown"))
                         failed_targets.append({"index": int(i), "stage": f"retract_{i}", "error": err})
@@ -171,6 +178,7 @@ class PrintSession(YamlSession):
 
                 if float(dwell_s) > 0.0:
                     res = self.run_sync(self.util.wait(float(dwell_s), enqueue=False), timeout_s=timeout_s)
+                    _pause()
                     if not res.get("ok", False):
                         log.warn(
                             f"[print_session:dots] Dwell wait failed at target {i}; continuing. "
@@ -187,6 +195,7 @@ class PrintSession(YamlSession):
                     ),
                     timeout_s=timeout_s,
                 )
+                _pause()
                 if not res.get("ok", False):
                     err = str(res.get("error", "unknown"))
                     failed_targets.append({"index": int(i), "stage": f"lift_{i}", "error": err})
@@ -357,11 +366,16 @@ class PrintSession(YamlSession):
         axis_length: float = 0.05,
         axis_radius: float = 0.003,
         clear_markers_before: bool = True,
+        pause_gate: Optional[Callable[[], None]] = None,
     ) -> dict:
         log = self.node.get_logger()
         segment_list = list(segments)
         if not segment_list:
             return {"ok": False, "stage": "parse_segments", "error": "Need at least 1 segment."}
+
+        def _pause() -> None:
+            if callable(pause_gate):
+                pause_gate()
 
         flattened: list[PoseStamped] = []
         for seg in segment_list:
@@ -397,6 +411,8 @@ class PrintSession(YamlSession):
             if str(eef_link).strip():
                 self.run_sync(self.motion.setEef(str(eef_link).strip(), enqueue=False), timeout_s=timeout_s)
 
+            _pause()
+
             first_start = segment_list[0].start
             first_approach = self._with_z_offset(first_start, float(approach_z_offset_m))
             res = self.run_sync(
@@ -409,10 +425,12 @@ class PrintSession(YamlSession):
                 ),
                 timeout_s=timeout_s,
             )
+            _pause()
             if not res.get("ok", False):
                 return {"ok": False, "stage": "approach_first_segment", "error": res.get("error", "unknown")}
 
             for pos, seg in enumerate(segment_list):
+                _pause()
                 start_travel = self._with_z_offset(seg.start, float(travel_z_offset_m))
                 end_travel = self._with_z_offset(seg.end, float(travel_z_offset_m))
 
@@ -426,6 +444,7 @@ class PrintSession(YamlSession):
                     ),
                     timeout_s=timeout_s,
                 )
+                _pause()
                 if not res.get("ok", False):
                     failed_segments.append(
                         {
@@ -451,6 +470,7 @@ class PrintSession(YamlSession):
                     ),
                     timeout_s=timeout_s,
                 )
+                _pause()
                 if not res.get("ok", False):
                     failed_segments.append(
                         {
@@ -473,6 +493,7 @@ class PrintSession(YamlSession):
                     target_print_speed_mm_s=float(target_print_speed_mm_s),
                     timeout_s=timeout_s,
                 )
+                _pause()
                 if not plan_res.get("ok", False):
                     res = {
                         "ok": False,
@@ -502,11 +523,13 @@ class PrintSession(YamlSession):
                         ),
                         timeout_s=timeout_s,
                     )
+                    _pause()
                     if not on_res.get("ok", False):
                         res = {"ok": False, "stage": "extruder_on", "error": on_res.get("error", "unknown")}
                     else:
                         extruder_on = True
                         exec_res = self.run_sync(self.motion.exec(enqueue=False), timeout_s=timeout_s)
+                        _pause()
                         if not exec_res.get("ok", False):
                             res = {"ok": False, "stage": "exec_segment", "error": exec_res.get("error", "unknown")}
                         else:
@@ -514,6 +537,7 @@ class PrintSession(YamlSession):
                                 self.extruder.setExtruder(False, enqueue=False),
                                 timeout_s=timeout_s,
                             )
+                            _pause()
                             if not res.get("ok", False):
                                 res = {"ok": False, "stage": "extruder_off", "error": res.get("error", "unknown")}
                             else:
@@ -525,6 +549,7 @@ class PrintSession(YamlSession):
                                         self.util.wait(float(post_segment_wait_s), enqueue=False),
                                         timeout_s=_step_timeout(float(post_segment_wait_s) + 2.0),
                                     )
+                                    _pause()
                                     if not wait_res.get("ok", False):
                                         res = {
                                             "ok": False,
@@ -546,6 +571,7 @@ class PrintSession(YamlSession):
                                         ),
                                         timeout_s=_step_timeout(float(post_segment_retract_s) + 3.0),
                                     )
+                                    _pause()
                                     if not retract_res.get("ok", False):
                                         res = {
                                             "ok": False,
@@ -584,6 +610,7 @@ class PrintSession(YamlSession):
                     ),
                     timeout_s=timeout_s,
                 )
+                _pause()
                 if not lift_res.get("ok", False):
                     failed_segments.append(
                         {

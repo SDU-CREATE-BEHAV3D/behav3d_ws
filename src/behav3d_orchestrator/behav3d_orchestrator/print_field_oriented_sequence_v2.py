@@ -90,7 +90,6 @@ class PrintFieldOrientedSequenceV2Node(Node):
         scan_accel_scale = self._cfg_float(cfg, "scan_accel_scale")
         scan_settle_s = self._cfg_float(cfg, "scan_settle_s")
         scan_prompt = self._cfg_str_allow_empty(cfg, "scan_prompt")
-        scan_rgb = self._cfg_bool(cfg, "scan_rgb")
         scan_depth = self._cfg_bool(cfg, "scan_depth")
         scan_ir = self._cfg_bool(cfg, "scan_ir")
         scan_pose = self._cfg_bool(cfg, "scan_pose")
@@ -156,9 +155,6 @@ class PrintFieldOrientedSequenceV2Node(Node):
         run_generate_candidates = self._cfg_bool(cfg, "run_generate_candidates")
         candidate_use_latest = self._cfg_bool(cfg, "candidate_use_latest")
         candidate_session_path = self._resolve_run_session_token(self._cfg_str(cfg, "candidate_session_path"), run_session_path)
-        candidate_field_state_path = self._cfg_str_allow_empty(cfg, "candidate_field_state_path")
-        candidate_scan_mesh_path = self._cfg_str_allow_empty(cfg, "candidate_scan_mesh_path")
-        candidate_output_dir = self._resolve_run_session_token(self._cfg_str(cfg, "candidate_output_dir"), run_session_path)
         candidate_request_timeout_s = self._cfg_float(cfg, "candidate_request_timeout_s")
         candidate_mode = self._cfg_str(cfg, "candidate_mode")
         candidate_beads_per_step = self._cfg_int(cfg, "candidate_beads_per_step")
@@ -166,95 +162,62 @@ class PrintFieldOrientedSequenceV2Node(Node):
         candidate_bead_height_mm = self._cfg_float(cfg, "candidate_bead_height_mm")
         candidate_walk_distance_mm = self._cfg_float(cfg, "candidate_walk_distance_mm")
         candidate_walk_step_mm = self._cfg_float(cfg, "candidate_walk_step_mm")
-        candidate_walk_max_steps = self._cfg_int(cfg, "candidate_walk_max_steps")
-        candidate_walk_start_fraction = self._cfg_float(cfg, "candidate_walk_start_fraction")
-        candidate_target_zx = self._cfg_float(cfg, "candidate_target_zx")
-        candidate_target_zy = self._cfg_float(cfg, "candidate_target_zy")
-        candidate_target_zz = self._cfg_float(cfg, "candidate_target_zz")
-        candidate_target_position_scale = self._cfg_float(cfg, "candidate_target_position_scale")
-        candidate_visualize_field_ply = self._cfg_bool(cfg, "candidate_visualize_field_ply")
-        candidate_restore_scan_mesh_after_field_ply = self._cfg_bool(
-            cfg, "candidate_restore_scan_mesh_after_field_ply"
-        )
-        candidate_publish_markers = self._cfg_bool(cfg, "candidate_publish_markers")
-        candidate_marker_axis_length = self._cfg_float(cfg, "candidate_marker_axis_length")
-        candidate_marker_axis_radius = self._cfg_float(cfg, "candidate_marker_axis_radius")
-        candidate_marker_clear_before = self._cfg_bool(cfg, "candidate_marker_clear_before")
-        oriented_targets_enable = self._cfg_bool(cfg, "oriented_targets_enable")
-        oriented_tangent_sign = self._cfg_float(cfg, "oriented_tangent_sign")
-        oriented_clamp_to_cone = self._cfg_bool(cfg, "oriented_clamp_to_cone")
-        oriented_cone_max_tilt_deg = self._cfg_float(cfg, "oriented_cone_max_tilt_deg")
-        oriented_base_to_world_yaw_deg = self._cfg_float(cfg, "oriented_base_to_world_yaw_deg")
-        print_mode = self._cfg_str(cfg, "print_mode")
-        dot_steps = self._cfg_int(cfg, "dot_steps")
-        dot_speed = self._cfg_int(cfg, "dot_speed")
-        dot_approach_z_offset_m = self._cfg_float(cfg, "dot_approach_z_offset_m")
-        dot_z_offset_m = self._cfg_float(cfg, "dot_z_offset_m")
-        dot_pre_vel_scale = self._cfg_float(cfg, "dot_pre_vel_scale")
-        dot_print_vel_scale = self._cfg_float(cfg, "dot_print_vel_scale")
-        dot_accel_scale = self._cfg_float(cfg, "dot_accel_scale")
-        dot_dwell_s = self._cfg_float(cfg, "dot_dwell_s")
-        post_dot_retract_steps = self._cfg_int(cfg, "post_dot_retract_steps")
-        post_dot_retract_speed = self._cfg_int(cfg, "post_dot_retract_speed")
-        dot_eef_link = self._cfg_str(cfg, "dot_eef_link")
-        segment_print_speed = self._cfg_int(cfg, "segment_print_speed")
-        segment_approach_z_offset_m = self._cfg_float(cfg, "segment_approach_z_offset_m")
-        segment_travel_z_offset_m = self._cfg_float(cfg, "segment_travel_z_offset_m")
-        segment_approach_vel_scale = self._cfg_float(cfg, "segment_approach_vel_scale")
-        segment_travel_vel_scale = self._cfg_float(cfg, "segment_travel_vel_scale")
-        segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
-        segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
-        segment_target_print_speed_mm_s = self._cfg_float(cfg, "segment_target_print_speed_mm_s")
-        post_segment_wait_s = self._cfg_float(cfg, "post_segment_wait_s")
-        post_segment_retract_s = self._cfg_float(cfg, "post_segment_retract_s")
-        post_segment_retract_speed = self._cfg_int(cfg, "post_segment_retract_speed")
-        max_cycles = self._cfg_int(cfg, "max_cycles")
-        prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
+        def refresh_runtime_config(reason: str) -> None:
+            new_cfg = self._reload_runtime_config_or_keep(
+                current=rt.config,
+                config_path=runtime_config_path,
+                reason=reason,
+            )
+            rt.__dict__.update(
+                self._parse_runtime_state(new_cfg, run_session_path).__dict__
+            )
 
         log.info(
             "Starting print_field_oriented sequence: "
-            f"scan_type={scan_type}, enable_scan={enable_scan}, debug_mode={debug_mode}, "
-            f"prompt_before_scan={prompt_before_scan}, "
-            f"initial_grid=({scan_nx}x{scan_ny}), "
-            f"cycle_grid=({grid_nx}x{grid_ny}), "
-            f"run_reconstruction={run_reconstruction}, run_field_init={run_field_init}, "
-            f"run_generate_candidates={run_generate_candidates}, max_cycles={max_cycles}, "
-            f"candidate_mode={candidate_mode}, "
-            f"field_position_target_enabled={field_use_position_target}, "
-            f"field_seed_level={field_seed_level:.4f}, "
-            f"field_require_full_hit={field_require_full_hit}, "
-            f"field_base_z_offset={field_base_z_offset:.4f}, "
-            f"field_position_target=({field_position_target_x:.3f},{field_position_target_y:.3f}), "
-            f"print_mode={print_mode}, dot_steps={dot_steps}, "
-            f"walk_distance_mm={candidate_walk_distance_mm:.1f}, "
-            f"segment_print_speed={segment_print_speed}, segment_print_v={segment_print_vel_scale:.3f}, "
-            f"segment_target_print_speed_mm_s={segment_target_print_speed_mm_s:.3f}, "
-            f"post_segment_wait_s={post_segment_wait_s:.3f}, "
-            f"post_segment_retract_s={post_segment_retract_s:.3f}, "
-            f"post_segment_retract_speed={post_segment_retract_speed}, "
-            f"oriented_targets_enable={oriented_targets_enable}, "
-            f"clamp_to_cone={oriented_clamp_to_cone}, cone_max_tilt_deg={oriented_cone_max_tilt_deg:.1f}, "
-            f"skip_bootstrap_scan_and_init={skip_bootstrap_scan_and_init}, "
-            f"scan_before_generate_first_cycle={scan_before_generate_first_cycle}, "
+            f"scan_type={rt.scan_type}, enable_scan={rt.enable_scan}, debug_mode={rt.debug_mode}, "
+            f"prompt_before_scan={rt.prompt_before_scan}, "
+            f"initial_grid=({rt.scan_nx}x{rt.scan_ny}), "
+            f"cycle_grid=({rt.grid_nx}x{rt.grid_ny}), "
+            f"run_reconstruction={rt.run_reconstruction}, run_field_init={rt.run_field_init}, "
+            f"run_generate_candidates={rt.run_generate_candidates}, max_cycles={rt.max_cycles}, "
+            f"candidate_mode={rt.candidate_mode}, "
+            f"field_position_target_enabled={rt.field_use_position_target}, "
+            f"field_seed_level={rt.field_seed_level:.4f}, "
+            f"field_require_full_hit={rt.field_require_full_hit}, "
+            f"field_base_z_offset={rt.field_base_z_offset:.4f}, "
+            f"field_position_target=({rt.field_position_target_x:.3f},{rt.field_position_target_y:.3f}), "
+            f"print_mode={rt.print_mode}, dot_steps={rt.dot_steps}, "
+            f"walk_distance_mm={rt.candidate_walk_distance_mm:.1f}, "
+            f"segment_print_speed={rt.segment_print_speed}, segment_print_v={rt.segment_print_vel_scale:.3f}, "
+            f"segment_target_print_speed_mm_s={rt.segment_target_print_speed_mm_s:.3f}, "
+            f"post_segment_wait_s={rt.post_segment_wait_s:.3f}, "
+            f"post_segment_retract_s={rt.post_segment_retract_s:.3f}, "
+            f"post_segment_retract_speed={rt.post_segment_retract_speed}, "
+            f"oriented_targets_enable={rt.oriented_targets_enable}, "
+            f"clamp_to_cone={rt.oriented_clamp_to_cone}, cone_max_tilt_deg={rt.oriented_cone_max_tilt_deg:.1f}, "
+            f"skip_bootstrap_scan_and_init={rt.skip_bootstrap_scan_and_init}, "
+            f"scan_before_generate_first_cycle={rt.scan_before_generate_first_cycle}, "
             f"run_session='{run_session_arg}', first_cycle={first_print_cycle_number:04d}, "
             f"runtime_config_path='{runtime_config_path}'"
         )
 
         mesh_path = ""
         rgb_ply_path = ""
-        field_state_path = str(candidate_field_state_path).strip()
+        field_state_path = str(rt.candidate_field_state_path).strip()
         field_center_xyz: Optional[tuple[float, float, float]] = None
         last_generated_targets: List[PoseStamped] = []
         reference_scan_orientation: Optional[tuple[float, float, float, float]] = None
 
         try:
-            if home_before_scan:
+            if rt.home_before_scan:
                 self.session.run_sync(
                     self.session.motion.home(enqueue=False),
-                    timeout_s=timeout_s,
+                    timeout_s=rt.timeout_s,
                 )
+                if not self._wait_if_control_paused("after home_before_scan"):
+                    return
 
-            eef = str(scan_eef_link).strip()
+            eef = str(rt.scan_eef_link).strip()
             if not eef:
                 log.warn(
                     "[print_field_oriented] scan_eef_link is empty; cannot capture TF scan orientation."
@@ -264,11 +227,11 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     pose_res = self.session.run_sync(
                         self.session.camera.get_pose(
                             eef=eef,
-                            base_frame=str(frame_id).strip() or "world",
+                            base_frame=str(rt.frame_id).strip() or "world",
                             use_tf=True,
                             enqueue=False,
                         ),
-                        timeout_s=timeout_s,
+                        timeout_s=rt.timeout_s,
                     )
                     if pose_res.get("ok", False) and "pose" in pose_res:
                         pose = pose_res["pose"]
@@ -298,8 +261,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
             # Optional resume mode: skip bootstrap and continue from existing
             # field state (plus optional existing scan mesh path).
             # -----------------------------------------------------------------
-            if skip_bootstrap_scan_and_init:
-                field_state_path = (resume_field_state_path or field_state_path).strip()
+            if rt.skip_bootstrap_scan_and_init:
+                field_state_path = (rt.resume_field_state_path or field_state_path).strip()
                 if not field_state_path:
                     raise RuntimeError(
                         "skip_bootstrap_scan_and_init=True requires a field state path via "
@@ -310,10 +273,10 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 field_center_xy_mapped = self.session.map_field_center_xy(
                     x=float(field_center_raw[0]),
                     y=float(field_center_raw[1]),
-                    sign_x=field_center_sign_x,
-                    sign_y=field_center_sign_y,
-                    offset_x=field_center_offset_x,
-                    offset_y=field_center_offset_y,
+                    sign_x=rt.field_center_sign_x,
+                    sign_y=rt.field_center_sign_y,
+                    offset_x=rt.field_center_offset_x,
+                    offset_y=rt.field_center_offset_y,
                 )
                 field_center_xyz = (
                     float(field_center_xy_mapped[0]),
@@ -322,21 +285,21 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 )
 
                 mesh_path = (
-                    resume_scan_mesh_path or candidate_scan_mesh_path or field_scan_mesh_path or mesh_path
+                    rt.resume_scan_mesh_path or rt.candidate_scan_mesh_path or rt.field_scan_mesh_path or mesh_path
                 ).strip()
 
                 if mesh_path:
                     mesh_res = self.session.run_sync(
                         self.session.camera.update_world_mesh(
                             use_latest=False,
-                            session_path=candidate_session_path or field_session_path or run_session_arg,
+                            session_path=rt.candidate_session_path or rt.field_session_path or run_session_arg,
                             mesh_path=mesh_path,
                             ply_path="",
                             prefer="mesh",
-                            wait_timeout_s=mesh_update_wait_timeout_s,
+                            wait_timeout_s=rt.mesh_update_wait_timeout_s,
                             enqueue=False,
                         ),
-                        timeout_s=mesh_update_request_timeout_s,
+                        timeout_s=rt.mesh_update_request_timeout_s,
                     )
                     if not mesh_res.get("ok", False):
                         raise RuntimeError(
@@ -348,91 +311,103 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         f"[print_field_oriented] Resume scan mesh published in RViz ({published_kind}): "
                         f"{published_path}"
                     )
+                    if not self._wait_if_control_paused("after resume scan mesh publish"):
+                        return
 
                 log.info(
                     "[print_field_oriented] Skipping bootstrap scan/init. "
                     f"Using existing field state='{field_state_path}', "
                     f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
                     f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
-                    f"xy_map=(x*{field_center_sign_x:.3f}+{field_center_offset_x:.3f}, "
-                    f"y*{field_center_sign_y:.3f}+{field_center_offset_y:.3f}), "
+                    f"xy_map=(x*{rt.field_center_sign_x:.3f}+{rt.field_center_offset_x:.3f}, "
+                    f"y*{rt.field_center_sign_y:.3f}+{rt.field_center_offset_y:.3f}), "
                     f"scan_mesh='{mesh_path}'"
                 )
 
-                if scan_before_generate_first_cycle:
+                if rt.scan_before_generate_first_cycle:
+                    refresh_runtime_config(f"before pre_scan_for_cycle_{first_print_cycle_number:04d}")
                     cycle_tag = f"cycle_{first_print_cycle_number:04d}"
                     cycle_root = self._run_session_child(run_session_path, f"field_loop/{cycle_tag}")
                     cycle_scan_capture_folder = f"{cycle_root}/scan"
                     cycle_scan_folder = f"field_loop/{cycle_tag}/scan"
-                    cycle_scan_z_off = float(grid_z_off)
-                    abs_scan_z = float(grid_center_z) + float(cycle_scan_z_off)
-                    pre_scan_use_tf_orientation = bool(grid_use_tf_orientation)
+                    cycle_scan_z_off = float(rt.grid_z_off)
+                    abs_scan_z = float(rt.grid_center_z) + float(cycle_scan_z_off)
+                    pre_scan_use_tf_orientation = bool(rt.grid_use_tf_orientation)
 
                     log.info(
                         f"[print_field_oriented] ===== pre_scan_for_{cycle_tag} ===== "
                         f"scan_capture='{cycle_scan_capture_folder}' scan_folder='{cycle_scan_folder}' "
-                        f"center=({grid_center_x:.4f}, {grid_center_y:.4f}, {grid_center_z:.4f}) "
-                        f"grid={grid_nx}x{grid_ny} size={1000.0*grid_width:.1f}x"
-                        f"{1000.0*grid_height:.1f}mm "
+                        f"center=({rt.grid_center_x:.4f}, {rt.grid_center_y:.4f}, {rt.grid_center_z:.4f}) "
+                        f"grid={rt.grid_nx}x{rt.grid_ny} size={1000.0*rt.grid_width:.1f}x"
+                        f"{1000.0*rt.grid_height:.1f}mm "
                         f"z_off={cycle_scan_z_off:.4f}m => abs_scan_z={abs_scan_z:.4f}m "
                         f"use_tf_orientation={pre_scan_use_tf_orientation}"
                     )
 
-                    if not self._prompt_before_scan_if_enabled(
-                        enabled=prompt_before_scan,
-                        label=f"pre_scan_for_{cycle_tag}",
-                    ):
-                        log.info("[print_field_oriented] Stopped by user before pre-scan.")
-                        return
+                    if not rt.enable_scan:
+                        log.info(
+                            f"[print_field_oriented] pre_scan_for_{cycle_tag} skipped because enable_scan=false."
+                        )
+                    else:
+                        if not self._prompt_before_scan_if_enabled(
+                            enabled=rt.prompt_before_scan,
+                            label=f"pre_scan_for_{cycle_tag}",
+                        ):
+                            log.info("[print_field_oriented] Stopped by user before pre-scan.")
+                            return
 
-                    pre_scan_targets = self._run_configured_scan(
-                        cfg=cfg,
-                        scan_type=scan_type,
-                        target=None,
-                        width=grid_width,
-                        height=grid_height,
-                        center_x=float(grid_center_x),
-                        center_y=float(grid_center_y),
-                        center_z=float(grid_center_z),
-                        z_off=cycle_scan_z_off,
-                        nx=grid_nx,
-                        ny=grid_ny,
-                        row_major=grid_row_major,
-                        use_tf_orientation=pre_scan_use_tf_orientation,
-                        capture_folder=cycle_scan_capture_folder,
-                        timeout_s=timeout_s,
-                        frame_id=frame_id,
-                    )
-                    if not pre_scan_targets:
-                        raise RuntimeError(f"Grid sweep produced 0 targets for pre_scan_for_{cycle_tag}.")
-                    reference_scan_orientation = (
-                        float(pre_scan_targets[0].pose.orientation.x),
-                        float(pre_scan_targets[0].pose.orientation.y),
-                        float(pre_scan_targets[0].pose.orientation.z),
-                        float(pre_scan_targets[0].pose.orientation.w),
-                    )
+                        pre_scan_targets = self._run_configured_scan(
+                            cfg=rt.config,
+                            scan_type=rt.scan_type,
+                            target=None,
+                            width=rt.grid_width,
+                            height=rt.grid_height,
+                            center_x=float(rt.grid_center_x),
+                            center_y=float(rt.grid_center_y),
+                            center_z=float(rt.grid_center_z),
+                            z_off=cycle_scan_z_off,
+                            nx=rt.grid_nx,
+                            ny=rt.grid_ny,
+                            row_major=rt.grid_row_major,
+                            use_tf_orientation=pre_scan_use_tf_orientation,
+                            capture_folder=cycle_scan_capture_folder,
+                            timeout_s=rt.timeout_s,
+                            frame_id=rt.frame_id,
+                        )
+                        if not pre_scan_targets:
+                            raise RuntimeError(f"Grid sweep produced 0 targets for pre_scan_for_{cycle_tag}.")
+                        if not self._wait_if_control_paused(f"after pre_scan_for_{cycle_tag}"):
+                            return
+                        reference_scan_orientation = (
+                            float(pre_scan_targets[0].pose.orientation.x),
+                            float(pre_scan_targets[0].pose.orientation.y),
+                            float(pre_scan_targets[0].pose.orientation.z),
+                            float(pre_scan_targets[0].pose.orientation.w),
+                        )
 
-                    if run_reconstruction:
+                    if rt.enable_scan and rt.run_reconstruction:
                         mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
                             session_path=run_session_arg,
                             scan_folder=cycle_scan_folder,
-                            reconstruct_device=reconstruct_device,
-                            reconstruct_request_timeout_s=reconstruct_request_timeout_s,
-                            wait_reconstruction_outputs=wait_reconstruction_outputs,
-                            color_to_depth_wait_timeout_s=color_to_depth_wait_timeout_s,
-                            tsdf_wait_timeout_s=tsdf_wait_timeout_s,
-                            mesh_prefer=mesh_prefer,
-                            mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
-                            mesh_update_request_timeout_s=mesh_update_request_timeout_s,
-                            tsdf_center_crop_enable=tsdf_center_crop_enable,
-                            tsdf_center_crop_width=tsdf_center_crop_width,
-                            tsdf_center_crop_height=tsdf_center_crop_height,
-                            tsdf_center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
-                            tsdf_aabb_crop_enable=tsdf_aabb_crop_enable,
-                            tsdf_aabb_crop_min=tsdf_aabb_crop_min,
-                            tsdf_aabb_crop_max=tsdf_aabb_crop_max,
-                            tsdf_param_update_timeout_s=tsdf_param_update_timeout_s,
+                            reconstruct_device=rt.reconstruct_device,
+                            reconstruct_request_timeout_s=rt.reconstruct_request_timeout_s,
+                            wait_reconstruction_outputs=rt.wait_reconstruction_outputs,
+                            color_to_depth_wait_timeout_s=rt.color_to_depth_wait_timeout_s,
+                            tsdf_wait_timeout_s=rt.tsdf_wait_timeout_s,
+                            mesh_prefer=rt.mesh_prefer,
+                            mesh_update_wait_timeout_s=rt.mesh_update_wait_timeout_s,
+                            mesh_update_request_timeout_s=rt.mesh_update_request_timeout_s,
+                            tsdf_center_crop_enable=rt.tsdf_center_crop_enable,
+                            tsdf_center_crop_width=rt.tsdf_center_crop_width,
+                            tsdf_center_crop_height=rt.tsdf_center_crop_height,
+                            tsdf_center_crop_apply_to_depth=rt.tsdf_center_crop_apply_to_depth,
+                            tsdf_aabb_crop_enable=rt.tsdf_aabb_crop_enable,
+                            tsdf_aabb_crop_min=rt.tsdf_aabb_crop_min,
+                            tsdf_aabb_crop_max=rt.tsdf_aabb_crop_max,
+                            tsdf_param_update_timeout_s=rt.tsdf_param_update_timeout_s,
                         )
+                        if not self._wait_if_control_paused(f"after reconstruction for pre_scan_for_{cycle_tag}"):
+                            return
             else:
                 bootstrap_tag = "cycle_0000"
                 bootstrap_root = self._run_session_child(run_session_path, f"field_loop/{bootstrap_tag}")
@@ -447,25 +422,27 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 )
 
                 bootstrap_targets = self._run_configured_scan(
-                    cfg=cfg,
-                    scan_type=scan_type,
+                    cfg=rt.config,
+                    scan_type=rt.scan_type,
                     target=None,
-                    width=scan_width,
-                    height=scan_height,
-                    center_x=scan_center_x,
-                    center_y=scan_center_y,
-                    center_z=scan_center_z,
-                    z_off=scan_z_off,
-                    nx=scan_nx,
-                    ny=scan_ny,
-                    row_major=scan_row_major,
-                    use_tf_orientation=scan_use_tf_orientation,
+                    width=rt.scan_width,
+                    height=rt.scan_height,
+                    center_x=rt.scan_center_x,
+                    center_y=rt.scan_center_y,
+                    center_z=rt.scan_center_z,
+                    z_off=rt.scan_z_off,
+                    nx=rt.scan_nx,
+                    ny=rt.scan_ny,
+                    row_major=rt.scan_row_major,
+                    use_tf_orientation=rt.scan_use_tf_orientation,
                     capture_folder=bootstrap_scan_capture_folder,
-                    timeout_s=timeout_s,
-                    frame_id=frame_id,
+                    timeout_s=rt.timeout_s,
+                    frame_id=rt.frame_id,
                 )
                 if not bootstrap_targets:
                     raise RuntimeError("Bootstrap grid sweep produced 0 targets.")
+                if not self._wait_if_control_paused("after bootstrap scan"):
+                    return
 
                 reference_scan_orientation = (
                     float(bootstrap_targets[0].pose.orientation.x),
@@ -474,54 +451,58 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     float(bootstrap_targets[0].pose.orientation.w),
                 )
 
-                if run_reconstruction:
+                if rt.run_reconstruction:
                     mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
                         session_path=run_session_arg,
                         scan_folder=bootstrap_scan_folder,
-                        reconstruct_device=reconstruct_device,
-                        reconstruct_request_timeout_s=reconstruct_request_timeout_s,
-                        wait_reconstruction_outputs=wait_reconstruction_outputs,
-                        color_to_depth_wait_timeout_s=color_to_depth_wait_timeout_s,
-                        tsdf_wait_timeout_s=tsdf_wait_timeout_s,
-                        mesh_prefer=mesh_prefer,
-                        mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
-                        mesh_update_request_timeout_s=mesh_update_request_timeout_s,
-                        tsdf_center_crop_enable=tsdf_center_crop_enable,
-                        tsdf_center_crop_width=tsdf_center_crop_width,
-                        tsdf_center_crop_height=tsdf_center_crop_height,
-                        tsdf_center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
-                        tsdf_aabb_crop_enable=tsdf_aabb_crop_enable,
-                        tsdf_aabb_crop_min=tsdf_aabb_crop_min,
-                        tsdf_aabb_crop_max=tsdf_aabb_crop_max,
-                        tsdf_param_update_timeout_s=tsdf_param_update_timeout_s,
+                        reconstruct_device=rt.reconstruct_device,
+                        reconstruct_request_timeout_s=rt.reconstruct_request_timeout_s,
+                        wait_reconstruction_outputs=rt.wait_reconstruction_outputs,
+                        color_to_depth_wait_timeout_s=rt.color_to_depth_wait_timeout_s,
+                        tsdf_wait_timeout_s=rt.tsdf_wait_timeout_s,
+                        mesh_prefer=rt.mesh_prefer,
+                        mesh_update_wait_timeout_s=rt.mesh_update_wait_timeout_s,
+                        mesh_update_request_timeout_s=rt.mesh_update_request_timeout_s,
+                        tsdf_center_crop_enable=rt.tsdf_center_crop_enable,
+                        tsdf_center_crop_width=rt.tsdf_center_crop_width,
+                        tsdf_center_crop_height=rt.tsdf_center_crop_height,
+                        tsdf_center_crop_apply_to_depth=rt.tsdf_center_crop_apply_to_depth,
+                        tsdf_aabb_crop_enable=rt.tsdf_aabb_crop_enable,
+                        tsdf_aabb_crop_min=rt.tsdf_aabb_crop_min,
+                        tsdf_aabb_crop_max=rt.tsdf_aabb_crop_max,
+                        tsdf_param_update_timeout_s=rt.tsdf_param_update_timeout_s,
                     )
+                    if not self._wait_if_control_paused("after bootstrap reconstruction"):
+                        return
 
-                if run_field_init:
+                if rt.run_field_init:
                     self._set_fields_node_positioning_params(
-                        fields_node_name=fields_node_name,
-                        seed_level=field_seed_level,
-                        require_full_hit=field_require_full_hit,
-                        base_z_offset=field_base_z_offset,
-                        use_position_target=field_use_position_target,
-                        position_target_x=field_position_target_x,
-                        position_target_y=field_position_target_y,
-                        timeout_s=field_position_param_timeout_s,
+                        fields_node_name=rt.fields_node_name,
+                        seed_level=rt.field_seed_level,
+                        require_full_hit=rt.field_require_full_hit,
+                        base_z_offset=rt.field_base_z_offset,
+                        use_position_target=rt.field_use_position_target,
+                        position_target_x=rt.field_position_target_x,
+                        position_target_y=rt.field_position_target_y,
+                        timeout_s=rt.field_position_param_timeout_s,
                     )
-                    scan_mesh_for_field = field_scan_mesh_path or mesh_path
+                    scan_mesh_for_field = rt.field_scan_mesh_path or mesh_path
                     scan_mesh_paths = [scan_mesh_for_field] if scan_mesh_for_field else []
                     init_res = self.session.run_sync(
                         self.session.field.init_field_from_scan(
-                            use_latest=field_use_latest,
-                            session_path=field_session_path,
+                            use_latest=rt.field_use_latest,
+                            session_path=rt.field_session_path,
                             scan_mesh_paths=scan_mesh_paths,
-                            field_mesh_path=field_mesh_path,
+                            field_mesh_path=rt.field_mesh_path,
                             state_output_dir=bootstrap_field_state_output_dir,
                             enqueue=False,
                         ),
-                        timeout_s=field_request_timeout_s,
+                        timeout_s=rt.field_request_timeout_s,
                     )
                     if not init_res.get("ok", False):
                         raise RuntimeError(f"init_field_from_scan failed: {init_res.get('error')}")
+                    if not self._wait_if_control_paused("after field init"):
+                        return
 
                     metrics = init_res.get("metrics", {})
                     field_state_path = str(metrics.get("field_state_path", "")).strip()
@@ -532,10 +513,10 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     field_center_xy = self.session.map_field_center_xy(
                         x=float(field_center_raw[0]),
                         y=float(field_center_raw[1]),
-                        sign_x=field_center_sign_x,
-                        sign_y=field_center_sign_y,
-                        offset_x=field_center_offset_x,
-                        offset_y=field_center_offset_y,
+                        sign_x=rt.field_center_sign_x,
+                        sign_y=rt.field_center_sign_y,
+                        offset_x=rt.field_center_offset_x,
+                        offset_y=rt.field_center_offset_y,
                     )
                     field_center_xyz = (
                         float(field_center_xy[0]),
@@ -551,8 +532,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         f"{metrics.get('offset_z', 0.0):.4f}), "
                         f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
                         f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
-                        f"xy_map=(x*{field_center_sign_x:.3f}+{field_center_offset_x:.3f}, "
-                        f"y*{field_center_sign_y:.3f}+{field_center_offset_y:.3f})"
+                        f"xy_map=(x*{rt.field_center_sign_x:.3f}+{rt.field_center_offset_x:.3f}, "
+                        f"y*{rt.field_center_sign_y:.3f}+{rt.field_center_offset_y:.3f})"
                     )
 
                     debug_field_ply_path = str(metrics.get("debug_field_ply_path", "")).strip()
@@ -560,14 +541,14 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         field_vis_res = self.session.run_sync(
                             self.session.camera.update_world_mesh(
                                 use_latest=False,
-                                session_path=field_session_path or run_session_arg,
+                                session_path=rt.field_session_path or run_session_arg,
                                 mesh_path="",
                                 ply_path=debug_field_ply_path,
                                 prefer="ply",
-                                wait_timeout_s=mesh_update_wait_timeout_s,
+                                wait_timeout_s=rt.mesh_update_wait_timeout_s,
                                 enqueue=False,
                             ),
-                            timeout_s=mesh_update_request_timeout_s,
+                            timeout_s=rt.mesh_update_request_timeout_s,
                         )
                         if not field_vis_res.get("ok", False):
                             raise RuntimeError(
@@ -578,6 +559,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         log.info(
                             f"[print_field_oriented] Field PLY published in RViz ({field_vis_kind}): {field_vis_path}"
                         )
+                        if not self._wait_if_control_paused("after field PLY publish"):
+                            return
                 else:
                     if not field_state_path:
                         raise RuntimeError(
@@ -588,10 +571,10 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     field_center_xy = self.session.map_field_center_xy(
                         x=float(field_center_raw[0]),
                         y=float(field_center_raw[1]),
-                        sign_x=field_center_sign_x,
-                        sign_y=field_center_sign_y,
-                        offset_x=field_center_offset_x,
-                        offset_y=field_center_offset_y,
+                        sign_x=rt.field_center_sign_x,
+                        sign_y=rt.field_center_sign_y,
+                        offset_x=rt.field_center_offset_x,
+                        offset_y=rt.field_center_offset_y,
                     )
                     field_center_xyz = (
                         float(field_center_xy[0]),
@@ -603,14 +586,14 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         f"state='{field_state_path}', "
                         f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
                         f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
-                        f"xy_map=(x*{field_center_sign_x:.3f}+{field_center_offset_x:.3f}, "
-                        f"y*{field_center_sign_y:.3f}+{field_center_offset_y:.3f})"
+                        f"xy_map=(x*{rt.field_center_sign_x:.3f}+{rt.field_center_offset_x:.3f}, "
+                        f"y*{rt.field_center_sign_y:.3f}+{rt.field_center_offset_y:.3f})"
                     )
 
             if field_center_xyz is None:
                 raise RuntimeError("Field center not available after bootstrap.")
 
-            if not run_generate_candidates:
+            if not rt.run_generate_candidates:
                 log.warn("[print_field_oriented] run_generate_candidates=False; stopping after bootstrap.")
                 return
 
@@ -621,98 +604,12 @@ class PrintFieldOrientedSequenceV2Node(Node):
             # -----------------------------------------------------------------
             print_cycle_index = 0
             while rclpy.ok():
-                try:
-                    cfg = self._load_runtime_config(runtime_config_path)
-                except Exception as exc:
-                    log.warn(
-                        "[print_field_oriented] Runtime config reload failed; keeping previous config. "
-                        f"path='{runtime_config_path}' error='{exc}'"
-                    )
-
-                max_cycles = self._cfg_int(cfg, "max_cycles")
-                prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
-                debug_mode = self._cfg_bool(cfg, "debug_mode")
-                prompt_before_print = self._cfg_bool(cfg, "prompt_before_print")
-                prompt_before_scan = self._cfg_bool(cfg, "prompt_before_scan")
-                enable_scan = self._cfg_bool(cfg, "enable_scan")
-                scan_type = self._cfg_str(cfg, "scan_type")
-                candidate_use_latest = self._cfg_bool(cfg, "candidate_use_latest")
-                candidate_session_path = self._resolve_run_session_token(
-                    self._cfg_str(cfg, "candidate_session_path"),
-                    run_session_path,
+                refresh_runtime_config(
+                    f"cycle loop start {first_print_cycle_number + print_cycle_index:04d}"
                 )
-                candidate_field_state_path = self._cfg_str_allow_empty(cfg, "candidate_field_state_path")
-                candidate_scan_mesh_path = self._cfg_str_allow_empty(cfg, "candidate_scan_mesh_path")
-                candidate_request_timeout_s = self._cfg_float(cfg, "candidate_request_timeout_s")
-                candidate_mode = self._cfg_str(cfg, "candidate_mode")
-                candidate_beads_per_step = self._cfg_int(cfg, "candidate_beads_per_step")
-                candidate_bead_separation_mm = self._cfg_float(cfg, "candidate_bead_separation_mm")
-                candidate_bead_height_mm = self._cfg_float(cfg, "candidate_bead_height_mm")
-                candidate_walk_distance_mm = self._cfg_float(cfg, "candidate_walk_distance_mm")
-                candidate_walk_step_mm = self._cfg_float(cfg, "candidate_walk_step_mm")
-                candidate_walk_max_steps = self._cfg_int(cfg, "candidate_walk_max_steps")
-                candidate_walk_start_fraction = self._cfg_float(cfg, "candidate_walk_start_fraction")
-                candidate_target_zx = self._cfg_float(cfg, "candidate_target_zx")
-                candidate_target_zy = self._cfg_float(cfg, "candidate_target_zy")
-                candidate_target_zz = self._cfg_float(cfg, "candidate_target_zz")
-                candidate_target_position_scale = self._cfg_float(cfg, "candidate_target_position_scale")
-                candidate_visualize_field_ply = self._cfg_bool(cfg, "candidate_visualize_field_ply")
-                candidate_restore_scan_mesh_after_field_ply = self._cfg_bool(
-                    cfg, "candidate_restore_scan_mesh_after_field_ply"
-                )
-                candidate_publish_markers = self._cfg_bool(cfg, "candidate_publish_markers")
-                candidate_marker_axis_length = self._cfg_float(cfg, "candidate_marker_axis_length")
-                candidate_marker_axis_radius = self._cfg_float(cfg, "candidate_marker_axis_radius")
-                candidate_marker_clear_before = self._cfg_bool(cfg, "candidate_marker_clear_before")
-                oriented_targets_enable = self._cfg_bool(cfg, "oriented_targets_enable")
-                oriented_tangent_sign = self._cfg_float(cfg, "oriented_tangent_sign")
-                oriented_clamp_to_cone = self._cfg_bool(cfg, "oriented_clamp_to_cone")
-                oriented_cone_max_tilt_deg = self._cfg_float(cfg, "oriented_cone_max_tilt_deg")
-                oriented_base_to_world_yaw_deg = self._cfg_float(cfg, "oriented_base_to_world_yaw_deg")
-                print_mode = self._cfg_str(cfg, "print_mode")
-                dot_steps = self._cfg_int(cfg, "dot_steps")
-                dot_speed = self._cfg_int(cfg, "dot_speed")
-                dot_approach_z_offset_m = self._cfg_float(cfg, "dot_approach_z_offset_m")
-                dot_z_offset_m = self._cfg_float(cfg, "dot_z_offset_m")
-                dot_pre_vel_scale = self._cfg_float(cfg, "dot_pre_vel_scale")
-                dot_print_vel_scale = self._cfg_float(cfg, "dot_print_vel_scale")
-                dot_accel_scale = self._cfg_float(cfg, "dot_accel_scale")
-                dot_dwell_s = self._cfg_float(cfg, "dot_dwell_s")
-                post_dot_retract_steps = self._cfg_int(cfg, "post_dot_retract_steps")
-                post_dot_retract_speed = self._cfg_int(cfg, "post_dot_retract_speed")
-                dot_eef_link = self._cfg_str(cfg, "dot_eef_link")
-                segment_print_speed = self._cfg_int(cfg, "segment_print_speed")
-                segment_approach_z_offset_m = self._cfg_float(cfg, "segment_approach_z_offset_m")
-                segment_travel_z_offset_m = self._cfg_float(cfg, "segment_travel_z_offset_m")
-                segment_approach_vel_scale = self._cfg_float(cfg, "segment_approach_vel_scale")
-                segment_travel_vel_scale = self._cfg_float(cfg, "segment_travel_vel_scale")
-                segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
-                segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
-                segment_target_print_speed_mm_s = self._cfg_float(cfg, "segment_target_print_speed_mm_s")
-                post_segment_wait_s = self._cfg_float(cfg, "post_segment_wait_s")
-                post_segment_retract_s = self._cfg_float(cfg, "post_segment_retract_s")
-                post_segment_retract_speed = self._cfg_int(cfg, "post_segment_retract_speed")
-                grid_width = self._cfg_float(cfg, "grid_width")
-                grid_height = self._cfg_float(cfg, "grid_height")
-                grid_center_x = self._cfg_float(cfg, "grid_center_x")
-                grid_center_y = self._cfg_float(cfg, "grid_center_y")
-                grid_center_z = self._cfg_float(cfg, "grid_center_z")
-                grid_z_off = self._cfg_float(cfg, "grid_z_off")
-                grid_nx = self._cfg_int(cfg, "grid_nx")
-                grid_ny = self._cfg_int(cfg, "grid_ny")
-                grid_row_major = self._cfg_bool(cfg, "grid_row_major")
-                grid_use_tf_orientation = self._cfg_bool(cfg, "grid_use_tf_orientation")
-                scan_debug_prompt = self._cfg_bool(cfg, "scan_debug_prompt")
-                scan_vel_scale = self._cfg_float(cfg, "scan_vel_scale")
-                scan_accel_scale = self._cfg_float(cfg, "scan_accel_scale")
-                scan_publish_markers = self._cfg_bool(cfg, "scan_publish_markers")
-                scan_axis_length = self._cfg_float(cfg, "scan_axis_length")
-                scan_axis_radius = self._cfg_float(cfg, "scan_axis_radius")
-                scan_clear_markers_before = self._cfg_bool(cfg, "scan_clear_markers_before")
-                scan_eef_link = self._cfg_str(cfg, "scan_eef_link")
 
-                if max_cycles > 0 and print_cycle_index >= max_cycles:
-                    log.info(f"[print_field_oriented] Reached max_cycles={max_cycles}.")
+                if rt.max_cycles > 0 and print_cycle_index >= rt.max_cycles:
+                    log.info(f"[print_field_oriented] Reached max_cycles={rt.max_cycles}.")
                     break
 
                 cycle_number = first_print_cycle_number + print_cycle_index
@@ -720,9 +617,12 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 cycle_root = self._run_session_child(run_session_path, f"field_loop/{cycle_tag}")
                 cycle_candidate_output_dir = f"{cycle_root}/candidates"
 
-                scan_mesh_for_candidates = candidate_scan_mesh_path or field_scan_mesh_path or mesh_path
+                if not self._wait_if_control_paused(f"before candidate generation for {cycle_tag}"):
+                    break
+
+                scan_mesh_for_candidates = rt.candidate_scan_mesh_path or rt.field_scan_mesh_path or mesh_path
                 scan_mesh_paths = [scan_mesh_for_candidates] if scan_mesh_for_candidates else []
-                field_state_for_candidates = candidate_field_state_path or field_state_path
+                field_state_for_candidates = rt.candidate_field_state_path or field_state_path
                 if not field_state_for_candidates:
                     raise RuntimeError(
                         "Missing field state for candidate generation. "
@@ -731,31 +631,31 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
                 cand_res = self.session.run_sync(
                         self.session.field.generate_print_candidates(
-                            use_latest=candidate_use_latest,
-                            session_path=candidate_session_path,
+                            use_latest=rt.candidate_use_latest,
+                            session_path=rt.candidate_session_path,
                             field_state_path=field_state_for_candidates,
                             scan_mesh_paths=scan_mesh_paths,
                             output_dir=cycle_candidate_output_dir,
-                            candidate_mode=candidate_mode,
-                            beads_per_step=candidate_beads_per_step,
-                            bead_separation_mm=candidate_bead_separation_mm,
-                            bead_height_mm=candidate_bead_height_mm,
-                            walk_distance_mm=candidate_walk_distance_mm,
-                            walk_step_mm=candidate_walk_step_mm,
-                            walk_max_steps=candidate_walk_max_steps,
-                            walk_start_fraction=candidate_walk_start_fraction,
-                            orient_with_tangent=oriented_targets_enable,
-                            tangent_sign=oriented_tangent_sign,
-                            clamp_to_cone=oriented_clamp_to_cone,
-                            cone_max_tilt_deg=oriented_cone_max_tilt_deg,
-                            base_to_world_yaw_deg=oriented_base_to_world_yaw_deg,
-                            target_zx=candidate_target_zx,
-                            target_zy=candidate_target_zy,
-                            target_zz=candidate_target_zz,
-                            target_position_scale=candidate_target_position_scale,
+                            candidate_mode=rt.candidate_mode,
+                            beads_per_step=rt.candidate_beads_per_step,
+                            bead_separation_mm=rt.candidate_bead_separation_mm,
+                            bead_height_mm=rt.candidate_bead_height_mm,
+                            walk_distance_mm=rt.candidate_walk_distance_mm,
+                            walk_step_mm=rt.candidate_walk_step_mm,
+                            walk_max_steps=rt.candidate_walk_max_steps,
+                            walk_start_fraction=rt.candidate_walk_start_fraction,
+                            orient_with_tangent=rt.oriented_targets_enable,
+                            tangent_sign=rt.oriented_tangent_sign,
+                            clamp_to_cone=rt.oriented_clamp_to_cone,
+                            cone_max_tilt_deg=rt.oriented_cone_max_tilt_deg,
+                            base_to_world_yaw_deg=rt.oriented_base_to_world_yaw_deg,
+                            target_zx=rt.candidate_target_zx,
+                            target_zy=rt.candidate_target_zy,
+                            target_zz=rt.candidate_target_zz,
+                            target_position_scale=rt.candidate_target_position_scale,
                             enqueue=False,
                     ),
-                    timeout_s=candidate_request_timeout_s,
+                    timeout_s=rt.candidate_request_timeout_s,
                 )
                 if not cand_res.get("ok", False):
                     raise RuntimeError(f"generate_print_candidates failed: {cand_res.get('error')}")
@@ -769,6 +669,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     f"yaml='{cand_metrics.get('targets_yaml_path', '')}' "
                     f"cycle_dir='{cand_metrics.get('cycle_output_dir', '')}'"
                 )
+                if not self._wait_if_control_paused(f"after candidate generation for {cycle_tag}"):
+                    break
 
                 targets_yaml_path = str(cand_metrics.get("targets_yaml_path", "")).strip()
                 preview_targets: List[PoseStamped] = []
@@ -776,28 +678,28 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 if targets_yaml_path:
                     preview_segments = self.print_session.parse_yaml_segments(
                         yaml_path=targets_yaml_path,
-                        frame_id=frame_id,
+                        frame_id=rt.frame_id,
                     )
                     preview_targets = self.print_session.parse_yaml_targets(
                         yaml_path=targets_yaml_path,
-                        frame_id=frame_id,
+                        frame_id=rt.frame_id,
                     )
 
-                if candidate_visualize_field_ply:
+                if rt.candidate_visualize_field_ply:
                     cycle_field_ply = str(cand_metrics.get("debug_field_ply_path", "")).strip()
                     if cycle_field_ply:
                         cycle_vis_res = self.session.run_sync(
                             self.session.camera.preview_field_ply(
                                 use_latest=False,
-                                session_path=candidate_session_path or run_session_arg,
+                                session_path=rt.candidate_session_path or run_session_arg,
                                 field_ply_path=cycle_field_ply,
                                 restore_mesh_path=(
-                                    scan_mesh_for_candidates if candidate_restore_scan_mesh_after_field_ply else ""
+                                    scan_mesh_for_candidates if rt.candidate_restore_scan_mesh_after_field_ply else ""
                                 ),
-                                wait_timeout_s=mesh_update_wait_timeout_s,
+                                wait_timeout_s=rt.mesh_update_wait_timeout_s,
                                 enqueue=False,
                             ),
-                            timeout_s=mesh_update_request_timeout_s,
+                            timeout_s=rt.mesh_update_request_timeout_s,
                         )
                         if not cycle_vis_res.get("ok", False):
                             raise RuntimeError(
@@ -815,7 +717,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                             f"{cycle_vis_path}"
                         )
 
-                        if candidate_restore_scan_mesh_after_field_ply and scan_mesh_for_candidates:
+                        if rt.candidate_restore_scan_mesh_after_field_ply and scan_mesh_for_candidates:
                             restored_path = str(
                                 cycle_vis_res.get("metrics", {}).get("restore_mesh_published_path", "")
                             ).strip()
@@ -827,16 +729,16 @@ class PrintFieldOrientedSequenceV2Node(Node):
                                 f"{restored_path}"
                             )
 
-                if candidate_publish_markers and preview_targets:
+                if rt.candidate_publish_markers and preview_targets:
                     marker_res = self.session.run_sync(
                         self.session.util.publish_targets(
                             preview_targets,
-                            axis_length=float(candidate_marker_axis_length),
-                            axis_radius=float(candidate_marker_axis_radius),
-                            clear_before=bool(candidate_marker_clear_before),
+                            axis_length=float(rt.candidate_marker_axis_length),
+                            axis_radius=float(rt.candidate_marker_axis_radius),
+                            clear_before=bool(rt.candidate_marker_clear_before),
                             enqueue=False,
                         ),
-                        timeout_s=mesh_update_request_timeout_s,
+                        timeout_s=rt.mesh_update_request_timeout_s,
                     )
                     if not marker_res.get("ok", False):
                         raise RuntimeError(
@@ -844,14 +746,20 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         )
                     log.info(
                         f"[print_field_oriented] Candidate markers published: {len(preview_targets)} targets "
-                        f"(yaml='{targets_yaml_path}', frame='{frame_id}')"
+                        f"(yaml='{targets_yaml_path}', frame='{rt.frame_id}')"
                     )
+                    if not self._wait_if_control_paused(f"after candidate markers for {cycle_tag}"):
+                        break
 
                 if not preview_targets:
                     log.warn("[print_field_oriented] No candidate targets generated; stopping loop.")
                     break
 
-                if debug_mode or prompt_before_print:
+                refresh_runtime_config(f"before print prompt for {cycle_tag}")
+                if not self._wait_if_control_paused(f"before print for {cycle_tag}"):
+                    break
+
+                if rt.debug_mode or rt.prompt_before_print:
                     gate_res = self.session.run_sync(
                         self.session.util.input(
                             prompt=(
@@ -867,7 +775,11 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         log.warn("[print_field_oriented] Print execution stopped by user.")
                         break
 
-                print_mode_norm = str(print_mode or "auto").strip().lower()
+                def print_pause_gate() -> None:
+                    if not self._wait_if_control_paused(f"during print for {cycle_tag}"):
+                        raise RuntimeError("Interrupted while waiting at print pause gate.")
+
+                print_mode_norm = str(rt.print_mode or "auto").strip().lower()
                 if print_mode_norm not in ("auto", "segments", "dots"):
                     raise RuntimeError("print_mode must be one of: auto, segments, dots")
 
@@ -882,45 +794,49 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     )
                     print_res = self.print_session.run_print_segments(
                         segments=preview_segments,
-                        print_speed=segment_print_speed,
-                        approach_z_offset_m=segment_approach_z_offset_m,
-                        travel_z_offset_m=segment_travel_z_offset_m,
-                        approach_vel_scale=segment_approach_vel_scale,
-                        travel_vel_scale=segment_travel_vel_scale,
-                        print_vel_scale=segment_print_vel_scale,
-                        accel_scale=segment_accel_scale,
-                        target_print_speed_mm_s=segment_target_print_speed_mm_s,
-                        post_segment_wait_s=post_segment_wait_s,
-                        post_segment_retract_s=post_segment_retract_s,
-                        post_segment_retract_speed=post_segment_retract_speed,
-                        timeout_s=timeout_s,
+                        print_speed=rt.segment_print_speed,
+                        approach_z_offset_m=rt.segment_approach_z_offset_m,
+                        travel_z_offset_m=rt.segment_travel_z_offset_m,
+                        approach_vel_scale=rt.segment_approach_vel_scale,
+                        travel_vel_scale=rt.segment_travel_vel_scale,
+                        print_vel_scale=rt.segment_print_vel_scale,
+                        accel_scale=rt.segment_accel_scale,
+                        target_print_speed_mm_s=rt.segment_target_print_speed_mm_s,
+                        post_segment_wait_s=rt.post_segment_wait_s,
+                        post_segment_retract_s=rt.post_segment_retract_s,
+                        post_segment_retract_speed=rt.post_segment_retract_speed,
+                        timeout_s=rt.timeout_s,
+                        pause_gate=print_pause_gate,
                     )
                 else:
                     log.info(
                         f"[print_field_oriented] Printing {len(preview_targets)} dots "
-                        f"(print_mode={print_mode_norm}, dot_steps={dot_steps}, "
-                        f"retract_steps={post_dot_retract_steps})."
+                        f"(print_mode={print_mode_norm}, dot_steps={rt.dot_steps}, "
+                        f"retract_steps={rt.post_dot_retract_steps})."
                     )
                     print_res = self.print_session.run_print_dots_targets(
                         targets=preview_targets,
-                        dot_steps=dot_steps,
-                        dot_speed=dot_speed,
-                        approach_z_offset_m=dot_approach_z_offset_m,
-                        dot_z_offset_m=dot_z_offset_m,
-                        pre_dot_vel_scale=dot_pre_vel_scale,
-                        dot_vel_scale=dot_print_vel_scale,
-                        accel_scale=dot_accel_scale,
-                        dwell_s=dot_dwell_s,
-                        post_dot_retract_steps=post_dot_retract_steps,
-                        post_dot_retract_speed=post_dot_retract_speed,
-                        eef_link=dot_eef_link,
-                        timeout_s=timeout_s,
+                        dot_steps=rt.dot_steps,
+                        dot_speed=rt.dot_speed,
+                        approach_z_offset_m=rt.dot_approach_z_offset_m,
+                        dot_z_offset_m=rt.dot_z_offset_m,
+                        pre_dot_vel_scale=rt.dot_pre_vel_scale,
+                        dot_vel_scale=rt.dot_print_vel_scale,
+                        accel_scale=rt.dot_accel_scale,
+                        dwell_s=rt.dot_dwell_s,
+                        post_dot_retract_steps=rt.post_dot_retract_steps,
+                        post_dot_retract_speed=rt.post_dot_retract_speed,
+                        eef_link=rt.dot_eef_link,
+                        timeout_s=rt.timeout_s,
+                        pause_gate=print_pause_gate,
                     )
                 if not print_res.get("ok", False):
                     log.warn(
                         "[print_field_oriented] Print stage returned non-fatal failure: "
                         f"stage={print_res.get('stage')} error={print_res.get('error', 'unknown')}"
                     )
+                    break
+                if not self._wait_if_control_paused(f"after print for {cycle_tag}"):
                     break
 
                 printed_count = int(print_res.get("printed", 0))
@@ -938,11 +854,14 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 last_generated_targets = list(preview_targets)
 
                 print_cycle_index += 1
-                if max_cycles > 0 and print_cycle_index >= max_cycles:
-                    log.info(f"[print_field_oriented] Reached max_cycles={max_cycles}.")
+
+                refresh_runtime_config(f"before scan prompt after {cycle_tag}")
+
+                if rt.max_cycles > 0 and print_cycle_index >= rt.max_cycles:
+                    log.info(f"[print_field_oriented] Reached max_cycles={rt.max_cycles}.")
                     break
 
-                if prompt_before_scan and prompt_before_next_cycle:
+                if rt.prompt_before_scan and rt.prompt_before_next_cycle:
                     next_res = self.session.run_sync(
                         self.session.util.input(
                             prompt=(
@@ -967,16 +886,16 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
                 if last_generated_targets:
                     highest_prev_z = max(float(t.pose.position.z) for t in last_generated_targets)
-                    abs_scan_z = highest_prev_z + float(grid_z_off)
-                    cycle_scan_z_off = abs_scan_z - float(grid_center_z)
+                    abs_scan_z = highest_prev_z + float(rt.grid_z_off)
+                    cycle_scan_z_off = abs_scan_z - float(rt.grid_center_z)
                     z_msg = (
-                        f"highest_generated_z={highest_prev_z:.4f}m + grid_z_off={grid_z_off:.4f}m "
+                        f"highest_generated_z={highest_prev_z:.4f}m + grid_z_off={rt.grid_z_off:.4f}m "
                         f"=> abs_scan_z={abs_scan_z:.4f}m, "
-                        f"center_z={grid_center_z:.4f}m => applied_z_off={cycle_scan_z_off:.4f}m"
+                        f"center_z={rt.grid_center_z:.4f}m => applied_z_off={cycle_scan_z_off:.4f}m"
                     )
                 else:
-                    cycle_scan_z_off = float(grid_z_off)
-                    abs_scan_z = float(grid_center_z) + float(cycle_scan_z_off)
+                    cycle_scan_z_off = float(rt.grid_z_off)
+                    abs_scan_z = float(rt.grid_center_z) + float(cycle_scan_z_off)
                     z_msg = (
                         f"fallback(no printed targets): z_off={cycle_scan_z_off:.4f}m "
                         f"=> abs_scan_z={abs_scan_z:.4f}m"
@@ -986,77 +905,82 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     f"[print_field_oriented] ===== scan_for_{next_cycle_tag} ===== "
                     f"scan_capture='{next_cycle_scan_capture_folder}' "
                     f"scan_folder='{next_cycle_scan_folder}' "
-                    f"center=({grid_center_x:.4f}, {grid_center_y:.4f}, {grid_center_z:.4f}) "
-                    f"grid={grid_nx}x{grid_ny} size={1000.0*grid_width:.1f}x"
-                    f"{1000.0*grid_height:.1f}mm use_tf_orientation={grid_use_tf_orientation} {z_msg}"
+                    f"center=({rt.grid_center_x:.4f}, {rt.grid_center_y:.4f}, {rt.grid_center_z:.4f}) "
+                    f"grid={rt.grid_nx}x{rt.grid_ny} size={1000.0*rt.grid_width:.1f}x"
+                    f"{1000.0*rt.grid_height:.1f}mm use_tf_orientation={rt.grid_use_tf_orientation} {z_msg}"
                 )
 
-                if not enable_scan:
+                if not rt.enable_scan:
                     log.info(
                         f"[print_field_oriented] scan_for_{next_cycle_tag} skipped because enable_scan=false."
                     )
                     scan_targets = []
                 else:
                     if not self._prompt_before_scan_if_enabled(
-                        enabled=prompt_before_scan,
+                        enabled=rt.prompt_before_scan,
                         label=f"scan_for_{next_cycle_tag}",
                     ):
                         log.info("[print_field_oriented] Stopped by user before scan.")
                         break
 
                     scan_targets = self._run_configured_scan(
-                        cfg=cfg,
-                        scan_type=scan_type,
+                        cfg=rt.config,
+                        scan_type=rt.scan_type,
                         target=None,
-                        width=grid_width,
-                        height=grid_height,
-                        center_x=float(grid_center_x),
-                        center_y=float(grid_center_y),
-                        center_z=float(grid_center_z),
+                        width=rt.grid_width,
+                        height=rt.grid_height,
+                        center_x=float(rt.grid_center_x),
+                        center_y=float(rt.grid_center_y),
+                        center_z=float(rt.grid_center_z),
                         z_off=cycle_scan_z_off,
-                        nx=grid_nx,
-                        ny=grid_ny,
-                        row_major=grid_row_major,
-                        use_tf_orientation=grid_use_tf_orientation,
+                        nx=rt.grid_nx,
+                        ny=rt.grid_ny,
+                        row_major=rt.grid_row_major,
+                        use_tf_orientation=rt.grid_use_tf_orientation,
                         capture_folder=next_cycle_scan_capture_folder,
-                        timeout_s=timeout_s,
-                        frame_id=frame_id,
+                        timeout_s=rt.timeout_s,
+                        frame_id=rt.frame_id,
                     )
                     if not scan_targets:
                         raise RuntimeError(f"Scan produced 0 targets for scan_for_{next_cycle_tag}.")
+                    if not self._wait_if_control_paused(f"after scan_for_{next_cycle_tag}"):
+                        break
 
-                if enable_scan and run_reconstruction:
+                if rt.enable_scan and rt.run_reconstruction:
                     mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
                         session_path=run_session_arg,
                         scan_folder=next_cycle_scan_folder,
-                        reconstruct_device=reconstruct_device,
-                        reconstruct_request_timeout_s=reconstruct_request_timeout_s,
-                        wait_reconstruction_outputs=wait_reconstruction_outputs,
-                        color_to_depth_wait_timeout_s=color_to_depth_wait_timeout_s,
-                        tsdf_wait_timeout_s=tsdf_wait_timeout_s,
-                        mesh_prefer=mesh_prefer,
-                        mesh_update_wait_timeout_s=mesh_update_wait_timeout_s,
-                        mesh_update_request_timeout_s=mesh_update_request_timeout_s,
-                        tsdf_center_crop_enable=tsdf_center_crop_enable,
-                        tsdf_center_crop_width=tsdf_center_crop_width,
-                        tsdf_center_crop_height=tsdf_center_crop_height,
-                        tsdf_center_crop_apply_to_depth=tsdf_center_crop_apply_to_depth,
-                        tsdf_aabb_crop_enable=tsdf_aabb_crop_enable,
-                        tsdf_aabb_crop_min=tsdf_aabb_crop_min,
-                        tsdf_aabb_crop_max=tsdf_aabb_crop_max,
-                        tsdf_param_update_timeout_s=tsdf_param_update_timeout_s,
+                        reconstruct_device=rt.reconstruct_device,
+                        reconstruct_request_timeout_s=rt.reconstruct_request_timeout_s,
+                        wait_reconstruction_outputs=rt.wait_reconstruction_outputs,
+                        color_to_depth_wait_timeout_s=rt.color_to_depth_wait_timeout_s,
+                        tsdf_wait_timeout_s=rt.tsdf_wait_timeout_s,
+                        mesh_prefer=rt.mesh_prefer,
+                        mesh_update_wait_timeout_s=rt.mesh_update_wait_timeout_s,
+                        mesh_update_request_timeout_s=rt.mesh_update_request_timeout_s,
+                        tsdf_center_crop_enable=rt.tsdf_center_crop_enable,
+                        tsdf_center_crop_width=rt.tsdf_center_crop_width,
+                        tsdf_center_crop_height=rt.tsdf_center_crop_height,
+                        tsdf_center_crop_apply_to_depth=rt.tsdf_center_crop_apply_to_depth,
+                        tsdf_aabb_crop_enable=rt.tsdf_aabb_crop_enable,
+                        tsdf_aabb_crop_min=rt.tsdf_aabb_crop_min,
+                        tsdf_aabb_crop_max=rt.tsdf_aabb_crop_max,
+                        tsdf_param_update_timeout_s=rt.tsdf_param_update_timeout_s,
                     )
+                    if not self._wait_if_control_paused(f"after reconstruction for scan_for_{next_cycle_tag}"):
+                        break
                 else:
                     log.warn(
                         "[print_field_oriented] run_reconstruction=False after scan; "
                         "next cycle will reuse previous scan mesh unless candidate_scan_mesh_path is set."
                     )
 
-            if home_after:
+            if rt.home_after:
                 self.session.run_sync(
                     self.session.motion.home(enqueue=False),
-                    timeout_s=timeout_s,
+                    timeout_s=rt.timeout_s,
                 )
+                self._wait_if_control_paused("after home_after")
 
         except TimeoutError:
             log.error("[print_field_oriented] Sequence timed out.")
@@ -1407,6 +1331,307 @@ class PrintFieldOrientedSequenceV2Node(Node):
         self.get_logger().warn("[print_field_oriented] Current EEF pose unavailable for scan orientation.")
         return None
 
+    def _parse_runtime_state(self, cfg: Dict[str, Any], run_session_path: Path) -> SimpleNamespace:
+        home_before_scan = self._cfg_bool(cfg, "home_before_scan")
+        home_after = self._cfg_bool(cfg, "home_after")
+        timeout_s = self._cfg_optional_timeout(cfg, "timeout_s")
+        debug_mode = self._cfg_bool(cfg, "debug_mode")
+        prompt_before_print = self._cfg_bool(cfg, "prompt_before_print")
+        prompt_before_scan = self._cfg_bool(cfg, "prompt_before_scan")
+        enable_scan = self._cfg_bool(cfg, "enable_scan")
+
+        frame_id = self._cfg_str(cfg, "frame_id")
+        scan_eef_link = self._cfg_str(cfg, "scan_eef_link")
+        scan_type = self._cfg_str(cfg, "scan_type")
+        scan_motion = self._cfg_str(cfg, "scan_motion")
+        scan_use_tf_orientation = self._cfg_bool(cfg, "scan_use_tf_orientation")
+        scan_width = self._cfg_float(cfg, "scan_width")
+        scan_height = self._cfg_float(cfg, "scan_height")
+        scan_center_x = self._cfg_float(cfg, "scan_center_x")
+        scan_center_y = self._cfg_float(cfg, "scan_center_y")
+        scan_center_z = self._cfg_float(cfg, "scan_center_z")
+        scan_z_off = self._cfg_float(cfg, "scan_z_off")
+        scan_nx = self._cfg_int(cfg, "scan_nx")
+        scan_ny = self._cfg_int(cfg, "scan_ny")
+        scan_row_major = self._cfg_bool(cfg, "scan_row_major")
+        scan_capture_folder = self._cfg_str(cfg, "scan_capture_folder")
+        scan_debug_prompt = self._cfg_bool(cfg, "scan_debug_prompt")
+        scan_debug = self._cfg_bool(cfg, "scan_debug")
+        scan_vel_scale = self._cfg_float(cfg, "scan_vel_scale")
+        scan_accel_scale = self._cfg_float(cfg, "scan_accel_scale")
+        scan_settle_s = self._cfg_float(cfg, "scan_settle_s")
+        scan_prompt = self._cfg_str_allow_empty(cfg, "scan_prompt")
+        scan_rgb = self._cfg_bool(cfg, "scan_rgb")
+        scan_depth = self._cfg_bool(cfg, "scan_depth")
+        scan_ir = self._cfg_bool(cfg, "scan_ir")
+        scan_pose = self._cfg_bool(cfg, "scan_pose")
+        scan_publish_markers = self._cfg_bool(cfg, "scan_publish_markers")
+        scan_axis_length = self._cfg_float(cfg, "scan_axis_length")
+        scan_axis_radius = self._cfg_float(cfg, "scan_axis_radius")
+        scan_clear_markers_before = self._cfg_bool(cfg, "scan_clear_markers_before")
+        scan_clear_markers_after = self._cfg_bool(cfg, "scan_clear_markers_after")
+
+        grid_width = self._cfg_float(cfg, "grid_width")
+        grid_height = self._cfg_float(cfg, "grid_height")
+        grid_center_x = self._cfg_float(cfg, "grid_center_x")
+        grid_center_y = self._cfg_float(cfg, "grid_center_y")
+        grid_center_z = self._cfg_float(cfg, "grid_center_z")
+        grid_z_off = self._cfg_float(cfg, "grid_z_off")
+        grid_nx = self._cfg_int(cfg, "grid_nx")
+        grid_ny = self._cfg_int(cfg, "grid_ny")
+        grid_row_major = self._cfg_bool(cfg, "grid_row_major")
+        grid_use_tf_orientation = self._cfg_bool(cfg, "grid_use_tf_orientation")
+        field_center_sign_x = self._cfg_float(cfg, "field_center_sign_x")
+        field_center_sign_y = self._cfg_float(cfg, "field_center_sign_y")
+        field_center_offset_x = self._cfg_float(cfg, "field_center_offset_x")
+        field_center_offset_y = self._cfg_float(cfg, "field_center_offset_y")
+
+        run_reconstruction = self._cfg_bool(cfg, "run_reconstruction")
+        reconstruct_device = self._cfg_str(cfg, "reconstruct_device")
+        reconstruct_request_timeout_s = self._cfg_float(cfg, "reconstruct_request_timeout_s")
+        wait_reconstruction_outputs = self._cfg_bool(cfg, "wait_reconstruction_outputs")
+        color_to_depth_wait_timeout_s = self._cfg_float(cfg, "color_to_depth_wait_timeout_s")
+        tsdf_wait_timeout_s = self._cfg_float(cfg, "tsdf_wait_timeout_s")
+        mesh_prefer = self._cfg_str(cfg, "mesh_prefer")
+        mesh_update_wait_timeout_s = self._cfg_float(cfg, "mesh_update_wait_timeout_s")
+        mesh_update_request_timeout_s = self._cfg_float(cfg, "mesh_update_request_timeout_s")
+        tsdf_center_crop_enable = self._cfg_bool(cfg, "tsdf_center_crop_enable")
+        tsdf_center_crop_width = self._cfg_int(cfg, "tsdf_center_crop_width")
+        tsdf_center_crop_height = self._cfg_int(cfg, "tsdf_center_crop_height")
+        tsdf_center_crop_apply_to_depth = self._cfg_bool(cfg, "tsdf_center_crop_apply_to_depth")
+        tsdf_aabb_crop_enable = self._cfg_bool(cfg, "tsdf_aabb_crop_enable")
+        tsdf_aabb_crop_min = self._cfg_float_list(cfg, "tsdf_aabb_crop_min")
+        tsdf_aabb_crop_max = self._cfg_float_list(cfg, "tsdf_aabb_crop_max")
+        tsdf_param_update_timeout_s = self._cfg_float(cfg, "tsdf_param_update_timeout_s")
+
+        run_field_init = self._cfg_bool(cfg, "run_field_init")
+        field_use_latest = self._cfg_bool(cfg, "field_use_latest")
+        field_session_path = self._resolve_run_session_token(self._cfg_str(cfg, "field_session_path"), run_session_path)
+        field_scan_mesh_path = self._cfg_str_allow_empty(cfg, "field_scan_mesh_path")
+        field_mesh_path = self._cfg_str(cfg, "field_mesh_path")
+        field_state_output_dir = self._resolve_run_session_token(self._cfg_str(cfg, "field_state_output_dir"), run_session_path)
+        field_request_timeout_s = self._cfg_float(cfg, "field_request_timeout_s")
+        fields_node_name = self._cfg_str(cfg, "fields_node_name")
+        field_position_param_timeout_s = self._cfg_float(cfg, "field_position_param_timeout_s")
+        field_seed_level = self._cfg_float(cfg, "field_seed_level")
+        field_require_full_hit = self._cfg_bool(cfg, "field_require_full_hit")
+        field_base_z_offset = self._cfg_float(cfg, "field_base_z_offset")
+        field_use_position_target = self._cfg_bool(cfg, "field_use_position_target")
+        field_position_target_x = self._cfg_float(cfg, "field_position_target_x")
+        field_position_target_y = self._cfg_float(cfg, "field_position_target_y")
+        skip_bootstrap_scan_and_init = self._cfg_bool(cfg, "skip_bootstrap_scan_and_init")
+        resume_field_state_path = self._cfg_str_allow_empty(cfg, "resume_field_state_path")
+        resume_scan_mesh_path = self._cfg_str_allow_empty(cfg, "resume_scan_mesh_path")
+        scan_before_generate_first_cycle = self._cfg_bool(cfg, "scan_before_generate_first_cycle")
+
+        run_generate_candidates = self._cfg_bool(cfg, "run_generate_candidates")
+        candidate_use_latest = self._cfg_bool(cfg, "candidate_use_latest")
+        candidate_session_path = self._resolve_run_session_token(self._cfg_str(cfg, "candidate_session_path"), run_session_path)
+        candidate_field_state_path = self._cfg_str_allow_empty(cfg, "candidate_field_state_path")
+        candidate_scan_mesh_path = self._cfg_str_allow_empty(cfg, "candidate_scan_mesh_path")
+        candidate_output_dir = self._resolve_run_session_token(self._cfg_str(cfg, "candidate_output_dir"), run_session_path)
+        candidate_request_timeout_s = self._cfg_float(cfg, "candidate_request_timeout_s")
+        candidate_mode = self._cfg_str(cfg, "candidate_mode")
+        candidate_beads_per_step = self._cfg_int(cfg, "candidate_beads_per_step")
+        candidate_bead_separation_mm = self._cfg_float(cfg, "candidate_bead_separation_mm")
+        candidate_bead_height_mm = self._cfg_float(cfg, "candidate_bead_height_mm")
+        candidate_walk_distance_mm = self._cfg_float(cfg, "candidate_walk_distance_mm")
+        candidate_walk_step_mm = self._cfg_float(cfg, "candidate_walk_step_mm")
+        candidate_walk_max_steps = self._cfg_int(cfg, "candidate_walk_max_steps")
+        candidate_walk_start_fraction = self._cfg_float(cfg, "candidate_walk_start_fraction")
+        candidate_target_zx = self._cfg_float(cfg, "candidate_target_zx")
+        candidate_target_zy = self._cfg_float(cfg, "candidate_target_zy")
+        candidate_target_zz = self._cfg_float(cfg, "candidate_target_zz")
+        candidate_target_position_scale = self._cfg_float(cfg, "candidate_target_position_scale")
+        candidate_visualize_field_ply = self._cfg_bool(cfg, "candidate_visualize_field_ply")
+        candidate_restore_scan_mesh_after_field_ply = self._cfg_bool(
+            cfg, "candidate_restore_scan_mesh_after_field_ply"
+        )
+        candidate_publish_markers = self._cfg_bool(cfg, "candidate_publish_markers")
+        candidate_marker_axis_length = self._cfg_float(cfg, "candidate_marker_axis_length")
+        candidate_marker_axis_radius = self._cfg_float(cfg, "candidate_marker_axis_radius")
+        candidate_marker_clear_before = self._cfg_bool(cfg, "candidate_marker_clear_before")
+        oriented_targets_enable = self._cfg_bool(cfg, "oriented_targets_enable")
+        oriented_tangent_sign = self._cfg_float(cfg, "oriented_tangent_sign")
+        oriented_clamp_to_cone = self._cfg_bool(cfg, "oriented_clamp_to_cone")
+        oriented_cone_max_tilt_deg = self._cfg_float(cfg, "oriented_cone_max_tilt_deg")
+        oriented_base_to_world_yaw_deg = self._cfg_float(cfg, "oriented_base_to_world_yaw_deg")
+        print_mode = self._cfg_str(cfg, "print_mode")
+        dot_steps = self._cfg_int(cfg, "dot_steps")
+        dot_speed = self._cfg_int(cfg, "dot_speed")
+        dot_approach_z_offset_m = self._cfg_float(cfg, "dot_approach_z_offset_m")
+        dot_z_offset_m = self._cfg_float(cfg, "dot_z_offset_m")
+        dot_pre_vel_scale = self._cfg_float(cfg, "dot_pre_vel_scale")
+        dot_print_vel_scale = self._cfg_float(cfg, "dot_print_vel_scale")
+        dot_accel_scale = self._cfg_float(cfg, "dot_accel_scale")
+        dot_dwell_s = self._cfg_float(cfg, "dot_dwell_s")
+        post_dot_retract_steps = self._cfg_int(cfg, "post_dot_retract_steps")
+        post_dot_retract_speed = self._cfg_int(cfg, "post_dot_retract_speed")
+        dot_eef_link = self._cfg_str(cfg, "dot_eef_link")
+        segment_print_speed = self._cfg_int(cfg, "segment_print_speed")
+        segment_approach_z_offset_m = self._cfg_float(cfg, "segment_approach_z_offset_m")
+        segment_travel_z_offset_m = self._cfg_float(cfg, "segment_travel_z_offset_m")
+        segment_approach_vel_scale = self._cfg_float(cfg, "segment_approach_vel_scale")
+        segment_travel_vel_scale = self._cfg_float(cfg, "segment_travel_vel_scale")
+        segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
+        segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
+        segment_target_print_speed_mm_s = self._cfg_float(cfg, "segment_target_print_speed_mm_s")
+        post_segment_wait_s = self._cfg_float(cfg, "post_segment_wait_s")
+        post_segment_retract_s = self._cfg_float(cfg, "post_segment_retract_s")
+        post_segment_retract_speed = self._cfg_int(cfg, "post_segment_retract_speed")
+        max_cycles = self._cfg_int(cfg, "max_cycles")
+        prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
+        scope = locals().copy()
+        values = {
+            name: scope[name]
+            for name in (
+            'home_before_scan',
+            'home_after',
+            'timeout_s',
+            'debug_mode',
+            'prompt_before_print',
+            'prompt_before_scan',
+            'enable_scan',
+            'frame_id',
+            'scan_eef_link',
+            'scan_type',
+            'scan_motion',
+            'scan_use_tf_orientation',
+            'scan_width',
+            'scan_height',
+            'scan_center_x',
+            'scan_center_y',
+            'scan_center_z',
+            'scan_z_off',
+            'scan_nx',
+            'scan_ny',
+            'scan_row_major',
+            'scan_capture_folder',
+            'scan_debug_prompt',
+            'scan_debug',
+            'scan_vel_scale',
+            'scan_accel_scale',
+            'scan_settle_s',
+            'scan_prompt',
+            'scan_rgb',
+            'scan_depth',
+            'scan_ir',
+            'scan_pose',
+            'scan_publish_markers',
+            'scan_axis_length',
+            'scan_axis_radius',
+            'scan_clear_markers_before',
+            'scan_clear_markers_after',
+            'grid_width',
+            'grid_height',
+            'grid_center_x',
+            'grid_center_y',
+            'grid_center_z',
+            'grid_z_off',
+            'grid_nx',
+            'grid_ny',
+            'grid_row_major',
+            'grid_use_tf_orientation',
+            'field_center_sign_x',
+            'field_center_sign_y',
+            'field_center_offset_x',
+            'field_center_offset_y',
+            'run_reconstruction',
+            'reconstruct_device',
+            'reconstruct_request_timeout_s',
+            'wait_reconstruction_outputs',
+            'color_to_depth_wait_timeout_s',
+            'tsdf_wait_timeout_s',
+            'mesh_prefer',
+            'mesh_update_wait_timeout_s',
+            'mesh_update_request_timeout_s',
+            'tsdf_center_crop_enable',
+            'tsdf_center_crop_width',
+            'tsdf_center_crop_height',
+            'tsdf_center_crop_apply_to_depth',
+            'tsdf_aabb_crop_enable',
+            'tsdf_aabb_crop_min',
+            'tsdf_aabb_crop_max',
+            'tsdf_param_update_timeout_s',
+            'run_field_init',
+            'field_use_latest',
+            'field_session_path',
+            'field_scan_mesh_path',
+            'field_mesh_path',
+            'field_state_output_dir',
+            'field_request_timeout_s',
+            'fields_node_name',
+            'field_position_param_timeout_s',
+            'field_seed_level',
+            'field_require_full_hit',
+            'field_base_z_offset',
+            'field_use_position_target',
+            'field_position_target_x',
+            'field_position_target_y',
+            'skip_bootstrap_scan_and_init',
+            'resume_field_state_path',
+            'resume_scan_mesh_path',
+            'scan_before_generate_first_cycle',
+            'run_generate_candidates',
+            'candidate_use_latest',
+            'candidate_session_path',
+            'candidate_field_state_path',
+            'candidate_scan_mesh_path',
+            'candidate_output_dir',
+            'candidate_request_timeout_s',
+            'candidate_mode',
+            'candidate_beads_per_step',
+            'candidate_bead_separation_mm',
+            'candidate_bead_height_mm',
+            'candidate_walk_distance_mm',
+            'candidate_walk_step_mm',
+            'candidate_walk_max_steps',
+            'candidate_walk_start_fraction',
+            'candidate_target_zx',
+            'candidate_target_zy',
+            'candidate_target_zz',
+            'candidate_target_position_scale',
+            'candidate_visualize_field_ply',
+            'candidate_restore_scan_mesh_after_field_ply',
+            'candidate_publish_markers',
+            'candidate_marker_axis_length',
+            'candidate_marker_axis_radius',
+            'candidate_marker_clear_before',
+            'oriented_targets_enable',
+            'oriented_tangent_sign',
+            'oriented_clamp_to_cone',
+            'oriented_cone_max_tilt_deg',
+            'oriented_base_to_world_yaw_deg',
+            'print_mode',
+            'dot_steps',
+            'dot_speed',
+            'dot_approach_z_offset_m',
+            'dot_z_offset_m',
+            'dot_pre_vel_scale',
+            'dot_print_vel_scale',
+            'dot_accel_scale',
+            'dot_dwell_s',
+            'post_dot_retract_steps',
+            'post_dot_retract_speed',
+            'dot_eef_link',
+            'segment_print_speed',
+            'segment_approach_z_offset_m',
+            'segment_travel_z_offset_m',
+            'segment_approach_vel_scale',
+            'segment_travel_vel_scale',
+            'segment_print_vel_scale',
+            'segment_accel_scale',
+            'segment_target_print_speed_mm_s',
+            'post_segment_wait_s',
+            'post_segment_retract_s',
+            'post_segment_retract_speed',
+            'max_cycles',
+            'prompt_before_next_cycle'
+            )
+        }
+        values["config"] = cfg
+        return SimpleNamespace(**values)
+
     def _load_runtime_config(self, config_path: str) -> Dict[str, Any]:
         if yaml is None:
             raise RuntimeError("PyYAML is not available; cannot load runtime YAML config.")
@@ -1427,6 +1652,27 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 "(expected ros__parameters block or plain key/value map)."
             )
         return dict(params_map)
+
+    def _reload_runtime_config_or_keep(
+        self,
+        *,
+        current: Dict[str, Any],
+        config_path: str,
+        reason: str,
+    ) -> Dict[str, Any]:
+        try:
+            new_cfg = self._load_runtime_config(config_path)
+        except Exception as exc:
+            self.get_logger().warn(
+                f"[print_field_oriented] Runtime config reload failed ({reason}); "
+                f"keeping previous config. error={exc}"
+            )
+            return current
+
+        self.get_logger().info(
+            f"[print_field_oriented] Runtime config reloaded ({reason}): {config_path}"
+        )
+        return new_cfg
 
     @staticmethod
     def _default_runtime_config_path() -> str:
