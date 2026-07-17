@@ -97,6 +97,7 @@ class WorldNode(Node):
         self._state: Dict[str, Any] = {}
         self._last_mesh_path: Optional[Path] = None
         self._last_mesh_kind: str = ""
+        self._mesh_staged_paths_by_kind: Dict[str, List[Path]] = {}
 
         period = float(self.get_parameter("poll_period_s").value)
         self._timer = self.create_timer(period, self._poll)
@@ -659,18 +660,16 @@ class WorldNode(Node):
         tmp_path = self._mesh_stage_dir / tmp_name
         staged_path = self._mesh_stage_dir / staged_name
 
-        shutil.copy2(src_path, tmp_path)
+        shutil.copyfile(src_path, tmp_path)
         tmp_path.replace(staged_path)
 
-        pattern = f"{kind}_*"
-        staged_files = sorted(
-            self._mesh_stage_dir.glob(pattern),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        for stale in staged_files[self._mesh_stage_keep:]:
+        staged_paths = self._mesh_staged_paths_by_kind.setdefault(kind, [])
+        staged_paths.append(staged_path)
+        while len(staged_paths) > self._mesh_stage_keep:
+            stale = staged_paths.pop(0)
             try:
-                stale.unlink()
+                if stale != staged_path:
+                    stale.unlink()
             except OSError:
                 pass
         return staged_path.resolve()

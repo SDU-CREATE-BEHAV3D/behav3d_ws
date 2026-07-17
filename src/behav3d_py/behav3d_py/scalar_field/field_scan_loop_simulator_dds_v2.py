@@ -103,6 +103,10 @@ from lib_scalar.viz import (
 
 DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl")
+DEFAULT_FIELD_STATE = Path("/home/lab/behav3d_ws/mesh/fields/field_state_init.npz")
+DEFAULT_ROBOT_SCAN_MESH = Path(
+    "/home/lab/behav3d_ws/captures/260317_171335/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl"
+)
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 ISO_LEVEL = 0.0
 BASE_Z_OFFSET = 1e-6
@@ -163,6 +167,87 @@ def resolve_heat_seed_indices(
     if seed_index < 0 or seed_index >= int(vertices.shape[0]):
         raise ValueError(f"Seed index out of range: {seed_index} (num vertices={vertices.shape[0]})")
     return np.asarray([seed_index], dtype=np.int64)
+
+
+@dataclass(frozen=True)
+class LoadedFieldState:
+    """Field state produced by the ROS field init pipeline."""
+
+    field_vertices_scaled: np.ndarray
+    field_faces: np.ndarray
+    heat_norm: np.ndarray
+    offset_xyz: tuple[float, float, float]
+    seed_points_scaled: np.ndarray
+
+
+def load_field_state_npz(field_state_path: Path) -> LoadedFieldState:
+    """Load a pre-initialized scalar field state for direct loop simulation."""
+    state_path = Path(field_state_path)
+    if not state_path.is_file():
+        raise FileNotFoundError(f"Field state not found: {state_path}")
+    if state_path.suffix.lower() != ".npz":
+        raise ValueError(
+            f"Unsupported field state format: {state_path}. "
+            "Expected a .npz state with field_vertices_scaled, field_faces, heat_norm, and offset_xyz."
+        )
+
+    state = np.load(str(state_path), allow_pickle=False)
+    missing = [key for key in ("field_faces", "heat_norm", "offset_xyz") if key not in state]
+    if missing:
+        raise KeyError(f"Missing field state keys in {state_path}: {', '.join(missing)}")
+
+    if "field_vertices_scaled" in state:
+        field_vertices_scaled = np.asarray(state["field_vertices_scaled"], dtype=np.float64)
+    elif "field_vertices" in state:
+        field_vertices = np.asarray(state["field_vertices"], dtype=np.float64)
+        field_scale = 1.0
+        if "field_scale" in state:
+            scale_arr = np.asarray(state["field_scale"], dtype=np.float64).reshape(-1)
+            if scale_arr.size > 0:
+                field_scale = float(scale_arr[0])
+        field_vertices_scaled = field_vertices * field_scale
+    else:
+        raise KeyError(
+            f"Missing 'field_vertices_scaled' or fallback 'field_vertices' in field state: {state_path}"
+        )
+
+    field_faces = np.asarray(state["field_faces"], dtype=np.int32)
+    heat_norm = np.asarray(state["heat_norm"], dtype=np.float64).reshape(-1)
+    offset_arr = np.asarray(state["offset_xyz"], dtype=np.float64).reshape(-1)
+    if field_vertices_scaled.ndim != 2 or field_vertices_scaled.shape[1] != 3:
+        raise ValueError(f"field_vertices_scaled has invalid shape: {field_vertices_scaled.shape}")
+    if field_faces.ndim != 2 or field_faces.shape[1] != 3:
+        raise ValueError(f"field_faces has invalid shape: {field_faces.shape}")
+    if heat_norm.shape[0] != field_vertices_scaled.shape[0]:
+        raise ValueError(
+            "heat_norm length does not match field vertices: "
+            f"{heat_norm.shape[0]} vs {field_vertices_scaled.shape[0]}"
+        )
+    if offset_arr.size < 3:
+        raise ValueError(f"offset_xyz has invalid shape: {offset_arr.shape}")
+
+    seed_points_scaled = np.zeros((0, 3), dtype=np.float64)
+    if "seed_indices" in state:
+        seed_indices = np.asarray(state["seed_indices"], dtype=np.int64).reshape(-1)
+        valid = (seed_indices >= 0) & (seed_indices < field_vertices_scaled.shape[0])
+        seed_points_scaled = field_vertices_scaled[seed_indices[valid]]
+    elif "seed_level" in state and "field_vertices" in state:
+        seed_level_arr = np.asarray(state["seed_level"], dtype=np.float64).reshape(-1)
+        if seed_level_arr.size > 0 and np.isfinite(seed_level_arr[0]):
+            seed_indices = resolve_heat_seed_indices(
+                np.asarray(state["field_vertices"], dtype=np.float64),
+                seed=None,
+                seed_level=float(seed_level_arr[0]),
+            )
+            seed_points_scaled = field_vertices_scaled[seed_indices]
+
+    return LoadedFieldState(
+        field_vertices_scaled=field_vertices_scaled,
+        field_faces=field_faces,
+        heat_norm=heat_norm,
+        offset_xyz=(float(offset_arr[0]), float(offset_arr[1]), float(offset_arr[2])),
+        seed_points_scaled=seed_points_scaled,
+    )
 
 
 def wait_next_terminal(step_index: int) -> bool:
@@ -847,6 +932,7 @@ def run(
     field_mesh_path: Path,
     scan_mesh_path: Path,
     output_dir: Path,
+    field_state_path: Path | None,
     seed: int | None,
     seed_level: float | None,
     t_coef: float,
@@ -891,33 +977,53 @@ def run(
 ) -> None:
     from dds import BeadProfile, Simulator
 
-    field_mesh = load_triangle_mesh_arrays(field_mesh_path)
-    base_vertices = field_mesh.vertices
-    base_faces = field_mesh.faces
-    field_vertices, field_faces = subdivide_field_mesh_loop(base_vertices, base_faces, int(field_subdivide_iter))
-    heat_seed_indices = resolve_heat_seed_indices(
-        field_vertices,
-        seed=seed,
-        seed_level=seed_level,
-    )
-    heat = compute_heat_field(
-        vertices=field_vertices,
-        faces=field_faces,
-        seed=seed,
-        seed_level=seed_level,
-        t_coef=t_coef,
-    )
+    initial_locked_offset_xyz: tuple[float, float, float] | None = None
+    seed_points_scaled = np.zeros((0, 3), dtype=np.float64)
+    if field_state_path is not None:
+        field_state = load_field_state_npz(field_state_path)
+        field_vertices_scaled = field_state.field_vertices_scaled
+        field_faces = field_state.field_faces
+        heat_norm = field_state.heat_norm
+        initial_locked_offset_xyz = field_state.offset_xyz
+        seed_points_scaled = field_state.seed_points_scaled
+        print(
+            "[field] loaded pre-initialized field state: "
+            f"{field_state_path} vertices={field_vertices_scaled.shape[0]} "
+            f"faces={field_faces.shape[0]} "
+            f"offset=({initial_locked_offset_xyz[0]:.6f},"
+            f"{initial_locked_offset_xyz[1]:.6f},"
+            f"{initial_locked_offset_xyz[2]:.6f})"
+        )
+    else:
+        field_mesh = load_triangle_mesh_arrays(field_mesh_path)
+        base_vertices = field_mesh.vertices
+        base_faces = field_mesh.faces
+        field_vertices, field_faces = subdivide_field_mesh_loop(base_vertices, base_faces, int(field_subdivide_iter))
+        heat_seed_indices = resolve_heat_seed_indices(
+            field_vertices,
+            seed=seed,
+            seed_level=seed_level,
+        )
+        heat = compute_heat_field(
+            vertices=field_vertices,
+            faces=field_faces,
+            seed=seed,
+            seed_level=seed_level,
+            t_coef=t_coef,
+        )
 
-    scale = float(field_scale)
-    if scale <= 0.0:
-        raise ValueError(f"field_scale must be > 0, got {field_scale}")
-    field_vertices_scaled = field_vertices * scale
-    heat_colors = yellow_to_red_colors(heat.norm)
+        scale = float(field_scale)
+        if scale <= 0.0:
+            raise ValueError(f"field_scale must be > 0, got {field_scale}")
+        field_vertices_scaled = field_vertices * scale
+        heat_norm = np.asarray(heat.norm, dtype=np.float64)
+        seed_points_scaled = field_vertices_scaled[heat_seed_indices]
+    heat_colors = yellow_to_red_colors(heat_norm)
 
     scan_mesh_base = load_triangle_mesh_legacy(scan_mesh_path)
     scan_mesh_current = copy.deepcopy(scan_mesh_base)
     all_selected_points: list[np.ndarray] = []
-    locked_offset_xyz: tuple[float, float, float] | None = None
+    locked_offset_xyz: tuple[float, float, float] | None = initial_locked_offset_xyz
     dds_simulator: Simulator | None = None
     dds_result = None
     viewer_state: dict[str, object] = {}
@@ -961,6 +1067,7 @@ def run(
         f"dds_domain_source={dds_domain_source} "
         f"position_target_xy={position_target_xy} "
         f"target_position_scale={float(target_position_scale):.3f} "
+        f"field_state_path={field_state_path} "
         f"dds_threshold={float(dds_threshold):.3f}"
     )
 
@@ -972,7 +1079,7 @@ def run(
             pose = position_field_with_attempts(
                 scan_mesh=scan_mesh_current,
                 field_vertices_scaled=field_vertices_scaled,
-                heat_norm=heat.norm,
+                heat_norm=heat_norm,
                 clearance=float(clearance),
                 iso_level=float(ISO_LEVEL),
                 base_z_offset=float(base_z_offset),
@@ -1026,7 +1133,7 @@ def run(
             contour=contour,
             field_faces=field_faces,
             field_vertices_world=pose.field_vertices_world,
-            heat_norm=heat.norm,
+            heat_norm=heat_norm,
             phi=pose.phi,
             mode=str(candidate_mode),
             beads_per_step=int(beads_per_step),
@@ -1056,7 +1163,7 @@ def run(
             candidate_mode=str(candidate_mode),
             field_vertices_world=pose.field_vertices_world,
             field_faces=field_faces,
-            field_scalar=heat.norm,
+            field_scalar=heat_norm,
             tangent_sign=float(walk_tangent_sign),
             clamp_to_cone=bool(clamp_to_cone),
             cone_max_tilt_deg=float(cone_max_tilt_deg),
@@ -1122,7 +1229,7 @@ def run(
                 field_vertices_world=pose.field_vertices_world,
                 heat_colors=heat_colors,
                 viable_mask=pose.viable,
-                seed_points=pose.field_vertices_world[heat_seed_indices],
+                seed_points=seed_points_scaled + np.asarray(pose.offset_xyz, dtype=np.float64),
                 scan_mesh=scan_mesh_current,
                 contour_points=contour.contour_points,
                 contour_lines=contour.contour_lines,
@@ -1423,6 +1530,7 @@ def main() -> None:
         field_mesh_path=args.field_mesh,
         scan_mesh_path=args.scan_mesh,
         output_dir=args.output_dir,
+        field_state_path=None,
         seed=args.seed,
         seed_level=args.seed_level,
         t_coef=args.t_coef,

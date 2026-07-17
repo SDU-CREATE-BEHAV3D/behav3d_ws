@@ -113,6 +113,31 @@ Useful DDS/debug flags:
 - `--save-dds-step-bundles`
 - `--no-vis` for terminal stepping with `n`/`q`
 
+### `field_state_scan_loop_simulator_dds_v2.py`
+
+Variant of the DDS v2 loop that starts from a pre-initialized field state
+instead of a field mesh. It expects a `.npz` state with
+`field_vertices_scaled`, `field_faces`, `heat_norm`, and `offset_xyz`, such as
+the `field_state_init.npz` produced by the ROS field init path.
+
+This skips only the initial field-mesh heat computation and scan-based field
+positioning. Candidate generation, secondary rules, segment YAML, DDS deposits,
+viewer overlays, and output layout are shared with `field_scan_loop_simulator_dds_v2.py`.
+
+Example:
+
+```bash
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py \
+  --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init.npz \
+  --scan-mesh /home/lab/behav3d_ws/captures/260317_171335/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl \
+  --output-dir /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/output/loop_sim_field_state \
+  --candidate-mode gradient_lift \
+  --offset-distance-mm 12 --offset-geodesic-delta-mm 0.6 \
+  --beads-per-step 7 --bead-separation-mm 16 \
+  --bead-width-mm 18 --bead-height-mm 12 \
+  --dds-deposit-mode line --dds-line-fraction 0.22
+```
+
 Performance knobs:
 
 - `--dds-domain-source field` builds one fixed DDS grid from the positioned

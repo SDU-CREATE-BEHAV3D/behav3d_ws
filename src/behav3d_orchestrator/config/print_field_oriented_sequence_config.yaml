@@ -5,8 +5,8 @@ print_field_oriented_sequence:
     home_after: false
     timeout_s: 0.0
     debug_mode: false
-    prompt_before_print: false
-    prompt_before_scan: false
+    prompt_before_print: true
+    prompt_before_scan: true
     enable_scan: true
 
     # Initial table grid sweep
@@ -136,11 +136,10 @@ print_field_oriented_sequence:
     field_use_position_target: true
     field_position_target_x: -0.20
     field_position_target_y: 0.85
-    skip_bootstrap_scan_and_init: false
-    resume_field_state_path: /home/lab/behav3d_ws/captures/260710_142131/field_loop/cycle_0000/field_init/field_state_init.npz
-    resume_scan_mesh_path: ""
-    scan_before_generate_first_cycle: true
-
+    skip_bootstrap_scan_and_init: true
+    resume_field_state_path: /home/lab/behav3d_ws/mesh/fields/field_state_init.npz
+    resume_scan_mesh_path: /home/lab/behav3d_ws/captures/260317_171335/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl
+    scan_before_generate_first_cycle: false
     # Candidate generation
     run_generate_candidates: true
     candidate_use_latest: true

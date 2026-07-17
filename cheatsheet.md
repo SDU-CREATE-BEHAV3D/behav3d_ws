@@ -19,3 +19,56 @@ ros2 run behav3d_orchestrator print_field_oriented_sequence_v2
 ```bash
 ros2 topic pub --once /print_field_oriented_sequence/control std_msgs/msg/String "{data: stop}"
 ```
+
+```bash
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_loop_simulator_dds_v2.py \
+  --field-mesh /home/lab/behav3d_ws/mesh/doublewall_iterative_loop_340mm.obj\
+  --scan-mesh /home/lab/behav3d_ws/captures/260701_172314/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl \
+  --output-dir /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/output/loop_sim \
+  --seed-level 5 \
+  --position-target-x 0.00 \
+  --position-target-y -0.80 \
+  --t-coef 2000 \
+  --field-subdivide-iter 0 \
+  --field-scale 0.001 \
+  --clearance 0.00 \
+  --candidate-mode gradient_lift \
+  --offset-distance-mm 12 \
+  --offset-geodesic-delta-mm 0.6 \
+  --beads-per-step 10 \
+  --bead-separation-mm 36\
+  --bead-width-mm 42 \
+  --bead-height-mm 19 \
+  --bead-shape cylinder \
+  --walk-distance-mm 12 \
+  --walk-step-mm 1.0 \
+  --walk-max-steps 32 \
+  --walk-tangent-sign 1.0 \
+  --walk-start-fraction 0.45 \
+  --clamp-to-cone \
+  --cone-max-tilt-deg 45 \
+  --positioning-attempts 3 \
+  --search-step-x 0.01 \
+  --search-step-y 0.01 \
+  --base-z-offset 0.005\
+  --axis-size -1 \
+  --dds-voxel-size-mm 3.0 \
+  --dds-threshold 0.5 \
+  --dds-padding-mm 42 \
+  --dds-surface-step-size 1 \
+  --dds-view-mode surface \
+  --dds-domain-source field \
+  --dds-deposit-mode line \
+  --dds-line-fraction 0.22 \
+```
+
+```bash
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py \
+  --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init.npz \
+  --scan-yaw-deg 180 \
+  --candidate-mode gradient_lift \
+  --beads-per-step 7 \
+  --bead-separation-mm 16 \
+  --bead-width-mm 18 \
+  --bead-height-mm 12
+```
