@@ -346,6 +346,7 @@ Orchestration entry points in `behav3d_orchestrator`:
 - `ros2 run behav3d_orchestrator print_yaml_and_scan_sequence`
 - `ros2 run behav3d_orchestrator polyline_motion_sequence`
 - `ros2 run behav3d_orchestrator scan_sequence`
+- `ros2 run behav3d_orchestrator scan_yaml_targets_sequence`
 - YAML-specific session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
 - `parse_yaml_targets(...)` supports:
   - `{index: N, xyz: [x, y, z]}`
@@ -357,6 +358,11 @@ Orchestration entry points in `behav3d_orchestrator`:
 Scan and print flows:
 - `scan_sequence` runs one configured grid, Fibonacci, half-cylinder, or
   half-cylinder-with-side-caps scan through `ScanSession`.
+- `scan_yaml_targets_sequence` loads explicit plane targets from YAML and runs
+  LIN plan/execute, dwell, and capture per reachable target, followed by one
+  reconstruction. Its config is reloaded before every target. Plane Z is the
+  desired camera optical axis; free roll is matched to the current configured
+  camera EEF orientation after the optional home.
 - `print_yaml_and_scan_sequence` prints YAML targets in chunks and optionally
   scans/reconstructs after each chunk.
 - `print_field_oriented_sequence_v2` runs the scan, reconstruction, scalar-field

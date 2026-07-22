@@ -1,0 +1,60 @@
+scan_yaml_targets_sequence:
+  ros__parameters:
+    # Target input. Plane origins are millimetres; Z is the target's Z axis.
+    # These path/frame values are fixed after startup. Restart to change them.
+    yaml_path: /home/lab/behav3d_ws/yaml/scan_targets.yaml
+    frame_id: world
+
+    # Capture location. scan_folder may be empty to derive it from
+    # capture_folder ("@session/scan_yaml_targets" -> "scan_yaml_targets").
+    session_path: "@session"
+    capture_folder: "@session/scan_yaml_targets"
+    scan_folder: scan_yaml_targets
+
+    # Camera link used both for planning and as the roll reference. After the
+    # optional home, its current X/Y orientation is preserved while each target
+    # Z from the YAML becomes the desired optical axis. Restart to change it.
+    eef_link: femto_color_optical_calib
+
+    # Motion and per-plane behavior. The file is reloaded before every target,
+    # so these values may be tuned while the sequence is running.
+    home_before: true
+    home_after: false
+    vel_scale: 0.1
+    accel_scale: 0.1
+    timeout_s: 0.0
+    dwell_s: 0.5
+    prompt_before_next_plane: true
+
+    # Capture channels, also reloaded before every target.
+    rgb: true
+    depth: true
+    ir: true
+    pose: true
+
+    # Target visualization through /behav3d/publish_targets.
+    publish_markers: true
+    axis_length: 0.05
+    axis_radius: 0.003
+    clear_markers_before: true
+    clear_markers_after: true
+
+    # Final reconstruction and RViz world-mesh update.
+    run_reconstruction: true
+    reconstruct_device: CPU:0
+    reconstruct_request_timeout_s: 10.0
+    wait_reconstruction_outputs: true
+    color_to_depth_wait_timeout_s: 60.0
+    tsdf_wait_timeout_s: 180.0
+    mesh_prefer: mesh
+    mesh_update_wait_timeout_s: 45.0
+    mesh_update_request_timeout_s: 55.0
+    update_world_mesh: true
+    tsdf_center_crop_enable: true
+    tsdf_center_crop_width: 300
+    tsdf_center_crop_height: 290
+    tsdf_center_crop_apply_to_depth: false
+    tsdf_aabb_crop_enable: false
+    tsdf_aabb_crop_min: [-0.25, -1.10, -1.00]
+    tsdf_aabb_crop_max: [0.30, -0.65, 0.50]
+    tsdf_param_update_timeout_s: 8.0

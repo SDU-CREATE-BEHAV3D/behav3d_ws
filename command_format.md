@@ -27,6 +27,8 @@ language:
 - `polyline_motion_sequence` reads `polylines:` data.
 - `print_field_oriented_sequence_v2` consumes generated field target/segment
   files through `PrintSession`.
+- `scan_yaml_targets_sequence` reads indexed `targets:` containing plane strings
+  such as `O(0,80,30) Z(0,0.01,1)`; origins are expressed in millimetres.
 
 Each workflow owns its parser and expected schema. Do not send retired generic
 command-list YAML to these nodes.
