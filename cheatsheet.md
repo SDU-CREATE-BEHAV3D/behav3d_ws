@@ -17,7 +17,7 @@ ros2 run behav3d_orchestrator print_field_oriented_sequence_v2
 ```
 
 ```bash
-ros2 topic pub --once /print_field_oriented_sequence/control std_msgs/msg/String "{data: stop}"
+ros2 topic pub --once /behav3d/control std_msgs/msg/String "{data: stop}"
 ```
 
 ```bash

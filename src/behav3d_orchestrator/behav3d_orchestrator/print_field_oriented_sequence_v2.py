@@ -22,6 +22,7 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 from std_msgs.msg import String
 
 try:
@@ -53,35 +54,42 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
         self._pause_requested = False
         self._pause_condition = threading.Condition()
-        self._control_sub = self.create_subscription(
+        qos = QoSProfile(depth=1)
+        qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
+        qos.reliability = QoSReliabilityPolicy.RELIABLE
+        self._control_state_sub = self.create_subscription(
             String,
-            "/print_field_oriented_sequence/control",
-            self._on_control_msg,
-            10,
+            "/behav3d/control_state",
+            self._on_control_state_msg,
+            qos,
         )
 
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
 
-    def _on_control_msg(self, msg: String) -> None:
-        cmd = str(msg.data or "").strip().lower()
-        if cmd != "stop":
+    def _on_control_state_msg(self, msg: String) -> None:
+        state = str(msg.data or "").strip().lower()
+        if state not in ("paused", "running"):
             self.get_logger().warn(
-                f"[print_field_oriented] Ignoring control command '{cmd}'. Use 'stop' to toggle pause."
+                f"[print_field_oriented] Ignoring global control state '{state}'. "
+                "Expected 'paused' or 'running'."
             )
             return
 
         with self._pause_condition:
-            self._pause_requested = not self._pause_requested
-            paused = self._pause_requested
+            paused = state == "paused"
+            changed = paused != self._pause_requested
+            self._pause_requested = paused
             self._pause_condition.notify_all()
 
+        if not changed:
+            return
         if paused:
             self.get_logger().warn(
-                "[print_field_oriented] Control stop received: will pause after the current command."
+                "[print_field_oriented] Global pause requested: will pause after the current command."
             )
         else:
-            self.get_logger().info("[print_field_oriented] Control stop received: resuming.")
+            self.get_logger().info("[print_field_oriented] Global resume requested.")
 
     def _wait_if_control_paused(self, label: str) -> bool:
         with self._pause_condition:
@@ -89,7 +97,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 return True
             self.get_logger().warn(
                 f"[print_field_oriented] Paused at safe point: {label}. "
-                "Send control 'stop' again to resume."
+                "Publish 'stop' on /behav3d/control again to resume."
             )
             while rclpy.ok() and self._pause_requested:
                 self._pause_condition.wait(timeout=0.25)

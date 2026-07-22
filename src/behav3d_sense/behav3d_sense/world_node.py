@@ -89,6 +89,13 @@ class WorldNode(Node):
         qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
         qos.reliability = QoSReliabilityPolicy.RELIABLE
         self._state_pub = self.create_publisher(String, "/behav3d/world_state", qos)
+        self._control_state_pub = self.create_publisher(String, "/behav3d/control_state", qos)
+        self._control_sub = self.create_subscription(
+            String,
+            "/behav3d/control",
+            self._handle_control_msg,
+            10,
+        )
         self._mesh_pub = self.create_publisher(Marker, self._mesh_topic, qos)
         self._state_srv = self.create_service(Trigger, "/behav3d/get_world_state", self._handle_get_world_state)
         self._mesh_srv = self.create_service(UpdateWorldMesh, "/behav3d/update_world_mesh", self._handle_update_world_mesh)
@@ -98,15 +105,19 @@ class WorldNode(Node):
         self._last_mesh_path: Optional[Path] = None
         self._last_mesh_kind: str = ""
         self._mesh_staged_paths_by_kind: Dict[str, List[Path]] = {}
+        self._control_paused = False
 
         period = float(self.get_parameter("poll_period_s").value)
         self._timer = self.create_timer(period, self._poll)
 
         # Initial publish
         self._poll()
+        self._publish_control_state()
         self.get_logger().info(
             "World node ready: /behav3d/world_state, /behav3d/get_world_state, /behav3d/update_world_mesh"
         )
+        self.get_logger().info("Control topic: /behav3d/control (std_msgs/String data='stop' toggles pause)")
+        self.get_logger().info("Control state topic: /behav3d/control_state")
         self.get_logger().info(f"Mesh marker topic: {self._mesh_topic} (frame={self._mesh_frame_id})")
         self.get_logger().info(f"Mesh staging dir: {self._mesh_stage_dir}")
         self.get_logger().info(f"Mesh source settle time: {self._mesh_source_settle_s:.2f}s")
@@ -122,6 +133,24 @@ class WorldNode(Node):
             "Mesh accumulate mode: "
             f"{self._mesh_accumulate} (max markers={self._mesh_accumulate_max_markers})"
         )
+
+    def _handle_control_msg(self, msg: String) -> None:
+        cmd = str(msg.data or "").strip().lower()
+        if cmd != "stop":
+            self.get_logger().warn(f"Ignoring control command '{cmd}'. Use 'stop' to toggle pause.")
+            return
+
+        self._control_paused = not self._control_paused
+        self._publish_control_state()
+        if self._control_paused:
+            self.get_logger().warn("Control stop received: global pause requested.")
+        else:
+            self.get_logger().info("Control stop received: global resume requested.")
+
+    def _publish_control_state(self) -> None:
+        msg = String()
+        msg.data = "paused" if self._control_paused else "running"
+        self._control_state_pub.publish(msg)
 
     @staticmethod
     def _parse_rgba(value: Any) -> Tuple[float, float, float, float]:

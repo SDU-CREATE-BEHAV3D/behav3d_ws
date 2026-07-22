@@ -6,9 +6,9 @@ print_yaml_and_scan_sequence:
     #   3) scan with selected scan_type
     #   4) reconstruct/update world mesh
     #   5) repeat until YAML targets are complete
-    yaml_path: /home/lab/behav3d_ws/yaml/lamine_doublewall_heatgun_01.yaml
+    yaml_path: /home/lab/behav3d_ws/yaml/lamine_primitives_18mm.yaml
     frame_id: world
-    points_per_cycle: 7
+    points_per_cycle: 25
     home_before: true
     home_after: true
     timeout_s: 0.0
@@ -20,22 +20,22 @@ print_yaml_and_scan_sequence:
     print_eef_link: extruder_tcp
     dot_steps_n: 25000
     dot_steps_e: 19000
-    dot_speed: 2400
-    post_dot_retract_steps: 3000
-    post_dot_retract_speed: 6000
+    dot_speed: 3000
+    post_dot_retract_steps: 4000
+    post_dot_retract_speed: 10000
     approach_z_offset_m: 0.3
     dot_z_offset_m: 0.04
-    pre_dot_vel_scale: 0.20
-    dot_vel_scale: 0.1
-    print_accel_scale: 0.1
-    dwell_s: 0.4
+    pre_dot_vel_scale: 0.30
+    dot_vel_scale: 0.2
+    print_accel_scale: 0.2
+    dwell_s: 0.3
     print_publish_markers: true
     print_axis_length: 0.05
     print_axis_radius: 0.003
     print_clear_markers_before: true
 
     # Scan execution. These match the current scan_sequence.py / ScanSession path.
-    enable_scan: false
+    enable_scan: true
     # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
     scan_type: grid_sweep
     scan_after_final: false
@@ -62,13 +62,13 @@ print_yaml_and_scan_sequence:
 
     # Grid sweep parameters from scan_sequence_test.yaml.
     grid_width: 0.50
-    grid_height: 0.15
-    grid_center_x: -0.17
+    grid_height: 0.50
+    grid_center_x: 0.01
     grid_center_y: 0.85
-    grid_center_z: -0.30
+    grid_center_z: -0.15
     grid_z_off: 0.60
     grid_nx: 5
-    grid_ny: 2
+    grid_ny: 5
     grid_row_major: false
     grid_use_tf_orientation: true
 

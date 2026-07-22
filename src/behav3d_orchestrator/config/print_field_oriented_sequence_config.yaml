@@ -7,7 +7,7 @@ print_field_oriented_sequence:
     debug_mode: false
     prompt_before_print: true
     prompt_before_scan: true
-    enable_scan: true
+    enable_scan: false
 
     # Initial table grid sweep
     frame_id: world
@@ -16,13 +16,13 @@ print_field_oriented_sequence:
     scan_eef_link: femto_color_optical_calib
     scan_motion: LIN
     scan_use_tf_orientation: true
-    scan_width: 0.50
+    scan_width: 1.8
     scan_height: 0.40
-    scan_center_x: -0.20
+    scan_center_x: 0.0
     scan_center_y: 0.80
     scan_center_z: 0.0
     scan_z_off: 0.60
-    scan_nx: 5
+    scan_nx: 18
     scan_ny: 4
     scan_row_major: false
     scan_capture_folder: "@session/grid_sweep"
@@ -136,7 +136,7 @@ print_field_oriented_sequence:
     field_use_position_target: true
     field_position_target_x: -0.20
     field_position_target_y: 0.85
-    skip_bootstrap_scan_and_init: true
+    skip_bootstrap_scan_and_init: false
     resume_field_state_path: /home/lab/behav3d_ws/mesh/fields/field_state_init.npz
     resume_scan_mesh_path: /home/lab/behav3d_ws/captures/260317_171335/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl
     scan_before_generate_first_cycle: false
