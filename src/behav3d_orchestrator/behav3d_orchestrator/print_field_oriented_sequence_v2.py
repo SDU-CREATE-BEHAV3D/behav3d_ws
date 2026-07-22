@@ -22,8 +22,6 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
-from std_msgs.msg import String
 
 try:
     import yaml
@@ -51,61 +49,13 @@ class PrintFieldOrientedSequenceV2Node(Node):
         self.session = FieldLoopSession(self)
         self.print_session = PrintSession(self)
         self.scan_session = ScanSession(self)
-
-        self._pause_requested = False
-        self._pause_condition = threading.Condition()
-        qos = QoSProfile(depth=1)
-        qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
-        qos.reliability = QoSReliabilityPolicy.RELIABLE
-        self._control_state_sub = self.create_subscription(
-            String,
-            "/behav3d/control_state",
-            self._on_control_state_msg,
-            qos,
-        )
+        self.control_pause = self.session.control_pause
 
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
 
-    def _on_control_state_msg(self, msg: String) -> None:
-        state = str(msg.data or "").strip().lower()
-        if state not in ("paused", "running"):
-            self.get_logger().warn(
-                f"[print_field_oriented] Ignoring global control state '{state}'. "
-                "Expected 'paused' or 'running'."
-            )
-            return
-
-        with self._pause_condition:
-            paused = state == "paused"
-            changed = paused != self._pause_requested
-            self._pause_requested = paused
-            self._pause_condition.notify_all()
-
-        if not changed:
-            return
-        if paused:
-            self.get_logger().warn(
-                "[print_field_oriented] Global pause requested: will pause after the current command."
-            )
-        else:
-            self.get_logger().info("[print_field_oriented] Global resume requested.")
-
     def _wait_if_control_paused(self, label: str) -> bool:
-        with self._pause_condition:
-            if not self._pause_requested:
-                return True
-            self.get_logger().warn(
-                f"[print_field_oriented] Paused at safe point: {label}. "
-                "Publish 'stop' on /behav3d/control again to resume."
-            )
-            while rclpy.ok() and self._pause_requested:
-                self._pause_condition.wait(timeout=0.25)
-            if not rclpy.ok():
-                return False
-
-        self.get_logger().info(f"[print_field_oriented] Resumed from safe point: {label}.")
-        return True
+        return self.control_pause.wait(label)
 
     def _run(self):
         log = self.get_logger()
@@ -731,10 +681,6 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         log.warn("[print_field_oriented] Print execution stopped by user.")
                         break
 
-                def print_pause_gate() -> None:
-                    if not self._wait_if_control_paused(f"during print for {cycle_tag}"):
-                        raise RuntimeError("Interrupted while waiting at print pause gate.")
-
                 print_mode_norm = str(rt.print_mode or "auto").strip().lower()
                 if print_mode_norm not in ("auto", "segments", "dots"):
                     raise RuntimeError("print_mode must be one of: auto, segments, dots")
@@ -762,7 +708,6 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         post_segment_retract_s=rt.post_segment_retract_s,
                         post_segment_retract_speed=rt.post_segment_retract_speed,
                         timeout_s=rt.timeout_s,
-                        pause_gate=print_pause_gate,
                     )
                 else:
                     log.info(
@@ -784,7 +729,6 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         post_dot_retract_speed=rt.post_dot_retract_speed,
                         eef_link=rt.dot_eef_link,
                         timeout_s=rt.timeout_s,
-                        pause_gate=print_pause_gate,
                     )
                 if not print_res.get("ok", False):
                     log.warn(

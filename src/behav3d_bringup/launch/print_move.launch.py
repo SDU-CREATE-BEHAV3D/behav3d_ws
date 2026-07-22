@@ -28,7 +28,6 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
 
@@ -80,56 +79,6 @@ def generate_launch_description():
         default_value="ur20_base_link",
         description="Frame for published reconstructed mesh marker",
     )
-    # MotionController Params
-    group_arg = DeclareLaunchArgument(
-        "group",
-        default_value="ur_arm",
-        description="MoveIt planning group"
-    )
-
-    root_link_arg = DeclareLaunchArgument(
-        "root_link",
-        default_value="world",
-        description="Root/world link frame"
-    )
-
-    eef_link_arg = DeclareLaunchArgument(
-        "eef_link",
-        default_value="femto_color_optical_calib",
-        description="End-effector link"
-    )
-
-    planning_pipeline_arg = DeclareLaunchArgument(
-        "planning_pipeline",
-        default_value="pilz_industrial_motion_planner",
-        description="Planning pipeline id"
-    )
-
-    max_velocity_scale_arg = DeclareLaunchArgument(
-        "max_velocity_scale",
-        default_value="0.2",
-        description="Max velocity scale [0..1]"
-    )
-
-    max_accel_scale_arg = DeclareLaunchArgument(
-        "max_accel_scale",
-        default_value="0.2",
-        description="Max acceleration scale [0..1]"
-    )
-
-    home_joints_deg_arg = DeclareLaunchArgument(
-        "home_joints_deg",
-        default_value="[-90.0, -120.0, 120.0, -90.0, 90.0, -150.0]",
-        description="Home joint positions in degrees (list)"
-    )
-    # Misc
-    
-    debug_arg = DeclareLaunchArgument(
-        "debug",
-        default_value="true",
-        description="Enable debug logging"
-    )
-
     # -------------------------------------------------------------------------
     # 2) Common paths
     # -------------------------------------------------------------------------
@@ -288,40 +237,10 @@ def generate_launch_description():
     )
     fields_node_call = TimerAction(period=2.0, actions=[fields_node])
 
-    node_demo = Node(
-        name="behav3d_demo",
-        package="behav3d_demo",
-        executable="mancap",
-        output="screen",
-        parameters=[
-            moveit_config.robot_description,
-            moveit_config.robot_description_semantic,
-            moveit_config.robot_description_kinematics,
-            moveit_config.planning_pipelines,
-            moveit_config.joint_limits,
-            {
-                # These values populate the NodeOptions-backed parameters used by PilzMotionController & MotionVisualizer
-                'group': LaunchConfiguration('group'),
-                'root_link': LaunchConfiguration('root_link'),
-                'eef_link': LaunchConfiguration('eef_link'),
-                'planning_pipeline': LaunchConfiguration('planning_pipeline'),
-                'max_velocity_scale': ParameterValue(LaunchConfiguration('max_velocity_scale'), value_type=float),
-                'max_accel_scale': ParameterValue(LaunchConfiguration('max_accel_scale'), value_type=float),
-                'debug': ParameterValue(LaunchConfiguration('debug'), value_type=bool),
-            }
-        ],
-    )
     return LaunchDescription(
         [
             robot_ip_arg,
             mock_arg,
-            group_arg,
-            root_link_arg,
-            eef_link_arg,
-            planning_pipeline_arg,
-            max_velocity_scale_arg,
-            max_accel_scale_arg,
-            debug_arg,
             orbbec_enable_arg,
             reconstruct_services_enable_arg,
             reconstruct_scan_folder_arg,
@@ -340,6 +259,5 @@ def generate_launch_description():
             reconstruct_services,
             world_node_call,
             fields_node_call,
-       #    node_demo
         ]
     )

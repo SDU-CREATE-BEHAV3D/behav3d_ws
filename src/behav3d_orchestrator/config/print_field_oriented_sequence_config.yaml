@@ -7,7 +7,7 @@ print_field_oriented_sequence:
     debug_mode: false
     prompt_before_print: true
     prompt_before_scan: true
-    enable_scan: false
+    enable_scan: true
 
     # Initial table grid sweep
     frame_id: world
@@ -16,13 +16,13 @@ print_field_oriented_sequence:
     scan_eef_link: femto_color_optical_calib
     scan_motion: LIN
     scan_use_tf_orientation: true
-    scan_width: 1.8
+    scan_width: 0.40
     scan_height: 0.40
     scan_center_x: 0.0
     scan_center_y: 0.80
     scan_center_z: 0.0
     scan_z_off: 0.60
-    scan_nx: 18
+    scan_nx: 4
     scan_ny: 4
     scan_row_major: false
     scan_capture_folder: "@session/grid_sweep"
@@ -174,7 +174,7 @@ print_field_oriented_sequence:
 
     # Dot print mode. Active when print_mode=dots, or print_mode=auto with targets YAML.
     dot_eef_link: extruder_tcp
-    dot_steps: 25000
+    dot_steps: 20000
     dot_speed: 2400
     dot_approach_z_offset_m: 0.30
     dot_z_offset_m: 0.04
@@ -182,7 +182,7 @@ print_field_oriented_sequence:
     dot_print_vel_scale: 0.10
     dot_accel_scale: 0.10
     dot_dwell_s: 0.4
-    post_dot_retract_steps: 3000
+    post_dot_retract_steps: 4000
     post_dot_retract_speed: 7000
 
     # Oriented target generation. Used by candidate generation when enabled.

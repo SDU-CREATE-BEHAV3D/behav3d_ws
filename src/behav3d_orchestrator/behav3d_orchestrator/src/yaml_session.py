@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple
 
-import behav3d_commands
 from behav3d_utils import pose_from_xyz_and_z_axis
 from geometry_msgs.msg import PoseStamped
+
+from .control_session import ControlAwareSession
 
 try:
     import yaml
@@ -29,7 +30,7 @@ class TargetPolyline:
     poses: List[PoseStamped]
 
 
-class YamlSession(behav3d_commands.Session):
+class YamlSession(ControlAwareSession):
     """
     Session helpers for target sequences loaded from YAML.
     """

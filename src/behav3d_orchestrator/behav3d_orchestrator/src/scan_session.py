@@ -7,16 +7,16 @@ from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
 import rclpy
-from behav3d_commands.session import Session
 from behav3d_utils import target_builder as tb
 from geometry_msgs.msg import PoseStamped
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
 
+from .control_session import ControlAwareSession
 from .scan_sequences import fibonacci, grid_sweep, half_cylinder, half_cylinder_side_caps
 
 
-class ScanSession(Session):
+class ScanSession(ControlAwareSession):
     """
     Shared scan execution helpers.
 

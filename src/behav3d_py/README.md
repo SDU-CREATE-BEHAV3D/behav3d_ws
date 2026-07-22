@@ -19,8 +19,6 @@ ros2 run behav3d_py <node_name>
 
 For function-level documentation, see `src/behav3d_py/behav3d_py/README.md`.
 
-Note: `move_and_print_test` and `handeye_capture_sequence` moved to `behav3d_examples`.
-
 ## Actionable improvements
 - Convert demo scripts into launchable examples with ROS params instead of in-file constants.
 - Add a minimal integration test that exercises `Commands` with mocked services/actions.

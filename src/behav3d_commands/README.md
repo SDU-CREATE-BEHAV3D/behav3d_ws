@@ -7,7 +7,7 @@ which owns a `SessionQueue`, a `CommandRouter`, and subsystem command sets
 (`MotionCommands`, `CameraCommands`, `FieldCommands`, `ExtruderCommands`,
 `UtilCommands`).
 
-Higher-level orchestration and example sessions live in `behav3d_examples`.
+Higher-level orchestration lives in `behav3d_orchestrator`.
 
 ## Core building blocks
 
@@ -21,6 +21,11 @@ their handlers. It exposes:
 
 `run_sync` must not be called from the ROS executor thread; use a worker thread
 or a multi-threaded executor.
+
+The local `Session.pause()`/`resume()` methods only control that instance's
+queue. Orchestrator sessions derive from `ControlAwareSession`, which listens
+to the shared `/behav3d/control_state` topic and waits before starting the next
+internal command.
 
 ### SessionQueue
 `SessionQueue` is a FIFO queue with optional parallel groups:
@@ -229,12 +234,6 @@ To add a new subsystem:
 2. Implement handlers (`_handle_*`) that accept `(payload, Command)`.
 3. Add public methods that return `QueueItem` (and optionally enqueue).
 4. Register handlers in `register(...)`, and wire the class in `Session`.
-
-## Examples
-`ScanSession` and `PrintSession` are example subclasses in `behav3d_examples`.
-Example nodes that use them live in `behav3d_examples`:
-- `move_and_print_test`
-- `handeye_capture_sequence`
 
 ## Related packages
 `behav3d_utils` contains geometry helpers (Python port of `target_builder.cpp`).

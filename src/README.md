@@ -7,59 +7,9 @@ ROS 2 workspace packages for the Behav3D stack. Each subdirectory is a package (
 ### `behav3d_bringup`
 Launch-only package for wiring the system.
 - `launch/print_move.launch.py`: brings up print + motion stack.
-- `launch/kinematics_ur20_demo.launch.py`: UR20 kinematics demo launch.
 - Orbbec PoE note: configure the Femto Mega IP in **OrbbecViewer** (device network settings),
   not in `print_move.launch.py`. Use an IP different from `192.168.1.10` (for example
   `192.168.1.11`), because `192.168.1.10` is reserved for the Controllino/Modbus extruder endpoint.
-
-### `behav3d_cpp`
-C++ library + nodes for motion, capture, and session workflows. Public APIs are defined in `include/behav3d_cpp/*.hpp`.
-
-Key classes and functions:
-- `behav3d::motion_controller::PilzMotionController` (`motion_controller.hpp`)
-  - `planTarget(...)`, `planJoints(...)`, `planSequence(...)`
-  - `executeTrajectory(...)`, `getCurrentPose(...)`, `getRelativePose(...)`
-  - `computeIK(...)`, `computeFK(...)`, `isReachable(...)`, `cancelAllGoals()`
-- `behav3d::motion_visualizer::MotionVisualizer` (`motion_visualizer.hpp`)
-  - `publishTargetPose(...)`, `publishTrail(...)`, `publishGhost(...)`
-  - `deleteAllMarkers()`, `prompt(...)`, `trigger()`
-- `behav3d::camera_manager::CameraManager` (`camera_manager.hpp`)
-  - `initSession(...)`, `capture(...)`, `captureAsync()`, `waitForIdle()`
-  - `getCalibration(...)` (optionally writes intrinsics YAML)
-- `behav3d::session_manager::SessionManager` (`session_manager.hpp`)
-  - `initSession(...)`, `run(...)`, `finish()`, `getSessionDir()`
-- `behav3d::trajectory_builder` (`trajectory_builder.hpp`)
-  - `fibonacciSphericalCap(...)`, `sweepZigzag(...)`, `addJitter(...)`, `blend(...)`, `uniformSphere(...)`
-- `behav3d::target_builder` (`target_builder.hpp`)
-  - `poseStamped(...)`, `worldXY(...)`, `worldXZ(...)`, `worldYZ(...)`
-  - `toIso(...)`, `fromIso(...)`, `translate(...)`, `rotateEuler(...)`, `transformRel(...)`
-  - `changeBasis(...)`, `rebase(...)`, `xAxis(...)`, `yAxis(...)`, `zAxis(...)`
-  - `alignTarget(...)`, `adjustTarget(...)`, `axisAngle(...)`, `poseBetween(...)`
-  - `mirrorAcrossPlane(...)`, `average(...)`, `offsetTarget(...)`, `setTargetOrigin(...)`
-  - `flipTargetAxes(...)`, `swapTargetAxes(...)`
-- `behav3d::util` (`util.hpp`)
-  - `deg2rad(...)`, `rad2deg(...)`, `wrapAngle(...)`, `randomUnitVector(...)`, `fromRPY(...)`
-  - `readJson(...)`, `writeJson(...)`, `readYaml(...)`, `writeYaml(...)`
-  - `indexString(...)`, `timeStringDateTime(...)`, `toJsonPose(...)`, `toJsonJoints(...)`
-  - `writeIntrinsicsYAML_OpenCV(...)`
-- `behav3d::handeye::HandeyeCalibration` (`handeye_calibration.hpp`)
-  - `getSessionParameters()`, `run()` and per-step helpers for manifests + Charuco detection.
-
-Implementation files live under `src/behav3d_cpp/src/*.cpp`.
-
-### `behav3d_demo`
-C++ demo nodes and launchers.
-- `behav3d_demo/demo.cpp`: motion demo.
-- `behav3d_demo/mancap.cpp`: capture/mancap demo.
-- `launch/*.launch.py`: UR10e/UR20 demo launches.
-
-### `behav3d_examples`
-Python example sequences and reusable session helpers.
-- Sequence nodes: `custom_sequence.py`, `fib_scan_sequence.py`, `handeye_capture_sequence.py`,
-  `loop0_sequence.py`, `print_line_sequence.py`.
-- Session modules in `behav3d_examples/src/`:
-  `custom_session.py`, `fib_cap_session.py`, `grid_sweep_session.py`,
-  `loop0_session.py`, `print_line_session.py`, `print_session.py`.
 
 ### `behav3d_interfaces`
 ROS 2 interface definitions.
@@ -88,15 +38,13 @@ MoveIt2 bridge node (`src/motion_bridge_node.cpp`) exposing planning services an
 - Supports controller execution via `control_msgs/FollowJointTrajectory`.
 
 ### `behav3d_orchestrator`
-Python action server that wraps `PlanAndExecute` on top of the motion bridge.
-- `Orchestrator` methods (`behav3d_orchestrator/orchestrator_node.py`):
-  - `goal_cb(...)`, `cancel_cb(...)`, `execute_cb(...)`
-  - `_wait_for_bridge(...)`, `_call_bridge(...)`
-- Additional orchestrated sequence nodes:
-  - `yaml_target_sequence.py`, `print_path_sequence.py`, `print_dots_sequence.py`,
-    `depth_bias_capture_sequence.py`
-- Session helpers in `behav3d_orchestrator/src/`:
-  - `yaml_session.py`, `print_dots_session.py`, `depth_bias_session.py`
+Python orchestration sequences for motion, printing, scanning, and field-oriented workflows.
+- Sequence nodes: `print_field_oriented_sequence_v2.py`, `print_yaml_and_scan_sequence.py`,
+  `polyline_motion_sequence.py`, and `scan_sequence.py`.
+- Session helpers: `scan_session.py`, `print_session.py`, `yaml_session.py`, and
+  `field_loop_session.py`.
+- `control_session.py` shares `/behav3d/control_state` across the sessions of a
+  node and applies cooperative pause checkpoints between internal commands.
 
 ### `behav3d_print`
 Python Modbus extruder control and print actions.
@@ -139,15 +87,6 @@ UR20 workcell URDFs, meshes, calibration YAMLs, and MoveIt configurations.
 - `ur20_workcell/` for robot descriptions.
 - `*_moveit_config/` for MoveIt configs, planners, and launch.
 
-### `kinematics_demo_cpp`
-C++ kinematics demo with launch files for UR10e and UR20.
-
-### `kinematics_demo_py`
-Python demo node built on `behav3d_py`.
-- `PilzDemo` (`kinematics_demo_py/demo.py`):
-  - Commands: `home()`, `draw_square()`, `draw_square_seq()`, `draw_circle()`, `draw_circle_seq()`, `draw_line()`
-  - Helpers: `RobotState_from_joints(...)`, `PoseStamped_from_xyzq(...)`, `PoseStamped_WorldXY(...)`
-
 ### `world_visualizer`
 Publishes a mesh marker for RViz.
 - `MeshVisualizer` (`world_visualizer/mesh_visualizer.py`):
@@ -161,7 +100,6 @@ Publishes a mesh marker for RViz.
 ## Actionable improvements
 - Add per-package READMEs for all ROS packages (build/run/test instructions + topics/services).
 - Standardize package naming and node names across Python and C++ stacks (avoid one-off demos).
-- Consolidate repeated capture/session logic between `behav3d_sense` and `behav3d_cpp`.
 - Move hard-coded parameters into ROS params or YAML configs (paths, IPs, frames).
 - TODO (loop/debug UX): redesign world-marker API to support explicit `append/remove/clear` commands (rviz_visual_tools-style) instead of relying on global accumulate params.
 - Split core vs demo packages (e.g., `behav3d_core/*`, `behav3d_demos/*`) for clarity.

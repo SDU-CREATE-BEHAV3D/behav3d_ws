@@ -16,7 +16,7 @@ There are **two orchestration layers** in this workspace:
    - **There is no explicit `exec` command in YAML.** Planning and execution are controlled by `goto.exec`.
 
 2. **Session API (`behav3d_commands.Session`)**  
-   Used by `custom_session.py` / `custom_sequence.py`. This layer supports **`run_sync` and `run_group`** and is **not** used by YAML.  
+   Used by the active sessions and sequence nodes in `behav3d_orchestrator`. This layer supports **`run_sync` and `run_group`** and is **not** used by the legacy YAML parser.
    - Use `run_sync(...)` when you need **deterministic blocking** (plan → exec → capture).  
    - Use `run_group([...])` when you need **parallel actions** (e.g., move + extrude).  
    - Use `enqueue=False` to build items for `run_group` or for blocking `run_sync`.
@@ -27,6 +27,9 @@ There are **two orchestration layers** in this workspace:
      commands. Use `ros2 run behav3d_orchestrator polyline_motion_sequence` for
      grouped `polylines:` YAML files.
    - For reconstructed TSDF meshes, the planning-scene mesh frame should match the RViz world-mesh frame used by `update_world_mesh`. In the current bringup that reference frame is `ur20_base_link`, not the MoveIt planning frame fallback.
+   - Orchestrator sessions derive from `ControlAwareSession`; they share the
+     `/behav3d/control_state` state and cooperatively pause before the next
+     internal synchronous command.
 
 If you are writing YAML, focus on the **FIFO behavior** and `goto.exec`.  
 If you are writing Python sessions, use **`run_sync`/`run_group`** to control blocking and concurrency.

@@ -50,8 +50,7 @@ Helper functions:
 - `_fibonacci_cap_dirs_np(cap_rad, n)`: vectorized directions on a spherical cap.
 - `_any_orthonormal(v)`: return an arbitrary orthonormal vector.
 
-## Demo nodes
-Note: `handeye_capture_sequence.py` and `move_and_print_test.py` moved to `behav3d_examples`.
+## Nodes
 
 ### `run_yaml_test.py`
 `RunYamlTest` loads and executes a YAML command file.

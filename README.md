@@ -213,25 +213,31 @@ source ~/.bashrc
 
 ## 7\. Test the Installation
 
-You can test your setup by launching the kinematics demo.
+You can test the current stack with mock robot hardware and the camera disabled.
 
-### Launch the Demo
+### Launch the Bringup
 
-Run the following launch command:
-
-```bash
-ros2 launch kinematics_demo_cpp kinematics_demo_launch.launch.py
-```
-
-### Publish a Test Topic
-
-In a new terminal, publish a message to the `/user_input` topic to interact with the demo:
+Run:
 
 ```bash
-ros2 topic pub --once /user_input std_msgs/msg/String "{data: 'draw_line'}"
+ros2 launch behav3d_bringup print_move.launch.py \
+  use_mock_hardware:=true \
+  orbbec_enable:=false \
+  enable_reconstruct_services:=false
 ```
 
-If the demo runs and responds to the command, your installation is complete and working correctly. 🎉
+### Verify Global Control
+
+In a sourced terminal, inspect the retained control state and toggle cooperative pause:
+
+```bash
+ros2 topic echo /behav3d/control_state
+ros2 topic pub --once /behav3d/control std_msgs/msg/String "{data: stop}"
+```
+
+`behav3d_world` converts each `stop` command into alternating `paused` and
+`running` states. Orchestrator sessions honor the state between internal
+commands; it is a cooperative pause, not an emergency stop.
 -----
 
 ## 7.5\. Pilz Polyline Sequence Test

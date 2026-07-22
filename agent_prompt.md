@@ -1,7 +1,7 @@
 # Behav3D Command Surface and Orchestration Guide (AI Agent)
 
 **Purpose**  
-This document describes the Behav3D command surface, how commands map to ROS 2 interfaces, and how orchestration is done in the `custom_sequence.py` + `custom_session.py` pattern. It is intended for AI agents that must reason about system dynamics, available commands, and correct usage constraints.
+This document describes the Behav3D command surface, how commands map to ROS 2 interfaces, and how the active orchestration sessions compose them. It is intended for AI agents that must reason about system dynamics, available commands, and correct usage constraints.
 
 **Context**  
 Behav3D is intended to coordinate a reactive 3D printing loop that alternates scanning and printing with a clay extruder. The longer-term goal is to develop autonomous printing behaviors that close the loop between perception and extrusion.
@@ -238,19 +238,18 @@ Field commands:
 | Command | Purpose | Key Parameters | Notes |
 | --- | --- | --- | --- |
 | `init_field_from_scan()` | Build and position the scalar field once from scan mesh + field mesh. | `use_latest`, `session_path`, `scan_mesh_paths[]`, `field_mesh_path`, `state_output_dir` | Produces `field_state_init.npz` and debug `field_masked_init.ply`; returns positioned offset `(x,y,z)`. |
-| `generate_print_candidates()` | Evaluate current scan against initialized field and produce print candidates. | `use_latest`, `session_path`, `field_state_path`, `scan_mesh_paths[]`, `output_dir`, `candidate_mode`, `beads_per_step`, `bead_separation_mm`, `bead_height_mm`, `orient_with_tangent`, `tangent_sign`, `clamp_to_cone`, `cone_max_tilt_deg`, `base_to_world_yaw_deg`, `target_zx/zy/zz`, `target_position_scale` | Produces cycle debug artifacts + final `targets.yaml` using the selected candidate mode (`z_lift` or `gradient_lift`) and optional tangent orientation. |
+| `generate_print_candidates()` | Evaluate current scan against initialized field and produce print candidates. | `use_latest`, `session_path`, `field_state_path`, `scan_mesh_paths[]`, `output_dir`, `candidate_mode`, `beads_per_step`, `bead_separation_mm`, `bead_height_mm`, `walk_distance_mm`, `walk_step_mm`, `walk_max_steps`, `walk_start_fraction`, `orient_with_tangent`, `tangent_sign`, `clamp_to_cone`, `cone_max_tilt_deg`, `base_to_world_yaw_deg`, `target_zx/zy/zz`, `target_position_scale` | Produces cycle debug artifacts + final `targets.yaml` using `z_lift`, `gradient_lift`, or `gradient_walk`. |
 
 Field command usage notes:
 - If `session_path` is non-empty, command layer forces `use_latest=False` (explicit path wins).
 - `scan_mesh_paths` can be omitted; the service resolves default TSDF mesh inside the session.
 - `field_state_path` can be omitted in `generate_print_candidates`; the service resolves latest `field_state_init.npz`.
 - Targets YAML is written in robot plane format `O(x,y,z) Z(i,j,k)` with position scaled by `target_position_scale` (default mm).
-- `candidate_mode` currently supports `z_lift` and `gradient_lift`.
+- `candidate_mode` supports `z_lift`, `gradient_lift`, and `gradient_walk`.
+- `gradient_walk` uses the `walk_*` parameters, forces tangent orientation,
+  and emits nested `segments:` with `start`/`end` planes in `targets.yaml`.
 - If `orient_with_tangent=true`, target orientation is sampled from the scalar tangent field; optional orientation clamp is applied with `clamp_to_cone` and `cone_max_tilt_deg`.
 - Base-link to world target reorientation is applied inside `fields_node` at YAML generation time (`base_to_world_yaw_deg`, default falls back to node parameter `target_base_to_world_yaw_deg`).
-- Python-only scalar experiments in `lib_scalar` may support additional modes
-  such as `gradient_walk`; do not assume those are exposed through this ROS
-  command surface until `fields_node` and `GeneratePrintCandidates` are updated.
 
 Fields node implementation:
 - `src/behav3d_sense/behav3d_sense/fields_node.py`
@@ -281,7 +280,9 @@ Utility commands:
 Actions in `src/behav3d_interfaces/action`:
 - `PrintTime.action` at `/print` (provider: `behav3d_print`)
 - `PrintSteps.action` at `/print_steps` (provider: `behav3d_print`)
-- `PlanAndExecute.action` at `/behav3d/plan_and_execute` (provider: `behav3d_orchestrator`)
+- `PlanAndExecute.action` remains defined, but the workspace currently has no
+  `/behav3d/plan_and_execute` provider because the old orchestrator action
+  server was removed.
 
 Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 - `/behav3d/plan_pilz_ptp` (`PlanPilzPtp`) via `behav3d_motion_bridge`
@@ -302,65 +303,49 @@ Services in `src/behav3d_interfaces/srv` (key ones used by commands):
 
 Implementation references:
 - `src/behav3d_motion_bridge/src/motion_bridge_node.cpp`
-- `src/behav3d_orchestrator/behav3d_orchestrator/orchestrator_node.py`
+- `src/behav3d_orchestrator/behav3d_orchestrator/src/control_session.py`
+- `src/behav3d_orchestrator/behav3d_orchestrator/src/scan_session.py`
+- `src/behav3d_orchestrator/behav3d_orchestrator/src/print_session.py`
 - `src/behav3d_print/behav3d_print/print_node.py`
 - `src/behav3d_sense/behav3d_sense/sense_node.py`
 - `src/behav3d_sense/behav3d_sense/reconstruction.py`
 
 ---
 
-**Ideal Use Case: custom_sequence + custom_session**
+**Current Orchestration Session Pattern**
 
-The reference pattern is:
-- `custom_sequence.py` starts a node, creates a `MySession`, and runs a worker thread that calls `run_sync` and `run_group`.
-- `custom_session.py` defines `MySession`, which provides high-level scan and print workflows by composing session commands.
+Active sequence nodes create one or more specialized sessions on the same ROS
+node and run blocking orchestration in a worker thread:
+- `ScanSession`: grid, Fibonacci, half-cylinder, capture, and reconstruction flows.
+- `PrintSession`: YAML targets/segments and extrusion-aware print execution.
+- `YamlSession`: YAML target and polyline parsing plus motion helpers.
+- `FieldLoopSession`: field-state center helpers used by the oriented loop.
 
-Files:
-- `src/behav3d_examples/behav3d_examples/custom_sequence.py`
-- `src/behav3d_examples/behav3d_examples/src/custom_session.py`
+All derive from `ControlAwareSession` in
+`src/behav3d_orchestrator/behav3d_orchestrator/src/control_session.py`.
+Sessions attached to the same node share one transient-local subscription to
+`/behav3d/control_state`. Before each internal `run_sync` command, the session
+waits while the state is `paused`; command timeouts start only after resume.
+Continuous segment printing keeps `extruder ON -> motion -> extruder OFF`
+atomic and honors pause after the extruder is safely off.
 
-Execution flow in `custom_sequence.py`:
-1. Start ROS and spin a node (`CustomSequenceDemo`).
-2. Create `MySession` instance in the node.
-3. Run a worker thread (not the ROS executor thread).
-4. Run a reconstruction cycle with incremented capture folder naming (`grid_sweep_00`, `grid_sweep_01`, ...):
-   - grid sweep capture to `@session/<scan_folder>`
-   - `color_to_depth` with `scan_folder=<scan_folder>`
-   - `tsdf_cropped` with `scan_folder=<scan_folder>`
-   - `update_world_mesh` using returned TSDF output paths
-5. Prompt operator: type `c` to capture another cycle, otherwise shutdown.
+Global control flow:
+1. Publish `std_msgs/String(data="stop")` on `/behav3d/control`.
+2. `behav3d_world` toggles and publishes `paused` or `running` on
+   `/behav3d/control_state`.
+3. Active sessions finish their current command and wait before the next one.
 
-Orchestration details in `custom_session.py`:
-- `run_scan_session`:
-  - `home()` then set defaults `setSpd`, `setAcc`, `setEef`, `setLIN`.
-  - For each target: `plan()`, then `exec()`, then `capture(...)`.
-  - Uses `run_sync` to enforce strict ordering.
-- `run_disc_print_session`:
-  - `home()` first.
-  - For each target: `plan()` then either:
-    - First target: `exec()` only.
-    - Subsequent targets: `run_group([exec(), print_steps(...)])` for motion + extrusion in parallel.
-  - Final `wait()` to provide a synchronization barrier.
-
-Why this pattern is ideal:
-- `run_sync` enforces deterministic sequencing.
-- `run_group` enables safe, explicit concurrency (move + print).
-- The worker thread avoids blocking the ROS executor.
+This is cooperative pause, not trajectory cancellation or an emergency stop.
 
 ---
 
 **Additional Orchestration Patterns (Current)**
 
 Orchestration entry points in `behav3d_orchestrator`:
-- Entry points:
-  - `ros2 run behav3d_orchestrator yaml_target_sequence`
-  - `ros2 run behav3d_orchestrator print_path_sequence`
-  - `ros2 run behav3d_orchestrator print_dots_sequence`
-  - `ros2 run behav3d_orchestrator print_scan_dots_sequence` (legacy alias: `print_scan_dots_sequencenc`)
-  - `ros2 run behav3d_orchestrator depth_bias_capture_sequence`
-  - `ros2 run behav3d_orchestrator print_field_sequence`
-  - `ros2 run behav3d_orchestrator print_field_centered_sequence`
-  - `ros2 run behav3d_orchestrator polyline_motion_sequence`
+- `ros2 run behav3d_orchestrator print_field_oriented_sequence_v2`
+- `ros2 run behav3d_orchestrator print_yaml_and_scan_sequence`
+- `ros2 run behav3d_orchestrator polyline_motion_sequence`
+- `ros2 run behav3d_orchestrator scan_sequence`
 - YAML-specific session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/yaml_session.py`
 - `parse_yaml_targets(...)` supports:
   - `{index: N, xyz: [x, y, z]}`
@@ -368,11 +353,16 @@ Orchestration entry points in `behav3d_orchestrator`:
   - `{index: N, plane: "O(x,y,z) Z(i,j,k)"}` where `O` is in mm and `Z` is the orientation normal
   - `[x, y, z]`
 - Ordering rule: targets are sorted by `index` (fallback: file position).
-- `run_yaml_target_sequence(...)` behavior:
-  - home, short settle wait, set `setSpd/setAcc/setLIN`, optional marker publishing, optional operator gate (`util.input`) per target.
-  - First target uses a safety approach (+0.40 m in Z) before final move.
-- `run_yaml_print_path(...)` behavior:
-  - Parse ordered targets, approach above first target, go to first target, turn extruder ON, plan+exec LIN through all remaining targets, turn extruder OFF, clear markers.
+
+Scan and print flows:
+- `scan_sequence` runs one configured grid, Fibonacci, half-cylinder, or
+  half-cylinder-with-side-caps scan through `ScanSession`.
+- `print_yaml_and_scan_sequence` prints YAML targets in chunks and optionally
+  scans/reconstructs after each chunk.
+- `print_field_oriented_sequence_v2` runs the scan, reconstruction, scalar-field
+  initialization, candidate generation, and dot/segment printing loop.
+- Runtime configuration files are installed from
+  `src/behav3d_orchestrator/config/`.
 
 Pilz polyline stress/test flow:
 - Entry point: `ros2 run behav3d_orchestrator polyline_motion_sequence`
@@ -406,30 +396,6 @@ Pilz polyline stress/test flow:
 - Confirm the new retime path by looking for:
   `TCP resample retime: original_points=... sampled_points=...`.
 
-Fib-cap capture flow in `behav3d_examples`:
-- Main session class: `FibCapSession` in `src/behav3d_examples/behav3d_examples/src/fib_cap_session.py`
-- Backward-compatibility alias still exported: `ScanSession = FibCapSession`
-- Sequence entry points:
-  - `ros2 run behav3d_examples handeye_capture_sequence`
-  - `ros2 run behav3d_examples fib_cap_sequence` (alias to same node)
-- `fib_scan(...)` handles Fibonacci-cap viewpoint generation, ordered motion/capture chaining, optional debug gating, and folder-scoped captures.
-
-Depth-bias calibration flow:
-- Capture entry point: `ros2 run behav3d_orchestrator depth_bias_capture_sequence`
-- Session implementation: `src/behav3d_orchestrator/behav3d_orchestrator/src/depth_bias_session.py`
-- Capture sequence parameters:
-  - `first_height_offset_m`: first capture height above measured center point.
-  - `height_step_m`: step between heights.
-  - `num_steps`: number of height levels (`h1..hN`).
-  - `captures_per_height`: repeated captures per level.
-- Height folder naming is incremental (`h1`, `h2`, ..., `hN`) under `@session/depth_bias` (or configured folder root).
-- Analysis entry point: `python3 python_scripts/3d_reconstruction/depth_bias_analysis.py --session-path <captures/session>`
-- Analysis behavior:
-  - `--folders auto` (default) auto-discovers valid height folders under `<session>/depth_bias`.
-  - Error definition is `error_mm = z_depth_world - z_gt_mesh`.
-  - `pLow/pHigh` correspond to trim quantiles (`--trim-low-q`, `--trim-high-q`) used for robust stats.
-  - Linear model output is `error_mm = a + b * range_m` where `range_m` is in meters; `R2` reports fit quality.
-
 ---
 
 **Guidance for AI Agents**
@@ -442,19 +408,25 @@ Do:
 - Use `capture(folder=...)` for session organization; use `"@session/..."` when you want consistent session roots.
 - Prefer shared geometry/orientation helpers from `behav3d_utils` instead of local duplicates.
 - For plane-normal to pose conversion, use `behav3d_utils.target_transforms` (`pose_from_xyz_and_z_axis`, `quat_from_z_axis`, `quat_from_rotmat`).
+- Use the existing `ControlAwareSession`/`ControlPauseGate` implementation for
+  global cooperative pause; sessions on one node must share the gate.
+- Keep safety-critical continuous-print groups atomic so pause cannot leave the
+  extruder running while motion is stopped.
 
 Avoid:
 - Calling `run_sync` directly inside ROS callbacks.
 - Scheduling conflicting hardware actions in the same `run_group`.
 - Assuming resource locks exist; `SessionQueue` does not enforce them.
 - Re-implementing pose/quaternion helper logic inside sessions when equivalent utilities already exist in `behav3d_utils`.
+- Subscribing separately to `/behav3d/control_state` in each sequence or adding
+  sequence-local pause flags; pause belongs in `control_session.py`.
 
 ---
 
 **Minimal Example (Pseudo-Flow)**
 
 ```python
-session = MySession(node)
+session = ScanSession(node)
 
 # Scan
 session.run_sync(session.motion.home(enqueue=False))
@@ -471,4 +443,5 @@ session.run_group([
 ])
 ```
 
-This mirrors the behavior in `custom_session.py` and `custom_sequence.py` while showing the command surface clearly.
+`ScanSession`, `PrintSession`, `YamlSession`, and `FieldLoopSession` automatically
+honor `/behav3d/control_state` between their internal synchronous commands.
