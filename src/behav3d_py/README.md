@@ -1,29 +1,34 @@
-# behav3d_py (ROS 2 package)
+# behav3d_py
 
-High-level Python API and demo nodes for motion, printing, and capture workflows. This package is the ROS 2 entry point; the Python modules live in `src/behav3d_py/behav3d_py/`.
+Python package containing scalar-field research utilities and low-level print
+diagnostic nodes.
 
-## Entry points (nodes)
-- `run_yaml_test`: execute a YAML command list via `SequenceParser`.
-- `print_test`: interactive print action test (keyboard control).
-- `modbus_test`: low-level Modbus coil/register test node.
+Motion, sensing, printing, and orchestration use `behav3d_commands` and
+`behav3d_orchestrator`. The former `Commands` FIFO, YAML parser, macros, and
+their demo nodes have been removed.
 
-Run with:
+## Entry point
+
+- `modbus_test`: direct Modbus TCP coil/register test for the extruder
+  controller.
+- `print_test`: interactive test of the print action and its speed/status
+  services. Requires `behav3d_print` to be running.
+
+Run it with:
+
+```bash
+ros2 run behav3d_py <modbus_test|print_test>
 ```
-ros2 run behav3d_py <node_name>
-```
 
-## Library modules
-- `behav3d_py/commands.py`: command FIFO + service/action wrappers.
-- `behav3d_py/yaml_parser.py`: YAML-to-Commands mapper.
-- `behav3d_py/macros.py`: higher-level scanning macros (fib-scan).
+This is a hardware diagnostic. Check its ROS parameters and controller address
+before connecting it to the real extruder.
 
-For function-level documentation, see `src/behav3d_py/behav3d_py/README.md`.
+## Scalar-field utilities
 
-## Actionable improvements
-- Convert demo scripts into launchable examples with ROS params instead of in-file constants.
-- Add a minimal integration test that exercises `Commands` with mocked services/actions.
-- Document the expected TF frames and default `eef` names in one place.
-- Provide a sample YAML for `run_yaml_test` under a `examples/` folder.
-- Ensure `setup.py` exposes all demo nodes via `console_scripts`.
-- Add parameter YAMLs for each demo node (speed, frames, IPs, default folders).
-- Add docstrings for demo nodes outlining dependencies and expected running stack.
+The `behav3d_py/scalar_field/` tree contains standalone field construction,
+contour extraction, candidate generation, simulation, visualization, and
+collision-probe scripts. Its reusable algorithms live in
+`scalar_field/lib_scalar/`.
+
+See [`behav3d_py/scalar_field/README.md`](behav3d_py/scalar_field/README.md) for
+the current scripts, inputs, and generated artifacts.

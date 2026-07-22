@@ -1,80 +1,45 @@
 # behav3d_py Python modules
 
-This is the Python API surface for the ROS 2 `behav3d_py` package. The focus is on a FIFO command queue (`Commands`), a YAML runner (`SequenceParser`), and higher-level capture macros (`Macros`).
+This module namespace contains three independent areas:
 
-## Package exports
-- `__init__.py`: exports `Commands`, `SequenceParser`, and `__version__`.
+- `modbus_test.py`: low-level ROS 2 diagnostic node for the Modbus extruder
+  controller.
+- `print_test.py`: interactive client for the print action and its
+  configuration/status services.
+- `scalar_field/`: standalone scalar-field experiments and the reusable
+  `lib_scalar` algorithms used by the field-processing workflow.
 
-## Core API
+The active robot command API is `behav3d_commands.Session`; active scan and
+print flows live in `behav3d_orchestrator`. This package no longer provides the
+legacy `Commands`, `SequenceParser`, or capture macros.
 
-### `commands.py`
-`Commands` is a single-queue orchestrator that wraps motion planning, controller execution, printing, sensing, and reconstruction into a FIFO.
+## Modbus diagnostic node
 
-Public methods:
-- `home(duration_s=10.0, on_move_done=None)`: enqueue a joint trajectory to the hard-coded HOME.
-- `goto(x, y, z, rx=None, ry=None, rz=None, eef=None, vel_scale=None, accel_scale=None, exec=True, on_move_done=None, start_print=None, motion=None)`: plan and optionally execute a PTP/LIN move.
-- `printTime(secs, speed, reverse=False, use_previous_speed=False, on_done=None)`: enqueue the `PrintTime` action.
-- `printSteps(steps, speed, reverse=False, use_previous_speed=False, on_done=None)`: enqueue the `PrintSteps` action.
-- `setPTP()`, `setLIN()`: set default motion mode.
-- `setEef(name)`, `setSpd(val)`, `setAcc(val)`: update defaults used by `goto()`.
-- `wait(secs, on_done=None)`: delay in the FIFO.
-- `getPose(eef, base_frame="world", use_tf=False, on_done=None)`: query link pose (MoveIt or TF).
-- `capture(rgb=False, depth=False, ir=False, pose=False, folder=None, on_done=None)`: call `/capture` service.
-- `reconstruct(use_latest=True, session_path="", on_done=None)`: call `/reconstruct_mesh` service.
-- `input(key=None, prompt=None, on_done=None)`: wait for keyboard input in the FIFO.
-- `pause()`, `resume()`, `toggle_pause()`: pause/resume queue processing.
+`ModbusTest` connects directly to Modbus TCP and exposes parameters for the
+extruder coil and speed register. Run it with:
 
-Queue/executor internals (useful for debugging):
-- `_enqueue(...)`, `_prepend(...)`, `_process_next()`: FIFO core.
-- `_do_follow_traj(...)`: send `FollowJointTrajectory`.
-- `_do_plan_motion(...)`: call Pilz PTP/LIN services and optionally execute.
-- `_do_print_time(...)`, `_do_print_steps(...)`: action clients.
-- `_do_wait(...)`, `_do_get_pose(...)`, `_do_capture(...)`, `_do_reconstruct(...)`, `_do_wait_input(...)`.
-- `_finish_move(...)`: common completion and queue advance.
-- `_quat_from_euler(...)`: RPY (rad) to quaternion helper.
+```bash
+ros2 run behav3d_py modbus_test
+```
 
-### `yaml_parser.py`
-`SequenceParser` maps YAML items to `Commands` calls.
-- `run_file(path)`: parse a YAML list and enqueue commands.
-- `_ensure_dict(val)`: validate mapping items.
-- `_parse_pose(val)`: convert `pose` or `getPose` YAML entries into `Commands.getPose(...)` arguments.
-- `_handle_input(val)`: parse input gating (`input` command).
-- `_handle_capture(val)`: parse capture flags and folder rules.
-- `_on_pose_log(res)`: default pose logger callback.
+Treat it as a hardware diagnostic rather than an orchestration interface.
 
-### `macros.py`
-`Macros` composes higher-level routines on top of `Commands`.
-- `fibScan(target, distance, cap_rad, samples, prompt=None, folder=None, settle_s=0.2, debug=False, z_jitter=0.0)`: enqueue a Fibonacci spherical-cap scan with capture at each viewpoint.
+## Interactive print test
 
-Helper functions:
-- `_fibonacci_cap_dirs_np(cap_rad, n)`: vectorized directions on a spherical cap.
-- `_any_orthonormal(v)`: return an arbitrary orthonormal vector.
+`print_test.py` sends a timed extrusion goal to `behav3d_print`. During the
+test, `u` and `d` adjust speed and Enter cancels the goal. Start the print node
+first, then run:
 
-## Nodes
+```bash
+ros2 run behav3d_py print_test
+```
 
-### `run_yaml_test.py`
-`RunYamlTest` loads and executes a YAML command file.
-- `RunYamlTest.__init__(yaml_path)` creates `Commands` and `SequenceParser`.
-- CLI: `--path /path/to/file.yaml`.
+## Scalar-field code
 
-### `print_test.py`
-Interactive print action tester.
-- `KeyReader`: puts the terminal into cbreak mode and reads single keys.
-- `OrchestratorNode`: sends a `PrintTime` goal and updates speed on key presses.
-  - Action helpers: `_send_goal(...)`, `_on_goal_response(...)`, `_cancel_goal(...)`, `_cancel_goal_and_wait(...)`.
-  - Service helpers: `_get_status(...)`, `_set_speed(...)`.
-  - UI: `_on_key(...)`, `_on_feedback(...)`, `_on_result(...)`, `_shutdown()`.
+The scalar-field scripts cover field positioning, heat/phi evaluation, contour
+and candidate extraction, loop simulation, visualization, target YAML output,
+and extruder collision probing.
 
-### `modbus_test.py`
-Minimal Modbus test node.
-- `ModbusTest`: connects to Modbus TCP and exposes params for coil + speed register.
-- `_on_params(...)`, `_poll()`, `_write_coil(...)`, `_write_speed(...)`.
-
-## Actionable improvements
-- Split `Commands` into transport adapters (MoveIt, print, capture) plus a FIFO core.
-- Replace magic strings with enums/constants (motion modes, service names, frames).
-- Add type hints for callbacks and payloads, and run `mypy` on the package.
-- Move user-facing examples out of the module namespace (to `examples/` or `demos/`).
-- Add structured result objects (dataclasses) for FIFO responses instead of dicts.
-- Add retry/backoff around ROS service/action calls to handle transient failures.
-- Enforce timeouts per queue item and propagate them into callbacks.
+Detailed documentation is in
+[`scalar_field/README.md`](scalar_field/README.md), with library-level notes in
+[`scalar_field/lib_scalar/README.md`](scalar_field/lib_scalar/README.md).

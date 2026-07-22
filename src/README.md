@@ -55,7 +55,10 @@ Python Modbus extruder control and print actions.
   - Actions: `_exec_print_time(...)`, `_exec_print_steps(...)`
 
 ### `behav3d_py`
-Python utilities + demos used by motion/printing workflows. See `src/behav3d_py/README.md` for API and examples.
+Scalar-field research utilities plus the low-level `modbus_test` and
+interactive `print_test` diagnostics.
+Robot command sessions and active workflows live in `behav3d_commands` and
+`behav3d_orchestrator`.
 
 ### `behav3d_utils`
 Shared Python geometry/target helper package.
@@ -87,15 +90,9 @@ UR20 workcell URDFs, meshes, calibration YAMLs, and MoveIt configurations.
 - `ur20_workcell/` for robot descriptions.
 - `*_moveit_config/` for MoveIt configs, planners, and launch.
 
-### `world_visualizer`
-Publishes a mesh marker for RViz.
-- `MeshVisualizer` (`world_visualizer/mesh_visualizer.py`):
-  - `publish_latest_mesh(...)` and file-watcher callbacks in `MeshUpdateHandler`.
-- Status: deprecated in bringup; `behav3d_sense/world_node.py` is now the primary mesh visualization interface.
-
 ## Related docs
 - `python_scripts/README.md` for standalone scripts.
-- `src/behav3d_py/README.md` for the Python API and demo entry points.
+- `src/behav3d_py/README.md` for scalar-field utilities and print diagnostics.
 
 ## Actionable improvements
 - Add per-package READMEs for all ROS packages (build/run/test instructions + topics/services).
