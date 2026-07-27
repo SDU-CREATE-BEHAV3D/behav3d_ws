@@ -557,6 +557,14 @@ class ScanSession(ControlAwareSession):
         tsdf_aabb_crop_enable: Optional[bool] = None,
         tsdf_aabb_crop_min: Optional[Sequence[float]] = None,
         tsdf_aabb_crop_max: Optional[Sequence[float]] = None,
+        tsdf_auto_object_crop_enable: Optional[bool] = None,
+        tsdf_auto_object_min_height_m: float = 0.010,
+        tsdf_auto_object_cluster_eps_m: float = 0.020,
+        tsdf_auto_object_cluster_min_points: int = 30,
+        tsdf_auto_object_neighbor_max_gap_m: float = 0.100,
+        tsdf_auto_object_xy_margin_m: float = 0.020,
+        tsdf_auto_object_top_margin_m: float = 0.010,
+        tsdf_auto_object_table_below_margin_m: float = 0.010,
         tsdf_param_update_timeout_s: float = 8.0,
     ) -> dict[str, Any]:
         log = self.node.get_logger()
@@ -583,7 +591,11 @@ class ScanSession(ControlAwareSession):
                 timeout_s=float(color_to_depth_wait_timeout_s),
             )
 
-        if tsdf_center_crop_enable is not None or tsdf_aabb_crop_enable is not None:
+        if (
+            tsdf_center_crop_enable is not None
+            or tsdf_aabb_crop_enable is not None
+            or tsdf_auto_object_crop_enable is not None
+        ):
             try:
                 self.set_tsdf_service_crop_params(
                     center_crop_enable=bool(tsdf_center_crop_enable),
@@ -593,6 +605,18 @@ class ScanSession(ControlAwareSession):
                     aabb_crop_enable=bool(tsdf_aabb_crop_enable),
                     aabb_crop_min=tsdf_aabb_crop_min or [-0.25, -1.10, -1.00],
                     aabb_crop_max=tsdf_aabb_crop_max or [0.30, -0.65, 0.50],
+                    auto_object_crop_enable=bool(tsdf_auto_object_crop_enable),
+                    auto_object_min_height_m=float(tsdf_auto_object_min_height_m),
+                    auto_object_cluster_eps_m=float(tsdf_auto_object_cluster_eps_m),
+                    auto_object_cluster_min_points=int(tsdf_auto_object_cluster_min_points),
+                    auto_object_neighbor_max_gap_m=float(
+                        tsdf_auto_object_neighbor_max_gap_m
+                    ),
+                    auto_object_xy_margin_m=float(tsdf_auto_object_xy_margin_m),
+                    auto_object_top_margin_m=float(tsdf_auto_object_top_margin_m),
+                    auto_object_table_below_margin_m=float(
+                        tsdf_auto_object_table_below_margin_m
+                    ),
                     timeout_s=float(tsdf_param_update_timeout_s),
                 )
             except Exception as exc:
@@ -663,6 +687,14 @@ class ScanSession(ControlAwareSession):
         aabb_crop_enable: bool,
         aabb_crop_min: Sequence[float],
         aabb_crop_max: Sequence[float],
+        auto_object_crop_enable: bool,
+        auto_object_min_height_m: float,
+        auto_object_cluster_eps_m: float,
+        auto_object_cluster_min_points: int,
+        auto_object_neighbor_max_gap_m: float,
+        auto_object_xy_margin_m: float,
+        auto_object_top_margin_m: float,
+        auto_object_table_below_margin_m: float,
         timeout_s: float,
     ) -> None:
         timeout = max(0.1, float(timeout_s))
@@ -688,6 +720,38 @@ class ScanSession(ControlAwareSession):
                 Parameter("aabb_crop_enable", value=bool(aabb_crop_enable)),
                 Parameter("aabb_crop_min", value=[float(crop_min[0]), float(crop_min[1]), float(crop_min[2])]),
                 Parameter("aabb_crop_max", value=[float(crop_max[0]), float(crop_max[1]), float(crop_max[2])]),
+                Parameter(
+                    "auto_object_crop_enable",
+                    value=bool(auto_object_crop_enable),
+                ),
+                Parameter(
+                    "auto_object_min_height_m",
+                    value=float(auto_object_min_height_m),
+                ),
+                Parameter(
+                    "auto_object_cluster_eps_m",
+                    value=float(auto_object_cluster_eps_m),
+                ),
+                Parameter(
+                    "auto_object_cluster_min_points",
+                    value=int(auto_object_cluster_min_points),
+                ),
+                Parameter(
+                    "auto_object_neighbor_max_gap_m",
+                    value=float(auto_object_neighbor_max_gap_m),
+                ),
+                Parameter(
+                    "auto_object_xy_margin_m",
+                    value=float(auto_object_xy_margin_m),
+                ),
+                Parameter(
+                    "auto_object_top_margin_m",
+                    value=float(auto_object_top_margin_m),
+                ),
+                Parameter(
+                    "auto_object_table_below_margin_m",
+                    value=float(auto_object_table_below_margin_m),
+                ),
             ]
         )
         deadline = time.time() + timeout

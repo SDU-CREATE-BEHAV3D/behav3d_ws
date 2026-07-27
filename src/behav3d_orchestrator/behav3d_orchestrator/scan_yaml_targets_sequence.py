@@ -325,6 +325,30 @@ class ScanYamlTargetsSequenceNode(Node):
                         tsdf_aabb_crop_max=self._cfg_float_list(
                             latest_cfg, "tsdf_aabb_crop_max", expected_length=3
                         ),
+                        tsdf_auto_object_crop_enable=self._cfg_bool(
+                            latest_cfg, "tsdf_auto_object_crop_enable"
+                        ),
+                        tsdf_auto_object_min_height_m=self._cfg_float(
+                            latest_cfg, "tsdf_auto_object_min_height_m"
+                        ),
+                        tsdf_auto_object_cluster_eps_m=self._cfg_float(
+                            latest_cfg, "tsdf_auto_object_cluster_eps_m"
+                        ),
+                        tsdf_auto_object_cluster_min_points=self._cfg_int(
+                            latest_cfg, "tsdf_auto_object_cluster_min_points"
+                        ),
+                        tsdf_auto_object_neighbor_max_gap_m=self._cfg_float(
+                            latest_cfg, "tsdf_auto_object_neighbor_max_gap_m"
+                        ),
+                        tsdf_auto_object_xy_margin_m=self._cfg_float(
+                            latest_cfg, "tsdf_auto_object_xy_margin_m"
+                        ),
+                        tsdf_auto_object_top_margin_m=self._cfg_float(
+                            latest_cfg, "tsdf_auto_object_top_margin_m"
+                        ),
+                        tsdf_auto_object_table_below_margin_m=self._cfg_float(
+                            latest_cfg, "tsdf_auto_object_table_below_margin_m"
+                        ),
                         tsdf_param_update_timeout_s=self._cfg_float(
                             latest_cfg, "tsdf_param_update_timeout_s"
                         ),
@@ -515,6 +539,7 @@ class ScanYamlTargetsSequenceNode(Node):
             "tsdf_center_crop_enable",
             "tsdf_center_crop_apply_to_depth",
             "tsdf_aabb_crop_enable",
+            "tsdf_auto_object_crop_enable",
         ):
             self._cfg_bool(cfg, key)
 
@@ -546,6 +571,21 @@ class ScanYamlTargetsSequenceNode(Node):
         crop_max = self._cfg_float_list(cfg, "tsdf_aabb_crop_max", expected_length=3)
         if any(low >= high for low, high in zip(crop_min, crop_max)):
             raise ValueError("each tsdf_aabb_crop_min component must be below crop_max")
+        if self._cfg_float(cfg, "tsdf_auto_object_min_height_m") < 0.0:
+            raise ValueError("tsdf_auto_object_min_height_m must be >= 0")
+        if self._cfg_float(cfg, "tsdf_auto_object_cluster_eps_m") <= 0.0:
+            raise ValueError("tsdf_auto_object_cluster_eps_m must be > 0")
+        if self._cfg_int(cfg, "tsdf_auto_object_cluster_min_points") <= 0:
+            raise ValueError("tsdf_auto_object_cluster_min_points must be > 0")
+        if self._cfg_float(cfg, "tsdf_auto_object_neighbor_max_gap_m") < 0.0:
+            raise ValueError("tsdf_auto_object_neighbor_max_gap_m must be >= 0")
+        for key in (
+            "tsdf_auto_object_xy_margin_m",
+            "tsdf_auto_object_top_margin_m",
+            "tsdf_auto_object_table_below_margin_m",
+        ):
+            if self._cfg_float(cfg, key) < 0.0:
+                raise ValueError(f"{key} must be >= 0")
 
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         if yaml is None:

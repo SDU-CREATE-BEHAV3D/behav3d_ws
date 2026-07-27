@@ -242,6 +242,38 @@ class TSDFCroppedService(_BaseReconstructService):
             "aabb_crop_max",
             [float(v) for v in np.asarray(TSDF_cpu_cropped.CROP_MAX, dtype=np.float64).reshape(-1)[:3]],
         )
+        self.declare_parameter(
+            "auto_object_crop_enable",
+            bool(TSDF_cpu_cropped.AUTO_OBJECT_CROP_ENABLE),
+        )
+        self.declare_parameter(
+            "auto_object_min_height_m",
+            float(TSDF_cpu_cropped.AUTO_OBJECT_MIN_HEIGHT_M),
+        )
+        self.declare_parameter(
+            "auto_object_cluster_eps_m",
+            float(TSDF_cpu_cropped.AUTO_OBJECT_CLUSTER_EPS_M),
+        )
+        self.declare_parameter(
+            "auto_object_cluster_min_points",
+            int(TSDF_cpu_cropped.AUTO_OBJECT_CLUSTER_MIN_POINTS),
+        )
+        self.declare_parameter(
+            "auto_object_neighbor_max_gap_m",
+            float(TSDF_cpu_cropped.AUTO_OBJECT_NEIGHBOR_MAX_GAP_M),
+        )
+        self.declare_parameter(
+            "auto_object_xy_margin_m",
+            float(TSDF_cpu_cropped.AUTO_OBJECT_XY_MARGIN_M),
+        )
+        self.declare_parameter(
+            "auto_object_top_margin_m",
+            float(TSDF_cpu_cropped.AUTO_OBJECT_TOP_MARGIN_M),
+        )
+        self.declare_parameter(
+            "auto_object_table_below_margin_m",
+            float(TSDF_cpu_cropped.AUTO_OBJECT_TABLE_BELOW_MARGIN_M),
+        )
 
     def _build_runner_kwargs(self, request) -> Dict[str, Any]:
         _ = request
@@ -261,6 +293,30 @@ class TSDFCroppedService(_BaseReconstructService):
             "aabb_crop_enable": bool(self.get_parameter("aabb_crop_enable").value),
             "aabb_crop_min": [float(crop_min[0]), float(crop_min[1]), float(crop_min[2])],
             "aabb_crop_max": [float(crop_max[0]), float(crop_max[1]), float(crop_max[2])],
+            "auto_object_crop_enable": bool(
+                self.get_parameter("auto_object_crop_enable").value
+            ),
+            "auto_object_min_height_m": float(
+                self.get_parameter("auto_object_min_height_m").value
+            ),
+            "auto_object_cluster_eps_m": float(
+                self.get_parameter("auto_object_cluster_eps_m").value
+            ),
+            "auto_object_cluster_min_points": int(
+                self.get_parameter("auto_object_cluster_min_points").value
+            ),
+            "auto_object_neighbor_max_gap_m": float(
+                self.get_parameter("auto_object_neighbor_max_gap_m").value
+            ),
+            "auto_object_xy_margin_m": float(
+                self.get_parameter("auto_object_xy_margin_m").value
+            ),
+            "auto_object_top_margin_m": float(
+                self.get_parameter("auto_object_top_margin_m").value
+            ),
+            "auto_object_table_below_margin_m": float(
+                self.get_parameter("auto_object_table_below_margin_m").value
+            ),
         }
 
 

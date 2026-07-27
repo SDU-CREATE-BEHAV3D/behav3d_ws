@@ -76,8 +76,28 @@ CROP_ENABLE = False
 CROP_MIN = np.array([-0.25, -1.1, -1.0], dtype=np.float64)  # meters
 CROP_MAX = np.array([ 0.3,  -0.65,  0.5], dtype=np.float64)  # meters
 
+# Adaptive final crop. The table plane is used only to identify points above
+# the support surface and set the crop height; the table patch inside the
+# resulting XY footprint remains in the exported mesh.
+AUTO_OBJECT_CROP_ENABLE = False
+AUTO_OBJECT_MIN_HEIGHT_M = 0.010
+AUTO_OBJECT_CLUSTER_EPS_M = 0.020
+AUTO_OBJECT_CLUSTER_MIN_POINTS = 30
+# Keep separate object clusters whose XY footprints are this close to the
+# largest cluster. This retains small neighboring objects without admitting
+# distant table-edge artifacts into the adaptive crop.
+AUTO_OBJECT_NEIGHBOR_MAX_GAP_M = 0.100
+AUTO_OBJECT_XY_MARGIN_M = 0.020
+AUTO_OBJECT_TOP_MARGIN_M = 0.010
+AUTO_OBJECT_TABLE_BELOW_MARGIN_M = 0.010
+
 # Outlier removal method: "none", "statistical", "radius"
 OUTLIER_METHOD = "statistical"
+
+# Mesh export cleanup. TSDF edge noise commonly produces many tiny disconnected
+# triangle islands; remove those without smoothing away object detail.
+MESH_REMOVE_SMALL_COMPONENTS = True
+MESH_MIN_COMPONENT_TRIANGLES = 50
 
 # Statistical outlier params
 OUTLIER_NB_NEIGHBORS = 35
@@ -711,6 +731,149 @@ def _slice_pcd_by_plane(pcd, conf, plane_model, keep_side="above", margin=0.0):
     return pcd2, conf2
 
 
+def _clean_mesh_for_export(mesh):
+    """Remove invalid geometry and small disconnected TSDF fragments."""
+    mesh.remove_duplicated_triangles()
+    mesh.remove_degenerate_triangles()
+    mesh.remove_duplicated_vertices()
+    mesh.remove_unreferenced_vertices()
+
+    if MESH_REMOVE_SMALL_COMPONENTS and len(mesh.triangles) > 0:
+        triangle_clusters, cluster_n_triangles, _cluster_area = (
+            mesh.cluster_connected_triangles()
+        )
+        triangle_clusters = np.asarray(triangle_clusters, dtype=np.int64)
+        cluster_n_triangles = np.asarray(cluster_n_triangles, dtype=np.int64)
+        remove_cluster = cluster_n_triangles < int(MESH_MIN_COMPONENT_TRIANGLES)
+        remove_triangles = remove_cluster[triangle_clusters]
+        removed = int(np.count_nonzero(remove_triangles))
+        if removed > 0:
+            mesh.remove_triangles_by_mask(remove_triangles)
+            mesh.remove_unreferenced_vertices()
+            print(
+                "Mesh cleanup removed "
+                f"{removed} triangles from {int(np.count_nonzero(remove_cluster))} "
+                f"components smaller than {MESH_MIN_COMPONENT_TRIANGLES} triangles"
+            )
+
+    mesh.compute_vertex_normals()
+    return mesh
+
+
+def _auto_object_crop_bounds(
+    pcd,
+    plane_model,
+    *,
+    min_height_m,
+    cluster_eps_m,
+    cluster_min_points,
+    neighbor_max_gap_m,
+    xy_margin_m,
+    top_margin_m,
+    table_below_margin_m,
+):
+    """Estimate an object AABB while keeping its underlying table patch."""
+    plane_model = _normalize_plane(plane_model)
+    pts = np.asarray(pcd.points, dtype=np.float64)
+    if pts.shape[0] == 0:
+        raise ValueError("Cannot estimate adaptive crop from an empty point cloud.")
+
+    signed_height = pts @ plane_model[:3] + plane_model[3]
+    candidates = pts[signed_height > float(min_height_m)]
+    if candidates.shape[0] < max(3, int(cluster_min_points)):
+        raise ValueError(
+            "Too few points above the fitted table for adaptive crop: "
+            f"{candidates.shape[0]}"
+        )
+
+    candidate_pcd = o3d.geometry.PointCloud()
+    candidate_pcd.points = o3d.utility.Vector3dVector(candidates)
+    labels = np.asarray(
+        candidate_pcd.cluster_dbscan(
+            eps=float(cluster_eps_m),
+            min_points=int(cluster_min_points),
+            print_progress=False,
+        ),
+        dtype=np.int64,
+    )
+    valid_labels = labels[labels >= 0]
+    selected_labels = []
+    cluster_gaps = {}
+    if valid_labels.size == 0:
+        object_pts = candidates
+        selected_label = None
+    else:
+        cluster_ids, cluster_counts = np.unique(valid_labels, return_counts=True)
+        selected_label = int(cluster_ids[int(np.argmax(cluster_counts))])
+        primary_pts = candidates[labels == selected_label]
+        primary_min_xy = np.min(primary_pts[:, :2], axis=0)
+        primary_max_xy = np.max(primary_pts[:, :2], axis=0)
+        for cluster_id in cluster_ids:
+            cluster_id = int(cluster_id)
+            cluster_pts = candidates[labels == cluster_id]
+            cluster_min_xy = np.min(cluster_pts[:, :2], axis=0)
+            cluster_max_xy = np.max(cluster_pts[:, :2], axis=0)
+            axis_gap = np.maximum(
+                np.maximum(primary_min_xy - cluster_max_xy, cluster_min_xy - primary_max_xy),
+                0.0,
+            )
+            gap = float(np.linalg.norm(axis_gap))
+            cluster_gaps[cluster_id] = gap
+            if gap <= max(0.0, float(neighbor_max_gap_m)):
+                selected_labels.append(cluster_id)
+        object_pts = candidates[np.isin(labels, selected_labels)]
+
+    # Recover nearby disconnected pieces belonging to the same object footprint.
+    xy_margin = max(0.0, float(xy_margin_m))
+    seed_min_xy = np.min(object_pts[:, :2], axis=0) - xy_margin
+    seed_max_xy = np.max(object_pts[:, :2], axis=0) + xy_margin
+    nearby = (
+        (candidates[:, 0] >= seed_min_xy[0])
+        & (candidates[:, 0] <= seed_max_xy[0])
+        & (candidates[:, 1] >= seed_min_xy[1])
+        & (candidates[:, 1] <= seed_max_xy[1])
+    )
+    object_pts = candidates[nearby]
+
+    object_min = np.min(object_pts, axis=0)
+    object_max = np.max(object_pts, axis=0)
+    crop_min_xy = object_min[:2] - xy_margin
+    crop_max_xy = object_max[:2] + xy_margin
+
+    a, b, c, d = [float(v) for v in plane_model]
+    if abs(c) < 1e-6:
+        raise ValueError("Adaptive crop requires a table plane with a non-zero Z component.")
+    table_z = []
+    for x in (crop_min_xy[0], crop_max_xy[0]):
+        for y in (crop_min_xy[1], crop_max_xy[1]):
+            table_z.append(-(a * x + b * y + d) / c)
+
+    crop_min = np.array(
+        [
+            crop_min_xy[0],
+            crop_min_xy[1],
+            min(table_z) - max(0.0, float(table_below_margin_m)),
+        ],
+        dtype=np.float64,
+    )
+    crop_max = np.array(
+        [
+            crop_max_xy[0],
+            crop_max_xy[1],
+            object_max[2] + max(0.0, float(top_margin_m)),
+        ],
+        dtype=np.float64,
+    )
+    print(
+        "Adaptive object crop: "
+        f"primary_cluster={selected_label}, selected_clusters={selected_labels}, "
+        f"cluster_xy_gaps_m={cluster_gaps}, object_points={object_pts.shape[0]}, "
+        f"min={crop_min.tolist()}, max={crop_max.tolist()}, "
+        "table_patch_retained=True"
+    )
+    return crop_min, crop_max
+
+
 def _make_plane_line_set(plane_model, pcd_ref, color=(0.85, 0.85, 0.85), scale=1.2,
                          normal_color=(1.0, 0.2, 0.2), normal_scale=0.25,
                          normal_radius=0.0, grid_lines=0):
@@ -819,10 +982,23 @@ def run(
     aabb_crop_enable=None,
     aabb_crop_min=None,
     aabb_crop_max=None,
+    auto_object_crop_enable=None,
+    auto_object_min_height_m=None,
+    auto_object_cluster_eps_m=None,
+    auto_object_cluster_min_points=None,
+    auto_object_neighbor_max_gap_m=None,
+    auto_object_xy_margin_m=None,
+    auto_object_top_margin_m=None,
+    auto_object_table_below_margin_m=None,
 ):
     global SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE
     global C2D_CENTER_CROP_ENABLE, C2D_CENTER_CROP_WIDTH, C2D_CENTER_CROP_HEIGHT
     global C2D_CENTER_CROP_APPLY_TO_DEPTH, CROP_ENABLE, CROP_MIN, CROP_MAX
+    global AUTO_OBJECT_CROP_ENABLE, AUTO_OBJECT_MIN_HEIGHT_M
+    global AUTO_OBJECT_CLUSTER_EPS_M, AUTO_OBJECT_CLUSTER_MIN_POINTS
+    global AUTO_OBJECT_NEIGHBOR_MAX_GAP_M
+    global AUTO_OBJECT_XY_MARGIN_M, AUTO_OBJECT_TOP_MARGIN_M
+    global AUTO_OBJECT_TABLE_BELOW_MARGIN_M
 
     SESSION_PATH = session_path or DEFAULT_SESSION_PATH
     scan_folder = scan_folder_override or DEFAULT_SCAN_FOLDER
@@ -851,6 +1027,22 @@ def run(
         arr = np.asarray(aabb_crop_max, dtype=np.float64).reshape(-1)
         if arr.shape[0] >= 3:
             CROP_MAX = np.array([float(arr[0]), float(arr[1]), float(arr[2])], dtype=np.float64)
+    if auto_object_crop_enable is not None:
+        AUTO_OBJECT_CROP_ENABLE = bool(auto_object_crop_enable)
+    if auto_object_min_height_m is not None:
+        AUTO_OBJECT_MIN_HEIGHT_M = float(auto_object_min_height_m)
+    if auto_object_cluster_eps_m is not None:
+        AUTO_OBJECT_CLUSTER_EPS_M = float(auto_object_cluster_eps_m)
+    if auto_object_cluster_min_points is not None:
+        AUTO_OBJECT_CLUSTER_MIN_POINTS = int(auto_object_cluster_min_points)
+    if auto_object_neighbor_max_gap_m is not None:
+        AUTO_OBJECT_NEIGHBOR_MAX_GAP_M = float(auto_object_neighbor_max_gap_m)
+    if auto_object_xy_margin_m is not None:
+        AUTO_OBJECT_XY_MARGIN_M = float(auto_object_xy_margin_m)
+    if auto_object_top_margin_m is not None:
+        AUTO_OBJECT_TOP_MARGIN_M = float(auto_object_top_margin_m)
+    if auto_object_table_below_margin_m is not None:
+        AUTO_OBJECT_TABLE_BELOW_MARGIN_M = float(auto_object_table_below_margin_m)
 
     session = Session(SESSION_PATH, scan_folder)
     device = _validate_device(_normalize_device(device))
@@ -869,6 +1061,14 @@ def run(
         f"enabled={CROP_ENABLE}, "
         f"min={np.asarray(CROP_MIN, dtype=np.float64).tolist()}, "
         f"max={np.asarray(CROP_MAX, dtype=np.float64).tolist()}"
+    )
+    print(
+        "Adaptive object crop: "
+        f"enabled={AUTO_OBJECT_CROP_ENABLE}, min_height={AUTO_OBJECT_MIN_HEIGHT_M}, "
+        f"cluster_eps={AUTO_OBJECT_CLUSTER_EPS_M}, "
+        f"cluster_min_points={AUTO_OBJECT_CLUSTER_MIN_POINTS}, "
+        f"xy_margin={AUTO_OBJECT_XY_MARGIN_M}, top_margin={AUTO_OBJECT_TOP_MARGIN_M}, "
+        f"table_below_margin={AUTO_OBJECT_TABLE_BELOW_MARGIN_M}"
     )
     tsdf_integration = TSDF_Integration(session, device=device, depth_bias_m=depth_bias_m)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
@@ -936,6 +1136,27 @@ def run(
             )
             print(f"After table slice ({TABLE_SLICE_KEEP_SIDE}): {len(pcd_rgb.points)} points")
 
+    auto_crop_min = None
+    auto_crop_max = None
+    if AUTO_OBJECT_CROP_ENABLE:
+        if plane_model is None:
+            raise ValueError("Adaptive object crop requires table-plane fitting.")
+        auto_crop_min, auto_crop_max = _auto_object_crop_bounds(
+            pcd_rgb,
+            plane_model,
+            min_height_m=AUTO_OBJECT_MIN_HEIGHT_M,
+            cluster_eps_m=AUTO_OBJECT_CLUSTER_EPS_M,
+            cluster_min_points=AUTO_OBJECT_CLUSTER_MIN_POINTS,
+            neighbor_max_gap_m=AUTO_OBJECT_NEIGHBOR_MAX_GAP_M,
+            xy_margin_m=AUTO_OBJECT_XY_MARGIN_M,
+            top_margin_m=AUTO_OBJECT_TOP_MARGIN_M,
+            table_below_margin_m=AUTO_OBJECT_TABLE_BELOW_MARGIN_M,
+        )
+        pcd_rgb, conf = tsdf_integration.crop_pcd_aabb_with_conf(
+            pcd_rgb, conf, auto_crop_min, auto_crop_max
+        )
+        print(f"After adaptive object crop: {len(pcd_rgb.points)} points")
+
     pcd_rgb, conf = tsdf_integration.filter_outliers_with_conf(
         pcd_rgb, conf,
         method=OUTLIER_METHOD,
@@ -975,12 +1196,21 @@ def run(
 
     out_mesh = output_folder / "tsdf_surface_mesh.stl"
     mesh_out = mesh
-    if CROP_ENABLE:
+    if auto_crop_min is not None and auto_crop_max is not None:
+        aabb = o3d.geometry.AxisAlignedBoundingBox(auto_crop_min, auto_crop_max)
+        mesh_out = mesh.crop(aabb)
+    elif CROP_ENABLE:
         aabb = o3d.geometry.AxisAlignedBoundingBox(CROP_MIN, CROP_MAX)
         mesh_out = mesh.crop(aabb)
-        mesh_out.compute_vertex_normals()
+    mesh_out = _clean_mesh_for_export(mesh_out)
     o3d.io.write_triangle_mesh(str(out_mesh), mesh_out)
     print("Saved:", out_mesh)
+
+    # Keep an indexed mesh alongside STL. STL duplicates vertices by design;
+    # PLY is smaller and better for inspection or downstream processing.
+    out_mesh_ply = output_folder / "tsdf_surface_mesh.ply"
+    o3d.io.write_triangle_mesh(str(out_mesh_ply), mesh_out)
+    print("Saved:", out_mesh_ply)
 
     out_rgb = output_folder / "tsdf_surface_rgb_colored.ply"
     out_conf = output_folder / "tsdf_surface_confidence_colored.ply"

@@ -2,7 +2,7 @@ scan_yaml_targets_sequence:
   ros__parameters:
     # Target input. Plane origins are millimetres; Z is the target's Z axis.
     # These path/frame values are fixed after startup. Restart to change them.
-    yaml_path: /home/lab/behav3d_ws/yaml/scan_targets.yaml
+    yaml_path: /home/lab/behav3d_ws/yaml/orbit_scan_test6.yaml
     frame_id: world
 
     # Capture location. scan_folder may be empty to derive it from
@@ -23,8 +23,8 @@ scan_yaml_targets_sequence:
     vel_scale: 0.1
     accel_scale: 0.1
     timeout_s: 0.0
-    dwell_s: 0.5
-    prompt_before_next_plane: true
+    dwell_s: 1.0
+    prompt_before_next_plane: false
 
     # Capture channels, also reloaded before every target.
     rgb: true
@@ -50,11 +50,26 @@ scan_yaml_targets_sequence:
     mesh_update_wait_timeout_s: 45.0
     mesh_update_request_timeout_s: 55.0
     update_world_mesh: true
-    tsdf_center_crop_enable: true
+    # Keep the full depth frame so a larger object is not clipped before TSDF.
+    tsdf_center_crop_enable: false
     tsdf_center_crop_width: 300
     tsdf_center_crop_height: 290
     tsdf_center_crop_apply_to_depth: false
+
+    # Fixed crop is retained only as a disabled fallback.
     tsdf_aabb_crop_enable: false
-    tsdf_aabb_crop_min: [-0.25, -1.10, -1.00]
-    tsdf_aabb_crop_max: [0.30, -0.65, 0.50]
+    tsdf_aabb_crop_min: [-0.055, -0.875, -0.195]
+    tsdf_aabb_crop_max: [0.065, -0.760, 0.005]
+
+    # Adaptive object cropping is currently disabled so the complete reconstructed
+    # scene is exported. Keep the settings below available for later re-enabling.
+    tsdf_auto_object_crop_enable: false
+    tsdf_auto_object_min_height_m: 0.010
+    tsdf_auto_object_cluster_eps_m: 0.020
+    tsdf_auto_object_cluster_min_points: 30
+    # Retain separate object clusters up to 10 cm from the main object's XY footprint.
+    tsdf_auto_object_neighbor_max_gap_m: 0.100
+    tsdf_auto_object_xy_margin_m: 0.020
+    tsdf_auto_object_top_margin_m: 0.010
+    tsdf_auto_object_table_below_margin_m: 0.010
     tsdf_param_update_timeout_s: 8.0
