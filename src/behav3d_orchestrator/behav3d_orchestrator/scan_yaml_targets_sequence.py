@@ -618,15 +618,35 @@ class ScanYamlTargetsSequenceNode(Node):
 
     @staticmethod
     def _default_config_path() -> str:
-        source_path = Path(__file__).resolve().parents[1] / "config" / CONFIG_FILENAME
-        if source_path.is_file():
-            return str(source_path)
+        # Prefer the editable workspace copy. With a regular colcon build this
+        # module runs from install/, so __file__ alone cannot locate src/.
+        source_candidates = [
+            Path(__file__).resolve().parents[1] / "config" / CONFIG_FILENAME,
+            Path.cwd() / "src" / "behav3d_orchestrator" / "config" / CONFIG_FILENAME,
+        ]
+        for source_path in source_candidates:
+            if source_path.is_file():
+                return str(source_path)
+
         try:
             from ament_index_python.packages import get_package_share_directory
 
-            return str(Path(get_package_share_directory("behav3d_orchestrator")) / "config" / CONFIG_FILENAME)
+            share_path = Path(get_package_share_directory("behav3d_orchestrator")).resolve()
+            for parent in share_path.parents:
+                if parent.name != "install":
+                    continue
+                source_path = (
+                    parent.parent
+                    / "src"
+                    / "behav3d_orchestrator"
+                    / "config"
+                    / CONFIG_FILENAME
+                )
+                if source_path.is_file():
+                    return str(source_path)
+            return str(share_path / "config" / CONFIG_FILENAME)
         except Exception:
-            return str(source_path)
+            return str(source_candidates[0])
 
     @staticmethod
     def _scan_folder_from_capture_folder(capture_folder: str) -> str:
