@@ -170,6 +170,67 @@ def build_oriented_line_targets(
     )
 
 
+def build_candidate_segment_targets(
+    *,
+    candidate_points: np.ndarray,
+    segment_start_points: np.ndarray | None,
+    candidate_mode: str,
+    field_vertices_world: np.ndarray,
+    field_faces: np.ndarray,
+    field_scalar: np.ndarray,
+    tangent_sign: float,
+    clamp_to_cone: bool,
+    cone_max_tilt_deg: float,
+    orient_with_tangent: bool | None = None,
+    fixed_z_dir: tuple[float, float, float] = (0.0, 0.0, 1.0),
+) -> OrientedLineTargets:
+    """Build the shared start/end target contract from scalar candidates."""
+    ends = _validate_points(candidate_points, "candidate_points")
+    if (
+        segment_start_points is not None
+        and np.asarray(segment_start_points).shape == ends.shape
+    ):
+        starts = _validate_points(segment_start_points, "segment_start_points")
+    else:
+        starts = ends.copy()
+
+    if ends.shape[0] == 0:
+        empty = np.zeros((0, 3), dtype=np.float64)
+        return OrientedLineTargets(empty, empty, empty, empty)
+
+    mode = str(candidate_mode).strip().lower()
+    use_tangent = (
+        mode in ("gradient_lift", "gradient_walk")
+        if orient_with_tangent is None
+        else bool(orient_with_tangent)
+    )
+    if use_tangent:
+        return build_oriented_line_targets(
+            start_points=starts,
+            end_points=ends,
+            field_vertices_world=field_vertices_world,
+            field_faces=field_faces,
+            field_scalar=field_scalar,
+            tangent_sign=float(tangent_sign),
+            clamp_to_cone=bool(clamp_to_cone),
+            cone_max_tilt_deg=float(cone_max_tilt_deg),
+        )
+
+    z_dir = np.asarray(fixed_z_dir, dtype=np.float64)
+    z_norm = float(np.linalg.norm(z_dir))
+    if z_norm <= 1e-12:
+        z_dir = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    else:
+        z_dir /= z_norm
+    z_dirs = np.tile(z_dir, (ends.shape[0], 1))
+    return OrientedLineTargets(
+        start_points=starts.copy(),
+        end_points=ends.copy(),
+        start_z_dirs=z_dirs,
+        end_z_dirs=z_dirs.copy(),
+    )
+
+
 def write_point_targets_yaml(
     out_yaml: Path,
     points_world: np.ndarray,

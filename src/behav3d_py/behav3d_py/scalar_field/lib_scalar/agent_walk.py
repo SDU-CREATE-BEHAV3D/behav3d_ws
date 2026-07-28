@@ -22,8 +22,6 @@ class AgentWalkConfig:
     step_size: float = 1e-3
     max_steps: int = 32
     tangent_sign: float = 1.0
-    source_min_distance: float = 0.008
-    final_min_distance: float = 0.008
     final_min_phi: float = 0.004
     segment_start_fraction: float = 0.25
     clamp_to_cone: bool = False
@@ -157,7 +155,7 @@ def run_agent_walk(
     config: AgentWalkConfig,
     phi_scalar: np.ndarray | None = None,
 ) -> AgentWalkResult:
-    """Run simple independent walk agents with source/final spacing filters."""
+    """Run simple independent walk agents with a final scalar-validity filter."""
     if source_points.shape[0] == 0:
         empty = np.zeros((0, 3), dtype=np.float64)
         return AgentWalkResult(
@@ -174,16 +172,9 @@ def run_agent_walk(
     accepted_indices: list[int] = []
     accepted_phi: list[float] = []
 
-    source_min = max(0.0, float(config.source_min_distance))
-    final_min = max(0.0, float(config.final_min_distance))
     final_min_phi = float(config.final_min_phi)
 
     for idx, source in enumerate(sources_surface):
-        if accepted_sources and source_min > 0.0:
-            d_source = np.linalg.norm(np.asarray(accepted_sources) - source, axis=1)
-            if np.any(d_source < source_min):
-                continue
-
         final = _walk_one_agent(
             source,
             field_vertices_world,
@@ -205,11 +196,6 @@ def run_agent_walk(
                 continue
         else:
             phi_final = float("nan")
-
-        if accepted_points and final_min > 0.0:
-            d_final = np.linalg.norm(np.asarray(accepted_points) - final, axis=1)
-            if np.any(d_final < final_min):
-                continue
 
         accepted_sources.append(source.copy())
         accepted_points.append(final.copy())

@@ -28,6 +28,7 @@ from .loop_simulation import (
 )
 from .print_targets import (
     OrientedLineTargets,
+    build_candidate_segment_targets,
     build_oriented_line_targets,
     orient_points_with_tangent,
     write_fixed_z_targets_yaml,
@@ -64,6 +65,7 @@ __all__ = [
     "run_agent_walk",
     "OrientedLineTargets",
     "orient_points_with_tangent",
+    "build_candidate_segment_targets",
     "build_oriented_line_targets",
     "write_point_targets_yaml",
     "write_fixed_z_targets_yaml",

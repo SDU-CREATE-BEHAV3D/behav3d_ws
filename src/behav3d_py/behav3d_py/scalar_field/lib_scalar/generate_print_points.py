@@ -284,8 +284,9 @@ def generate_print_points(
     - `gradient_walk`: walk on field surface along scalar tangent direction
       until euclidean displacement from source reaches `walk_distance`
       (or `walk_max_steps` is reached).
-      The simple agent walk also keeps source/final spacing at 8 mm and can
-      reject final points with `phi < 4 mm` when `agent_phi_scalar` is passed.
+      The simple agent walk can reject final points with `phi < 4 mm` when
+      `agent_phi_scalar` is passed. Final endpoint spacing is handled by the
+      shared secondary target rules after target construction.
       It also exposes a projected segment start at `walk_start_fraction`
       along `source -> output`.
       Optional clamp:

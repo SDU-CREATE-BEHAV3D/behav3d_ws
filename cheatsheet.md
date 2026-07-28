@@ -64,11 +64,21 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
 
 ```bash
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py \
-  --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init.npz \
+  --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init1.npz \
+  --scan-mesh /home/lab/behav3d_ws/mesh/ScanMesh.stl \
+  --scan-scale 0.001 \
   --scan-yaw-deg 180 \
   --candidate-mode gradient_lift \
   --beads-per-step 7 \
-  --bead-separation-mm 16 \
-  --bead-width-mm 18 \
-  --bead-height-mm 12
+  --bead-separation-mm 30 \
+  --bead-width-mm 36 \
+  --bead-height-mm 16 \
+  --clamp-to-cone \
+  --cone-max-tilt-deg 30
 ```
+
+```bash
+  THIS ARE FOR ADJUSTING MESH WHEN IT COMES FROM RHINO WORLD COORDINTAES IN MM>
+    --scan-scale 0.001 \
+    --scan-yaw-deg 180 \
+  ```

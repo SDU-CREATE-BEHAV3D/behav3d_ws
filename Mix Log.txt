@@ -29,6 +29,9 @@ Target height / steps matrix
 | 20                 | D: / H:          | D: / H:           | D: / H:           | D: 41.5 / H: 20.5 | D: 46.2 / H: 20.5 |
 | 25                 | D: / H:          | D: / H:           | D: / H:           | D: / H:           | D: / H:           |
 
+12mm nozzle           14000 steps
+| 16                | D:36 / H: 15.5   |
+
 
 Material Water Content Experiment
 ////////////////////////////////////////

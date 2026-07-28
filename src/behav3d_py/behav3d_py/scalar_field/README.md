@@ -129,7 +129,9 @@ Example:
 ```bash
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py \
   --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init.npz \
-  --scan-mesh /home/lab/behav3d_ws/captures/260317_171335/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl \
+  --scan-mesh /home/lab/behav3d_ws/mesh/ScanMesh.stl \
+  --scan-scale 0.001 \
+  --scan-yaw-deg 0 \
   --output-dir /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/output/loop_sim_field_state \
   --candidate-mode gradient_lift \
   --offset-distance-mm 12 --offset-geodesic-delta-mm 0.6 \

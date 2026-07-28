@@ -86,7 +86,7 @@ from lib_scalar.loop_simulation import (
 )
 from lib_scalar.print_targets import (
     OrientedLineTargets,
-    build_oriented_line_targets,
+    build_candidate_segment_targets,
     write_line_targets_yaml,
 )
 from lib_scalar.target_rules import (
@@ -104,9 +104,7 @@ from lib_scalar.viz import (
 DEFAULT_FIELD_MESH = Path("/home/lab/behav3d_ws/mesh/curved_wall_5mm.obj")
 DEFAULT_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/tsdf_surface_mesh2.stl")
 DEFAULT_FIELD_STATE = Path("/home/lab/behav3d_ws/mesh/fields/field_state_init.npz")
-DEFAULT_ROBOT_SCAN_MESH = Path(
-    "/home/lab/behav3d_ws/captures/260317_171335/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl"
-)
+DEFAULT_FIELD_STATE_SCAN_MESH = Path("/home/lab/behav3d_ws/mesh/ScanMesh.stl")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 ISO_LEVEL = 0.0
 BASE_Z_OFFSET = 1e-6
@@ -261,6 +259,27 @@ def wait_next_terminal(step_index: int) -> bool:
         print("[loop] invalid input. use 'n' or 'q'.")
 
 
+def rotate_mesh_about_z_origin(mesh: o3d.geometry.TriangleMesh, yaw_deg: float) -> o3d.geometry.TriangleMesh:
+    """Rotate a mesh around world Z at the origin."""
+    angle_deg = float(yaw_deg)
+    if abs(angle_deg) <= 1e-12:
+        return mesh
+    angle = np.deg2rad(angle_deg)
+    c = float(np.cos(angle))
+    s = float(np.sin(angle))
+    transform = np.array(
+        [
+            [c, -s, 0.0, 0.0],
+            [s, c, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    mesh.transform(transform)
+    return mesh
+
+
 def build_dds_domain_from_print_zone(
     field_vertices_world: np.ndarray,
     candidate_points: np.ndarray,
@@ -342,73 +361,6 @@ class SegmentTargetSet:
     @property
     def count(self) -> int:
         return int(self.end_points.shape[0])
-
-
-def _fixed_z_line_targets(
-    start_points: np.ndarray,
-    end_points: np.ndarray,
-    z_dir: tuple[float, float, float] = (0.0, 0.0, 1.0),
-) -> OrientedLineTargets:
-    starts = np.asarray(start_points, dtype=np.float64)
-    ends = np.asarray(end_points, dtype=np.float64)
-    if starts.shape != ends.shape:
-        raise ValueError(f"start/end shape mismatch: {starts.shape} vs {ends.shape}")
-    z = np.asarray(z_dir, dtype=np.float64)
-    z_norm = float(np.linalg.norm(z))
-    if z_norm <= 1e-12:
-        z = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-    else:
-        z = z / z_norm
-    z_dirs = np.tile(z, (ends.shape[0], 1))
-    return OrientedLineTargets(
-        start_points=starts,
-        end_points=ends,
-        start_z_dirs=z_dirs,
-        end_z_dirs=z_dirs,
-    )
-
-
-def build_candidate_segment_targets(
-    *,
-    candidate_points: np.ndarray,
-    segment_start_points: np.ndarray | None,
-    candidate_mode: str,
-    field_vertices_world: np.ndarray,
-    field_faces: np.ndarray,
-    field_scalar: np.ndarray,
-    tangent_sign: float,
-    clamp_to_cone: bool,
-    cone_max_tilt_deg: float,
-) -> OrientedLineTargets:
-    """Build the segment YAML contract from current scalar candidates."""
-
-    ends = np.asarray(candidate_points, dtype=np.float64)
-    if (
-        segment_start_points is not None
-        and np.asarray(segment_start_points).shape == ends.shape
-    ):
-        starts = np.asarray(segment_start_points, dtype=np.float64)
-    else:
-        starts = ends.copy()
-
-    if ends.shape[0] == 0:
-        empty = np.zeros((0, 3), dtype=np.float64)
-        return OrientedLineTargets(empty, empty, empty, empty)
-
-    mode = str(candidate_mode).strip().lower()
-    if mode in ("gradient_lift", "gradient_walk"):
-        return build_oriented_line_targets(
-            start_points=starts,
-            end_points=ends,
-            field_vertices_world=field_vertices_world,
-            field_faces=field_faces,
-            field_scalar=field_scalar,
-            tangent_sign=float(tangent_sign),
-            clamp_to_cone=bool(clamp_to_cone),
-            cone_max_tilt_deg=float(cone_max_tilt_deg),
-        )
-
-    return _fixed_z_line_targets(starts, ends)
 
 
 def _parse_plane_target(
@@ -933,6 +885,8 @@ def run(
     scan_mesh_path: Path,
     output_dir: Path,
     field_state_path: Path | None,
+    scan_scale: float,
+    scan_yaw_deg: float,
     seed: int | None,
     seed_level: float | None,
     t_coef: float,
@@ -954,7 +908,6 @@ def run(
     clamp_to_cone: bool,
     cone_max_tilt_deg: float,
     normal_continuity_rule: bool,
-    endpoint_spacing_rule: bool,
     bead_shape: str,
     positioning_attempts: int,
     position_target_xy: tuple[float, float] | None,
@@ -1020,7 +973,16 @@ def run(
         seed_points_scaled = field_vertices_scaled[heat_seed_indices]
     heat_colors = yellow_to_red_colors(heat_norm)
 
+    scan_scale_value = float(scan_scale)
+    if scan_scale_value <= 0.0:
+        raise ValueError(f"scan_scale must be > 0, got {scan_scale}")
     scan_mesh_base = load_triangle_mesh_legacy(scan_mesh_path)
+    if abs(scan_scale_value - 1.0) > 1e-12:
+        scan_mesh_base.scale(scan_scale_value, center=(0.0, 0.0, 0.0))
+        print(f"[scan] scaled scan mesh about origin by {scan_scale_value:.6f}")
+    rotate_mesh_about_z_origin(scan_mesh_base, float(scan_yaw_deg))
+    if abs(float(scan_yaw_deg)) > 1e-12:
+        print(f"[scan] rotated scan mesh around origin Z by {float(scan_yaw_deg):.3f} deg")
     scan_mesh_current = copy.deepcopy(scan_mesh_base)
     all_selected_points: list[np.ndarray] = []
     locked_offset_xyz: tuple[float, float, float] | None = initial_locked_offset_xyz
@@ -1055,7 +1017,7 @@ def run(
         "[config] "
         f"candidate_mode={candidate_mode} "
         f"normal_continuity_rule={bool(normal_continuity_rule)} "
-        f"endpoint_spacing_rule={bool(endpoint_spacing_rule)} "
+        "endpoint_spacing_rule=True "
         f"proxy=dds_implicit_surface "
         f"dds_deposit_mode={dds_deposit_mode_norm} "
         f"dds_line_fraction={dds_line_fraction_value:.3f} "
@@ -1068,6 +1030,8 @@ def run(
         f"position_target_xy={position_target_xy} "
         f"target_position_scale={float(target_position_scale):.3f} "
         f"field_state_path={field_state_path} "
+        f"scan_scale={scan_scale_value:.6f} "
+        f"scan_yaw_deg={float(scan_yaw_deg):.3f} "
         f"dds_threshold={float(dds_threshold):.3f}"
     )
 
@@ -1174,7 +1138,6 @@ def run(
             bead_height_m=1e-3 * float(bead_height_mm),
             bead_separation_m=1e-3 * float(bead_separation_mm),
             normal_continuity_rule=bool(normal_continuity_rule),
-            endpoint_spacing_rule=bool(endpoint_spacing_rule),
         )
         normal_flip_replaced = int(secondary_stats["normal_continuity_replaced"])
         endpoint_spacing_removed = int(secondary_stats["endpoint_spacing_removed"])
@@ -1370,6 +1333,18 @@ def main() -> None:
     parser.add_argument("--field-mesh", type=Path, default=DEFAULT_FIELD_MESH)
     parser.add_argument("--scan-mesh", type=Path, default=DEFAULT_SCAN_MESH)
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR / "loop_sim")
+    parser.add_argument(
+        "--scan-scale",
+        type=float,
+        default=1.0,
+        help="Uniform scale applied to the loaded scan mesh about the origin before simulation.",
+    )
+    parser.add_argument(
+        "--scan-yaw-deg",
+        type=float,
+        default=0.0,
+        help="Rotate the loaded scan mesh about world Z at the origin before simulation.",
+    )
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--seed-level", type=float, default=None)
     parser.add_argument("--t-coef", type=float, default=2000.0)
@@ -1406,14 +1381,6 @@ def main() -> None:
         help=(
             "Disable the secondary gradient_lift target rule that replaces low "
             "start/end Z-continuity segments."
-        ),
-    )
-    parser.add_argument(
-        "--disable-endpoint-spacing-rule",
-        action="store_true",
-        help=(
-            "Disable the secondary target rule that removes later targets whose "
-            "end point is closer than --bead-separation-mm to an earlier kept end."
         ),
     )
     parser.add_argument(
@@ -1531,6 +1498,8 @@ def main() -> None:
         scan_mesh_path=args.scan_mesh,
         output_dir=args.output_dir,
         field_state_path=None,
+        scan_scale=args.scan_scale,
+        scan_yaw_deg=args.scan_yaw_deg,
         seed=args.seed,
         seed_level=args.seed_level,
         t_coef=args.t_coef,
@@ -1552,7 +1521,6 @@ def main() -> None:
         clamp_to_cone=args.clamp_to_cone,
         cone_max_tilt_deg=args.cone_max_tilt_deg,
         normal_continuity_rule=not args.disable_normal_continuity_rule,
-        endpoint_spacing_rule=not args.disable_endpoint_spacing_rule,
         bead_shape=args.bead_shape,
         positioning_attempts=args.positioning_attempts,
         position_target_xy=position_target_xy,

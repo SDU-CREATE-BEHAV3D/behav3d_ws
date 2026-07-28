@@ -26,17 +26,16 @@ try:
     from behav3d_py.scalar_field.lib_scalar.extract_phi_contour import extract_phi_contour
     from behav3d_py.scalar_field.lib_scalar.generate_print_points import generate_print_points
     from behav3d_py.scalar_field.lib_scalar.geometry import (
-        clamp_vectors_to_cone,
         load_triangle_mesh_arrays,
-        sample_tangent_axes_on_surface_from_scalar,
     )
     from behav3d_py.scalar_field.lib_scalar.loop_simulation import position_field_with_attempts
     from behav3d_py.scalar_field.lib_scalar.print_targets import (
-        build_oriented_line_targets,
+        build_candidate_segment_targets,
         write_fixed_z_targets_yaml,
         write_line_targets_yaml,
         write_point_targets_yaml,
     )
+    from behav3d_py.scalar_field.lib_scalar.target_rules import apply_secondary_target_rules
     from behav3d_py.scalar_field.lib_scalar.viz import make_line_set, make_point_cloud, yellow_to_red_colors
 
     _SCALAR_IMPORT_ERROR = None
@@ -46,14 +45,13 @@ except Exception as exc:  # pragma: no cover
     make_scan_scene = None
     extract_phi_contour = None
     generate_print_points = None
-    clamp_vectors_to_cone = None
     load_triangle_mesh_arrays = None
-    sample_tangent_axes_on_surface_from_scalar = None
     position_field_with_attempts = None
-    build_oriented_line_targets = None
+    build_candidate_segment_targets = None
     write_fixed_z_targets_yaml = None
     write_line_targets_yaml = None
     write_point_targets_yaml = None
+    apply_secondary_target_rules = None
     make_line_set = None
     make_point_cloud = None
     yellow_to_red_colors = None
@@ -574,6 +572,37 @@ class FieldsNode(Node):
             )
             candidate_points = candidates.points
 
+            line_targets = build_candidate_segment_targets(
+                candidate_points=np.asarray(candidate_points, dtype=np.float64),
+                segment_start_points=np.asarray(candidates.segment_start_points, dtype=np.float64),
+                candidate_mode=candidate_mode,
+                field_vertices_world=pose.field_vertices_world,
+                field_faces=field_faces,
+                field_scalar=heat_norm,
+                tangent_sign=float(tangent_sign),
+                clamp_to_cone=bool(clamp_to_cone),
+                cone_max_tilt_deg=float(cone_max_tilt_deg),
+                orient_with_tangent=bool(orient_with_tangent),
+                fixed_z_dir=(targets_zx, targets_zy, targets_zz),
+            )
+
+            line_targets, secondary_stats = apply_secondary_target_rules(
+                line_targets,
+                candidate_mode=candidate_mode,
+                bead_height_m=1e-3 * bead_height_mm_used,
+                bead_separation_m=1e-3 * bead_separation_mm_used,
+                normal_continuity_rule=True,
+            )
+            normal_replaced = int(secondary_stats["normal_continuity_replaced"])
+            endpoint_removed = int(secondary_stats["endpoint_spacing_removed"])
+            candidate_points = np.asarray(line_targets.end_points, dtype=np.float64)
+            self.get_logger().info(
+                "Secondary target rules applied: "
+                f"normal_continuity_replaced={normal_replaced} "
+                f"endpoint_spacing_removed={endpoint_removed} "
+                f"endpoint_min_distance_mm={bead_separation_mm_used:.3f}"
+            )
+
             out_dir = _resolve_output_dir(
                 req.output_dir,
                 session_dir,
@@ -613,16 +642,6 @@ class FieldsNode(Node):
                 candidate_written = str(debug_candidates_path)
 
             if candidate_mode == "gradient_walk":
-                line_targets = build_oriented_line_targets(
-                    start_points=np.asarray(candidates.segment_start_points, dtype=np.float64),
-                    end_points=np.asarray(candidate_points, dtype=np.float64),
-                    field_vertices_world=pose.field_vertices_world,
-                    field_faces=field_faces,
-                    field_scalar=heat_norm,
-                    tangent_sign=float(tangent_sign),
-                    clamp_to_cone=bool(clamp_to_cone),
-                    cone_max_tilt_deg=float(cone_max_tilt_deg),
-                )
                 write_line_targets_yaml(
                     out_yaml=targets_yaml_path,
                     targets=line_targets,
@@ -630,27 +649,10 @@ class FieldsNode(Node):
                     base_to_world_yaw_deg=target_base_to_world_yaw_deg,
                 )
             elif orient_with_tangent and candidate_points.shape[0] > 0:
-                surface_points = np.asarray(candidates.surface_points, dtype=np.float64)
-                if surface_points.shape != candidate_points.shape:
-                    surface_points = np.asarray(candidate_points, dtype=np.float64)
-                tangent_dir, _binormal_dir, _normal_dir = sample_tangent_axes_on_surface_from_scalar(
-                    query_points=surface_points,
-                    mesh_vertices=pose.field_vertices_world,
-                    mesh_faces=field_faces,
-                    vertex_scalar=heat_norm,
-                    tangent_sign=float(tangent_sign),
-                )
-                z_dirs_base = np.asarray(tangent_dir, dtype=np.float64)
-                if clamp_to_cone:
-                    z_dirs_base = clamp_vectors_to_cone(
-                        z_dirs_base,
-                        max_tilt_deg=float(cone_max_tilt_deg),
-                        cone_axis=(0.0, 0.0, 1.0),
-                    )
                 write_point_targets_yaml(
                     out_yaml=targets_yaml_path,
-                    points_world=np.asarray(candidate_points, dtype=np.float64),
-                    z_dirs_world=np.asarray(z_dirs_base, dtype=np.float64),
+                    points_world=np.asarray(line_targets.end_points, dtype=np.float64),
+                    z_dirs_world=np.asarray(line_targets.end_z_dirs, dtype=np.float64),
                     position_scale=target_position_scale,
                     base_to_world_yaw_deg=target_base_to_world_yaw_deg,
                 )

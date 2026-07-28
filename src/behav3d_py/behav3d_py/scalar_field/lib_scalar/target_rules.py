@@ -129,7 +129,6 @@ def apply_secondary_target_rules(
     bead_height_m: float,
     bead_separation_m: float,
     normal_continuity_rule: bool,
-    endpoint_spacing_rule: bool,
 ) -> tuple[OrientedLineTargets, dict[str, int]]:
     """Apply optional post-generation target rules before visualization/YAML/DDS."""
     stats = {
@@ -145,11 +144,10 @@ def apply_secondary_target_rules(
         )
         stats["normal_continuity_replaced"] = int(replaced)
 
-    if bool(endpoint_spacing_rule):
-        targets, removed = remove_close_endpoint_targets(
-            targets,
-            min_distance_m=float(bead_separation_m),
-        )
-        stats["endpoint_spacing_removed"] = int(removed)
+    targets, removed = remove_close_endpoint_targets(
+        targets,
+        min_distance_m=float(bead_separation_m),
+    )
+    stats["endpoint_spacing_removed"] = int(removed)
 
     return targets, stats

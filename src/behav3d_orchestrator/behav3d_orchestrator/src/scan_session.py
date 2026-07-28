@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
 import rclpy
+from behav3d_utils import pose_from_xyz_and_z_axis
 from behav3d_utils import target_builder as tb
 from geometry_msgs.msg import PoseStamped
 from rclpy.parameter import Parameter
@@ -257,6 +258,14 @@ class ScanSession(ControlAwareSession):
                     log.warn("[scan_session:grid] Using default orientation; TF pose not available.")
             except TimeoutError:
                 log.warn("[scan_session:grid] Using default orientation; TF lookup timed out.")
+
+        if target is None and not use_tf_orientation:
+            center = pose_from_xyz_and_z_axis(
+                xyz_m=(float(center_x), float(center_y), float(center_z)),
+                z_axis=(0.0, 0.0, -1.0),
+                frame_id=str(frame_id or "world"),
+            )
+            center = tb.rotate_euler(center, (0.0, 0.0, 180.0), degrees=True)
 
         return grid_sweep.build_targets_from_center(
             center=center,

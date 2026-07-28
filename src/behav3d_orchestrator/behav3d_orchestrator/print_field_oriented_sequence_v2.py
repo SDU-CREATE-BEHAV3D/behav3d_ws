@@ -505,7 +505,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
             # -----------------------------------------------------------------
             # Print cycles:
-            # - cycle_0001 candidates come from bootstrap scan mesh.
+            # - cycle_0000 candidates come from the bootstrap scan mesh.
             # - after each print, run a centered layer scan for the next cycle.
             # -----------------------------------------------------------------
             print_cycle_index = 0
@@ -1621,7 +1621,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
     def _first_available_cycle_number(run_session_path: Path) -> int:
         field_loop = run_session_path / "field_loop"
         if not field_loop.is_dir():
-            return 1
+            return 0
 
         used: list[int] = []
         for path in field_loop.iterdir():
@@ -1631,7 +1631,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             if suffix.isdigit():
                 used.append(int(suffix))
         if not used:
-            return 1
+            return 0
         return max(used) + 1
 
     def _extract_runtime_param_map(self, raw: Any) -> Dict[str, Any]:

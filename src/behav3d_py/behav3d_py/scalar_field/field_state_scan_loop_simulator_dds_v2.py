@@ -8,7 +8,8 @@ field-mesh heat computation and scan-based field positioning stage.
 Sample command:
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py \
   --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init.npz \
-  --scan-mesh /home/lab/behav3d_ws/captures/260317_171335/field_loop/cycle_0000/scan/reconstruct/tsdf_surface_mesh.stl \
+  --scan-mesh /home/lab/behav3d_ws/mesh/ScanMesh.stl \
+  --scan-scale 0.001 \
   --output-dir /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/output/loop_sim_field_state \
   --candidate-mode gradient_lift \
   --offset-distance-mm 12 \
@@ -29,7 +30,7 @@ from pathlib import Path
 from field_scan_loop_simulator_dds_v2 import (
     DEFAULT_FIELD_MESH,
     DEFAULT_FIELD_STATE,
-    DEFAULT_ROBOT_SCAN_MESH,
+    DEFAULT_FIELD_STATE_SCAN_MESH,
     OUTPUT_DIR,
     TARGET_POSITION_SCALE,
     run,
@@ -43,7 +44,19 @@ def main() -> None:
         )
     )
     parser.add_argument("--field-state", type=Path, default=DEFAULT_FIELD_STATE)
-    parser.add_argument("--scan-mesh", type=Path, default=DEFAULT_ROBOT_SCAN_MESH)
+    parser.add_argument("--scan-mesh", type=Path, default=DEFAULT_FIELD_STATE_SCAN_MESH)
+    parser.add_argument(
+        "--scan-scale",
+        type=float,
+        default=0.001,
+        help="Uniform scale applied to the scan mesh. Default converts mesh/ScanMesh.stl from mm to m.",
+    )
+    parser.add_argument(
+        "--scan-yaw-deg",
+        type=float,
+        default=0.0,
+        help="Rotate the loaded scan mesh about world Z at the origin before simulation.",
+    )
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR / "loop_sim_field_state")
     parser.add_argument("--clearance", type=float, default=0.0)
     parser.add_argument("--t-coef", type=float, default=2000.0)
@@ -75,11 +88,6 @@ def main() -> None:
         "--disable-normal-continuity-rule",
         action="store_true",
         help="Disable secondary replacement of low start/end Z-continuity segments.",
-    )
-    parser.add_argument(
-        "--disable-endpoint-spacing-rule",
-        action="store_true",
-        help="Disable secondary removal of close target endpoints.",
     )
     parser.add_argument(
         "--bead-shape",
@@ -127,6 +135,8 @@ def main() -> None:
         scan_mesh_path=args.scan_mesh,
         output_dir=args.output_dir,
         field_state_path=args.field_state,
+        scan_scale=args.scan_scale,
+        scan_yaw_deg=args.scan_yaw_deg,
         seed=None,
         seed_level=None,
         t_coef=args.t_coef,
@@ -148,7 +158,6 @@ def main() -> None:
         clamp_to_cone=args.clamp_to_cone,
         cone_max_tilt_deg=args.cone_max_tilt_deg,
         normal_continuity_rule=not args.disable_normal_continuity_rule,
-        endpoint_spacing_rule=not args.disable_endpoint_spacing_rule,
         bead_shape=args.bead_shape,
         positioning_attempts=0,
         position_target_xy=None,
