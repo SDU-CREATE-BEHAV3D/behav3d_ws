@@ -64,7 +64,7 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
 
 ```bash
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py \
-  --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init1.npz \
+  --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init2.npz \
   --scan-mesh /home/lab/behav3d_ws/mesh/ScanMesh.stl \
   --scan-scale 0.001 \
   --scan-yaw-deg 180 \
@@ -81,4 +81,8 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_
   THIS ARE FOR ADJUSTING MESH WHEN IT COMES FROM RHINO WORLD COORDINTAES IN MM>
     --scan-scale 0.001 \
     --scan-yaw-deg 180 \
-  ```
+```
+
+```bash
+  ros2 service call /capture behav3d_interfaces/srv/Capture "{do_rgb: true, do_depth: true, do_ir: true, do_pose: true, set_folder: true, folder: '/home/lab/behav3d_ws/captures/test_capture'}"
+```
