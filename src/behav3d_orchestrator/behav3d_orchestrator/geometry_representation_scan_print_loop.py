@@ -31,9 +31,13 @@ SRC_CONFIG_PATH = f"/home/lab/behav3d_ws/src/behav3d_orchestrator/config/{CONFIG
 SCAN_FRAME_ID = "world"
 SCAN_EEF_LINK = "femto_color_optical_calib"
 SCAN_MOTION = "LIN"
-SCAN_VEL_SCALE = 0.1
-SCAN_ACCEL_SCALE = 0.1
-SCAN_SETTLE_S = 0.5
+
+CANDIDATE_VISUALIZE_FIELD_PLY = True
+CANDIDATE_RESTORE_SCAN_MESH_AFTER_FIELD_PLY = True
+CANDIDATE_PUBLISH_MARKERS = True
+CANDIDATE_MARKER_AXIS_LENGTH = 0.05
+CANDIDATE_MARKER_AXIS_RADIUS = 0.003
+CANDIDATE_MARKER_CLEAR_BEFORE = True
 
 
 class GeometryRepresentationScanPrintLoopNode(Node):
@@ -86,6 +90,8 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             "Starting geometry_representation_scan_print_loop sequence: "
             f"scan_type={rt.scan_type}, enable_scan={rt.enable_scan}, debug_mode={rt.debug_mode}, "
             f"prompt_before_scan={rt.prompt_before_scan}, "
+            f"scan_motion={SCAN_MOTION}, scan_vel_scale={rt.scan_vel_scale:.3f}, "
+            f"scan_accel_scale={rt.scan_accel_scale:.3f}, scan_settle_s={rt.scan_settle_s:.3f}, "
             f"grid=({rt.grid_nx}x{rt.grid_ny}), "
             f"run_reconstruction={rt.run_reconstruction}, "
             f"max_cycles={rt.max_cycles}, "
@@ -204,6 +210,9 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                         capture_folder=cycle_scan_capture_folder,
                         timeout_s=rt.timeout_s,
                         frame_id=rt.frame_id,
+                        vel_scale=rt.scan_vel_scale,
+                        accel_scale=rt.scan_accel_scale,
+                        settle_s=rt.scan_settle_s,
                     )
                     if not pre_scan_targets:
                         raise RuntimeError(f"Scan produced 0 targets for pre_scan_for_{cycle_tag}.")
@@ -316,6 +325,82 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                         yaml_path=targets_yaml_path,
                         frame_id=rt.frame_id,
                     )
+
+                if CANDIDATE_VISUALIZE_FIELD_PLY:
+                    cycle_field_ply = str(cand_metrics.get("debug_field_ply_path", "")).strip()
+                    if cycle_field_ply:
+                        cycle_vis_res = self.session.run_sync(
+                            self.session.camera.preview_field_ply(
+                                use_latest=False,
+                                session_path=rt.candidate_session_path or run_session_arg,
+                                field_ply_path=cycle_field_ply,
+                                restore_mesh_path=(
+                                    mesh_path
+                                    if CANDIDATE_RESTORE_SCAN_MESH_AFTER_FIELD_PLY
+                                    else ""
+                                ),
+                                wait_timeout_s=rt.mesh_update_wait_timeout_s,
+                                enqueue=False,
+                            ),
+                            timeout_s=rt.mesh_update_request_timeout_s,
+                        )
+                        if not cycle_vis_res.get("ok", False):
+                            raise RuntimeError(
+                                f"preview_field_ply failed: {cycle_vis_res.get('error')}"
+                            )
+
+                        cycle_vis_metrics = cycle_vis_res.get("metrics", {})
+                        cycle_vis_path = str(
+                            cycle_vis_metrics.get("field_ply_published_path", "")
+                        ).strip()
+                        cycle_vis_kind = str(
+                            cycle_vis_metrics.get("field_ply_published_kind", "ply")
+                        ).strip()
+                        log.info(
+                            "[geometry_representation_scan_print_loop] "
+                            f"Cycle field PLY published in RViz ({cycle_vis_kind}): "
+                            f"{cycle_vis_path}"
+                        )
+
+                        if CANDIDATE_RESTORE_SCAN_MESH_AFTER_FIELD_PLY and mesh_path:
+                            restored_path = str(
+                                cycle_vis_metrics.get("restore_mesh_published_path", "")
+                            ).strip()
+                            restored_kind = str(
+                                cycle_vis_metrics.get(
+                                    "restore_mesh_published_kind", "mesh"
+                                )
+                            ).strip()
+                            log.info(
+                                "[geometry_representation_scan_print_loop] "
+                                f"Scan mesh restored in RViz ({restored_kind}): "
+                                f"{restored_path}"
+                            )
+
+                if CANDIDATE_PUBLISH_MARKERS and preview_targets:
+                    marker_res = self.session.run_sync(
+                        self.session.util.publish_targets(
+                            preview_targets,
+                            axis_length=CANDIDATE_MARKER_AXIS_LENGTH,
+                            axis_radius=CANDIDATE_MARKER_AXIS_RADIUS,
+                            clear_before=CANDIDATE_MARKER_CLEAR_BEFORE,
+                            enqueue=False,
+                        ),
+                        timeout_s=rt.mesh_update_request_timeout_s,
+                    )
+                    if not marker_res.get("ok", False):
+                        raise RuntimeError(
+                            f"publish_targets(candidates) failed: {marker_res.get('error')}"
+                        )
+                    log.info(
+                        "[geometry_representation_scan_print_loop] "
+                        f"Candidate markers published: {len(preview_targets)} targets "
+                        f"(yaml='{targets_yaml_path}', frame='{rt.frame_id}')"
+                    )
+                    if not self._wait_if_control_paused(
+                        f"after candidate markers for {cycle_tag}"
+                    ):
+                        break
 
                 if not preview_targets:
                     log.warn("[geometry_representation_scan_print_loop] No candidate targets generated; stopping loop.")
@@ -483,6 +568,9 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                         capture_folder=next_cycle_scan_capture_folder,
                         timeout_s=rt.timeout_s,
                         frame_id=rt.frame_id,
+                        vel_scale=rt.scan_vel_scale,
+                        accel_scale=rt.scan_accel_scale,
+                        settle_s=rt.scan_settle_s,
                     )
                     if not scan_targets:
                         raise RuntimeError(f"Scan produced 0 targets for scan_for_{next_cycle_tag}.")
@@ -551,9 +639,17 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         capture_folder: str,
         timeout_s: Optional[float],
         frame_id: str,
+        vel_scale: float,
+        accel_scale: float,
+        settle_s: float,
     ) -> List[PoseStamped]:
         scan_type_norm = str(scan_type or "grid_sweep").strip().lower()
-        common = self._scan_common_kwargs(timeout_s=timeout_s)
+        common = self._scan_common_kwargs(
+            timeout_s=timeout_s,
+            vel_scale=vel_scale,
+            accel_scale=accel_scale,
+            settle_s=settle_s,
+        )
 
         if scan_type_norm in ("grid", "grid_sweep"):
             res = self.scan_session.run_grid_scan(
@@ -723,15 +819,21 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         return value != "q"
 
     @staticmethod
-    def _scan_common_kwargs(*, timeout_s: Optional[float]) -> Dict[str, Any]:
+    def _scan_common_kwargs(
+        *,
+        timeout_s: Optional[float],
+        vel_scale: float,
+        accel_scale: float,
+        settle_s: float,
+    ) -> Dict[str, Any]:
         return {
             "motion": SCAN_MOTION,
             "eef_link": SCAN_EEF_LINK,
             "do_home": False,
-            "vel_scale": SCAN_VEL_SCALE,
-            "accel_scale": SCAN_ACCEL_SCALE,
+            "vel_scale": float(vel_scale),
+            "accel_scale": float(accel_scale),
             "timeout_s": timeout_s,
-            "settle_s": SCAN_SETTLE_S,
+            "settle_s": float(settle_s),
             "prompt": None,
             "debug": False,
             "rgb": True,
@@ -826,6 +928,9 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 "scan_type must be one of: grid_sweep, half_cylinder, "
                 "half_cylinder_side_caps"
             )
+        scan_vel_scale = self._cfg_float(cfg, "scan_vel_scale")
+        scan_accel_scale = self._cfg_float(cfg, "scan_accel_scale")
+        scan_settle_s = self._cfg_float(cfg, "scan_settle_s")
 
         grid_width = self._cfg_float(cfg, "grid_width")
         grid_height = self._cfg_float(cfg, "grid_height")
@@ -919,6 +1024,9 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             'frame_id',
             'scan_eef_link',
             'scan_type',
+            'scan_vel_scale',
+            'scan_accel_scale',
+            'scan_settle_s',
             'grid_width',
             'grid_height',
             'grid_center_x',

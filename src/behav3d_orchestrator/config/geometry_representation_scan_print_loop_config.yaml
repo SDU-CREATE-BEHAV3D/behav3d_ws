@@ -11,6 +11,10 @@ geometry_representation_scan_print_loop:
 
     # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
     scan_type: grid_sweep
+    # Common scan execution. Motion remains fixed to LIN.
+    scan_vel_scale: 0.1
+    scan_accel_scale: 0.1
+    scan_settle_s: 0.5
 
     # Half-cylinder scan parameters. Active when scan_type=half_cylinder
     # or scan_type=half_cylinder_side_caps.
@@ -56,13 +60,13 @@ geometry_representation_scan_print_loop:
     #   abs_scan_z = highest_generated_target_z + grid_z_off
     #   applied z_off = abs_scan_z - grid_center_z
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
-    grid_width: 0.4
+    grid_width: 0.3
     grid_height: 0.2
-    grid_center_x: -0.16
+    grid_center_x: -0.26
     grid_center_y: 0.89
     grid_center_z: -0.30
-    grid_z_off: 0.70
-    grid_nx: 4
+    grid_z_off: 0.55
+    grid_nx: 3
     grid_ny: 2
     grid_row_major: false
     grid_use_tf_orientation: false
@@ -101,8 +105,8 @@ geometry_representation_scan_print_loop:
     candidate_request_timeout_s: 120.0
     candidate_mode: gradient_lift
     candidate_beads_per_step: 10
-    candidate_bead_separation_mm: 28.0
-    candidate_bead_height_mm: 12.6
+    candidate_bead_separation_mm: 16.0
+    candidate_bead_height_mm: 14
 
     # Print selection. Use "dots" for z_lift/simple point deposition,
     # "segments" for oriented segment printing, or "auto" to follow YAML shape.
@@ -110,7 +114,7 @@ geometry_representation_scan_print_loop:
 
     # Dot print mode. Active when print_mode=dots, or print_mode=auto with targets YAML.
     dot_eef_link: extruder_tcp
-    dot_steps: 9000
+    dot_steps: 8600
     dot_speed: 2700
     dot_approach_z_offset_m: 0.30
     dot_z_offset_m: 0.04
@@ -118,7 +122,7 @@ geometry_representation_scan_print_loop:
     dot_print_vel_scale: 0.15
     dot_accel_scale: 0.15
     dot_dwell_s: 0.5
-    post_dot_retract_steps: 4000
+    post_dot_retract_steps: 4500
     post_dot_retract_speed: 7000
 
     # Oriented target generation. Used by candidate generation when enabled.
