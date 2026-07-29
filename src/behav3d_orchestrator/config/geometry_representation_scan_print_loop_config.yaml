@@ -1,4 +1,4 @@
-print_field_oriented_sequence:
+geometry_representation_scan_print_loop:
   ros__parameters:
     # Global flow
     home_before_scan: true
@@ -8,39 +8,6 @@ print_field_oriented_sequence:
     prompt_before_print: false
     prompt_before_scan: false
     enable_scan: true
-
-    # Initial table grid sweep
-    frame_id: world
-    # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
-    scan_type: grid_sweep
-    scan_eef_link: femto_color_optical_calib
-    scan_motion: LIN
-    scan_use_tf_orientation: true
-    scan_width: 0.40
-    scan_height: 0.40
-    scan_center_x: -0.16
-    scan_center_y: 0.89
-    scan_center_z: -0.07
-    scan_z_off: 0.60
-    scan_nx: 4
-    scan_ny: 4
-    scan_row_major: false
-    scan_capture_folder: "@session/grid_sweep"
-    scan_debug_prompt: false
-    scan_debug: false
-    scan_vel_scale: 0.1
-    scan_accel_scale: 0.1
-    scan_settle_s: 0.5
-    scan_prompt: ""
-    scan_rgb: true
-    scan_depth: true
-    scan_ir: true
-    scan_pose: true
-    scan_publish_markers: true
-    scan_axis_length: 0.05
-    scan_axis_radius: 0.003
-    scan_clear_markers_before: true
-    scan_clear_markers_after: true
 
     # Half-cylinder scan parameters. Active when scan_type=half_cylinder
     # or scan_type=half_cylinder_side_caps.
@@ -125,7 +92,6 @@ print_field_oriented_sequence:
     field_use_latest: true
     field_session_path: "@session"
     field_scan_mesh_path: ""
-    field_mesh_path: /home/lab/behav3d_ws/mesh/doublewall_iterative_loop_340mm.obj
     field_state_output_dir: "@session/field_loop/init"
     field_request_timeout_s: 120.0
     fields_node_name: /behav3d_fields
@@ -137,36 +103,20 @@ print_field_oriented_sequence:
     field_position_target_x: -0.20
     field_position_target_y: 0.85
     skip_bootstrap_scan_and_init: true
+
+    # Here run field made in grasshopper:
     resume_field_state_path: /home/lab/behav3d_ws/mesh/fields/field_state_init2.npz
     resume_scan_mesh_path: ""
     scan_before_generate_first_cycle: true
+
     # Candidate generation
-    run_generate_candidates: true
-    candidate_use_latest: true
     candidate_session_path: "@session"
-    candidate_field_state_path: ""
-    candidate_scan_mesh_path: ""
     candidate_output_dir: "@session/field_loop/cycle_0001"
     candidate_request_timeout_s: 120.0
     candidate_mode: gradient_lift
     candidate_beads_per_step: 10
     candidate_bead_separation_mm: 28.0
-    candidate_bead_height_mm: 12
-    # If gradient walk mode
-    candidate_walk_distance_mm: 10.0
-    candidate_walk_step_mm: 0.5
-    candidate_walk_max_steps: 60
-    candidate_walk_start_fraction: 0.45
-    candidate_target_zx: 0.03
-    candidate_target_zy: -0.01
-    candidate_target_zz: 1.0
-    candidate_target_position_scale: 1000.0
-    candidate_visualize_field_ply: true
-    candidate_restore_scan_mesh_after_field_ply: true
-    candidate_publish_markers: true
-    candidate_marker_axis_length: 0.05
-    candidate_marker_axis_radius: 0.003
-    candidate_marker_clear_before: true
+    candidate_bead_height_mm: 12.6
 
     # Print selection. Use "dots" for z_lift/simple point deposition,
     # "segments" for oriented segment printing, or "auto" to follow YAML shape.
@@ -206,4 +156,4 @@ print_field_oriented_sequence:
     post_segment_retract_s: 0.7
     post_segment_retract_speed: 7000
     max_cycles: 0
-    prompt_before_next_cycle: true
+

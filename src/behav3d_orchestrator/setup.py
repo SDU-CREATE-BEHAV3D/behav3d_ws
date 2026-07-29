@@ -25,6 +25,7 @@ setup(
             'print_yaml_and_scan_sequence = behav3d_orchestrator.print_yaml_and_scan_sequence:main',
             'scan_sequence = behav3d_orchestrator.scan_sequence:main',
             'print_field_oriented_sequence_v2 = behav3d_orchestrator.print_field_oriented_sequence_v2:main',
+            'geometry_representation_scan_print_loop = behav3d_orchestrator.geometry_representation_scan_print_loop:main',
             'polyline_motion_sequence = behav3d_orchestrator.polyline_motion_sequence:main',
             'scan_yaml_targets_sequence = behav3d_orchestrator.scan_yaml_targets_sequence:main',
         ],
