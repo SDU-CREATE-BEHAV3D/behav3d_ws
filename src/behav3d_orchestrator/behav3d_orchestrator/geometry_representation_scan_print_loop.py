@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import threading
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
@@ -20,8 +19,6 @@ from behav3d_orchestrator.src.print_session import PrintSession
 from behav3d_orchestrator.src.scan_session import ScanSession
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
-from rclpy.parameter import Parameter
-from rclpy.parameter_client import AsyncParameterClient
 
 try:
     import yaml
@@ -31,7 +28,6 @@ except ImportError:  # pragma: no cover
 CONFIG_FILENAME = "geometry_representation_scan_print_loop_config.yaml"
 SRC_CONFIG_PATH = f"/home/lab/behav3d_ws/src/behav3d_orchestrator/config/{CONFIG_FILENAME}"
 
-SCAN_TYPE = "grid_sweep"
 SCAN_FRAME_ID = "world"
 SCAN_EEF_LINK = "femto_color_optical_calib"
 SCAN_MOTION = "LIN"
@@ -91,14 +87,9 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             f"scan_type={rt.scan_type}, enable_scan={rt.enable_scan}, debug_mode={rt.debug_mode}, "
             f"prompt_before_scan={rt.prompt_before_scan}, "
             f"grid=({rt.grid_nx}x{rt.grid_ny}), "
-            f"run_reconstruction={rt.run_reconstruction}, run_field_init={rt.run_field_init}, "
+            f"run_reconstruction={rt.run_reconstruction}, "
             f"max_cycles={rt.max_cycles}, "
             f"candidate_mode={rt.candidate_mode}, "
-            f"field_position_target_enabled={rt.field_use_position_target}, "
-            f"field_seed_level={rt.field_seed_level:.4f}, "
-            f"field_require_full_hit={rt.field_require_full_hit}, "
-            f"field_base_z_offset={rt.field_base_z_offset:.4f}, "
-            f"field_position_target=({rt.field_position_target_x:.3f},{rt.field_position_target_y:.3f}), "
             f"print_mode={rt.print_mode}, dot_steps={rt.dot_steps}, "
             f"segment_print_speed={rt.segment_print_speed}, segment_print_v={rt.segment_print_vel_scale:.3f}, "
             f"segment_target_print_speed_mm_s={rt.segment_target_print_speed_mm_s:.3f}, "
@@ -107,18 +98,15 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             f"post_segment_retract_speed={rt.post_segment_retract_speed}, "
             f"oriented_targets_enable={rt.oriented_targets_enable}, "
             f"clamp_to_cone={rt.oriented_clamp_to_cone}, cone_max_tilt_deg={rt.oriented_cone_max_tilt_deg:.1f}, "
-            f"skip_bootstrap_scan_and_init={rt.skip_bootstrap_scan_and_init}, "
             f"scan_before_generate_first_cycle={rt.scan_before_generate_first_cycle}, "
             f"run_session='{run_session_arg}', first_cycle={first_print_cycle_number:04d}, "
             f"runtime_config_path='{runtime_config_path}'"
         )
 
         mesh_path = ""
-        rgb_ply_path = ""
         field_state_path = ""
         field_center_xyz: Optional[tuple[float, float, float]] = None
         last_generated_targets: List[PoseStamped] = []
-        reference_scan_orientation: Optional[tuple[float, float, float, float]] = None
 
         try:
             if rt.home_before_scan:
@@ -129,248 +117,103 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 if not self._wait_if_control_paused("after home_before_scan"):
                     return
 
-            eef = str(rt.scan_eef_link).strip()
-            if not eef:
-                log.warn(
-                    "[geometry_representation_scan_print_loop] scan_eef_link is empty; cannot capture TF scan orientation."
-                )
-            else:
-                try:
-                    pose_res = self.session.run_sync(
-                        self.session.camera.get_pose(
-                            eef=eef,
-                            base_frame=str(rt.frame_id).strip() or "world",
-                            use_tf=True,
-                            enqueue=False,
-                        ),
-                        timeout_s=rt.timeout_s,
-                    )
-                    if pose_res.get("ok", False) and "pose" in pose_res:
-                        pose = pose_res["pose"]
-                        reference_scan_orientation = (
-                            float(pose.pose.orientation.x),
-                            float(pose.pose.orientation.y),
-                            float(pose.pose.orientation.z),
-                            float(pose.pose.orientation.w),
-                        )
-                        log.info(
-                            "[geometry_representation_scan_print_loop] Initial scan reference orientation captured from TF."
-                        )
-                    else:
-                        err = str(pose_res.get("error", "unknown"))
-                        log.warn(
-                            "[geometry_representation_scan_print_loop] Could not capture initial scan reference orientation from TF. "
-                            f"Will rely on bootstrap/pre-scan orientation if available. error='{err}'"
-                        )
-                except TimeoutError:
-                    log.warn(
-                        "[geometry_representation_scan_print_loop] Timed out while reading scanner TF pose for "
-                        "reference orientation."
-                    )
+            field_state_path = str(rt.resume_field_state_path).strip()
+            if not field_state_path:
+                raise RuntimeError("resume_field_state_path is required.")
 
-            # -----------------------------------------------------------------
-            # Bootstrap cycle: table scan + reconstruction + field init.
-            # Optional resume mode: skip bootstrap and continue from existing
-            # field state (plus optional existing scan mesh path).
-            # -----------------------------------------------------------------
-            if rt.skip_bootstrap_scan_and_init:
-                field_state_path = (rt.resume_field_state_path or field_state_path).strip()
-                if not field_state_path:
+            field_center_raw = self.session.compute_field_center_from_state(field_state_path)
+            field_center_xy_mapped = self.session.map_field_center_xy(
+                x=float(field_center_raw[0]),
+                y=float(field_center_raw[1]),
+                sign_x=rt.field_center_sign_x,
+                sign_y=rt.field_center_sign_y,
+                offset_x=rt.field_center_offset_x,
+                offset_y=rt.field_center_offset_y,
+            )
+            field_center_xyz = (
+                float(field_center_xy_mapped[0]),
+                float(field_center_xy_mapped[1]),
+                float(field_center_raw[2]),
+            )
+
+            mesh_path = str(rt.resume_scan_mesh_path).strip()
+            if mesh_path:
+                mesh_res = self.session.run_sync(
+                    self.session.camera.update_world_mesh(
+                        use_latest=False,
+                        session_path=rt.candidate_session_path or run_session_arg,
+                        mesh_path=mesh_path,
+                        ply_path="",
+                        prefer="mesh",
+                        wait_timeout_s=rt.mesh_update_wait_timeout_s,
+                        enqueue=False,
+                    ),
+                    timeout_s=rt.mesh_update_request_timeout_s,
+                )
+                if not mesh_res.get("ok", False):
                     raise RuntimeError(
-                        "skip_bootstrap_scan_and_init=True requires resume_field_state_path."
+                        f"update_world_mesh(resume_scan_mesh) failed: {mesh_res.get('error')}"
                     )
+                if not self._wait_if_control_paused("after resume scan mesh publish"):
+                    return
 
-                field_center_raw = self.session.compute_field_center_from_state(field_state_path)
-                field_center_xy_mapped = self.session.map_field_center_xy(
-                    x=float(field_center_raw[0]),
-                    y=float(field_center_raw[1]),
-                    sign_x=rt.field_center_sign_x,
-                    sign_y=rt.field_center_sign_y,
-                    offset_x=rt.field_center_offset_x,
-                    offset_y=rt.field_center_offset_y,
-                )
-                field_center_xyz = (
-                    float(field_center_xy_mapped[0]),
-                    float(field_center_xy_mapped[1]),
-                    float(field_center_raw[2]),
-                )
+            log.info(
+                "[geometry_representation_scan_print_loop] Using known field state: "
+                f"state='{field_state_path}', "
+                f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
+                f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
+                f"xy_map=(x*{rt.field_center_sign_x:.3f}+{rt.field_center_offset_x:.3f}, "
+                f"y*{rt.field_center_sign_y:.3f}+{rt.field_center_offset_y:.3f}), "
+                f"scan_mesh='{mesh_path}'"
+            )
 
-                mesh_path = (rt.resume_scan_mesh_path or rt.field_scan_mesh_path or mesh_path).strip()
+            if rt.scan_before_generate_first_cycle:
+                refresh_runtime_config(f"before pre_scan_for_cycle_{first_print_cycle_number:04d}")
+                cycle_tag = f"cycle_{first_print_cycle_number:04d}"
+                cycle_root = self._run_session_child(run_session_path, f"field_loop/{cycle_tag}")
+                cycle_scan_capture_folder = f"{cycle_root}/scan"
+                cycle_scan_folder = f"field_loop/{cycle_tag}/scan"
+                cycle_scan_z_off = float(rt.grid_z_off)
 
-                if mesh_path:
-                    mesh_res = self.session.run_sync(
-                        self.session.camera.update_world_mesh(
-                            use_latest=False,
-                            session_path=rt.candidate_session_path or rt.field_session_path or run_session_arg,
-                            mesh_path=mesh_path,
-                            ply_path="",
-                            prefer="mesh",
-                            wait_timeout_s=rt.mesh_update_wait_timeout_s,
-                            enqueue=False,
-                        ),
-                        timeout_s=rt.mesh_update_request_timeout_s,
-                    )
-                    if not mesh_res.get("ok", False):
-                        raise RuntimeError(
-                            f"update_world_mesh(resume_scan_mesh) failed: {mesh_res.get('error')}"
-                        )
-                    published_path = str(mesh_res.get("metrics", {}).get("published_path", "")).strip()
-                    published_kind = str(mesh_res.get("metrics", {}).get("published_kind", "")).strip()
+                if not rt.enable_scan:
                     log.info(
-                        f"[geometry_representation_scan_print_loop] Resume scan mesh published in RViz ({published_kind}): "
-                        f"{published_path}"
+                        f"[geometry_representation_scan_print_loop] pre_scan_for_{cycle_tag} skipped because enable_scan=false."
                     )
-                    if not self._wait_if_control_paused("after resume scan mesh publish"):
+                else:
+                    if not self._prompt_before_scan_if_enabled(
+                        enabled=rt.prompt_before_scan,
+                        label=f"pre_scan_for_{cycle_tag}",
+                    ):
+                        log.info("[geometry_representation_scan_print_loop] Stopped by user before pre-scan.")
                         return
 
-                log.info(
-                    "[geometry_representation_scan_print_loop] Skipping bootstrap scan/init. "
-                    f"Using existing field state='{field_state_path}', "
-                    f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
-                    f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
-                    f"xy_map=(x*{rt.field_center_sign_x:.3f}+{rt.field_center_offset_x:.3f}, "
-                    f"y*{rt.field_center_sign_y:.3f}+{rt.field_center_offset_y:.3f}), "
-                    f"scan_mesh='{mesh_path}'"
-                )
-
-                if rt.scan_before_generate_first_cycle:
-                    refresh_runtime_config(f"before pre_scan_for_cycle_{first_print_cycle_number:04d}")
-                    cycle_tag = f"cycle_{first_print_cycle_number:04d}"
-                    cycle_root = self._run_session_child(run_session_path, f"field_loop/{cycle_tag}")
-                    cycle_scan_capture_folder = f"{cycle_root}/scan"
-                    cycle_scan_folder = f"field_loop/{cycle_tag}/scan"
-                    cycle_scan_z_off = float(rt.grid_z_off)
-                    abs_scan_z = float(rt.grid_center_z) + float(cycle_scan_z_off)
-                    pre_scan_use_tf_orientation = bool(rt.grid_use_tf_orientation)
-
-                    log.info(
-                        f"[geometry_representation_scan_print_loop] ===== pre_scan_for_{cycle_tag} ===== "
-                        f"scan_capture='{cycle_scan_capture_folder}' scan_folder='{cycle_scan_folder}' "
-                        f"center=({rt.grid_center_x:.4f}, {rt.grid_center_y:.4f}, {rt.grid_center_z:.4f}) "
-                        f"grid={rt.grid_nx}x{rt.grid_ny} size={1000.0*rt.grid_width:.1f}x"
-                        f"{1000.0*rt.grid_height:.1f}mm "
-                        f"z_off={cycle_scan_z_off:.4f}m => abs_scan_z={abs_scan_z:.4f}m "
-                        f"use_tf_orientation={pre_scan_use_tf_orientation}"
+                    pre_scan_targets = self._run_configured_scan(
+                        cfg=rt.config,
+                        scan_type=rt.scan_type,
+                        target=None,
+                        width=rt.grid_width,
+                        height=rt.grid_height,
+                        center_x=float(rt.grid_center_x),
+                        center_y=float(rt.grid_center_y),
+                        center_z=float(rt.grid_center_z),
+                        z_off=cycle_scan_z_off,
+                        nx=rt.grid_nx,
+                        ny=rt.grid_ny,
+                        row_major=rt.grid_row_major,
+                        use_tf_orientation=rt.grid_use_tf_orientation,
+                        capture_folder=cycle_scan_capture_folder,
+                        timeout_s=rt.timeout_s,
+                        frame_id=rt.frame_id,
                     )
+                    if not pre_scan_targets:
+                        raise RuntimeError(f"Scan produced 0 targets for pre_scan_for_{cycle_tag}.")
+                    if not self._wait_if_control_paused(f"after pre_scan_for_{cycle_tag}"):
+                        return
 
-                    if not rt.enable_scan:
-                        log.info(
-                            f"[geometry_representation_scan_print_loop] pre_scan_for_{cycle_tag} skipped because enable_scan=false."
-                        )
-                    else:
-                        if not self._prompt_before_scan_if_enabled(
-                            enabled=rt.prompt_before_scan,
-                            label=f"pre_scan_for_{cycle_tag}",
-                        ):
-                            log.info("[geometry_representation_scan_print_loop] Stopped by user before pre-scan.")
-                            return
-
-                        pre_scan_targets = self._run_configured_scan(
-                            cfg=rt.config,
-                            scan_type=rt.scan_type,
-                            target=None,
-                            width=rt.grid_width,
-                            height=rt.grid_height,
-                            center_x=float(rt.grid_center_x),
-                            center_y=float(rt.grid_center_y),
-                            center_z=float(rt.grid_center_z),
-                            z_off=cycle_scan_z_off,
-                            nx=rt.grid_nx,
-                            ny=rt.grid_ny,
-                            row_major=rt.grid_row_major,
-                            use_tf_orientation=pre_scan_use_tf_orientation,
-                            capture_folder=cycle_scan_capture_folder,
-                            timeout_s=rt.timeout_s,
-                            frame_id=rt.frame_id,
-                        )
-                        if not pre_scan_targets:
-                            raise RuntimeError(f"Grid sweep produced 0 targets for pre_scan_for_{cycle_tag}.")
-                        if not self._wait_if_control_paused(f"after pre_scan_for_{cycle_tag}"):
-                            return
-                        reference_scan_orientation = (
-                            float(pre_scan_targets[0].pose.orientation.x),
-                            float(pre_scan_targets[0].pose.orientation.y),
-                            float(pre_scan_targets[0].pose.orientation.z),
-                            float(pre_scan_targets[0].pose.orientation.w),
-                        )
-
-                    if rt.enable_scan and rt.run_reconstruction:
-                        mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
-                            session_path=run_session_arg,
-                            scan_folder=cycle_scan_folder,
-                            reconstruct_device=rt.reconstruct_device,
-                            reconstruct_request_timeout_s=rt.reconstruct_request_timeout_s,
-                            wait_reconstruction_outputs=rt.wait_reconstruction_outputs,
-                            color_to_depth_wait_timeout_s=rt.color_to_depth_wait_timeout_s,
-                            tsdf_wait_timeout_s=rt.tsdf_wait_timeout_s,
-                            mesh_prefer=rt.mesh_prefer,
-                            mesh_update_wait_timeout_s=rt.mesh_update_wait_timeout_s,
-                            mesh_update_request_timeout_s=rt.mesh_update_request_timeout_s,
-                            tsdf_center_crop_enable=rt.tsdf_center_crop_enable,
-                            tsdf_center_crop_width=rt.tsdf_center_crop_width,
-                            tsdf_center_crop_height=rt.tsdf_center_crop_height,
-                            tsdf_center_crop_apply_to_depth=rt.tsdf_center_crop_apply_to_depth,
-                            tsdf_aabb_crop_enable=rt.tsdf_aabb_crop_enable,
-                            tsdf_aabb_crop_min=rt.tsdf_aabb_crop_min,
-                            tsdf_aabb_crop_max=rt.tsdf_aabb_crop_max,
-                            tsdf_param_update_timeout_s=rt.tsdf_param_update_timeout_s,
-                        )
-                        if not self._wait_if_control_paused(f"after reconstruction for pre_scan_for_{cycle_tag}"):
-                            return
-            else:
-                bootstrap_tag = "cycle_0000"
-                bootstrap_root = self._run_session_child(run_session_path, f"field_loop/{bootstrap_tag}")
-                bootstrap_scan_capture_folder = f"{bootstrap_root}/scan"
-                bootstrap_scan_folder = f"field_loop/{bootstrap_tag}/scan"
-                bootstrap_field_state_output_dir = f"{bootstrap_root}/field_init"
-
-                log.info(
-                    f"[geometry_representation_scan_print_loop] ===== {bootstrap_tag} (bootstrap) ===== "
-                    f"scan_capture='{bootstrap_scan_capture_folder}' "
-                    f"scan_folder='{bootstrap_scan_folder}'"
-                )
-
-                if not self._prompt_before_scan_if_enabled(
-                    enabled=rt.prompt_before_scan,
-                    label=f"scan_for_{bootstrap_tag}",
-                ):
-                    log.info("[geometry_representation_scan_print_loop] Stopped by user before bootstrap scan.")
-                    return
-
-                bootstrap_targets = self._run_configured_scan(
-                    cfg=rt.config,
-                    scan_type=rt.scan_type,
-                    target=None,
-                    width=rt.grid_width,
-                    height=rt.grid_height,
-                    center_x=rt.grid_center_x,
-                    center_y=rt.grid_center_y,
-                    center_z=rt.grid_center_z,
-                    z_off=rt.grid_z_off,
-                    nx=rt.grid_nx,
-                    ny=rt.grid_ny,
-                    row_major=rt.grid_row_major,
-                    use_tf_orientation=rt.grid_use_tf_orientation,
-                    capture_folder=bootstrap_scan_capture_folder,
-                    timeout_s=rt.timeout_s,
-                    frame_id=rt.frame_id,
-                )
-                if not bootstrap_targets:
-                    raise RuntimeError("Bootstrap grid sweep produced 0 targets.")
-                if not self._wait_if_control_paused("after bootstrap scan"):
-                    return
-
-                reference_scan_orientation = (
-                    float(bootstrap_targets[0].pose.orientation.x),
-                    float(bootstrap_targets[0].pose.orientation.y),
-                    float(bootstrap_targets[0].pose.orientation.z),
-                    float(bootstrap_targets[0].pose.orientation.w),
-                )
-
-                if rt.run_reconstruction:
-                    mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
+                if rt.enable_scan and rt.run_reconstruction:
+                    mesh_path, _ = self._run_reconstruction_for_scan(
                         session_path=run_session_arg,
-                        scan_folder=bootstrap_scan_folder,
+                        scan_folder=cycle_scan_folder,
                         reconstruct_device=rt.reconstruct_device,
                         reconstruct_request_timeout_s=rt.reconstruct_request_timeout_s,
                         wait_reconstruction_outputs=rt.wait_reconstruction_outputs,
@@ -388,130 +231,12 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                         tsdf_aabb_crop_max=rt.tsdf_aabb_crop_max,
                         tsdf_param_update_timeout_s=rt.tsdf_param_update_timeout_s,
                     )
-                    if not self._wait_if_control_paused("after bootstrap reconstruction"):
+                    if not self._wait_if_control_paused(f"after reconstruction for pre_scan_for_{cycle_tag}"):
                         return
-
-                if rt.run_field_init:
-                    self._set_fields_node_positioning_params(
-                        fields_node_name=rt.fields_node_name,
-                        seed_level=rt.field_seed_level,
-                        require_full_hit=rt.field_require_full_hit,
-                        base_z_offset=rt.field_base_z_offset,
-                        use_position_target=rt.field_use_position_target,
-                        position_target_x=rt.field_position_target_x,
-                        position_target_y=rt.field_position_target_y,
-                        timeout_s=rt.field_position_param_timeout_s,
-                    )
-                    scan_mesh_for_field = rt.field_scan_mesh_path or mesh_path
-                    scan_mesh_paths = [scan_mesh_for_field] if scan_mesh_for_field else []
-                    init_res = self.session.run_sync(
-                        self.session.field.init_field_from_scan(
-                            use_latest=rt.field_use_latest,
-                            session_path=rt.field_session_path,
-                            scan_mesh_paths=scan_mesh_paths,
-                            field_mesh_path=rt.field_mesh_path,
-                            state_output_dir=bootstrap_field_state_output_dir,
-                            enqueue=False,
-                        ),
-                        timeout_s=rt.field_request_timeout_s,
-                    )
-                    if not init_res.get("ok", False):
-                        raise RuntimeError(f"init_field_from_scan failed: {init_res.get('error')}")
-                    if not self._wait_if_control_paused("after field init"):
-                        return
-
-                    metrics = init_res.get("metrics", {})
-                    field_state_path = str(metrics.get("field_state_path", "")).strip()
-                    if not field_state_path:
-                        raise RuntimeError("init_field_from_scan did not return field_state_path")
-
-                    field_center_raw = self.session.compute_field_center_from_state(field_state_path)
-                    field_center_xy = self.session.map_field_center_xy(
-                        x=float(field_center_raw[0]),
-                        y=float(field_center_raw[1]),
-                        sign_x=rt.field_center_sign_x,
-                        sign_y=rt.field_center_sign_y,
-                        offset_x=rt.field_center_offset_x,
-                        offset_y=rt.field_center_offset_y,
-                    )
-                    field_center_xyz = (
-                        float(field_center_xy[0]),
-                        float(field_center_xy[1]),
-                        float(field_center_raw[2]),
-                    )
-                    log.info(
-                        "[geometry_representation_scan_print_loop] Field initialized: "
-                        f"state='{field_state_path}', "
-                        f"debug_ply='{metrics.get('debug_field_ply_path', '')}', "
-                        f"offset=({metrics.get('offset_x', 0.0):.4f}, "
-                        f"{metrics.get('offset_y', 0.0):.4f}, "
-                        f"{metrics.get('offset_z', 0.0):.4f}), "
-                        f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
-                        f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
-                        f"xy_map=(x*{rt.field_center_sign_x:.3f}+{rt.field_center_offset_x:.3f}, "
-                        f"y*{rt.field_center_sign_y:.3f}+{rt.field_center_offset_y:.3f})"
-                    )
-
-                    debug_field_ply_path = str(metrics.get("debug_field_ply_path", "")).strip()
-                    if debug_field_ply_path:
-                        field_vis_res = self.session.run_sync(
-                            self.session.camera.update_world_mesh(
-                                use_latest=False,
-                                session_path=rt.field_session_path or run_session_arg,
-                                mesh_path="",
-                                ply_path=debug_field_ply_path,
-                                prefer="ply",
-                                wait_timeout_s=rt.mesh_update_wait_timeout_s,
-                                enqueue=False,
-                            ),
-                            timeout_s=rt.mesh_update_request_timeout_s,
-                        )
-                        if not field_vis_res.get("ok", False):
-                            raise RuntimeError(
-                                f"update_world_mesh(field_ply) failed: {field_vis_res.get('error')}"
-                            )
-                        field_vis_path = str(field_vis_res.get("metrics", {}).get("published_path", "")).strip()
-                        field_vis_kind = str(field_vis_res.get("metrics", {}).get("published_kind", "")).strip()
-                        log.info(
-                            f"[geometry_representation_scan_print_loop] Field PLY published in RViz ({field_vis_kind}): {field_vis_path}"
-                        )
-                        if not self._wait_if_control_paused("after field PLY publish"):
-                            return
-                else:
-                    if not field_state_path:
-                        raise RuntimeError(
-                            "No field state is available. Use resume_field_state_path "
-                            "with skip_bootstrap_scan_and_init=true."
-                        )
-                    field_center_raw = self.session.compute_field_center_from_state(field_state_path)
-                    field_center_xy = self.session.map_field_center_xy(
-                        x=float(field_center_raw[0]),
-                        y=float(field_center_raw[1]),
-                        sign_x=rt.field_center_sign_x,
-                        sign_y=rt.field_center_sign_y,
-                        offset_x=rt.field_center_offset_x,
-                        offset_y=rt.field_center_offset_y,
-                    )
-                    field_center_xyz = (
-                        float(field_center_xy[0]),
-                        float(field_center_xy[1]),
-                        float(field_center_raw[2]),
-                    )
-                    log.info(
-                        "[geometry_representation_scan_print_loop] Using provided field state: "
-                        f"state='{field_state_path}', "
-                        f"field_center_raw=({field_center_raw[0]:.4f}, {field_center_raw[1]:.4f}, {field_center_raw[2]:.4f}), "
-                        f"field_center_scan=({field_center_xyz[0]:.4f}, {field_center_xyz[1]:.4f}, {field_center_xyz[2]:.4f}), "
-                        f"xy_map=(x*{rt.field_center_sign_x:.3f}+{rt.field_center_offset_x:.3f}, "
-                        f"y*{rt.field_center_sign_y:.3f}+{rt.field_center_offset_y:.3f})"
-                    )
-
-            if field_center_xyz is None:
-                raise RuntimeError("Field center not available after bootstrap.")
 
             # -----------------------------------------------------------------
             # Print cycles:
-            # - cycle_0000 candidates come from the bootstrap scan mesh.
+            # - first-cycle candidates use a fresh or resumed scan mesh.
             # - after each print, run a centered layer scan for the next cycle.
             # -----------------------------------------------------------------
             print_cycle_index = 0
@@ -532,8 +257,12 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 if not self._wait_if_control_paused(f"before candidate generation for {cycle_tag}"):
                     break
 
-                scan_mesh_for_candidates = rt.field_scan_mesh_path or mesh_path
-                scan_mesh_paths = [scan_mesh_for_candidates] if scan_mesh_for_candidates else []
+                if not mesh_path:
+                    raise RuntimeError(
+                        "No scan mesh is available for candidate generation. "
+                        "Enable scan_before_generate_first_cycle or set resume_scan_mesh_path."
+                    )
+                scan_mesh_paths = [mesh_path]
                 field_state_for_candidates = field_state_path
                 if not field_state_for_candidates:
                     raise RuntimeError(
@@ -761,7 +490,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                         break
 
                 if rt.enable_scan and rt.run_reconstruction:
-                    mesh_path, rgb_ply_path = self._run_reconstruction_for_scan(
+                    mesh_path, _ = self._run_reconstruction_for_scan(
                         session_path=run_session_arg,
                         scan_folder=next_cycle_scan_folder,
                         reconstruct_device=rt.reconstruct_device,
@@ -1065,72 +794,6 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             )
         return str(rec.get("mesh_path", "")).strip(), str(rec.get("rgb_ply_path", "")).strip()
 
-    def _set_fields_node_positioning_params(
-        self,
-        *,
-        fields_node_name: str,
-        seed_level: float,
-        require_full_hit: bool,
-        base_z_offset: float,
-        use_position_target: bool,
-        position_target_x: float,
-        position_target_y: float,
-        timeout_s: float,
-    ) -> None:
-        node_name = str(fields_node_name or "/behav3d_fields").strip()
-        if not node_name.startswith("/"):
-            node_name = f"/{node_name}"
-        timeout = max(0.1, float(timeout_s))
-        client = AsyncParameterClient(self, node_name)
-        if hasattr(client, "wait_for_services"):
-            ready = bool(client.wait_for_services(timeout_sec=timeout))
-        elif hasattr(client, "wait_for_service"):
-            ready = bool(client.wait_for_service(timeout_sec=timeout))
-        else:
-            ready = bool(client.services_are_ready()) if hasattr(client, "services_are_ready") else False
-        if not ready:
-            raise RuntimeError(f"Parameter service for {node_name} not available.")
-
-        params = [
-            Parameter("seed_level", value=float(seed_level)),
-            Parameter("require_full_hit", value=bool(require_full_hit)),
-            Parameter("base_z_offset", value=float(base_z_offset)),
-            Parameter("use_position_target", value=bool(use_position_target)),
-            Parameter("position_target_x", value=float(position_target_x)),
-            Parameter("position_target_y", value=float(position_target_y)),
-        ]
-        fut = client.set_parameters(params)
-        deadline = time.time() + timeout
-        while rclpy.ok() and not fut.done() and time.time() < deadline:
-            time.sleep(0.05)
-        if not fut.done():
-            raise TimeoutError(f"Timed out while setting field positioning params on {node_name}.")
-
-        response = fut.result()
-        if response is None:
-            raise RuntimeError(f"Failed to set field positioning params on {node_name}: no response.")
-        if hasattr(response, "results"):
-            results = list(response.results)
-        elif isinstance(response, (list, tuple)):
-            results = list(response)
-        else:
-            raise RuntimeError(
-                "Failed to set field positioning params: unexpected response type "
-                f"{type(response).__name__}"
-            )
-        failed = [str(r.reason) for r in results if not bool(getattr(r, "successful", False))]
-        if failed:
-            raise RuntimeError(f"Failed to set field positioning params: {'; '.join(failed)}")
-
-        self.get_logger().info(
-            "[geometry_representation_scan_print_loop] Field positioning params set: "
-            f"node={node_name} use_target={bool(use_position_target)} "
-            f"seed_level={float(seed_level):.6f} "
-            f"require_full_hit={bool(require_full_hit)} "
-            f"base_z_offset={float(base_z_offset):.6f} "
-            f"target=({float(position_target_x):.6f}, {float(position_target_y):.6f})"
-        )
-
     def _current_eef_pose(self, *, cfg: Dict[str, Any], frame_id: str, timeout_s: Optional[float]):
         res = self.scan_session.run_sync(
             self.scan_session.camera.get_pose(
@@ -1157,7 +820,12 @@ class GeometryRepresentationScanPrintLoopNode(Node):
 
         frame_id = SCAN_FRAME_ID
         scan_eef_link = SCAN_EEF_LINK
-        scan_type = SCAN_TYPE
+        scan_type = self._cfg_str(cfg, "scan_type").strip().lower()
+        if scan_type not in ("grid_sweep", "half_cylinder", "half_cylinder_side_caps"):
+            raise ValueError(
+                "scan_type must be one of: grid_sweep, half_cylinder, "
+                "half_cylinder_side_caps"
+            )
 
         grid_width = self._cfg_float(cfg, "grid_width")
         grid_height = self._cfg_float(cfg, "grid_height")
@@ -1192,22 +860,6 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         tsdf_aabb_crop_max = self._cfg_float_list(cfg, "tsdf_aabb_crop_max")
         tsdf_param_update_timeout_s = self._cfg_float(cfg, "tsdf_param_update_timeout_s")
 
-        run_field_init = self._cfg_bool(cfg, "run_field_init")
-        field_use_latest = self._cfg_bool(cfg, "field_use_latest")
-        field_session_path = self._resolve_run_session_token(self._cfg_str(cfg, "field_session_path"), run_session_path)
-        field_scan_mesh_path = self._cfg_str_allow_empty(cfg, "field_scan_mesh_path")
-        field_mesh_path = ""
-        field_state_output_dir = self._resolve_run_session_token(self._cfg_str(cfg, "field_state_output_dir"), run_session_path)
-        field_request_timeout_s = self._cfg_float(cfg, "field_request_timeout_s")
-        fields_node_name = self._cfg_str(cfg, "fields_node_name")
-        field_position_param_timeout_s = self._cfg_float(cfg, "field_position_param_timeout_s")
-        field_seed_level = self._cfg_float(cfg, "field_seed_level")
-        field_require_full_hit = self._cfg_bool(cfg, "field_require_full_hit")
-        field_base_z_offset = self._cfg_float(cfg, "field_base_z_offset")
-        field_use_position_target = self._cfg_bool(cfg, "field_use_position_target")
-        field_position_target_x = self._cfg_float(cfg, "field_position_target_x")
-        field_position_target_y = self._cfg_float(cfg, "field_position_target_y")
-        skip_bootstrap_scan_and_init = self._cfg_bool(cfg, "skip_bootstrap_scan_and_init")
         resume_field_state_path = self._cfg_str_allow_empty(cfg, "resume_field_state_path")
         resume_scan_mesh_path = self._cfg_str_allow_empty(cfg, "resume_scan_mesh_path")
         scan_before_generate_first_cycle = self._cfg_bool(cfg, "scan_before_generate_first_cycle")
@@ -1298,22 +950,6 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             'tsdf_aabb_crop_min',
             'tsdf_aabb_crop_max',
             'tsdf_param_update_timeout_s',
-            'run_field_init',
-            'field_use_latest',
-            'field_session_path',
-            'field_scan_mesh_path',
-            'field_mesh_path',
-            'field_state_output_dir',
-            'field_request_timeout_s',
-            'fields_node_name',
-            'field_position_param_timeout_s',
-            'field_seed_level',
-            'field_require_full_hit',
-            'field_base_z_offset',
-            'field_use_position_target',
-            'field_position_target_x',
-            'field_position_target_y',
-            'skip_bootstrap_scan_and_init',
             'resume_field_state_path',
             'resume_scan_mesh_path',
             'scan_before_generate_first_cycle',

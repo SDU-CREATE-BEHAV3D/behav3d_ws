@@ -151,7 +151,7 @@ print_field_oriented_sequence:
     candidate_mode: gradient_lift
     candidate_beads_per_step: 10
     candidate_bead_separation_mm: 28.0
-    candidate_bead_height_mm: 12
+    candidate_bead_height_mm: 13
     # If gradient walk mode
     candidate_walk_distance_mm: 10.0
     candidate_walk_step_mm: 0.5
@@ -174,7 +174,7 @@ print_field_oriented_sequence:
 
     # Dot print mode. Active when print_mode=dots, or print_mode=auto with targets YAML.
     dot_eef_link: extruder_tcp
-    dot_steps: 9000
+    dot_steps: 8500
     dot_speed: 2700
     dot_approach_z_offset_m: 0.30
     dot_z_offset_m: 0.04

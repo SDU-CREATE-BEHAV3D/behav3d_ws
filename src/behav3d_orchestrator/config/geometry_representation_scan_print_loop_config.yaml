@@ -9,6 +9,9 @@ geometry_representation_scan_print_loop:
     prompt_before_scan: false
     enable_scan: true
 
+    # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
+    scan_type: grid_sweep
+
     # Half-cylinder scan parameters. Active when scan_type=half_cylinder
     # or scan_type=half_cylinder_side_caps.
     half_use_line_axis: true
@@ -87,23 +90,6 @@ geometry_representation_scan_print_loop:
     tsdf_aabb_crop_max: [0.30, -0.65, 0.50]
     tsdf_param_update_timeout_s: 8.0
 
-    # Field init
-    run_field_init: false
-    field_use_latest: true
-    field_session_path: "@session"
-    field_scan_mesh_path: ""
-    field_state_output_dir: "@session/field_loop/init"
-    field_request_timeout_s: 120.0
-    fields_node_name: /behav3d_fields
-    field_position_param_timeout_s: 5.0
-    field_seed_level: 5.0
-    field_require_full_hit: true
-    field_base_z_offset: 0.005
-    field_use_position_target: true
-    field_position_target_x: -0.20
-    field_position_target_y: 0.85
-    skip_bootstrap_scan_and_init: true
-
     # Here run field made in grasshopper:
     resume_field_state_path: /home/lab/behav3d_ws/mesh/fields/field_state_init2.npz
     resume_scan_mesh_path: ""
@@ -156,4 +142,3 @@ geometry_representation_scan_print_loop:
     post_segment_retract_s: 0.7
     post_segment_retract_speed: 7000
     max_cycles: 0
-
