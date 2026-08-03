@@ -5,8 +5,8 @@ print_field_oriented_sequence:
     home_after: false
     timeout_s: 0.0
     debug_mode: false
-    prompt_before_print: true
-    prompt_before_scan: true
+    prompt_before_print: false
+    prompt_before_scan: false
     enable_scan: true
 
     # Initial table grid sweep

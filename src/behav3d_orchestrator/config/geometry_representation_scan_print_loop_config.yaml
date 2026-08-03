@@ -62,7 +62,7 @@ geometry_representation_scan_print_loop:
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
     grid_width: 0.3
     grid_height: 0.2
-    grid_center_x: -0.26
+    grid_center_x: -0.20
     grid_center_y: 0.89
     grid_center_z: -0.30
     grid_z_off: 0.55

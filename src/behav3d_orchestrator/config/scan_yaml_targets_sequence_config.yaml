@@ -2,7 +2,7 @@ scan_yaml_targets_sequence:
   ros__parameters:
     # Target input. Plane origins are millimetres; Z is the target's Z axis.
     # These path/frame values are fixed after startup. Restart to change them.
-    yaml_path: /home/lab/behav3d_ws/yaml/orbit_scan_test6.yaml
+    yaml_path: /home/lab/behav3d_ws/yaml/A02/G10_obj_3.yaml
     frame_id: world
 
     # Capture location. scan_folder may be empty to derive it from
@@ -24,7 +24,7 @@ scan_yaml_targets_sequence:
     accel_scale: 0.1
     timeout_s: 0.0
     dwell_s: 1.0
-    prompt_before_next_plane: false
+    prompt_before_next_plane: true
 
     # Capture channels, also reloaded before every target.
     rgb: true
