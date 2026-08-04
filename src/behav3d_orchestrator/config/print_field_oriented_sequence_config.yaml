@@ -30,7 +30,7 @@ print_field_oriented_sequence:
     scan_debug: false
     scan_vel_scale: 0.1
     scan_accel_scale: 0.1
-    scan_settle_s: 0.5
+    scan_settle_s: 1.2
     scan_prompt: ""
     scan_rgb: true
     scan_depth: true
@@ -86,14 +86,14 @@ print_field_oriented_sequence:
     #   abs_scan_z = highest_generated_target_z + grid_z_off
     #   applied z_off = abs_scan_z - grid_center_z
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
-    grid_width: 0.3
-    grid_height: 0.2
-    grid_center_x: -0.26
-    grid_center_y: 0.89
+    grid_width: 0.6
+    grid_height: 0.6
+    grid_center_x: -0.00
+    grid_center_y: 0.90
     grid_center_z: -0.30
-    grid_z_off: 0.70
-    grid_nx: 3
-    grid_ny: 2
+    grid_z_off: 0.60
+    grid_nx: 6
+    grid_ny: 6
     grid_row_major: false
     grid_use_tf_orientation: false
     field_center_sign_x: -1.0
@@ -121,7 +121,7 @@ print_field_oriented_sequence:
     tsdf_param_update_timeout_s: 8.0
 
     # Field init
-    run_field_init: false
+    run_field_init: true
     field_use_latest: true
     field_session_path: "@session"
     field_scan_mesh_path: ""

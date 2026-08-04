@@ -29,8 +29,8 @@ SRC_CONFIG_PATH = f"/home/lab/behav3d_ws/src/behav3d_orchestrator/config/{CONFIG
 
 class PrintYamlAndScanSequenceNode(Node):
     """
-    Print ordered YAML targets in fixed-size chunks, then run a grid-sweep scan
-    and optional reconstruction after each chunk.
+    Print ordered YAML targets in fixed-size chunks, then run one optional scan
+    and reconstruction after all targets are complete.
     """
 
     def __init__(self):
@@ -96,6 +96,7 @@ class PrintYamlAndScanSequenceNode(Node):
             cycle_count = 0
             next_target_idx = 0
             stopped_by_user = False
+            all_printed_targets: list[PoseStamped] = []
 
             while rclpy.ok() and next_target_idx < len(targets):
                 try:
@@ -136,7 +137,6 @@ class PrintYamlAndScanSequenceNode(Node):
                 cycle_tag = f"cycle_{cycle_count:04d}"
                 chunk = targets[start_idx:end_idx]
                 chunk_plane_types = plane_types[start_idx:end_idx]
-                next_target_idx = end_idx
 
                 log.info(
                     f"[print_yaml_and_scan] ===== {cycle_tag} print ===== "
@@ -147,7 +147,7 @@ class PrintYamlAndScanSequenceNode(Node):
                 )
                 self._publish_yaml_targets(targets, cfg=cfg, timeout_s=timeout_s)
 
-                if self._cfg_bool(cfg, "debug_mode") or self._cfg_bool(cfg, "prompt_before_print"):
+                if self._cfg_bool(cfg, "debug_mode"):
                     if self._operator_requested_stop(
                         f"[print_yaml_and_scan:{cycle_tag}] Debug gate: press ENTER to continue this cycle "
                         "(type 'q' + ENTER to stop)."
@@ -160,6 +160,8 @@ class PrintYamlAndScanSequenceNode(Node):
                     plane_types=chunk_plane_types,
                     cfg=cfg,
                     timeout_s=timeout_s,
+                    target_start_index=start_idx,
+                    total_target_count=len(targets),
                 )
                 if not print_res.get("ok", False):
                     log.error(
@@ -171,6 +173,8 @@ class PrintYamlAndScanSequenceNode(Node):
                 printed = int(print_res.get("printed", 0))
                 skipped = int(print_res.get("skipped", 0))
                 printed_targets = print_res.get("printed_targets", [])
+                if isinstance(printed_targets, list):
+                    all_printed_targets.extend(printed_targets)
                 total_printed += printed
                 total_skipped += skipped
                 log.info(
@@ -179,39 +183,37 @@ class PrintYamlAndScanSequenceNode(Node):
                     f"total_printed={total_printed}"
                 )
 
-                has_more_targets = end_idx < len(targets)
-                should_scan = self._cfg_bool(cfg, "enable_scan") and (
-                    has_more_targets or self._cfg_bool(cfg, "scan_after_final")
-                )
-                if not should_scan:
-                    if not self._cfg_bool(cfg, "enable_scan"):
-                        log.info(f"[print_yaml_and_scan] {cycle_tag} scan skipped because enable_scan=false.")
-                    elif self._cfg_bool(cfg, "enable_scan"):
-                        log.info(
-                            f"[print_yaml_and_scan] {cycle_tag} is final chunk; "
-                            "scan skipped because scan_after_final=false."
-                        )
-                    continue
-
-                if self._cfg_bool(cfg, "prompt_before_scan"):
-                    if self._operator_requested_stop(
-                        f"[print_yaml_and_scan:{cycle_tag}] Press ENTER to scan after this chunk "
-                        "(type 'q' + ENTER to stop)."
-                    ):
-                        stopped_by_user = True
-                        break
-
-                scan_ok = self._run_scan_cycle(
-                    cycle_tag=cycle_tag,
-                    cfg=cfg,
-                    timeout_s=scan_timeout_s,
-                    printed_targets=printed_targets if isinstance(printed_targets, list) else [],
-                )
-                if not scan_ok:
+                if bool(print_res.get("stopped_by_user", False)):
+                    stopped_by_user = True
                     break
+
+                next_target_idx = end_idx
 
             if stopped_by_user:
                 log.warn("[print_yaml_and_scan] Sequence stopped by user.")
+
+            sequence_complete = next_target_idx >= len(targets) and not stopped_by_user
+            if sequence_complete and self._cfg_bool(cfg, "enable_scan"):
+                final_cycle_tag = f"cycle_{cycle_count:04d}"
+                if self._cfg_bool(cfg, "prompt_before_scan"):
+                    if self._operator_requested_stop(
+                        f"[print_yaml_and_scan:{final_cycle_tag}] Press ENTER for final scan "
+                        "(type 'q' + ENTER to stop)."
+                    ):
+                        stopped_by_user = True
+
+                if not stopped_by_user:
+                    log.info(
+                        "[print_yaml_and_scan] All YAML targets processed; starting the single final scan."
+                    )
+                    self._run_scan_cycle(
+                        cycle_tag=final_cycle_tag,
+                        cfg=cfg,
+                        timeout_s=scan_timeout_s,
+                        printed_targets=all_printed_targets,
+                    )
+            elif sequence_complete:
+                log.info("[print_yaml_and_scan] Final scan skipped because enable_scan=false.")
 
             log.info(
                 "[print_yaml_and_scan] Sequence finished: "
@@ -239,6 +241,8 @@ class PrintYamlAndScanSequenceNode(Node):
         plane_types: Sequence[str],
         cfg: Dict[str, Any],
         timeout_s: Optional[float],
+        target_start_index: int,
+        total_target_count: int,
     ) -> dict:
         log = self.get_logger()
         target_list = list(targets)
@@ -290,6 +294,25 @@ class PrintYamlAndScanSequenceNode(Node):
             f"retract_steps={retract_steps}, retract_speed={retract_speed}"
         )
 
+        prompt_before_print = self._cfg_bool(cfg, "prompt_before_print")
+        if prompt_before_print and self._operator_requested_stop(
+            self._target_print_prompt(
+                target_index=target_start_index,
+                total_target_count=total_target_count,
+                first=True,
+            )
+        ):
+            return {
+                "ok": True,
+                "stage": "stopped_by_user",
+                "targets": len(target_list),
+                "printed": 0,
+                "skipped": 0,
+                "failed_targets": [],
+                "printed_targets": [],
+                "stopped_by_user": True,
+            }
+
         first_approach = self._with_z_offset(target_list[0], approach_z_offset_m)
         res = self.print_session.run_sync(
             self.print_session.motion.goto(
@@ -314,6 +337,24 @@ class PrintYamlAndScanSequenceNode(Node):
         failed_targets: list[dict[str, Any]] = []
         printed_targets: list[PoseStamped] = []
         for i, target in enumerate(target_list):
+            if i > 0 and prompt_before_print and self._operator_requested_stop(
+                self._target_print_prompt(
+                    target_index=target_start_index + i,
+                    total_target_count=total_target_count,
+                    first=False,
+                )
+            ):
+                return {
+                    "ok": True,
+                    "stage": "stopped_by_user",
+                    "targets": len(target_list),
+                    "printed": printed,
+                    "skipped": skipped,
+                    "failed_targets": failed_targets,
+                    "printed_targets": printed_targets,
+                    "stopped_by_user": True,
+                }
+
             plane_type = self._normalize_plane_type(plane_types[i] if i < len(plane_types) else "")
             dot_steps = dot_steps_e if plane_type == "E" else dot_steps_n
             above = self._with_z_offset(target, dot_z_offset_m)
@@ -422,7 +463,17 @@ class PrintYamlAndScanSequenceNode(Node):
             "skipped": skipped,
             "failed_targets": failed_targets,
             "printed_targets": printed_targets,
+            "stopped_by_user": False,
         }
+
+    @staticmethod
+    def _target_print_prompt(*, target_index: int, total_target_count: int, first: bool) -> str:
+        action = "print target" if first and target_index == 0 else "print next target"
+        return (
+            f"[print_yaml_and_scan] Press ENTER to {action} "
+            f"({target_index + 1}/{total_target_count}) "
+            "or type 'q' + ENTER to stop."
+        )
 
     def _publish_yaml_targets(
         self,

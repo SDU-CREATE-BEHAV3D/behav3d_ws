@@ -2,28 +2,28 @@ print_yaml_and_scan_sequence:
   ros__parameters:
     # Flow:
     #   1) home
-    #   2) print points_per_cycle YAML targets
-    #   3) scan with selected scan_type
+    #   2) print all YAML targets, grouped by points_per_cycle
+    #   3) scan once after the final target
     #   4) reconstruct/update world mesh
-    #   5) repeat until YAML targets are complete
-    yaml_path: /home/lab/behav3d_ws/yaml/T02-test01.yaml
+    yaml_path: /home/lab/behav3d_ws/yaml/A03/Test.yaml
     frame_id: world
-    points_per_cycle: 2
+    points_per_cycle: 1
     home_before: true
     home_after: true
     timeout_s: 0.0
     debug_mode: false
-    prompt_before_print: true
+    # When true, require ENTER before moving to each print target.
+    prompt_before_print: false
     prompt_before_scan: false
 
     # Dot print parameters.
     print_eef_link: extruder_tcp
-    dot_steps_n: 25000
+    dot_steps_n: 4000
     dot_steps_e: 19000
-    dot_speed: 3000
+    dot_speed: 2800
     post_dot_retract_steps: 4000
     post_dot_retract_speed: 10000
-    approach_z_offset_m: 0.3
+    approach_z_offset_m: 0.1
     dot_z_offset_m: 0.04
     pre_dot_vel_scale: 0.30
     dot_vel_scale: 0.2
@@ -35,16 +35,15 @@ print_yaml_and_scan_sequence:
     print_clear_markers_before: true
 
     # Scan execution. These match the current scan_sequence.py / ScanSession path.
-    enable_scan: false
+    enable_scan: true
     # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
-    scan_type: grid_sweep
-    scan_after_final: false
+    scan_type: half_cylinder_side_caps
     scan_root_folder: "@session/print_yaml_scan"
     scan_motion: LIN
     scan_do_home: false
     scan_eef_link: femto_color_optical_calib
-    scan_vel_scale: 0.08
-    scan_accel_scale: 0.08
+    scan_vel_scale: 0.12
+    scan_accel_scale: 0.12
     scan_timeout_s: 0.0
     scan_settle_s: 0.5
     scan_debug: false
@@ -58,34 +57,34 @@ print_yaml_and_scan_sequence:
     scan_axis_radius: 0.003
     scan_clear_markers_before: true
     scan_clear_markers_after: true
-    scan_follow_printed_z: true
+    scan_follow_printed_z: false
 
     # Grid sweep parameters from scan_sequence_test.yaml.
-    grid_width: 0.50
-    grid_height: 0.50
+    grid_width: 0.30
+    grid_height: 0.30
     grid_center_x: 0.01
     grid_center_y: 0.85
     grid_center_z: -0.15
-    grid_z_off: 0.60
-    grid_nx: 5
-    grid_ny: 5
+    grid_z_off: 0.40
+    grid_nx: 3
+    grid_ny: 3
     grid_row_major: false
     grid_use_tf_orientation: true
 
     # Half-cylinder line-axis parameters from scan_sequence_test.yaml.
     # Active when scan_type=half_cylinder or half_cylinder_side_caps.
     half_use_line_axis: true
-    half_axis_start_x: 0.20
+    half_axis_start_x: 0.06
     half_axis_start_y: 0.85
-    half_axis_start_z: -0.20
-    half_axis_end_x: -0.45
+    half_axis_start_z: 0.05
+    half_axis_end_x: -0.03
     half_axis_end_y: 0.85
-    half_axis_end_z: -0.20
-    half_radius: 0.60
-    half_angle_min_deg: -35.0
-    half_angle_max_deg: 35.0
-    half_n_angle: 5
-    half_n_axis: 7
+    half_axis_end_z: 0.05
+    half_radius: 0.45
+    half_angle_min_deg: -40.0
+    half_angle_max_deg: 40.0
+    half_n_angle: 3
+    half_n_axis: 1
     half_arc_center_dx: 0.0
     half_arc_center_dy: 0.0
     half_arc_center_dz: 1.0
@@ -98,10 +97,10 @@ print_yaml_and_scan_sequence:
     endcap_radius: 0.0
     endcap_angle_min_deg: -35.0
     endcap_angle_max_deg: 35.0
-    endcap_n_angle: 3
+    endcap_n_angle: 2
     endcap_polar_min_deg: 20.0
-    endcap_polar_max_deg: 60.0
-    endcap_n_polar: 3
+    endcap_polar_max_deg: 40.0
+    endcap_n_polar: 2
     endcap_include_start: true
     endcap_include_end: true
     endcap_row_major: false
