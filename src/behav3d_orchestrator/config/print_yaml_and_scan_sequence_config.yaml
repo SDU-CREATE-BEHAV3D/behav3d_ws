@@ -5,7 +5,7 @@ print_yaml_and_scan_sequence:
     #   2) print all YAML targets, grouped by points_per_cycle
     #   3) scan once after the final target
     #   4) reconstruct/update world mesh
-    yaml_path: /home/lab/behav3d_ws/yaml/A02 - YAML Files/G10_alt_29_2.yaml
+    yaml_path: /home/lab/behav3d_ws/yaml/A03/Test.yaml
     frame_id: world
     points_per_cycle: 1
     home_before: true
@@ -18,10 +18,10 @@ print_yaml_and_scan_sequence:
 
     # Dot print parameters.
     print_eef_link: extruder_tcp
-    dot_steps_n: 13000
+    dot_steps_n: 100
     dot_steps_e: 19000
     dot_speed: 2800
-    post_dot_retract_steps: 5000
+    post_dot_retract_steps: 200
     post_dot_retract_speed: 10000
     approach_z_offset_m: 0.1
     dot_z_offset_m: 0.04

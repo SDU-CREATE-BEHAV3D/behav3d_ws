@@ -18,6 +18,7 @@ import rclpy
 from behav3d_orchestrator.src.field_loop_session import FieldLoopSession
 from behav3d_orchestrator.src.print_session import PrintSession
 from behav3d_orchestrator.src.scan_session import ScanSession
+from behav3d_utils.config_snapshot import snapshot_cycle_config
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.parameter import Parameter
@@ -92,7 +93,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"field_require_full_hit={rt.field_require_full_hit}, "
             f"field_base_z_offset={rt.field_base_z_offset:.4f}, "
             f"field_position_target=({rt.field_position_target_x:.3f},{rt.field_position_target_y:.3f}), "
-            f"print_mode={rt.print_mode}, dot_steps={rt.dot_steps}, "
+            f"print_mode={rt.print_mode}, log_joint_currents={rt.log_joint_currents}, "
+            f"dot_steps={rt.dot_steps}, "
             f"walk_distance_mm={rt.candidate_walk_distance_mm:.1f}, "
             f"segment_print_speed={rt.segment_print_speed}, segment_print_v={rt.segment_print_vel_scale:.3f}, "
             f"segment_target_print_speed_mm_s={rt.segment_target_print_speed_mm_s:.3f}, "
@@ -662,6 +664,15 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     break
 
                 refresh_runtime_config(f"before print prompt for {cycle_tag}")
+                config_snapshot_path, config_snapshot_created = snapshot_cycle_config(
+                    runtime_config_path,
+                    cycle_root,
+                )
+                log.info(
+                    "[print_field_oriented] Cycle config "
+                    f"{'saved' if config_snapshot_created else 'already exists'}: "
+                    f"'{config_snapshot_path}'"
+                )
                 if not self._wait_if_control_paused(f"before print for {cycle_tag}"):
                     break
 
@@ -708,6 +719,10 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         post_segment_retract_s=rt.post_segment_retract_s,
                         post_segment_retract_speed=rt.post_segment_retract_speed,
                         timeout_s=rt.timeout_s,
+                        joint_current_log_dir=(
+                            f"{cycle_root}/joint_current" if rt.log_joint_currents else None
+                        ),
+                        joint_current_log_label=f"{cycle_tag}:segments",
                     )
                 else:
                     log.info(
@@ -729,6 +744,10 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         post_dot_retract_speed=rt.post_dot_retract_speed,
                         eef_link=rt.dot_eef_link,
                         timeout_s=rt.timeout_s,
+                        joint_current_log_dir=(
+                            f"{cycle_root}/joint_current" if rt.log_joint_currents else None
+                        ),
+                        joint_current_log_label=f"{cycle_tag}:dots",
                     )
                 if not print_res.get("ok", False):
                     log.warn(
@@ -1357,6 +1376,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         oriented_cone_max_tilt_deg = self._cfg_float(cfg, "oriented_cone_max_tilt_deg")
         oriented_base_to_world_yaw_deg = self._cfg_float(cfg, "oriented_base_to_world_yaw_deg")
         print_mode = self._cfg_str(cfg, "print_mode")
+        log_joint_currents = self._cfg_bool(cfg, "log_joint_currents")
         dot_steps = self._cfg_int(cfg, "dot_steps")
         dot_speed = self._cfg_int(cfg, "dot_speed")
         dot_approach_z_offset_m = self._cfg_float(cfg, "dot_approach_z_offset_m")
@@ -1503,6 +1523,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             'oriented_cone_max_tilt_deg',
             'oriented_base_to_world_yaw_deg',
             'print_mode',
+            'log_joint_currents',
             'dot_steps',
             'dot_speed',
             'dot_approach_z_offset_m',

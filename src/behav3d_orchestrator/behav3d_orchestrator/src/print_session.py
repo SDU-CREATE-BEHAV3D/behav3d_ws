@@ -8,6 +8,7 @@ from typing import Optional, Sequence
 from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory
 
+from .joint_current_logger import JointCurrentLogger
 from .yaml_session import TargetSegment, YamlSession
 
 
@@ -15,6 +16,10 @@ class PrintSession(YamlSession):
     """
     Shared print execution helpers for parsed YAML targets.
     """
+
+    def __init__(self, node, **kwargs):
+        super().__init__(node, **kwargs)
+        self.joint_current_logger = JointCurrentLogger(node)
 
     def run_print_dots_targets(
         self,
@@ -36,6 +41,8 @@ class PrintSession(YamlSession):
         axis_length: float = 0.05,
         axis_radius: float = 0.003,
         clear_markers_before: bool = True,
+        joint_current_log_dir: Optional[str] = None,
+        joint_current_log_label: str = "print_dots",
     ) -> dict:
         log = self.node.get_logger()
         target_list = list(targets)
@@ -54,6 +61,10 @@ class PrintSession(YamlSession):
                 timeout_s=timeout_s,
             )
 
+        current_logging = self._start_joint_current_logging(
+            joint_current_log_dir,
+            label=joint_current_log_label,
+        )
         try:
             self.run_sync(self.motion.setLIN(enqueue=False), timeout_s=timeout_s)
             self.run_sync(self.motion.setAcc(float(accel_scale), enqueue=False), timeout_s=timeout_s)
@@ -119,14 +130,28 @@ class PrintSession(YamlSession):
                     log.warn(f"[print_session:dots] Skip target {i}: goto_target failed. error='{err}'")
                     continue
 
-                res = self.run_sync(
-                    self.extruder.print_steps(
-                        steps=int(dot_steps),
-                        speed=int(dot_speed),
-                        enqueue=False,
-                    ),
-                    timeout_s=timeout_s,
+                self.joint_current_logger.mark_event(
+                    "extruder_on_request",
+                    extruder_on=True,
+                    item_kind="dot",
+                    item_index=i,
                 )
+                try:
+                    res = self.run_sync(
+                        self.extruder.print_steps(
+                            steps=int(dot_steps),
+                            speed=int(dot_speed),
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                finally:
+                    self.joint_current_logger.mark_event(
+                        "extruder_off",
+                        extruder_on=False,
+                        item_kind="dot",
+                        item_index=i,
+                    )
                 if not res.get("ok", False):
                     skipped += 1
                     err = str(res.get("error", "unknown"))
@@ -148,6 +173,12 @@ class PrintSession(YamlSession):
                     continue
 
                 if int(post_dot_retract_steps) > 0 and int(post_dot_retract_speed) > 0:
+                    self.joint_current_logger.mark_event(
+                        "retract_start",
+                        extruder_on=False,
+                        item_kind="dot_retract",
+                        item_index=i,
+                    )
                     res = self.run_sync(
                         self.extruder.print_steps(
                             steps=int(post_dot_retract_steps),
@@ -156,6 +187,12 @@ class PrintSession(YamlSession):
                             enqueue=False,
                         ),
                         timeout_s=timeout_s,
+                    )
+                    self.joint_current_logger.mark_event(
+                        "retract_stop",
+                        extruder_on=False,
+                        item_kind="dot",
+                        item_index=i,
                     )
                     if not res.get("ok", False):
                         err = str(res.get("error", "unknown"))
@@ -203,6 +240,8 @@ class PrintSession(YamlSession):
                     self.run_sync(self.util.delete_markers(enqueue=False), timeout_s=timeout_s)
                 except TimeoutError:
                     log.warn("[print_session:dots] delete_markers timed out.")
+            if current_logging:
+                self._stop_joint_current_logging()
 
     def run_print_dots(
         self,
@@ -229,6 +268,8 @@ class PrintSession(YamlSession):
         axis_length: float = 0.05,
         axis_radius: float = 0.003,
         clear_markers_before: bool = True,
+        joint_current_log_dir: Optional[str] = None,
+        joint_current_log_label: str = "print_path",
     ) -> dict:
         log = self.node.get_logger()
         target_list = list(targets)
@@ -240,6 +281,10 @@ class PrintSession(YamlSession):
         marker_targets = [approach] + target_list
 
         extruder_on = False
+        current_logging = self._start_joint_current_logging(
+            joint_current_log_dir,
+            label=joint_current_log_label,
+        )
         try:
             self.run_sync(self.motion.setLIN(enqueue=False), timeout_s=timeout_s)
             self.run_sync(self.motion.setAcc(float(accel_scale), enqueue=False), timeout_s=timeout_s)
@@ -285,11 +330,17 @@ class PrintSession(YamlSession):
             if not res.get("ok", False):
                 return {"ok": False, "stage": "goto_first", "error": res.get("error", "unknown")}
 
+            self.joint_current_logger.mark_event(
+                "extruder_on_request", extruder_on=True, item_kind="path", item_index=0
+            )
             on_res = self.run_sync(
                 self.extruder.setExtruder(True, speed=int(print_speed), enqueue=False),
                 timeout_s=timeout_s,
             )
             if not on_res.get("ok", False):
+                self.joint_current_logger.mark_event(
+                    "extruder_on_failed", extruder_on=False, item_kind="path", item_index=0
+                )
                 return {"ok": False, "stage": "extruder_on", "error": on_res.get("error", "unknown")}
             extruder_on = True
 
@@ -313,6 +364,9 @@ class PrintSession(YamlSession):
 
             off_res = self.run_sync(self.extruder.setExtruder(False, enqueue=False), timeout_s=timeout_s)
             extruder_on = False
+            self.joint_current_logger.mark_event(
+                "extruder_off", extruder_on=False, item_kind="path", item_index=len(target_list) - 1
+            )
             if not off_res.get("ok", False):
                 return {"ok": False, "stage": "extruder_off", "error": off_res.get("error", "unknown")}
 
@@ -323,11 +377,16 @@ class PrintSession(YamlSession):
                     self.run_sync(self.extruder.setExtruder(False, enqueue=False), timeout_s=timeout_s)
                 except TimeoutError:
                     log.warn("[print_session:path] Failed to force extruder OFF after error/timeout.")
+                self.joint_current_logger.mark_event(
+                    "extruder_off_cleanup", extruder_on=False, item_kind="path"
+                )
             if publish_markers:
                 try:
                     self.run_sync(self.util.delete_markers(enqueue=False), timeout_s=timeout_s)
                 except TimeoutError:
                     log.warn("[print_session:path] delete_markers timed out.")
+            if current_logging:
+                self._stop_joint_current_logging()
 
     def run_print_segments(
         self,
@@ -350,6 +409,8 @@ class PrintSession(YamlSession):
         axis_length: float = 0.05,
         axis_radius: float = 0.003,
         clear_markers_before: bool = True,
+        joint_current_log_dir: Optional[str] = None,
+        joint_current_log_label: str = "print_segments",
     ) -> dict:
         log = self.node.get_logger()
         segment_list = list(segments)
@@ -377,6 +438,10 @@ class PrintSession(YamlSession):
         failed_segments: list[dict] = []
         printed_targets: list[PoseStamped] = []
         extruder_on = False
+        current_logging = self._start_joint_current_logging(
+            joint_current_log_dir,
+            label=joint_current_log_label,
+        )
 
         def _step_timeout(extra_s: float) -> Optional[float]:
             if timeout_s is None:
@@ -489,6 +554,12 @@ class PrintSession(YamlSession):
                     if not self.wait_if_paused(f"print segment {seg.index}"):
                         raise RuntimeError("ROS shutdown while waiting for global resume.")
                     with self.defer_pause():
+                        self.joint_current_logger.mark_event(
+                            "extruder_on_request",
+                            extruder_on=True,
+                            item_kind="segment",
+                            item_index=int(seg.index),
+                        )
                         on_res = self.run_sync(
                             self.extruder.setExtruder(
                                 True,
@@ -499,6 +570,12 @@ class PrintSession(YamlSession):
                             timeout_s=timeout_s,
                         )
                         if not on_res.get("ok", False):
+                            self.joint_current_logger.mark_event(
+                                "extruder_on_failed",
+                                extruder_on=False,
+                                item_kind="segment",
+                                item_index=int(seg.index),
+                            )
                             res = {
                                 "ok": False,
                                 "stage": "extruder_on",
@@ -526,6 +603,12 @@ class PrintSession(YamlSession):
                                     }
                                 else:
                                     extruder_on = False
+                                    self.joint_current_logger.mark_event(
+                                        "extruder_off",
+                                        extruder_on=False,
+                                        item_kind="segment",
+                                        item_index=int(seg.index),
+                                    )
                                     res = {"ok": True}
 
                     if res.get("ok", False) and float(post_segment_wait_s) > 0.0:
@@ -568,6 +651,12 @@ class PrintSession(YamlSession):
                         except TimeoutError:
                             log.warn("[print_session:segments] Failed to force extruder OFF after segment error.")
                         extruder_on = False
+                        self.joint_current_logger.mark_event(
+                            "extruder_off_cleanup",
+                            extruder_on=False,
+                            item_kind="segment",
+                            item_index=int(seg.index),
+                        )
                     failed_segments.append(
                         {
                             "index": int(seg.index),
@@ -630,6 +719,32 @@ class PrintSession(YamlSession):
                     self.run_sync(self.extruder.setExtruder(False, enqueue=False), timeout_s=timeout_s)
                 except TimeoutError:
                     log.warn("[print_session:segments] Failed to force extruder OFF at cleanup.")
+                self.joint_current_logger.mark_event(
+                    "extruder_off_cleanup", extruder_on=False, item_kind="segment"
+                )
+            if current_logging:
+                self._stop_joint_current_logging()
+
+    def _start_joint_current_logging(self, output_dir: Optional[str], *, label: str) -> bool:
+        path = str(output_dir or "").strip()
+        if not path:
+            return False
+        try:
+            self.joint_current_logger.start(path, label=str(label))
+            return True
+        except Exception as exc:
+            self.node.get_logger().warn(
+                f"[print_session] Joint-current logging could not start: {exc}"
+            )
+            return False
+
+    def _stop_joint_current_logging(self) -> None:
+        try:
+            self.joint_current_logger.stop(make_plot=True)
+        except Exception as exc:
+            self.node.get_logger().warn(
+                f"[print_session] Joint-current logging could not stop cleanly: {exc}"
+            )
 
     def _plan_print_segment(
         self,

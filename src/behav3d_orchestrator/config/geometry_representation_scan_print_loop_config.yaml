@@ -12,9 +12,9 @@ geometry_representation_scan_print_loop:
     # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
     scan_type: grid_sweep
     # Common scan execution. Motion remains fixed to LIN.
-    scan_vel_scale: 0.1
-    scan_accel_scale: 0.1
-    scan_settle_s: 0.5
+    scan_vel_scale: 0.15
+    scan_accel_scale: 0.15
+    scan_settle_s: 1.2
 
     # Half-cylinder scan parameters. Active when scan_type=half_cylinder
     # or scan_type=half_cylinder_side_caps.
@@ -60,14 +60,14 @@ geometry_representation_scan_print_loop:
     #   abs_scan_z = highest_generated_target_z + grid_z_off
     #   applied z_off = abs_scan_z - grid_center_z
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
-    grid_width: 0.3
-    grid_height: 0.2
-    grid_center_x: -0.20
-    grid_center_y: 0.89
+    grid_width: 0.2
+    grid_height: 0.3
+    grid_center_x: 0.00
+    grid_center_y: 0.98
     grid_center_z: -0.30
-    grid_z_off: 0.55
-    grid_nx: 3
-    grid_ny: 2
+    grid_z_off: 0.60
+    grid_nx: 2
+    grid_ny: 3
     grid_row_major: false
     grid_use_tf_orientation: false
     field_center_sign_x: -1.0
@@ -95,7 +95,7 @@ geometry_representation_scan_print_loop:
     tsdf_param_update_timeout_s: 8.0
 
     # Here run field made in grasshopper:
-    resume_field_state_path: /home/lab/behav3d_ws/mesh/fields/field_state_init2.npz
+    resume_field_state_path: /home/lab/behav3d_ws/Week_01_experiments/G02/260807/20260807_field_state_init_1.npz
     resume_scan_mesh_path: ""
     scan_before_generate_first_cycle: true
 
@@ -104,32 +104,33 @@ geometry_representation_scan_print_loop:
     candidate_output_dir: "@session/field_loop/cycle_0001"
     candidate_request_timeout_s: 120.0
     candidate_mode: gradient_lift
-    candidate_beads_per_step: 10
-    candidate_bead_separation_mm: 16.0
-    candidate_bead_height_mm: 14
+    candidate_beads_per_step: 6
+    candidate_bead_separation_mm: 20.0
+    candidate_bead_height_mm: 12.0
 
     # Print selection. Use "dots" for z_lift/simple point deposition,
     # "segments" for oriented segment printing, or "auto" to follow YAML shape.
     print_mode: dots
+    log_joint_currents: false
 
     # Dot print mode. Active when print_mode=dots, or print_mode=auto with targets YAML.
     dot_eef_link: extruder_tcp
-    dot_steps: 8600
-    dot_speed: 2700
+    dot_steps: 11000
+    dot_speed: 2800
     dot_approach_z_offset_m: 0.30
-    dot_z_offset_m: 0.04
-    dot_pre_vel_scale: 0.20
-    dot_print_vel_scale: 0.15
-    dot_accel_scale: 0.15
+    dot_z_offset_m: 0.06
+    dot_pre_vel_scale: 0.3
+    dot_print_vel_scale: 0.24
+    dot_accel_scale: 0.24
     dot_dwell_s: 0.5
-    post_dot_retract_steps: 4500
+    post_dot_retract_steps: 7000
     post_dot_retract_speed: 7000
 
-    # Oriented target generation. Used by candidate generation when enabled.
+    # Oriented target generatio`n. Used by candidate generation when enabled.
     oriented_targets_enable: true
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
-    oriented_cone_max_tilt_deg: 15.0
+    oriented_cone_max_tilt_deg: 45.0
     oriented_base_to_world_yaw_deg: 180.0
 
     # Segment print mode. Active when print_mode=segments,
