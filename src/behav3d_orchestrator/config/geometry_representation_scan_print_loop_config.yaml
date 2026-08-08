@@ -62,8 +62,8 @@ geometry_representation_scan_print_loop:
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
     grid_width: 0.3
     grid_height: 0.2
-    grid_center_x: 0.00
-    grid_center_y: 0.98
+    grid_center_x: -0.20
+    grid_center_y: 0.90
     grid_center_z: -0.30
     grid_z_off: 0.60
     grid_nx: 3
@@ -115,19 +115,19 @@ geometry_representation_scan_print_loop:
     #          Width maps linearly from min to max; spacing is computed from
     #          neighboring widths and candidate_bead_overlap_mm. Generated
     #          targets contain volume_mm3 and printing converts it to steps.
-    candidate_width_mode: fixed
+    candidate_width_mode: field
 
     # Common to both width modes.
-    candidate_bead_height_mm: 12.0
+    candidate_bead_height_mm: 13.0
 
     # Fixed mode parameters.
-    candidate_bead_separation_mm: 20.0
-    candidate_bead_width_mm: 36.0
+    candidate_bead_separation_mm: 18.0
+    candidate_bead_width_mm: 32.0
 
     # Field mode parameters. These are ignored in fixed mode.
-    candidate_width_field_path: ""
-    candidate_bead_width_min_mm: 20.0
-    candidate_bead_width_max_mm: 40.0
+    candidate_width_field_path: "/home/lab/behav3d_ws/mesh/fields/width_field.npz"
+    candidate_bead_width_min_mm: 24.0
+    candidate_bead_width_max_mm: 36.0
     candidate_bead_overlap_mm: 4.0
 
     # Print selection. Use "dots" for z_lift/simple point deposition,
@@ -141,7 +141,7 @@ geometry_representation_scan_print_loop:
     # PrintSession sends dot_steps + post_dot_retract_steps, then retracts.
     # A target volume_mm3 overrides dot_steps after conversion below.
     dot_steps: 4000
-    # Theoretical calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
+    # Theoretical calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm) Only used for fields variable width mode.
     dot_steps_per_mm3: 0.8148733086
     dot_speed: 2800
     dot_approach_z_offset_m: 0.30
@@ -158,7 +158,7 @@ geometry_representation_scan_print_loop:
     oriented_targets_enable: true
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
-    oriented_cone_max_tilt_deg: 45.0
+    oriented_cone_max_tilt_deg: 30.0
     oriented_base_to_world_yaw_deg: 180.0
 
     # Segment print mode. Active when print_mode=segments,
