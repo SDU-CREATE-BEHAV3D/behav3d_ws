@@ -2,6 +2,13 @@
 """Reusable scalar-field pipeline library."""
 
 from .agent_walk import AgentWalkConfig, AgentWalkResult, run_agent_walk
+from .bead_profile import (
+    WIDTH_MAP_KEY,
+    load_normalized_width_map,
+    minimum_center_distance,
+    normalized_width_to_mm,
+    rounded_cylinder_volume_mm3,
+)
 from .extract_phi_contour import (
     compute_geodesic_from_phi_contour,
     contour_seed_vertices_from_phi,
@@ -63,6 +70,11 @@ __all__ = [
     "AgentWalkConfig",
     "AgentWalkResult",
     "run_agent_walk",
+    "WIDTH_MAP_KEY",
+    "load_normalized_width_map",
+    "normalized_width_to_mm",
+    "minimum_center_distance",
+    "rounded_cylinder_volume_mm3",
     "OrientedLineTargets",
     "orient_points_with_tangent",
     "build_candidate_segment_targets",

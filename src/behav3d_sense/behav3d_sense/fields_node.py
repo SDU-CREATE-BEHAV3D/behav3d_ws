@@ -23,6 +23,11 @@ from .reconstruct.service_utils import get_captures_root, resolve_session_path
 try:
     from behav3d_py.scalar_field.lib_scalar.compute_heat_field import compute_heat_field
     from behav3d_py.scalar_field.lib_scalar.compute_phi_mask import evaluate_fixed_pose, make_scan_scene
+    from behav3d_py.scalar_field.lib_scalar.bead_profile import (
+        load_normalized_width_map,
+        normalized_width_to_mm,
+        rounded_cylinder_volume_mm3,
+    )
     from behav3d_py.scalar_field.lib_scalar.extract_phi_contour import extract_phi_contour
     from behav3d_py.scalar_field.lib_scalar.generate_print_points import generate_print_points
     from behav3d_py.scalar_field.lib_scalar.geometry import (
@@ -43,6 +48,9 @@ except Exception as exc:  # pragma: no cover
     compute_heat_field = None
     evaluate_fixed_pose = None
     make_scan_scene = None
+    load_normalized_width_map = None
+    normalized_width_to_mm = None
+    rounded_cylinder_volume_mm3 = None
     extract_phi_contour = None
     generate_print_points = None
     load_triangle_mesh_arrays = None
@@ -179,6 +187,12 @@ class FieldsNode(Node):
         self.declare_parameter("beads_per_step", 7)
         self.declare_parameter("bead_separation_mm", 16.0)
         self.declare_parameter("bead_height_mm", 12.0)
+        self.declare_parameter("candidate_width_mode", "fixed")
+        self.declare_parameter("candidate_bead_width_mm", 36.0)
+        self.declare_parameter("candidate_width_field_path", "")
+        self.declare_parameter("candidate_bead_width_min_mm", 20.0)
+        self.declare_parameter("candidate_bead_width_max_mm", 40.0)
+        self.declare_parameter("candidate_bead_overlap_mm", 4.0)
         self.declare_parameter("walk_distance_mm", 12.0)
         self.declare_parameter("walk_step_mm", 1.0)
         self.declare_parameter("walk_max_steps", 32)
@@ -503,6 +517,71 @@ class FieldsNode(Node):
             if beads_per_step_used < 0:
                 raise ValueError(f"beads_per_step must be >= 0, got {beads_per_step_used}")
 
+            width_mode = str(
+                self.get_parameter("candidate_width_mode").value
+            ).strip().lower()
+            if width_mode not in ("fixed", "field"):
+                raise ValueError(
+                    f"candidate_width_mode must be 'fixed' or 'field', got '{width_mode}'"
+                )
+            fixed_bead_width_mm = float(
+                self.get_parameter("candidate_bead_width_mm").value
+            )
+            if not np.isfinite(fixed_bead_width_mm) or fixed_bead_width_mm <= 0.0:
+                raise ValueError(
+                    "candidate_bead_width_mm must be finite and > 0, "
+                    f"got {fixed_bead_width_mm}"
+                )
+
+            field_bead_widths_m = None
+            bead_overlap_mm_used = 0.0
+            resolved_width_field_path = None
+            if width_mode == "field":
+                width_field_raw = str(
+                    self.get_parameter("candidate_width_field_path").value
+                ).strip()
+                resolved_width_field_path = _resolve_input_path(
+                    width_field_raw,
+                    session_dir,
+                    self._captures_root,
+                )
+                if resolved_width_field_path is None:
+                    raise ValueError(
+                        "candidate_width_field_path is required when "
+                        "candidate_width_mode='field'."
+                    )
+                width_norm = load_normalized_width_map(
+                    resolved_width_field_path,
+                    expected_count=field_vertices_scaled.shape[0],
+                )
+                width_min_mm = float(
+                    self.get_parameter("candidate_bead_width_min_mm").value
+                )
+                width_max_mm = float(
+                    self.get_parameter("candidate_bead_width_max_mm").value
+                )
+                field_bead_widths_mm = normalized_width_to_mm(
+                    width_norm,
+                    width_min_mm=width_min_mm,
+                    width_max_mm=width_max_mm,
+                )
+                field_bead_widths_m = 1e-3 * field_bead_widths_mm
+                bead_overlap_mm_used = float(
+                    self.get_parameter("candidate_bead_overlap_mm").value
+                )
+                if (
+                    not np.isfinite(bead_overlap_mm_used)
+                    or bead_overlap_mm_used < 0.0
+                ):
+                    raise ValueError(
+                        "candidate_bead_overlap_mm must be finite and >= 0, "
+                        f"got {bead_overlap_mm_used}"
+                    )
+                if bead_height_mm_used <= 0.0:
+                    raise ValueError(
+                        "bead_height_mm must be > 0 when candidate_width_mode='field'."
+                    )
+
             candidate_mode = str(req.candidate_mode).strip().lower()
             if not candidate_mode:
                 candidate_mode = str(self.get_parameter("candidate_mode_default").value).strip().lower() or "z_lift"
@@ -569,8 +648,15 @@ class FieldsNode(Node):
                 clamp_to_cone=clamp_to_cone,
                 cone_max_tilt_deg=cone_max_tilt_deg,
                 agent_phi_scalar=pose.phi,
+                field_bead_widths=field_bead_widths_m,
+                bead_overlap=1e-3 * bead_overlap_mm_used,
             )
             candidate_points = candidates.points
+            candidate_bead_widths_m = (
+                None
+                if candidates.bead_widths is None
+                else np.asarray(candidates.bead_widths, dtype=np.float64)
+            )
 
             line_targets = build_candidate_segment_targets(
                 candidate_points=np.asarray(candidate_points, dtype=np.float64),
@@ -592,15 +678,37 @@ class FieldsNode(Node):
                 bead_height_m=1e-3 * bead_height_mm_used,
                 bead_separation_m=1e-3 * bead_separation_mm_used,
                 normal_continuity_rule=True,
+                bead_widths_m=candidate_bead_widths_m,
+                bead_overlap_m=1e-3 * bead_overlap_mm_used,
             )
             normal_replaced = int(secondary_stats["normal_continuity_replaced"])
             endpoint_removed = int(secondary_stats["endpoint_spacing_removed"])
+            kept_indices = np.asarray(
+                secondary_stats["kept_indices"], dtype=np.int32
+            )
+            if candidate_bead_widths_m is not None:
+                candidate_bead_widths_m = candidate_bead_widths_m[kept_indices]
             candidate_points = np.asarray(line_targets.end_points, dtype=np.float64)
+            candidate_volumes_mm3 = None
+            if candidate_bead_widths_m is not None:
+                candidate_volumes_mm3 = rounded_cylinder_volume_mm3(
+                    1e3 * candidate_bead_widths_m,
+                    float(bead_height_mm_used),
+                )
+            width_detail = (
+                f"overlap_mm={bead_overlap_mm_used:.3f} "
+                f"width_range_mm=({float(width_min_mm):.3f}, "
+                f"{float(width_max_mm):.3f}) "
+                f"width_field='{resolved_width_field_path}'"
+                if width_mode == "field"
+                else f"endpoint_min_distance_mm={bead_separation_mm_used:.3f}"
+            )
             self.get_logger().info(
                 "Secondary target rules applied: "
                 f"normal_continuity_replaced={normal_replaced} "
                 f"endpoint_spacing_removed={endpoint_removed} "
-                f"endpoint_min_distance_mm={bead_separation_mm_used:.3f}"
+                f"width_mode={width_mode} "
+                f"{width_detail}"
             )
 
             out_dir = _resolve_output_dir(
@@ -655,6 +763,7 @@ class FieldsNode(Node):
                     z_dirs_world=np.asarray(line_targets.end_z_dirs, dtype=np.float64),
                     position_scale=target_position_scale,
                     base_to_world_yaw_deg=target_base_to_world_yaw_deg,
+                    volumes_mm3=candidate_volumes_mm3,
                 )
             else:
                 write_fixed_z_targets_yaml(
@@ -663,6 +772,7 @@ class FieldsNode(Node):
                     z_dir=(targets_zx, targets_zy, targets_zz),
                     position_scale=target_position_scale,
                     base_to_world_yaw_deg=target_base_to_world_yaw_deg,
+                    volumes_mm3=candidate_volumes_mm3,
                 )
 
             res.success = True
@@ -673,7 +783,8 @@ class FieldsNode(Node):
                 f"viable={int(np.count_nonzero(pose.viable))} "
                 f"contour_segments={int(contour_lines.shape[0])} "
                 f"candidates={int(candidate_points.shape[0])} "
-                f"walk_distance_mm={walk_distance_mm_used:.3f}"
+                f"walk_distance_mm={walk_distance_mm_used:.3f} "
+                f"width_mode={width_mode}"
             )
             res.resolved_field_state_path = str(field_state_path)
             res.resolved_scan_mesh_path = str(scan_paths[0])

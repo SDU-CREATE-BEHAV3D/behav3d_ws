@@ -15,6 +15,7 @@ import heapq
 import numpy as np
 
 from .agent_walk import AgentWalkConfig, run_agent_walk
+from .bead_profile import minimum_center_distance
 from .geometry import (
     project_points_to_surface,
     sample_tangent_axes_on_surface_from_scalar,
@@ -270,11 +271,15 @@ def generate_print_points(
     clamp_to_cone: bool = False,
     cone_max_tilt_deg: float = 45.0,
     agent_phi_scalar: np.ndarray | None = None,
+    field_bead_widths: np.ndarray | None = None,
+    bead_overlap: float = 0.0,
 ) -> PrintPointSet:
     """Select print points and optionally post-process candidate locations.
 
     Base selection:
     - pick scalar minima on polyline with spacing suppression.
+    - when `field_bead_widths` is provided, suppress each pair using
+      `(width_i + width_j) / 2 - bead_overlap` instead of `min_spacing`.
 
     Candidate modes:
     - `polyline`: output selected polyline points.
@@ -323,6 +328,11 @@ def generate_print_points(
             source_points=np.zeros((0, 3), dtype=np.float64),
             surface_points=np.zeros((0, 3), dtype=np.float64),
             segment_start_points=np.zeros((0, 3), dtype=np.float64),
+            bead_widths=(
+                np.zeros((0,), dtype=np.float64)
+                if field_bead_widths is not None
+                else None
+            ),
         )
 
     if point_valid_mask is not None:
@@ -361,6 +371,35 @@ def generate_print_points(
             field_vertices_world=field_vertices_world,
             field_scalar=field_scalar,
         )
+
+    bead_width_vals: np.ndarray | None = None
+    if field_bead_widths is not None:
+        field_widths = np.asarray(field_bead_widths, dtype=np.float64).reshape(-1)
+        if field_widths.shape[0] != field_vertices_world.shape[0]:
+            raise ValueError(
+                "field_bead_widths length must match field vertices: "
+                f"{field_widths.shape[0]} vs {field_vertices_world.shape[0]}"
+            )
+        if np.any(~np.isfinite(field_widths)) or np.any(field_widths <= 0.0):
+            raise ValueError("field_bead_widths must contain finite positive values.")
+        overlap = float(bead_overlap)
+        if not np.isfinite(overlap) or overlap < 0.0:
+            raise ValueError(f"bead_overlap must be finite and >= 0, got {bead_overlap}")
+        if use_surface_sampling:
+            bead_width_vals = sample_vertex_scalar_on_surface(
+                query_points=unique_points,
+                mesh_vertices=field_vertices_world,
+                mesh_faces=np.asarray(field_faces, dtype=np.int32),
+                vertex_scalar=field_widths,
+            )
+        else:
+            bead_width_vals, _ = _sample_scalar_nearest_vertex(
+                sample_points=unique_points,
+                field_vertices_world=field_vertices_world,
+                field_scalar=field_widths,
+            )
+        if np.any(~np.isfinite(bead_width_vals)) or np.any(bead_width_vals <= 0.0):
+            raise ValueError("Sampled bead widths must be finite and positive.")
     adj = _build_adjacency(unique_points, unique_lines)
 
     valid = unique_valid.copy()
@@ -375,7 +414,27 @@ def generate_print_points(
         selected.append(local_min_i)
         valid[local_min_i] = False
 
-        if spacing > 0.0:
+        if bead_width_vals is not None:
+            max_width = float(np.max(bead_width_vals[valid_idx]))
+            search_limit = float(
+                minimum_center_distance(
+                    bead_width_vals[local_min_i],
+                    max_width,
+                    overlap=float(bead_overlap),
+                )
+            )
+            blocked = _dijkstra_with_limit(adj, local_min_i, limit=search_limit)
+            for idx, distance in blocked.items():
+                threshold = float(
+                    minimum_center_distance(
+                        bead_width_vals[local_min_i],
+                        bead_width_vals[int(idx)],
+                        overlap=float(bead_overlap),
+                    )
+                )
+                if int(idx) == local_min_i or float(distance) < threshold:
+                    valid[int(idx)] = False
+        elif spacing > 0.0:
             blocked = _dijkstra_with_limit(adj, local_min_i, limit=spacing)
             for idx in blocked.keys():
                 valid[int(idx)] = False
@@ -439,4 +498,9 @@ def generate_print_points(
         source_points=source_points,
         surface_points=surface_points,
         segment_start_points=segment_start_points,
+        bead_widths=(
+            bead_width_vals[selected_arr].copy()
+            if bead_width_vals is not None
+            else None
+        ),
     )

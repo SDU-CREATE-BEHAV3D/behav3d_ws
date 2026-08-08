@@ -51,12 +51,18 @@ Important behavior:
   half a bead height past the original segment midpoint along the average target
   direction. Its `Z(...)` direction is the average target direction. Disable it
   with `--disable-normal-continuity-rule`.
-- The endpoint-spacing rule removes later targets whose `end` point is closer
-  than `--bead-separation-mm` to an earlier kept `end`. Disable it with
-  `--disable-endpoint-spacing-rule`.
-- `--bead-separation-mm` controls candidate spacing and endpoint-spacing
-  pruning. `--bead-width-mm` is required and controls DDS
-  `BeadProfile.width`.
+- The endpoint-spacing rule removes later targets whose `end` point violates
+  the active fixed or variable spacing rule.
+- `--candidate-width-mode fixed` preserves fixed candidate spacing and requires
+  `--bead-width-mm` for DDS geometry.
+- `--candidate-width-mode field` loads an NPZ passed through `--width-field`.
+  It must contain `width_norm`, one normalized value per field vertex in the
+  same order as the heat field. `--bead-width-min-mm` and
+  `--bead-width-max-mm` define the linear mapping, while
+  `--bead-overlap-mm` defines within-cycle neighbor overlap.
+- In field mode, candidate suppression and secondary endpoint pruning use
+  `(width_i + width_j) / 2 - overlap`; DDS receives one `BeadProfile` per
+  accepted candidate and reserves domain padding for the maximum width.
 - The magenta geodesic offset line is a diagnostic/reference line. In
   `gradient_walk`, candidates are selected from the `phi=0` contour and walked
   over the scalar field, so the magenta line is not the print path.
@@ -112,6 +118,16 @@ Useful DDS/debug flags:
 - `--dds-surface-step-size 1`
 - `--save-dds-step-bundles`
 - `--no-vis` for terminal stepping with `n`/`q`
+
+Variable-width arguments:
+
+```bash
+  --candidate-width-mode field \
+  --width-field /home/lab/behav3d_ws/mesh/fields/width_field.npz \
+  --bead-width-min-mm 20 \
+  --bead-width-max-mm 40 \
+  --bead-overlap-mm 4
+```
 
 ### `field_state_scan_loop_simulator_dds_v2.py`
 
@@ -231,7 +247,9 @@ written by default.
 
 ## Relationship to YAML/ROS
 
-The DDS v2 simulator is a prototyping track and does not consume print YAML.
-YAML segment execution is handled elsewhere in the orchestrator stack. This
-separation is intentional while scalar-policy design and ROS execution evolve in
-parallel.
+The DDS v2 simulator remains a prototyping track and writes/reads its own
+per-step `segments.yaml` before creating DDS deposits. In the ROS candidate
+pipeline, variable-width dot targets use the flat target contract with optional
+`volume_mm3`. `PrintSession` converts that volume to extrusion steps; targets
+without volume continue using configured `dot_steps`. Width maps and DDS objects
+remain outside the ROS print service contract.

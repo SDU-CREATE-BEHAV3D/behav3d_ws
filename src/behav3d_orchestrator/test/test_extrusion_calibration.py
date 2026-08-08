@@ -1,0 +1,34 @@
+import math
+
+import pytest
+
+from behav3d_orchestrator.src.extrusion_calibration import (
+    MAX_PRINT_STEPS,
+    compensated_forward_steps,
+    volume_mm3_to_steps,
+)
+
+
+def test_reference_piston_volume_maps_to_reference_steps():
+    reference_volume_mm3 = math.pi * 50.0**2 * 10.0
+    assert volume_mm3_to_steps(reference_volume_mm3) == 64_000
+
+
+def test_forward_steps_include_retract_compensation():
+    assert compensated_forward_steps(8_500, retract_steps=4_000) == 12_500
+
+
+def test_forward_steps_do_not_compensate_disabled_retract():
+    assert (
+        compensated_forward_steps(
+            8_500,
+            retract_steps=4_000,
+            retract_enabled=False,
+        )
+        == 8_500
+    )
+
+
+def test_forward_steps_reject_uint32_overflow():
+    with pytest.raises(ValueError, match="exceeds uint32"):
+        compensated_forward_steps(MAX_PRINT_STEPS, retract_steps=1)

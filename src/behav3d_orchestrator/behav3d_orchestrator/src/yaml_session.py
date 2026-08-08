@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,13 @@ class TargetSegment:
     index: int
     start: PoseStamped
     end: PoseStamped
+
+
+@dataclass(frozen=True)
+class DotTarget:
+    index: int
+    pose: PoseStamped
+    volume_mm3: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -341,20 +349,37 @@ class YamlSession(ControlAwareSession):
                 out.append(seg.end)
             return out
 
-        items = self._extract_target_items(data)
-
-        ordered: List[Tuple[int, int, PoseStamped]] = []
-        for pos, item in enumerate(items):
-            idx, ps = self._parse_target_item(
-                item=item,
-                fallback_index=pos,
+        return [
+            target.pose
+            for target in self._parse_dot_targets_data(
+                data,
                 frame_id=str(frame_id or "world"),
             )
-            order_idx = int(idx) if idx is not None else 1_000_000 + pos
-            ordered.append((order_idx, pos, ps))
+        ]
 
-        ordered.sort(key=lambda row: (row[0], row[1]))
-        return [ps for _, _, ps in ordered]
+    def parse_yaml_dot_targets(
+        self,
+        *,
+        yaml_path: str,
+        frame_id: str = "world",
+    ) -> List[DotTarget]:
+        """Parse flat dot targets with an optional requested material volume."""
+        if yaml is None:
+            raise RuntimeError("PyYAML is not available. Install python3-yaml.")
+
+        path = self._resolve_yaml_path(yaml_path)
+        data = self._load_yaml_data(path)
+
+        if isinstance(data, dict) and any(
+            isinstance(data.get(key), list) for key in ("polylines", "path", "segments")
+        ):
+            poses = self.parse_yaml_targets(yaml_path=str(path), frame_id=frame_id)
+            return [DotTarget(index=i, pose=pose) for i, pose in enumerate(poses)]
+
+        return self._parse_dot_targets_data(
+            data,
+            frame_id=str(frame_id or "world"),
+        )
 
     def parse_yaml_polylines(
         self,
@@ -429,6 +454,43 @@ class YamlSession(ControlAwareSession):
     def _load_yaml_data(path: Path) -> Any:
         with path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f)
+
+    @staticmethod
+    def _parse_dot_targets_data(data: Any, frame_id: str) -> List[DotTarget]:
+        items = YamlSession._extract_target_items(data)
+        ordered: List[Tuple[int, int, DotTarget]] = []
+        for pos, item in enumerate(items):
+            idx, pose = YamlSession._parse_target_item(
+                item=item,
+                fallback_index=pos,
+                frame_id=frame_id,
+            )
+            target_index = int(idx) if idx is not None else pos
+            order_index = int(idx) if idx is not None else 1_000_000 + pos
+
+            volume_mm3: Optional[float] = None
+            if isinstance(item, dict) and item.get("volume_mm3") is not None:
+                volume_mm3 = float(item["volume_mm3"])
+                if not math.isfinite(volume_mm3) or volume_mm3 <= 0.0:
+                    raise ValueError(
+                        "Target volume_mm3 must be finite and > 0. "
+                        f"index={target_index} value={item['volume_mm3']}"
+                    )
+
+            ordered.append(
+                (
+                    order_index,
+                    pos,
+                    DotTarget(
+                        index=target_index,
+                        pose=pose,
+                        volume_mm3=volume_mm3,
+                    ),
+                )
+            )
+
+        ordered.sort(key=lambda row: (row[0], row[1]))
+        return [target for _, _, target in ordered]
 
     @staticmethod
     def _parse_path_data(data: dict, frame_id: str) -> List[PoseStamped]:

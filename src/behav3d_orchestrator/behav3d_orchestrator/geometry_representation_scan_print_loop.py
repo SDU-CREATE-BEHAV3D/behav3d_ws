@@ -16,10 +16,12 @@ import numpy as np
 import rclpy
 from behav3d_orchestrator.src.field_loop_session import FieldLoopSession
 from behav3d_orchestrator.src.print_session import PrintSession
+from behav3d_orchestrator.src.remote_parameters import set_remote_parameters
 from behav3d_orchestrator.src.scan_session import ScanSession
 from behav3d_utils.config_snapshot import snapshot_cycle_config
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 
 try:
     import yaml
@@ -39,6 +41,8 @@ CANDIDATE_PUBLISH_MARKERS = True
 CANDIDATE_MARKER_AXIS_LENGTH = 0.05
 CANDIDATE_MARKER_AXIS_RADIUS = 0.003
 CANDIDATE_MARKER_CLEAR_BEFORE = True
+FIELDS_NODE_NAME = "/behav3d_fields"
+CANDIDATE_PARAM_TIMEOUT_S = 8.0
 
 
 class GeometryRepresentationScanPrintLoopNode(Node):
@@ -97,6 +101,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             f"run_reconstruction={rt.run_reconstruction}, "
             f"max_cycles={rt.max_cycles}, "
             f"candidate_mode={rt.candidate_mode}, "
+            f"candidate_width_mode={rt.candidate_width_mode}, "
             f"print_mode={rt.print_mode}, log_joint_currents={rt.log_joint_currents}, "
             f"dot_steps={rt.dot_steps}, "
             f"segment_print_speed={rt.segment_print_speed}, segment_print_v={rt.segment_print_vel_scale:.3f}, "
@@ -280,6 +285,8 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                         "Missing field state for candidate generation."
                     )
 
+                self._set_fields_node_candidate_params(rt)
+
                 cand_res = self.session.run_sync(
                     self.session.field.generate_print_candidates(
                         use_latest=False,
@@ -317,16 +324,28 @@ class GeometryRepresentationScanPrintLoopNode(Node):
 
                 targets_yaml_path = str(cand_metrics.get("targets_yaml_path", "")).strip()
                 preview_targets: List[PoseStamped] = []
+                preview_volumes_mm3: List[Optional[float]] = []
                 preview_segments = []
                 if targets_yaml_path:
                     preview_segments = self.print_session.parse_yaml_segments(
                         yaml_path=targets_yaml_path,
                         frame_id=rt.frame_id,
                     )
-                    preview_targets = self.print_session.parse_yaml_targets(
-                        yaml_path=targets_yaml_path,
-                        frame_id=rt.frame_id,
-                    )
+                    if preview_segments:
+                        preview_targets = self.print_session.parse_yaml_targets(
+                            yaml_path=targets_yaml_path,
+                            frame_id=rt.frame_id,
+                        )
+                        preview_volumes_mm3 = [None] * len(preview_targets)
+                    else:
+                        dot_targets = self.print_session.parse_yaml_dot_targets(
+                            yaml_path=targets_yaml_path,
+                            frame_id=rt.frame_id,
+                        )
+                        preview_targets = [target.pose for target in dot_targets]
+                        preview_volumes_mm3 = [
+                            target.volume_mm3 for target in dot_targets
+                        ]
 
                 if CANDIDATE_VISUALIZE_FIELD_PLY:
                     cycle_field_ply = str(cand_metrics.get("debug_field_ply_path", "")).strip()
@@ -472,12 +491,14 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 else:
                     log.info(
                         f"[geometry_representation_scan_print_loop] Printing {len(preview_targets)} dots "
-                        f"(print_mode={print_mode_norm}, dot_steps={rt.dot_steps}, "
+                        f"(print_mode={print_mode_norm}, net_dot_steps={rt.dot_steps}, "
                         f"retract_steps={rt.post_dot_retract_steps})."
                     )
                     print_res = self.print_session.run_print_dots_targets(
                         targets=preview_targets,
+                        volumes_mm3=preview_volumes_mm3,
                         dot_steps=rt.dot_steps,
+                        dot_steps_per_mm3=rt.dot_steps_per_mm3,
                         dot_speed=rt.dot_speed,
                         approach_z_offset_m=rt.dot_approach_z_offset_m,
                         dot_z_offset_m=rt.dot_z_offset_m,
@@ -930,6 +951,41 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         self.get_logger().warn("[geometry_representation_scan_print_loop] Current EEF pose unavailable for scan orientation.")
         return None
 
+    def _set_fields_node_candidate_params(self, rt: SimpleNamespace) -> None:
+        params = [
+            Parameter("candidate_width_mode", value=rt.candidate_width_mode),
+            Parameter("candidate_bead_width_mm", value=rt.candidate_bead_width_mm),
+            Parameter("candidate_width_field_path", value=rt.candidate_width_field_path),
+            Parameter(
+                "candidate_bead_width_min_mm",
+                value=rt.candidate_bead_width_min_mm,
+            ),
+            Parameter(
+                "candidate_bead_width_max_mm",
+                value=rt.candidate_bead_width_max_mm,
+            ),
+            Parameter(
+                "candidate_bead_overlap_mm",
+                value=rt.candidate_bead_overlap_mm,
+            ),
+        ]
+        node_name = set_remote_parameters(
+            self,
+            remote_node_name=FIELDS_NODE_NAME,
+            params=params,
+            timeout_s=CANDIDATE_PARAM_TIMEOUT_S,
+            label="candidate width",
+        )
+        self.get_logger().info(
+            "[geometry_representation_scan_print_loop] Candidate width params set: "
+            f"node={node_name} mode={rt.candidate_width_mode} "
+            f"fixed_width_mm={rt.candidate_bead_width_mm:.3f} "
+            f"range_mm=({rt.candidate_bead_width_min_mm:.3f}, "
+            f"{rt.candidate_bead_width_max_mm:.3f}) "
+            f"overlap_mm={rt.candidate_bead_overlap_mm:.3f} "
+            f"field='{rt.candidate_width_field_path}'"
+        )
+
     def _parse_runtime_state(self, cfg: Dict[str, Any], run_session_path: Path) -> SimpleNamespace:
         home_before_scan = self._cfg_bool(cfg, "home_before_scan")
         home_after = self._cfg_bool(cfg, "home_after")
@@ -1000,6 +1056,42 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         candidate_beads_per_step = self._cfg_int(cfg, "candidate_beads_per_step")
         candidate_bead_separation_mm = self._cfg_float(cfg, "candidate_bead_separation_mm")
         candidate_bead_height_mm = self._cfg_float(cfg, "candidate_bead_height_mm")
+        candidate_width_mode = self._cfg_str(cfg, "candidate_width_mode").strip().lower()
+        if candidate_width_mode not in ("fixed", "field"):
+            raise ValueError("candidate_width_mode must be 'fixed' or 'field'")
+        candidate_bead_width_mm = self._cfg_float(cfg, "candidate_bead_width_mm")
+        candidate_width_field_path = self._cfg_str_allow_empty(
+            cfg,
+            "candidate_width_field_path",
+        )
+        candidate_bead_width_min_mm = self._cfg_float(
+            cfg,
+            "candidate_bead_width_min_mm",
+        )
+        candidate_bead_width_max_mm = self._cfg_float(
+            cfg,
+            "candidate_bead_width_max_mm",
+        )
+        candidate_bead_overlap_mm = self._cfg_float(
+            cfg,
+            "candidate_bead_overlap_mm",
+        )
+        if candidate_width_mode == "fixed" and candidate_bead_width_mm <= 0.0:
+            raise ValueError("candidate_bead_width_mm must be > 0 in fixed mode")
+        if candidate_width_mode == "field":
+            if not candidate_width_field_path:
+                raise ValueError(
+                    "candidate_width_field_path is required in field width mode"
+                )
+            if (
+                candidate_bead_width_min_mm <= 0.0
+                or candidate_bead_width_max_mm < candidate_bead_width_min_mm
+            ):
+                raise ValueError(
+                    "candidate bead width range must satisfy 0 < min <= max"
+                )
+            if candidate_bead_overlap_mm < 0.0:
+                raise ValueError("candidate_bead_overlap_mm must be >= 0")
         oriented_targets_enable = self._cfg_bool(cfg, "oriented_targets_enable")
         oriented_tangent_sign = self._cfg_float(cfg, "oriented_tangent_sign")
         oriented_clamp_to_cone = self._cfg_bool(cfg, "oriented_clamp_to_cone")
@@ -1008,6 +1100,9 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         print_mode = self._cfg_str(cfg, "print_mode")
         log_joint_currents = self._cfg_bool(cfg, "log_joint_currents")
         dot_steps = self._cfg_int(cfg, "dot_steps")
+        dot_steps_per_mm3 = self._cfg_float(cfg, "dot_steps_per_mm3")
+        if dot_steps_per_mm3 <= 0.0:
+            raise ValueError("dot_steps_per_mm3 must be > 0")
         dot_speed = self._cfg_int(cfg, "dot_speed")
         dot_approach_z_offset_m = self._cfg_float(cfg, "dot_approach_z_offset_m")
         dot_z_offset_m = self._cfg_float(cfg, "dot_z_offset_m")
@@ -1088,6 +1183,12 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             'candidate_beads_per_step',
             'candidate_bead_separation_mm',
             'candidate_bead_height_mm',
+            'candidate_width_mode',
+            'candidate_bead_width_mm',
+            'candidate_width_field_path',
+            'candidate_bead_width_min_mm',
+            'candidate_bead_width_max_mm',
+            'candidate_bead_overlap_mm',
             'oriented_targets_enable',
             'oriented_tangent_sign',
             'oriented_clamp_to_cone',
@@ -1096,6 +1197,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             'print_mode',
             'log_joint_currents',
             'dot_steps',
+            'dot_steps_per_mm3',
             'dot_speed',
             'dot_approach_z_offset_m',
             'dot_z_offset_m',

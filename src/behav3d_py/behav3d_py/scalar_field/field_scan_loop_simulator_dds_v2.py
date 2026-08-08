@@ -17,7 +17,7 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
   --field-subdivide-iter 1 --field-scale 0.001 \
   --candidate-mode gradient_walk \
   --beads-per-step 7 --bead-separation-mm 16 \
-  --bead-height-mm 12 --bead-shape cylinder \
+  --bead-width-mm 18 --bead-height-mm 12 --bead-shape cylinder \
   --positioning-attempts 3 \
   --search-step-x 0.01 --search-step-y 0.01 \
   --offset-distance-mm 12 --offset-geodesic-delta-mm 0.6 \
@@ -37,7 +37,7 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
   --offset-geodesic-delta-mm 0.6 \
   --beads-per-step 7 \
   --bead-separation-mm 16 \
-  --bead-height-mm 12 \
+  --bead-width-mm 18 --bead-height-mm 12 \
   --bead-shape cylinder \
   --walk-distance-mm 12 \
   --walk-step-mm 1.0 \
@@ -72,6 +72,10 @@ from pathlib import Path
 import numpy as np
 import open3d as o3d
 
+from lib_scalar.bead_profile import (
+    load_normalized_width_map,
+    normalized_width_to_mm,
+)
 from lib_scalar.compute_heat_field import (
     choose_seed_vertex,
     choose_seed_vertices_below_level,
@@ -427,7 +431,7 @@ def load_segment_targets_yaml(
 def build_dds_step_deposits(
     segments: SegmentTargetSet,
     *,
-    profile,
+    profiles: tuple[object, ...],
     mode: str,
     line_fraction: float,
 ) -> tuple[object, ...]:
@@ -459,13 +463,19 @@ def build_dds_step_deposits(
             f"starts={starts.shape} ends={ends.shape} "
             f"start_normals={start_normals.shape} end_normals={end_normals.shape}"
         )
+    if len(profiles) != starts.shape[0]:
+        raise ValueError(
+            "DDS profile count must match segment count: "
+            f"{len(profiles)} vs {starts.shape[0]}"
+        )
 
     deposits = []
-    for start, end, start_normal, end_normal in zip(
+    for start, end, start_normal, end_normal, profile in zip(
         starts,
         ends,
         start_normals,
         end_normals,
+        profiles,
         strict=True,
     ):
         if mode_norm == "dot":
@@ -898,7 +908,12 @@ def run(
     offset_geodesic_delta_mm: float,
     beads_per_step: int,
     bead_separation_mm: float,
-    bead_width_mm: float,
+    bead_width_mm: float | None,
+    candidate_width_mode: str,
+    width_field_path: Path | None,
+    bead_width_min_mm: float,
+    bead_width_max_mm: float,
+    bead_overlap_mm: float,
     bead_height_mm: float,
     walk_distance_mm: float,
     walk_step_mm: float,
@@ -973,6 +988,46 @@ def run(
         seed_points_scaled = field_vertices_scaled[heat_seed_indices]
     heat_colors = yellow_to_red_colors(heat_norm)
 
+    width_mode_norm = str(candidate_width_mode).strip().lower()
+    if width_mode_norm not in {"fixed", "field"}:
+        raise ValueError(
+            "candidate_width_mode must be 'fixed' or 'field', "
+            f"got '{candidate_width_mode}'"
+        )
+    field_bead_widths_m: np.ndarray | None = None
+    fixed_bead_width_mm: float | None = None
+    bead_overlap_mm_value = 0.0
+    if width_mode_norm == "field":
+        if width_field_path is None:
+            raise ValueError(
+                "--width-field is required when --candidate-width-mode field."
+            )
+        width_norm = load_normalized_width_map(
+            width_field_path,
+            expected_count=field_vertices_scaled.shape[0],
+        )
+        field_bead_widths_mm = normalized_width_to_mm(
+            width_norm,
+            width_min_mm=float(bead_width_min_mm),
+            width_max_mm=float(bead_width_max_mm),
+        )
+        field_bead_widths_m = 1e-3 * field_bead_widths_mm
+        bead_overlap_mm_value = float(bead_overlap_mm)
+        if not np.isfinite(bead_overlap_mm_value) or bead_overlap_mm_value < 0.0:
+            raise ValueError(
+                f"bead_overlap_mm must be finite and >= 0, got {bead_overlap_mm}"
+            )
+        dds_max_bead_width_mm = float(bead_width_max_mm)
+    else:
+        if bead_width_mm is None:
+            raise ValueError(
+                "--bead-width-mm is required when --candidate-width-mode fixed."
+            )
+        fixed_bead_width_mm = float(bead_width_mm)
+        if not np.isfinite(fixed_bead_width_mm) or fixed_bead_width_mm <= 0.0:
+            raise ValueError(f"bead_width_mm must be > 0, got {bead_width_mm}")
+        dds_max_bead_width_mm = fixed_bead_width_mm
+
     scan_scale_value = float(scan_scale)
     if scan_scale_value <= 0.0:
         raise ValueError(f"scan_scale must be > 0, got {scan_scale}")
@@ -989,13 +1044,9 @@ def run(
     dds_simulator: Simulator | None = None
     dds_result = None
     viewer_state: dict[str, object] = {}
-    dds_bead_width_mm = float(bead_width_mm)
-    if dds_bead_width_mm <= 0.0:
-        raise ValueError(f"bead_width_mm must be > 0, got {bead_width_mm}")
-    dds_profile = BeadProfile(
-        width=1e-3 * dds_bead_width_mm,
-        height=1e-3 * float(bead_height_mm),
-    )
+    all_applied_widths_mm: list[np.ndarray] = []
+    if not np.isfinite(float(bead_height_mm)) or float(bead_height_mm) <= 0.0:
+        raise ValueError(f"bead_height_mm must be finite and > 0, got {bead_height_mm}")
     dds_voxel_size_m = 1e-3 * float(dds_voxel_size_mm)
     dds_padding_m = 1e-3 * float(dds_padding_mm)
     if dds_voxel_size_m <= 0.0:
@@ -1024,7 +1075,10 @@ def run(
         f"legacy_bead_shape_arg={bead_shape} "
         f"bead_separation_mm={float(bead_separation_mm):.3f} "
         f"bead_height_mm={float(bead_height_mm):.3f} "
-        f"dds_bead_width_mm={dds_bead_width_mm:.3f} "
+        f"candidate_width_mode={width_mode_norm} "
+        f"dds_max_bead_width_mm={dds_max_bead_width_mm:.3f} "
+        f"bead_overlap_mm={bead_overlap_mm_value:.3f} "
+        f"width_field_path={width_field_path} "
         f"dds_voxel_size_mm={float(dds_voxel_size_mm):.3f} "
         f"dds_domain_source={dds_domain_source} "
         f"position_target_xy={position_target_xy} "
@@ -1110,7 +1164,24 @@ def run(
             walk_start_fraction=float(walk_start_fraction),
             clamp_to_cone=bool(clamp_to_cone),
             cone_max_tilt_deg=float(cone_max_tilt_deg),
+            field_bead_widths=field_bead_widths_m,
+            bead_overlap_mm=bead_overlap_mm_value,
         )
+        if candidate.bead_widths is None:
+            if fixed_bead_width_mm is None:
+                raise RuntimeError(
+                    "Variable-width candidate generation did not return bead widths."
+                )
+            candidate_bead_widths_m = np.full(
+                candidate.points.shape[0],
+                1e-3 * float(fixed_bead_width_mm),
+                dtype=np.float64,
+            )
+        else:
+            candidate_bead_widths_m = np.asarray(
+                candidate.bead_widths,
+                dtype=np.float64,
+            ).reshape(-1)
 
         print(
             f"[step {step_index}] "
@@ -1138,9 +1209,18 @@ def run(
             bead_height_m=1e-3 * float(bead_height_mm),
             bead_separation_m=1e-3 * float(bead_separation_mm),
             normal_continuity_rule=bool(normal_continuity_rule),
+            bead_widths_m=(
+                candidate_bead_widths_m if width_mode_norm == "field" else None
+            ),
+            bead_overlap_m=1e-3 * bead_overlap_mm_value,
         )
         normal_flip_replaced = int(secondary_stats["normal_continuity_replaced"])
         endpoint_spacing_removed = int(secondary_stats["endpoint_spacing_removed"])
+        kept_indices = np.asarray(
+            secondary_stats["kept_indices"],
+            dtype=np.int32,
+        )
+        candidate_bead_widths_m = candidate_bead_widths_m[kept_indices]
         if normal_flip_replaced > 0:
             print(
                 f"[targets] replaced normal-discontinuity segments: "
@@ -1149,9 +1229,14 @@ def run(
                 f"extension_fraction={TARGET_NORMAL_FLIP_BEAD_HEIGHT_FRACTION:.3f}"
             )
         if endpoint_spacing_removed > 0:
+            spacing_description = (
+                f"overlap_m={1e-3 * bead_overlap_mm_value:.6f}"
+                if width_mode_norm == "field"
+                else f"min_distance_m={1e-3 * float(bead_separation_mm):.6f}"
+            )
             print(
                 f"[targets] removed close endpoint segments: "
-                f"{endpoint_spacing_removed} min_distance_m={1e-3 * float(bead_separation_mm):.6f}"
+                f"{endpoint_spacing_removed} {spacing_description}"
             )
         target_points, target_z_dirs = line_targets.flattened_points_and_z_dirs()
         step_dir = output_dir / f"step_{step_index:02d}"
@@ -1168,7 +1253,7 @@ def run(
                     dds_padding_m,
                     1e-3 * float(offset_distance_mm),
                     1e-3 * float(bead_height_mm),
-                    1e-3 * dds_bead_width_mm,
+                    1e-3 * dds_max_bead_width_mm,
                 ),
             )
             dds_simulator = Simulator(dds_domain)
@@ -1237,7 +1322,13 @@ def run(
 
         step_deposits = build_dds_step_deposits(
             applied_segments,
-            profile=dds_profile,
+            profiles=tuple(
+                BeadProfile(
+                    width=float(width_m),
+                    height=1e-3 * float(bead_height_mm),
+                )
+                for width_m in candidate_bead_widths_m
+            ),
             mode=dds_deposit_mode_norm,
             line_fraction=dds_line_fraction_value,
         )
@@ -1245,6 +1336,7 @@ def run(
         assert dds_simulator is not None
         validate_deposits_inside_domain(step_deposits, dds_simulator.domain)
         dds_simulator.add_deposits(step_deposits)
+        all_applied_widths_mm.append(1e3 * candidate_bead_widths_m.copy())
         dds_result = dds_simulator.result(
             include_coverage=True,
             threshold=float(dds_threshold),
@@ -1275,8 +1367,10 @@ def run(
                     "step": step_index,
                     "candidate_mode": str(candidate_mode),
                     "threshold": float(dds_threshold),
-                    "bead_width_m": float(dds_profile.width),
-                    "bead_height_m": float(dds_profile.height),
+                    "bead_width_mode": width_mode_norm,
+                    "bead_width_min_m": float(np.min(candidate_bead_widths_m)),
+                    "bead_width_max_m": float(np.max(candidate_bead_widths_m)),
+                    "bead_height_m": 1e-3 * float(bead_height_mm),
                 },
             )
             print(f"[dds] saved step bundle: {bundle_dir}")
@@ -1297,14 +1391,17 @@ def run(
     if dds_result is not None:
         from dds.geometry import write_mesh
 
+        applied_widths_mm = np.concatenate(all_applied_widths_mm)
         final_bundle_dir = output_dir / "loop_sim_dds_bundle"
         dds_result.save(
             final_bundle_dir,
             metadata={
                 "candidate_mode": str(candidate_mode),
                 "threshold": float(dds_threshold),
-                "bead_width_m": float(dds_profile.width),
-                "bead_height_m": float(dds_profile.height),
+                "bead_width_mode": width_mode_norm,
+                "bead_width_min_m": 1e-3 * float(np.min(applied_widths_mm)),
+                "bead_width_max_m": 1e-3 * float(np.max(applied_widths_mm)),
+                "bead_height_m": 1e-3 * float(bead_height_mm),
             },
         )
         dds_surface = dds_result.analysis.surface_mesh(
@@ -1362,11 +1459,26 @@ def main() -> None:
     parser.add_argument("--beads-per-step", type=int, default=7)
     parser.add_argument("--bead-separation-mm", type=float, default=16.0)
     parser.add_argument(
+        "--candidate-width-mode",
+        choices=("fixed", "field"),
+        default="fixed",
+        help="Use one fixed DDS width or sample per-candidate width from --width-field.",
+    )
+    parser.add_argument(
         "--bead-width-mm",
         type=float,
-        required=True,
-        help="DDS BeadProfile width in mm. Required; independent from --bead-separation-mm.",
+        default=None,
+        help="DDS width in fixed mode. Required when --candidate-width-mode fixed.",
     )
+    parser.add_argument(
+        "--width-field",
+        type=Path,
+        default=None,
+        help="NPZ containing normalized per-field-vertex values under width_norm.",
+    )
+    parser.add_argument("--bead-width-min-mm", type=float, default=20.0)
+    parser.add_argument("--bead-width-max-mm", type=float, default=40.0)
+    parser.add_argument("--bead-overlap-mm", type=float, default=4.0)
     parser.add_argument("--bead-height-mm", type=float, default=12.0)
     parser.add_argument("--walk-distance-mm", type=float, default=12.0)
     parser.add_argument("--walk-step-mm", type=float, default=1.0)
@@ -1512,6 +1624,11 @@ def main() -> None:
         beads_per_step=args.beads_per_step,
         bead_separation_mm=args.bead_separation_mm,
         bead_width_mm=args.bead_width_mm,
+        candidate_width_mode=args.candidate_width_mode,
+        width_field_path=args.width_field,
+        bead_width_min_mm=args.bead_width_min_mm,
+        bead_width_max_mm=args.bead_width_max_mm,
+        bead_overlap_mm=args.bead_overlap_mm,
         bead_height_mm=args.bead_height_mm,
         walk_distance_mm=args.walk_distance_mm,
         walk_step_mm=args.walk_step_mm,

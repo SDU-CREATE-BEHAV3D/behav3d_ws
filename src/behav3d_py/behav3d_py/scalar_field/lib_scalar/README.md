@@ -105,7 +105,22 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - `PoseResult`: positioned field, phi values, viability mask, ray-hit stats, search stats.
    - `PrintPointSet`: selected print points and spacing/selection metadata.
 
-9. `generate_print_points.py`
+9. `bead_profile.py`
+   - Owns the normalized width-map contract and nominal bead geometry math.
+   - Width maps are NPZ files containing one `width_norm` value in `[0, 1]`
+     per field vertex, in the same vertex order as the heat field.
+   - The current isolated mapping law is linear:
+     `width = width_min + width_norm * (width_max - width_min)`.
+   - Pair spacing is `(width_i + width_j) / 2 - overlap`.
+   - Volume uses the analytic rounded-cylinder shape represented by the DDS
+     `BeadProfile`; voxelization is not needed to produce target volume.
+   - Main APIs:
+     - `load_normalized_width_map(...)`
+     - `normalized_width_to_mm(...)`
+     - `minimum_center_distance(...)`
+     - `rounded_cylinder_volume_mm3(...)`
+
+10. `generate_print_points.py`
    - Unified print-point generator.
    - Base selection always runs on the provided polyline graph:
      - pick the polyline vertex with minimum scalar value,
@@ -132,15 +147,19 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - if `field_faces` is provided and scalar length matches field vertices, scalar
        is sampled on polyline points by triangle interpolation (`sample_vertex_scalar_on_surface`),
      - otherwise falls back to nearest-vertex sampling.
+   - When `field_bead_widths` is provided, width is sampled with the same
+     interpolation and replaces fixed suppression distance with the per-pair
+     width/overlap rule for the current candidate batch.
    - Returns `PrintPointSet`, including:
      - `points`: final points for the selected mode,
      - `source_points`: points selected on the original polyline,
      - `segment_start_points`: projected print-line start points,
-     - `surface_points`: mode-aware surface points (useful before lift/projection).
+     - `surface_points`: mode-aware surface points (useful before lift/projection),
+     - `bead_widths`: sampled widths aligned with returned points when supplied.
    - Main API:
      - `generate_print_points(...) -> PrintPointSet`
 
-10. `loop_simulation.py`
+11. `loop_simulation.py`
    - Utilities for iterative loop simulation before robot execution.
    - Keeps loop stages explicit:
      - position field with bounded retries (`positioning_attempts`),
@@ -159,7 +178,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `generate_step_candidates(...) -> CandidateStage`
      - `apply_simulated_beads(...) -> (scan_mesh, bead_centers)`
 
-11. `agent_walk.py`
+12. `agent_walk.py`
    - Simple surface-walk agent used by `candidate_mode='gradient_walk'`.
    - Walks from selected source points along the scalar tangent field.
    - Exposes each accepted origin, projected print-line start (`p1`, default
@@ -170,7 +189,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `AgentWalkConfig`
      - `run_agent_walk(...) -> AgentWalkResult`
 
-12. `print_targets.py`
+13. `print_targets.py`
    - Builds oriented point or line targets from candidate geometry.
    - Keeps generated target positions unchanged, samples scalar-tangent
      orientation from the field surface, optionally clamps target Z directions
@@ -186,6 +205,15 @@ The objective is to keep each stage isolated, testable, and reusable from:
          end:
            plane: "O(...) Z(...)"
      ```
+   - Flat dot targets may include requested material volume:
+     ```yaml
+     targets:
+       - index: 0
+         plane: "O(...) Z(...)"
+         volume_mm3: 2929.187507
+     ```
+     Fixed-width mode omits `volume_mm3`, preserving the configured legacy
+     `dot_steps` fallback.
    - Main APIs:
      - `build_oriented_line_targets(...) -> OrientedLineTargets`
        keeps candidate positions unchanged and samples the field surface only
@@ -193,14 +221,14 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `write_line_targets_yaml(...)`
      - `write_fixed_z_targets_yaml(...)`
 
-13. `target_rules.py`
+14. `target_rules.py`
    - Secondary target rules applied after candidate generation and before
      visualization/YAML/DDS.
    - Current rules:
      - normal-continuity replacement for `gradient_lift` targets with
        `dot(start_Z, end_Z) < 0.5`,
-     - endpoint-spacing pruning for targets whose `end` points are closer than
-       the selected bead spacing.
+     - endpoint-spacing pruning using either fixed spacing or the per-pair
+       width/overlap distance.
    - Main APIs:
      - `apply_secondary_target_rules(...) -> (OrientedLineTargets, stats)`
      - `replace_low_continuity_target_segments(...)`

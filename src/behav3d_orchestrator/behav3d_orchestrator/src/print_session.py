@@ -8,6 +8,11 @@ from typing import Optional, Sequence
 from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory
 
+from .extrusion_calibration import (
+    THEORETICAL_STEPS_PER_MM3,
+    compensated_forward_steps,
+    volume_mm3_to_steps,
+)
 from .joint_current_logger import JointCurrentLogger
 from .yaml_session import TargetSegment, YamlSession
 
@@ -25,7 +30,9 @@ class PrintSession(YamlSession):
         self,
         *,
         targets: Sequence[PoseStamped],
+        volumes_mm3: Optional[Sequence[Optional[float]]] = None,
         dot_steps: int = 11000,
+        dot_steps_per_mm3: float = THEORETICAL_STEPS_PER_MM3,
         dot_speed: int = 1200,
         approach_z_offset_m: float = 0.40,
         dot_z_offset_m: float = 0.04,
@@ -48,6 +55,48 @@ class PrintSession(YamlSession):
         target_list = list(targets)
         if len(target_list) < 1:
             return {"ok": False, "stage": "parse_targets", "error": "Need at least 1 target."}
+
+        volume_list: list[Optional[float]]
+        if volumes_mm3 is None:
+            volume_list = [None] * len(target_list)
+        else:
+            volume_list = list(volumes_mm3)
+            if len(volume_list) != len(target_list):
+                raise ValueError(
+                    "volumes_mm3 length must match targets: "
+                    f"{len(volume_list)} vs {len(target_list)}"
+                )
+
+        bead_steps = [
+            int(dot_steps)
+            if volume is None
+            else volume_mm3_to_steps(
+                float(volume),
+                steps_per_mm3=float(dot_steps_per_mm3),
+            )
+            for volume in volume_list
+        ]
+        retract_enabled = (
+            int(post_dot_retract_steps) > 0
+            and int(post_dot_retract_speed) > 0
+        )
+        forward_steps = [
+            compensated_forward_steps(
+                steps,
+                retract_steps=int(post_dot_retract_steps),
+                retract_enabled=retract_enabled,
+            )
+            for steps in bead_steps
+        ]
+        variable_volume_count = sum(volume is not None for volume in volume_list)
+        log.info(
+            "[print_session:dots] Extrusion requests prepared: "
+            f"targets={len(target_list)} variable_volume={variable_volume_count} "
+            f"default_bead_steps={int(dot_steps)} "
+            f"bead_steps_range=({min(bead_steps)}, {max(bead_steps)}) "
+            f"retract_compensation={int(post_dot_retract_steps) if retract_enabled else 0} "
+            f"forward_steps_range=({min(forward_steps)}, {max(forward_steps)})"
+        )
 
         if publish_markers:
             self.run_sync(
@@ -139,7 +188,7 @@ class PrintSession(YamlSession):
                 try:
                     res = self.run_sync(
                         self.extruder.print_steps(
-                            steps=int(dot_steps),
+                            steps=forward_steps[i],
                             speed=int(dot_speed),
                             enqueue=False,
                         ),
@@ -172,7 +221,7 @@ class PrintSession(YamlSession):
                         pass
                     continue
 
-                if int(post_dot_retract_steps) > 0 and int(post_dot_retract_speed) > 0:
+                if retract_enabled:
                     self.joint_current_logger.mark_event(
                         "retract_start",
                         extruder_on=False,
@@ -233,6 +282,11 @@ class PrintSession(YamlSession):
                 "skipped": skipped,
                 "failed_targets": failed_targets,
                 "printed_targets": printed_targets,
+                "requested_steps": bead_steps,
+                "commanded_forward_steps": forward_steps,
+                "retract_compensation_steps": (
+                    int(post_dot_retract_steps) if retract_enabled else 0
+                ),
             }
         finally:
             if publish_markers:
@@ -250,8 +304,12 @@ class PrintSession(YamlSession):
         frame_id: str = "world",
         **kwargs,
     ) -> dict:
-        targets = self.parse_yaml_targets(yaml_path=yaml_path, frame_id=frame_id)
-        return self.run_print_dots_targets(targets=targets, **kwargs)
+        targets = self.parse_yaml_dot_targets(yaml_path=yaml_path, frame_id=frame_id)
+        return self.run_print_dots_targets(
+            targets=[target.pose for target in targets],
+            volumes_mm3=[target.volume_mm3 for target in targets],
+            **kwargs,
+        )
 
     def run_print_path_targets(
         self,
@@ -926,8 +984,12 @@ class PrintSession(YamlSession):
         segments = self.parse_yaml_segments(yaml_path=yaml_path, frame_id=frame_id)
         if segments:
             return self.run_print_segments(segments=segments, **kwargs)
-        targets = self.parse_yaml_targets(yaml_path=yaml_path, frame_id=frame_id)
-        return self.run_print_dots_targets(targets=targets, **kwargs)
+        targets = self.parse_yaml_dot_targets(yaml_path=yaml_path, frame_id=frame_id)
+        return self.run_print_dots_targets(
+            targets=[target.pose for target in targets],
+            volumes_mm3=[target.volume_mm3 for target in targets],
+            **kwargs,
+        )
 
     @staticmethod
     def _with_z_offset(ps: PoseStamped, z_offset_m: float) -> PoseStamped:

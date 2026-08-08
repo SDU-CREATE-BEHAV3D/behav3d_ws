@@ -150,8 +150,29 @@ print_field_oriented_sequence:
     candidate_request_timeout_s: 120.0
     candidate_mode: gradient_lift
     candidate_beads_per_step: 10
-    candidate_bead_separation_mm: 28.0
+    # Width mode selection:
+    #   fixed: candidate_bead_separation_mm controls center-to-center spacing.
+    #          candidate_bead_width_mm records the nominal fixed bead width.
+    #          targets omit volume_mm3 and printing falls back to dot_steps.
+    #   field: candidate_width_field_path must be an NPZ containing width_norm
+    #          in [0, 1], with the same vertex count/order as the scalar field.
+    #          Width maps linearly from min to max; spacing is computed from
+    #          neighboring widths and candidate_bead_overlap_mm. Generated
+    #          targets contain volume_mm3 and printing converts it to steps.
+    candidate_width_mode: fixed
+
+    # Common to both width modes.
     candidate_bead_height_mm: 13
+
+    # Fixed mode parameters.
+    candidate_bead_separation_mm: 28.0
+    candidate_bead_width_mm: 36.0
+
+    # Field mode parameters. These are ignored in fixed mode.
+    candidate_width_field_path: ""
+    candidate_bead_width_min_mm: 20.0
+    candidate_bead_width_max_mm: 40.0
+    candidate_bead_overlap_mm: 4.0
     # If gradient walk mode
     candidate_walk_distance_mm: 10.0
     candidate_walk_step_mm: 0.5
@@ -175,7 +196,12 @@ print_field_oriented_sequence:
 
     # Dot print mode. Active when print_mode=dots, or print_mode=auto with targets YAML.
     dot_eef_link: extruder_tcp
-    dot_steps: 8500
+    # Net material steps for a fixed-width bead. Do not add retract here:
+    # PrintSession sends dot_steps + post_dot_retract_steps, then retracts.
+    # A target volume_mm3 overrides dot_steps after conversion below.
+    dot_steps: 4500
+    # Theoretical calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
+    dot_steps_per_mm3: 0.8148733086
     dot_speed: 2700
     dot_approach_z_offset_m: 0.30
     dot_z_offset_m: 0.04
@@ -183,6 +209,7 @@ print_field_oriented_sequence:
     dot_print_vel_scale: 0.15
     dot_accel_scale: 0.15
     dot_dwell_s: 0.5
+    # Compensation is automatic when both retract values are positive.
     post_dot_retract_steps: 4000
     post_dot_retract_speed: 7000
 

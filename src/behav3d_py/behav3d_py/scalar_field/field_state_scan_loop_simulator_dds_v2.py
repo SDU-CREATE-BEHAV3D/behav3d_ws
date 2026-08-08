@@ -71,11 +71,25 @@ def main() -> None:
     parser.add_argument("--beads-per-step", type=int, default=7)
     parser.add_argument("--bead-separation-mm", type=float, default=16.0)
     parser.add_argument(
+        "--candidate-width-mode",
+        choices=("fixed", "field"),
+        default="fixed",
+    )
+    parser.add_argument(
         "--bead-width-mm",
         type=float,
-        required=True,
-        help="DDS BeadProfile width in mm. Required; independent from --bead-separation-mm.",
+        default=None,
+        help="DDS width in fixed mode. Required when --candidate-width-mode fixed.",
     )
+    parser.add_argument(
+        "--width-field",
+        type=Path,
+        default=None,
+        help="NPZ containing normalized per-field-vertex values under width_norm.",
+    )
+    parser.add_argument("--bead-width-min-mm", type=float, default=20.0)
+    parser.add_argument("--bead-width-max-mm", type=float, default=40.0)
+    parser.add_argument("--bead-overlap-mm", type=float, default=4.0)
     parser.add_argument("--bead-height-mm", type=float, default=12.0)
     parser.add_argument("--walk-distance-mm", type=float, default=12.0)
     parser.add_argument("--walk-step-mm", type=float, default=1.0)
@@ -149,6 +163,11 @@ def main() -> None:
         beads_per_step=args.beads_per_step,
         bead_separation_mm=args.bead_separation_mm,
         bead_width_mm=args.bead_width_mm,
+        candidate_width_mode=args.candidate_width_mode,
+        width_field_path=args.width_field,
+        bead_width_min_mm=args.bead_width_min_mm,
+        bead_width_max_mm=args.bead_width_max_mm,
+        bead_overlap_mm=args.bead_overlap_mm,
         bead_height_mm=args.bead_height_mm,
         walk_distance_mm=args.walk_distance_mm,
         walk_step_mm=args.walk_step_mm,

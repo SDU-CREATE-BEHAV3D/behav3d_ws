@@ -63,6 +63,8 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_scan_l
 ```
 
 ```bash
+# FIXED WIDTH MODE
+
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py \
   --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init2.npz \
   --scan-mesh /home/lab/behav3d_ws/mesh/ScanMesh.stl \
@@ -70,9 +72,34 @@ python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_
   --scan-yaw-deg 180 \
   --candidate-mode gradient_lift \
   --beads-per-step 7 \
+  --candidate-width-mode fixed \
   --bead-separation-mm 30 \
   --bead-width-mm 36 \
   --bead-height-mm 16 \
+  --clamp-to-cone \
+  --cone-max-tilt-deg 30
+```
+```bash
+# VARIABLE WIDTH FIELD MODE
+# - width_norm=0 maps to bead-width-min-mm.
+# - width_norm=1 maps to bead-width-max-mm.
+# - Center spacing = width_i/2 + width_j/2 - overlap.
+# - Overlap is enforced only between candidates from the current cycle.
+# - bead-width-mm and bead-separation-mm do not control spacing in this mode.
+
+python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py \
+  --field-state /home/lab/behav3d_ws/mesh/fields/field_state_init2.npz \
+  --scan-mesh /home/lab/behav3d_ws/mesh/ScanMesh.stl \
+  --scan-scale 0.001 \
+  --scan-yaw-deg 180 \
+  --candidate-mode gradient_lift \
+  --beads-per-step 7 \
+  --candidate-width-mode field \
+  --width-field /home/lab/behav3d_ws/mesh/fields/width_field.npz \
+  --bead-width-min-mm 16 \
+  --bead-width-max-mm 36 \
+  --bead-overlap-mm 4 \
+  --bead-height-mm 14 \
   --clamp-to-cone \
   --cone-max-tilt-deg 30
 ```

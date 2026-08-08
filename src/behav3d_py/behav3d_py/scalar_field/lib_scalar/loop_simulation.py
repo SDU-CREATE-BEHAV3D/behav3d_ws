@@ -45,6 +45,7 @@ class CandidateStage:
     z_valid_count: int
     source_points: np.ndarray | None = None
     segment_start_points: np.ndarray | None = None
+    bead_widths: np.ndarray | None = None
 
 
 def position_field_with_attempts(
@@ -209,6 +210,8 @@ def generate_step_candidates(
     walk_start_fraction: float = 0.25,
     clamp_to_cone: bool = False,
     cone_max_tilt_deg: float = 45.0,
+    field_bead_widths: np.ndarray | None = None,
+    bead_overlap_mm: float = 0.0,
 ) -> CandidateStage:
     """Generate current-step print points.
 
@@ -233,6 +236,8 @@ def generate_step_candidates(
             min_spacing=sep_m,
             point_valid_mask=contour.z_valid_mask,
             extra_points=None,
+            field_bead_widths=field_bead_widths,
+            bead_overlap=1e-3 * float(bead_overlap_mm),
         )
         return CandidateStage(
             points=pool.points,
@@ -241,6 +246,7 @@ def generate_step_candidates(
             z_valid_count=int(np.count_nonzero(contour.z_valid_mask)),
             source_points=pool.source_points,
             segment_start_points=pool.segment_start_points,
+            bead_widths=pool.bead_widths,
         )
 
     if mode_norm == "z_lift":
@@ -256,6 +262,8 @@ def generate_step_candidates(
             candidate_mode="z_lift",
             lift_height=1e-3 * float(bead_height_mm),
             field_faces=field_faces,
+            field_bead_widths=field_bead_widths,
+            bead_overlap=1e-3 * float(bead_overlap_mm),
         )
         return CandidateStage(
             points=pool.points,
@@ -264,6 +272,7 @@ def generate_step_candidates(
             z_valid_count=int(pool.available_vertices),
             source_points=pool.source_points,
             segment_start_points=pool.segment_start_points,
+            bead_widths=pool.bead_widths,
         )
 
     if mode_norm in ("gradient_lift", "gradient_walk"):
@@ -287,6 +296,8 @@ def generate_step_candidates(
             clamp_to_cone=bool(clamp_to_cone),
             cone_max_tilt_deg=float(cone_max_tilt_deg),
             agent_phi_scalar=phi,
+            field_bead_widths=field_bead_widths,
+            bead_overlap=1e-3 * float(bead_overlap_mm),
         )
         return CandidateStage(
             points=pool.points,
@@ -295,6 +306,7 @@ def generate_step_candidates(
             z_valid_count=int(pool.available_vertices),
             source_points=pool.source_points,
             segment_start_points=pool.segment_start_points,
+            bead_widths=pool.bead_widths,
         )
 
     raise ValueError(

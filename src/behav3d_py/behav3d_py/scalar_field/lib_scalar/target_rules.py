@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .bead_profile import minimum_center_distance
 from .print_targets import OrientedLineTargets
 
 
@@ -81,14 +82,49 @@ def remove_close_endpoint_targets(
     targets: OrientedLineTargets,
     *,
     min_distance_m: float,
+    bead_widths_m: np.ndarray | None = None,
+    bead_overlap_m: float = 0.0,
 ) -> tuple[OrientedLineTargets, int]:
     """Remove later targets whose end point is too close to an earlier kept end."""
+    filtered, removed, _keep = remove_close_endpoint_targets_with_indices(
+        targets,
+        min_distance_m=float(min_distance_m),
+        bead_widths_m=bead_widths_m,
+        bead_overlap_m=float(bead_overlap_m),
+    )
+    return filtered, removed
+
+
+def remove_close_endpoint_targets_with_indices(
+    targets: OrientedLineTargets,
+    *,
+    min_distance_m: float,
+    bead_widths_m: np.ndarray | None = None,
+    bead_overlap_m: float = 0.0,
+) -> tuple[OrientedLineTargets, int, np.ndarray]:
+    """Filter close endpoints and return indices retained from the input batch."""
     if targets.count == 0:
-        return targets, 0
+        return targets, 0, np.zeros((0,), dtype=np.int32)
 
     min_distance = max(0.0, float(min_distance_m))
-    if min_distance <= 0.0:
-        return targets, 0
+    widths: np.ndarray | None = None
+    if bead_widths_m is not None:
+        widths = np.asarray(bead_widths_m, dtype=np.float64).reshape(-1)
+        if widths.shape[0] != targets.count:
+            raise ValueError(
+                "bead_widths_m length must match targets: "
+                f"{widths.shape[0]} vs {targets.count}"
+            )
+        if np.any(~np.isfinite(widths)) or np.any(widths <= 0.0):
+            raise ValueError("bead_widths_m must contain finite positive values.")
+        overlap = float(bead_overlap_m)
+        if not np.isfinite(overlap) or overlap < 0.0:
+            raise ValueError(
+                f"bead_overlap_m must be finite and >= 0, got {bead_overlap_m}"
+            )
+    elif min_distance <= 0.0:
+        keep = np.arange(targets.count, dtype=np.int32)
+        return targets, 0, keep
 
     starts = np.asarray(targets.start_points, dtype=np.float64)
     ends = np.asarray(targets.end_points, dtype=np.float64)
@@ -102,15 +138,28 @@ def remove_close_endpoint_targets(
             continue
         kept_ends = ends[np.asarray(keep_indices, dtype=np.int32)]
         distances = np.linalg.norm(kept_ends - end, axis=1)
-        if np.any(distances < min_distance):
+        if widths is None:
+            thresholds = np.full(distances.shape, min_distance, dtype=np.float64)
+        else:
+            kept = np.asarray(keep_indices, dtype=np.int32)
+            thresholds = minimum_center_distance(
+                widths[kept],
+                widths[idx],
+                overlap=float(bead_overlap_m),
+            )
+        if np.any(distances < thresholds):
             continue
         keep_indices.append(int(idx))
 
     removed = int(targets.count - len(keep_indices))
-    if removed == 0:
-        return OrientedLineTargets(starts.copy(), ends.copy(), start_z, end_z), 0
-
     keep = np.asarray(keep_indices, dtype=np.int32)
+    if removed == 0:
+        return (
+            OrientedLineTargets(starts.copy(), ends.copy(), start_z, end_z),
+            0,
+            keep,
+        )
+
     return (
         OrientedLineTargets(
             start_points=starts[keep].copy(),
@@ -119,6 +168,7 @@ def remove_close_endpoint_targets(
             end_z_dirs=end_z[keep].copy(),
         ),
         removed,
+        keep,
     )
 
 
@@ -129,11 +179,14 @@ def apply_secondary_target_rules(
     bead_height_m: float,
     bead_separation_m: float,
     normal_continuity_rule: bool,
-) -> tuple[OrientedLineTargets, dict[str, int]]:
+    bead_widths_m: np.ndarray | None = None,
+    bead_overlap_m: float = 0.0,
+) -> tuple[OrientedLineTargets, dict[str, object]]:
     """Apply optional post-generation target rules before visualization/YAML/DDS."""
     stats = {
         "normal_continuity_replaced": 0,
         "endpoint_spacing_removed": 0,
+        "kept_indices": np.arange(targets.count, dtype=np.int32),
     }
     mode = str(candidate_mode).strip().lower()
 
@@ -144,10 +197,13 @@ def apply_secondary_target_rules(
         )
         stats["normal_continuity_replaced"] = int(replaced)
 
-    targets, removed = remove_close_endpoint_targets(
+    targets, removed, keep = remove_close_endpoint_targets_with_indices(
         targets,
         min_distance_m=float(bead_separation_m),
+        bead_widths_m=bead_widths_m,
+        bead_overlap_m=float(bead_overlap_m),
     )
     stats["endpoint_spacing_removed"] = int(removed)
+    stats["kept_indices"] = keep
 
     return targets, stats

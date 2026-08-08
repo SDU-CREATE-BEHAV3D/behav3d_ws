@@ -237,11 +237,22 @@ def write_point_targets_yaml(
     z_dirs_world: np.ndarray,
     position_scale: float,
     base_to_world_yaw_deg: float = 0.0,
+    volumes_mm3: np.ndarray | None = None,
 ) -> None:
     """Write flat target YAML with one plane per point."""
     points, z_dirs = _apply_yaw(points_world, z_dirs_world, float(base_to_world_yaw_deg))
     if points.shape[0] != z_dirs.shape[0]:
         raise ValueError(f"points/z_dirs size mismatch: {points.shape[0]} vs {z_dirs.shape[0]}")
+    volumes = None
+    if volumes_mm3 is not None:
+        volumes = np.asarray(volumes_mm3, dtype=np.float64).reshape(-1)
+        if volumes.shape[0] != points.shape[0]:
+            raise ValueError(
+                "volumes_mm3 length must match points: "
+                f"{volumes.shape[0]} vs {points.shape[0]}"
+            )
+        if np.any(~np.isfinite(volumes)) or np.any(volumes <= 0.0):
+            raise ValueError("volumes_mm3 must contain finite positive values.")
 
     out_yaml.parent.mkdir(parents=True, exist_ok=True)
     if points.shape[0] == 0:
@@ -253,6 +264,8 @@ def write_point_targets_yaml(
         plane = _plane_string(points[i], z_dirs[i], float(position_scale))
         lines.append(f"  - index: {i}")
         lines.append(f'    plane: "{plane}"')
+        if volumes is not None:
+            lines.append(f"    volume_mm3: {float(volumes[i]):.6f}")
     out_yaml.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -262,6 +275,7 @@ def write_fixed_z_targets_yaml(
     z_dir: tuple[float, float, float],
     position_scale: float,
     base_to_world_yaw_deg: float = 0.0,
+    volumes_mm3: np.ndarray | None = None,
 ) -> None:
     """Write flat target YAML with a shared fixed Z direction."""
     points = _validate_points(points_world, "points_world")
@@ -275,6 +289,7 @@ def write_fixed_z_targets_yaml(
         z_dirs,
         position_scale,
         base_to_world_yaw_deg=float(base_to_world_yaw_deg),
+        volumes_mm3=volumes_mm3,
     )
 
 

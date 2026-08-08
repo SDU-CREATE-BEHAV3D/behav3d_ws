@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import threading
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
@@ -17,12 +16,12 @@ import numpy as np
 import rclpy
 from behav3d_orchestrator.src.field_loop_session import FieldLoopSession
 from behav3d_orchestrator.src.print_session import PrintSession
+from behav3d_orchestrator.src.remote_parameters import set_remote_parameters
 from behav3d_orchestrator.src.scan_session import ScanSession
 from behav3d_utils.config_snapshot import snapshot_cycle_config
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.parameter import Parameter
-from rclpy.parameter_client import AsyncParameterClient
 
 try:
     import yaml
@@ -88,13 +87,14 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"run_reconstruction={rt.run_reconstruction}, run_field_init={rt.run_field_init}, "
             f"run_generate_candidates={rt.run_generate_candidates}, max_cycles={rt.max_cycles}, "
             f"candidate_mode={rt.candidate_mode}, "
+            f"candidate_width_mode={rt.candidate_width_mode}, "
             f"field_position_target_enabled={rt.field_use_position_target}, "
             f"field_seed_level={rt.field_seed_level:.4f}, "
             f"field_require_full_hit={rt.field_require_full_hit}, "
             f"field_base_z_offset={rt.field_base_z_offset:.4f}, "
             f"field_position_target=({rt.field_position_target_x:.3f},{rt.field_position_target_y:.3f}), "
             f"print_mode={rt.print_mode}, log_joint_currents={rt.log_joint_currents}, "
-            f"dot_steps={rt.dot_steps}, "
+            f"dot_steps={rt.dot_steps}, dot_steps_per_mm3={rt.dot_steps_per_mm3:.9f}, "
             f"walk_distance_mm={rt.candidate_walk_distance_mm:.1f}, "
             f"segment_print_speed={rt.segment_print_speed}, segment_print_v={rt.segment_print_vel_scale:.3f}, "
             f"segment_target_print_speed_mm_s={rt.segment_target_print_speed_mm_s:.3f}, "
@@ -537,6 +537,17 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         "Run field init or provide candidate_field_state_path."
                     )
 
+                self._set_fields_node_candidate_params(
+                    fields_node_name=rt.fields_node_name,
+                    width_mode=rt.candidate_width_mode,
+                    bead_width_mm=rt.candidate_bead_width_mm,
+                    width_field_path=rt.candidate_width_field_path,
+                    bead_width_min_mm=rt.candidate_bead_width_min_mm,
+                    bead_width_max_mm=rt.candidate_bead_width_max_mm,
+                    bead_overlap_mm=rt.candidate_bead_overlap_mm,
+                    timeout_s=rt.field_position_param_timeout_s,
+                )
+
                 cand_res = self.session.run_sync(
                         self.session.field.generate_print_candidates(
                             use_latest=rt.candidate_use_latest,
@@ -582,16 +593,28 @@ class PrintFieldOrientedSequenceV2Node(Node):
 
                 targets_yaml_path = str(cand_metrics.get("targets_yaml_path", "")).strip()
                 preview_targets: List[PoseStamped] = []
+                preview_volumes_mm3: List[Optional[float]] = []
                 preview_segments = []
                 if targets_yaml_path:
                     preview_segments = self.print_session.parse_yaml_segments(
                         yaml_path=targets_yaml_path,
                         frame_id=rt.frame_id,
                     )
-                    preview_targets = self.print_session.parse_yaml_targets(
-                        yaml_path=targets_yaml_path,
-                        frame_id=rt.frame_id,
-                    )
+                    if preview_segments:
+                        preview_targets = self.print_session.parse_yaml_targets(
+                            yaml_path=targets_yaml_path,
+                            frame_id=rt.frame_id,
+                        )
+                        preview_volumes_mm3 = [None] * len(preview_targets)
+                    else:
+                        dot_targets = self.print_session.parse_yaml_dot_targets(
+                            yaml_path=targets_yaml_path,
+                            frame_id=rt.frame_id,
+                        )
+                        preview_targets = [target.pose for target in dot_targets]
+                        preview_volumes_mm3 = [
+                            target.volume_mm3 for target in dot_targets
+                        ]
 
                 if rt.candidate_visualize_field_ply:
                     cycle_field_ply = str(cand_metrics.get("debug_field_ply_path", "")).strip()
@@ -727,12 +750,14 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 else:
                     log.info(
                         f"[print_field_oriented] Printing {len(preview_targets)} dots "
-                        f"(print_mode={print_mode_norm}, dot_steps={rt.dot_steps}, "
+                        f"(print_mode={print_mode_norm}, net_dot_steps={rt.dot_steps}, "
                         f"retract_steps={rt.post_dot_retract_steps})."
                     )
                     print_res = self.print_session.run_print_dots_targets(
                         targets=preview_targets,
+                        volumes_mm3=preview_volumes_mm3,
                         dot_steps=rt.dot_steps,
+                        dot_steps_per_mm3=rt.dot_steps_per_mm3,
                         dot_speed=rt.dot_speed,
                         approach_z_offset_m=rt.dot_approach_z_offset_m,
                         dot_z_offset_m=rt.dot_z_offset_m,
@@ -1181,20 +1206,6 @@ class PrintFieldOrientedSequenceV2Node(Node):
         position_target_y: float,
         timeout_s: float,
     ) -> None:
-        node_name = str(fields_node_name or "/behav3d_fields").strip()
-        if not node_name.startswith("/"):
-            node_name = f"/{node_name}"
-        timeout = max(0.1, float(timeout_s))
-        client = AsyncParameterClient(self, node_name)
-        if hasattr(client, "wait_for_services"):
-            ready = bool(client.wait_for_services(timeout_sec=timeout))
-        elif hasattr(client, "wait_for_service"):
-            ready = bool(client.wait_for_service(timeout_sec=timeout))
-        else:
-            ready = bool(client.services_are_ready()) if hasattr(client, "services_are_ready") else False
-        if not ready:
-            raise RuntimeError(f"Parameter service for {node_name} not available.")
-
         params = [
             Parameter("seed_level", value=float(seed_level)),
             Parameter("require_full_hit", value=bool(require_full_hit)),
@@ -1203,28 +1214,12 @@ class PrintFieldOrientedSequenceV2Node(Node):
             Parameter("position_target_x", value=float(position_target_x)),
             Parameter("position_target_y", value=float(position_target_y)),
         ]
-        fut = client.set_parameters(params)
-        deadline = time.time() + timeout
-        while rclpy.ok() and not fut.done() and time.time() < deadline:
-            time.sleep(0.05)
-        if not fut.done():
-            raise TimeoutError(f"Timed out while setting field positioning params on {node_name}.")
-
-        response = fut.result()
-        if response is None:
-            raise RuntimeError(f"Failed to set field positioning params on {node_name}: no response.")
-        if hasattr(response, "results"):
-            results = list(response.results)
-        elif isinstance(response, (list, tuple)):
-            results = list(response)
-        else:
-            raise RuntimeError(
-                "Failed to set field positioning params: unexpected response type "
-                f"{type(response).__name__}"
-            )
-        failed = [str(r.reason) for r in results if not bool(getattr(r, "successful", False))]
-        if failed:
-            raise RuntimeError(f"Failed to set field positioning params: {'; '.join(failed)}")
+        node_name = self._set_fields_node_params(
+            fields_node_name=fields_node_name,
+            params=params,
+            timeout_s=timeout_s,
+            label="field positioning",
+        )
 
         self.get_logger().info(
             "[print_field_oriented] Field positioning params set: "
@@ -1233,6 +1228,58 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"require_full_hit={bool(require_full_hit)} "
             f"base_z_offset={float(base_z_offset):.6f} "
             f"target=({float(position_target_x):.6f}, {float(position_target_y):.6f})"
+        )
+
+    def _set_fields_node_candidate_params(
+        self,
+        *,
+        fields_node_name: str,
+        width_mode: str,
+        bead_width_mm: float,
+        width_field_path: str,
+        bead_width_min_mm: float,
+        bead_width_max_mm: float,
+        bead_overlap_mm: float,
+        timeout_s: float,
+    ) -> None:
+        params = [
+            Parameter("candidate_width_mode", value=str(width_mode)),
+            Parameter("candidate_bead_width_mm", value=float(bead_width_mm)),
+            Parameter("candidate_width_field_path", value=str(width_field_path)),
+            Parameter("candidate_bead_width_min_mm", value=float(bead_width_min_mm)),
+            Parameter("candidate_bead_width_max_mm", value=float(bead_width_max_mm)),
+            Parameter("candidate_bead_overlap_mm", value=float(bead_overlap_mm)),
+        ]
+        node_name = self._set_fields_node_params(
+            fields_node_name=fields_node_name,
+            params=params,
+            timeout_s=timeout_s,
+            label="candidate width",
+        )
+        self.get_logger().info(
+            "[print_field_oriented] Candidate width params set: "
+            f"node={node_name} mode={str(width_mode)} "
+            f"fixed_width_mm={float(bead_width_mm):.3f} "
+            f"range_mm=({float(bead_width_min_mm):.3f}, "
+            f"{float(bead_width_max_mm):.3f}) "
+            f"overlap_mm={float(bead_overlap_mm):.3f} "
+            f"field='{str(width_field_path)}'"
+        )
+
+    def _set_fields_node_params(
+        self,
+        *,
+        fields_node_name: str,
+        params: List[Parameter],
+        timeout_s: float,
+        label: str,
+    ) -> str:
+        return set_remote_parameters(
+            self,
+            remote_node_name=fields_node_name,
+            params=params,
+            timeout_s=timeout_s,
+            label=label,
         )
 
     def _current_eef_pose(self, *, cfg: Dict[str, Any], frame_id: str, timeout_s: Optional[float]):
@@ -1354,6 +1401,41 @@ class PrintFieldOrientedSequenceV2Node(Node):
         candidate_beads_per_step = self._cfg_int(cfg, "candidate_beads_per_step")
         candidate_bead_separation_mm = self._cfg_float(cfg, "candidate_bead_separation_mm")
         candidate_bead_height_mm = self._cfg_float(cfg, "candidate_bead_height_mm")
+        candidate_width_mode = self._cfg_str(cfg, "candidate_width_mode").strip().lower()
+        if candidate_width_mode not in ("fixed", "field"):
+            raise ValueError(
+                "candidate_width_mode must be 'fixed' or 'field', "
+                f"got '{candidate_width_mode}'"
+            )
+        candidate_bead_width_mm = self._cfg_float(cfg, "candidate_bead_width_mm")
+        candidate_width_field_path = self._cfg_str_allow_empty(
+            cfg, "candidate_width_field_path"
+        )
+        candidate_bead_width_min_mm = self._cfg_float(
+            cfg, "candidate_bead_width_min_mm"
+        )
+        candidate_bead_width_max_mm = self._cfg_float(
+            cfg, "candidate_bead_width_max_mm"
+        )
+        candidate_bead_overlap_mm = self._cfg_float(
+            cfg, "candidate_bead_overlap_mm"
+        )
+        if candidate_width_mode == "fixed" and candidate_bead_width_mm <= 0.0:
+            raise ValueError("candidate_bead_width_mm must be > 0 in fixed mode")
+        if candidate_width_mode == "field":
+            if not candidate_width_field_path:
+                raise ValueError(
+                    "candidate_width_field_path is required in field width mode"
+                )
+            if (
+                candidate_bead_width_min_mm <= 0.0
+                or candidate_bead_width_max_mm < candidate_bead_width_min_mm
+            ):
+                raise ValueError(
+                    "candidate bead width range must satisfy 0 < min <= max"
+                )
+            if candidate_bead_overlap_mm < 0.0:
+                raise ValueError("candidate_bead_overlap_mm must be >= 0")
         candidate_walk_distance_mm = self._cfg_float(cfg, "candidate_walk_distance_mm")
         candidate_walk_step_mm = self._cfg_float(cfg, "candidate_walk_step_mm")
         candidate_walk_max_steps = self._cfg_int(cfg, "candidate_walk_max_steps")
@@ -1378,6 +1460,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
         print_mode = self._cfg_str(cfg, "print_mode")
         log_joint_currents = self._cfg_bool(cfg, "log_joint_currents")
         dot_steps = self._cfg_int(cfg, "dot_steps")
+        dot_steps_per_mm3 = self._cfg_float(cfg, "dot_steps_per_mm3")
+        if dot_steps_per_mm3 <= 0.0:
+            raise ValueError("dot_steps_per_mm3 must be > 0")
         dot_speed = self._cfg_int(cfg, "dot_speed")
         dot_approach_z_offset_m = self._cfg_float(cfg, "dot_approach_z_offset_m")
         dot_z_offset_m = self._cfg_float(cfg, "dot_z_offset_m")
@@ -1503,6 +1588,12 @@ class PrintFieldOrientedSequenceV2Node(Node):
             'candidate_beads_per_step',
             'candidate_bead_separation_mm',
             'candidate_bead_height_mm',
+            'candidate_width_mode',
+            'candidate_bead_width_mm',
+            'candidate_width_field_path',
+            'candidate_bead_width_min_mm',
+            'candidate_bead_width_max_mm',
+            'candidate_bead_overlap_mm',
             'candidate_walk_distance_mm',
             'candidate_walk_step_mm',
             'candidate_walk_max_steps',
@@ -1525,6 +1616,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             'print_mode',
             'log_joint_currents',
             'dot_steps',
+            'dot_steps_per_mm3',
             'dot_speed',
             'dot_approach_z_offset_m',
             'dot_z_offset_m',

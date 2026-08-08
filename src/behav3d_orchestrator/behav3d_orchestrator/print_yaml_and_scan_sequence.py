@@ -15,6 +15,11 @@ import rclpy
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 
+from .src.extrusion_calibration import (
+    THEORETICAL_STEPS_PER_MM3,
+    compensated_forward_steps,
+    volume_mm3_to_steps,
+)
 from .src.print_session import PrintSession
 from .src.scan_session import ScanSession
 
@@ -67,7 +72,12 @@ class PrintYamlAndScanSequenceNode(Node):
             return
 
         try:
-            targets = self.print_session.parse_yaml_targets(yaml_path=yaml_path, frame_id=frame_id)
+            dot_targets = self.print_session.parse_yaml_dot_targets(
+                yaml_path=yaml_path,
+                frame_id=frame_id,
+            )
+            targets = [target.pose for target in dot_targets]
+            target_volumes_mm3 = [target.volume_mm3 for target in dot_targets]
             if not targets:
                 raise ValueError(f"No valid targets found in YAML: {yaml_path}")
             plane_types = self._load_yaml_plane_types(yaml_path, target_count=len(targets))
@@ -136,6 +146,7 @@ class PrintYamlAndScanSequenceNode(Node):
                 cycle_count += 1
                 cycle_tag = f"cycle_{cycle_count:04d}"
                 chunk = targets[start_idx:end_idx]
+                chunk_volumes_mm3 = target_volumes_mm3[start_idx:end_idx]
                 chunk_plane_types = plane_types[start_idx:end_idx]
 
                 log.info(
@@ -157,6 +168,7 @@ class PrintYamlAndScanSequenceNode(Node):
 
                 print_res = self._print_chunk(
                     chunk,
+                    volumes_mm3=chunk_volumes_mm3,
                     plane_types=chunk_plane_types,
                     cfg=cfg,
                     timeout_s=timeout_s,
@@ -238,6 +250,7 @@ class PrintYamlAndScanSequenceNode(Node):
         self,
         targets: Sequence[PoseStamped],
         *,
+        volumes_mm3: Sequence[Optional[float]],
         plane_types: Sequence[str],
         cfg: Dict[str, Any],
         timeout_s: Optional[float],
@@ -248,10 +261,18 @@ class PrintYamlAndScanSequenceNode(Node):
         target_list = list(targets)
         if not target_list:
             return {"ok": False, "stage": "parse_targets", "error": "Need at least 1 target."}
+        volume_list = list(volumes_mm3)
+        if len(volume_list) != len(target_list):
+            raise ValueError("volumes_mm3 length must match targets")
 
         print_eef = self._cfg_str(cfg, "print_eef_link")
         dot_steps_n = self._cfg_int(cfg, "dot_steps_n")
         dot_steps_e = self._cfg_int(cfg, "dot_steps_e")
+        dot_steps_per_mm3 = float(
+            cfg.get("dot_steps_per_mm3", THEORETICAL_STEPS_PER_MM3)
+        )
+        if not math.isfinite(dot_steps_per_mm3) or dot_steps_per_mm3 <= 0.0:
+            raise ValueError("dot_steps_per_mm3 must be finite and > 0")
         dot_speed = self._cfg_int(cfg, "dot_speed")
         retract_steps = self._cfg_int(cfg, "post_dot_retract_steps")
         retract_speed = self._cfg_int(cfg, "post_dot_retract_speed")
@@ -261,6 +282,7 @@ class PrintYamlAndScanSequenceNode(Node):
         dot_vel_scale = self._cfg_float(cfg, "dot_vel_scale")
         accel_scale = self._cfg_float(cfg, "print_accel_scale")
         dwell_s = self._cfg_float(cfg, "dwell_s")
+        retract_enabled = retract_steps > 0 and retract_speed > 0
 
         res = self.print_session.run_sync(self.print_session.motion.setLIN(enqueue=False), timeout_s=timeout_s)
         if not res.get("ok", False):
@@ -289,9 +311,11 @@ class PrintYamlAndScanSequenceNode(Node):
 
         log.info(
             f"[print_yaml_and_scan] Print context ready: eef='{print_eef}', "
-            f"targets={len(target_list)}, dot_steps_n={dot_steps_n}, dot_steps_e={dot_steps_e}, "
+            f"targets={len(target_list)}, net_dot_steps_n={dot_steps_n}, "
+            f"net_dot_steps_e={dot_steps_e}, "
             f"plane_types={self._format_plane_type_counts(plane_types)}, "
-            f"retract_steps={retract_steps}, retract_speed={retract_speed}"
+            f"retract_compensation={retract_steps if retract_enabled else 0}, "
+            f"retract_speed={retract_speed}"
         )
 
         prompt_before_print = self._cfg_bool(cfg, "prompt_before_print")
@@ -356,7 +380,21 @@ class PrintYamlAndScanSequenceNode(Node):
                 }
 
             plane_type = self._normalize_plane_type(plane_types[i] if i < len(plane_types) else "")
-            dot_steps = dot_steps_e if plane_type == "E" else dot_steps_n
+            default_bead_steps = dot_steps_e if plane_type == "E" else dot_steps_n
+            volume_mm3 = volume_list[i]
+            bead_steps = (
+                default_bead_steps
+                if volume_mm3 is None
+                else volume_mm3_to_steps(
+                    volume_mm3,
+                    steps_per_mm3=dot_steps_per_mm3,
+                )
+            )
+            forward_steps = compensated_forward_steps(
+                bead_steps,
+                retract_steps=retract_steps,
+                retract_enabled=retract_enabled,
+            )
             above = self._with_z_offset(target, dot_z_offset_m)
             above_vel = pre_dot_vel_scale if i == 0 else dot_vel_scale
 
@@ -400,7 +438,7 @@ class PrintYamlAndScanSequenceNode(Node):
 
             res = self.print_session.run_sync(
                 self.print_session.extruder.print_steps(
-                    steps=dot_steps,
+                    steps=forward_steps,
                     speed=dot_speed,
                     reverse=False,
                     enqueue=False,
@@ -414,7 +452,7 @@ class PrintYamlAndScanSequenceNode(Node):
                 log.warn(f"[print_yaml_and_scan] Skip print target {i}: extrude failed. error='{err}'")
                 continue
 
-            if retract_steps > 0:
+            if retract_enabled:
                 res = self.print_session.run_sync(
                     self.print_session.extruder.print_steps(
                         steps=retract_steps,

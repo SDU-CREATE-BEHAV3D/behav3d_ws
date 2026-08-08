@@ -16,11 +16,17 @@ print_yaml_and_scan_sequence:
     prompt_before_print: true
     prompt_before_scan: false
 
-    # Dot print parameters.
+    # Dot print parameters. The N/E values are net bead material steps; do not
+    # add retract manually. The forward command includes retract automatically,
+    # then the configured retract is executed after deposition.
     print_eef_link: extruder_tcp
     dot_steps_n: 100
-    dot_steps_e: 19000
+    dot_steps_e: 18800
+    # Used only when a YAML target provides volume_mm3; it overrides N/E steps.
+    # Theoretical calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
+    dot_steps_per_mm3: 0.8148733086
     dot_speed: 2800
+    # Compensation is automatic when both retract values are positive.
     post_dot_retract_steps: 200
     post_dot_retract_speed: 10000
     approach_z_offset_m: 0.1
