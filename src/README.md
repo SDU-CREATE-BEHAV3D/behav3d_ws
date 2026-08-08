@@ -40,7 +40,7 @@ MoveIt2 bridge node (`src/motion_bridge_node.cpp`) exposing planning services an
 ### `behav3d_orchestrator`
 Python orchestration sequences for motion, printing, scanning, and field-oriented workflows.
 - Sequence nodes: `print_field_oriented_sequence_v2.py`, `print_yaml_and_scan_sequence.py`,
-  `polyline_motion_sequence.py`, `scan_sequence.py`, and
+  `geometry_representation_scan_print_loop.py`, `polyline_motion_sequence.py`, `scan_sequence.py`, and
   `scan_yaml_targets_sequence.py`.
 - `scan_yaml_targets_sequence.py` reads indexed plane targets, skips failed LIN
   plans, captures after dwell, and reconstructs once at the end. Its runtime
@@ -50,6 +50,8 @@ Python orchestration sequences for motion, printing, scanning, and field-oriente
   `field_loop_session.py`.
 - `control_session.py` shares `/behav3d/control_state` across the sessions of a
   node and applies cooperative pause checkpoints between internal commands.
+- See `behav3d_orchestrator/README.md` for candidate width modes, YAML volume
+  handling, and automatic retract compensation.
 
 ### `behav3d_print`
 Python Modbus extruder control and print actions.

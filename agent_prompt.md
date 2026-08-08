@@ -246,6 +246,18 @@ Field command usage notes:
 - `field_state_path` can be omitted in `generate_print_candidates`; the service resolves latest `field_state_init.npz`.
 - Targets YAML is written in robot plane format `O(x,y,z) Z(i,j,k)` with position scaled by `target_position_scale` (default mm).
 - `candidate_mode` supports `z_lift`, `gradient_lift`, and `gradient_walk`.
+- Candidate selection is greedy: choose the valid contour point with minimum
+  `heat_norm`, suppress points inside its spacing radius, and repeat. Heat sets
+  priority; spacing determines feasibility and is not part of the heat score.
+- Heat and optional width are interpolated at contour source points before lift
+  or walk. Fixed mode uses `bead_separation_mm`; field-width mode uses
+  `(width_a + width_b) / 2 - overlap`. A secondary Euclidean endpoint check
+  removes candidates that become too close after displacement.
+- Variable-width settings are parameters of `/behav3d_fields`, synchronized by
+  the field-loop orchestrators before candidate generation. A width NPZ must
+  contain `width_norm` in `[0, 1]` with the scalar field's vertex count/order.
+- Flat variable-width dot targets receive analytic `volume_mm3`; fixed-width
+  dots omit it. DDS voxel occupancy is not used to calculate requested volume.
 - `gradient_walk` uses the `walk_*` parameters, forces tangent orientation,
   and emits nested `segments:` with `start`/`end` planes in `targets.yaml`.
 - If `orient_with_tangent=true`, target orientation is sampled from the scalar tangent field; optional orientation clamp is applied with `clamp_to_cone` and `cone_max_tilt_deg`.
@@ -329,6 +341,15 @@ waits while the state is `paused`; command timeouts start only after resume.
 Continuous segment printing keeps `extruder ON -> motion -> extruder OFF`
 atomic and honors pause after the extruder is safely off.
 
+Dot-print invariants:
+- Configured `dot_steps` is net bead material, never bead plus retract.
+- A target `volume_mm3` overrides `dot_steps` and is converted with
+  `dot_steps_per_mm3`; this calibration is otherwise unused.
+- When retract is enabled, `PrintSession` sends
+  `net_bead_steps + post_dot_retract_steps`, then performs the reverse retract.
+- The canonical YAML schema is in `command_format.md`; print configuration is
+  documented in `src/behav3d_orchestrator/README.md`.
+
 Global control flow:
 1. Publish `std_msgs/String(data="stop")` on `/behav3d/control`.
 2. `behav3d_world` toggles and publishes `paused` or `running` on
@@ -343,6 +364,7 @@ This is cooperative pause, not trajectory cancellation or an emergency stop.
 
 Orchestration entry points in `behav3d_orchestrator`:
 - `ros2 run behav3d_orchestrator print_field_oriented_sequence_v2`
+- `ros2 run behav3d_orchestrator geometry_representation_scan_print_loop`
 - `ros2 run behav3d_orchestrator print_yaml_and_scan_sequence`
 - `ros2 run behav3d_orchestrator polyline_motion_sequence`
 - `ros2 run behav3d_orchestrator scan_sequence`

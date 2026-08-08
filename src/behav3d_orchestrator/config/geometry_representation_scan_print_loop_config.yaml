@@ -126,7 +126,7 @@ geometry_representation_scan_print_loop:
 
     # Field mode parameters. These are ignored in fixed mode.
     candidate_width_field_path: "/home/lab/behav3d_ws/mesh/fields/width_field.npz"
-    candidate_bead_width_min_mm: 24.0
+    candidate_bead_width_min_mm: 22.0
     candidate_bead_width_max_mm: 36.0
     candidate_bead_overlap_mm: 4.0
 

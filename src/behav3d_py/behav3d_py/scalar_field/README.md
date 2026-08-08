@@ -63,6 +63,9 @@ Important behavior:
 - In field mode, candidate suppression and secondary endpoint pruning use
   `(width_i + width_j) / 2 - overlap`; DDS receives one `BeadProfile` per
   accepted candidate and reserves domain padding for the maximum width.
+- Heat and width are sampled on contour source points before lift/walk. Heat
+  orders the greedy selection; spacing suppresses neighbors after each pick.
+  See `lib_scalar/README.md` for the detailed two-stage spacing algorithm.
 - The magenta geodesic offset line is a diagnostic/reference line. In
   `gradient_walk`, candidates are selected from the `phi=0` contour and walked
   over the scalar field, so the magenta line is not the print path.
@@ -248,8 +251,7 @@ written by default.
 ## Relationship to YAML/ROS
 
 The DDS v2 simulator remains a prototyping track and writes/reads its own
-per-step `segments.yaml` before creating DDS deposits. In the ROS candidate
-pipeline, variable-width dot targets use the flat target contract with optional
-`volume_mm3`. `PrintSession` converts that volume to extrusion steps; targets
-without volume continue using configured `dot_steps`. Width maps and DDS objects
-remain outside the ROS print service contract.
+per-step `segments.yaml` before creating DDS deposits. The ROS YAML and print
+contracts are documented centrally in `command_format.md` and
+`src/behav3d_orchestrator/README.md`. Width maps and DDS objects remain outside
+the ROS print service contract.

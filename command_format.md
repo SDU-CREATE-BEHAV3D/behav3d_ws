@@ -32,3 +32,25 @@ language:
 
 Each workflow owns its parser and expected schema. Do not send retired generic
 command-list YAML to these nodes.
+
+## Dot target contract
+
+Generated and user-authored dot targets use a flat `targets:` list:
+
+```yaml
+targets:
+  - index: 0
+    plane: "O(100.0,-800.0,120.0) Z(0.0,0.0,1.0)"
+    volume_mm3: 2929.187507
+```
+
+- `index` controls execution order.
+- `plane` uses millimetres for `O(...)`; `Z(...)` is the target normal.
+- `volume_mm3` is optional and must be finite and positive when present.
+- If `volume_mm3` is absent, dot printing uses the configured net `dot_steps`.
+- If it is present, `PrintSession` converts it with `dot_steps_per_mm3`.
+- Do not add width, DDS profile, deposition, or retract fields to this contract.
+
+Variable-width field generation adds `volume_mm3` to flat dot targets. Fixed
+width generation omits it. Nested `segments:` retain their `start`/`end` plane
+contract and do not carry per-dot volume.

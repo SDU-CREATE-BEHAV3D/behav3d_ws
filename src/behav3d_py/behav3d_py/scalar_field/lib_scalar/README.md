@@ -122,10 +122,14 @@ The objective is to keep each stage isolated, testable, and reusable from:
 
 10. `generate_print_points.py`
    - Unified print-point generator.
-   - Base selection always runs on the provided polyline graph:
-     - pick the polyline vertex with minimum scalar value,
-     - suppress nearby polyline vertices within minimum spacing,
-     - repeat until requested count is reached.
+   - Base selection is greedy and always runs on the provided polyline graph:
+     - interpolate heat at every source-polyline point,
+     - pick the valid point with minimum heat,
+     - suppress nearby points using graph/geodesic distance,
+     - repeat from the remaining point with minimum heat until the requested
+       count is reached.
+   - Heat controls selection order only. Spacing is a feasibility constraint;
+     it is not combined with heat into a weighted score.
    - Supports optional post-processing through `candidate_mode`:
      - `polyline`: keep selected points on the source polyline.
      - `z_lift`: apply vertical offset (`lift_height`) in +Z.
@@ -147,9 +151,10 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - if `field_faces` is provided and scalar length matches field vertices, scalar
        is sampled on polyline points by triangle interpolation (`sample_vertex_scalar_on_surface`),
      - otherwise falls back to nearest-vertex sampling.
-   - When `field_bead_widths` is provided, width is sampled with the same
-     interpolation and replaces fixed suppression distance with the per-pair
-     width/overlap rule for the current candidate batch.
+   - When `field_bead_widths` is provided, width is sampled at the same source
+     points, before lift/walk, using the same interpolation. It replaces fixed
+     suppression distance with the current-batch pair rule
+     `(width_i + width_j) / 2 - overlap`.
    - Returns `PrintPointSet`, including:
      - `points`: final points for the selected mode,
      - `source_points`: points selected on the original polyline,
@@ -212,7 +217,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
          plane: "O(...) Z(...)"
          volume_mm3: 2929.187507
      ```
-     Fixed-width mode omits `volume_mm3`, preserving the configured legacy
+     Fixed-width mode omits `volume_mm3` and uses the configured net
      `dot_steps` fallback.
    - Main APIs:
      - `build_oriented_line_targets(...) -> OrientedLineTargets`
@@ -229,6 +234,9 @@ The objective is to keep each stage isolated, testable, and reusable from:
        `dot(start_Z, end_Z) < 0.5`,
      - endpoint-spacing pruning using either fixed spacing or the per-pair
        width/overlap distance.
+       This second check uses Euclidean distance between final endpoints after
+       lift/walk. Candidate order still follows the original heat-priority
+       selection, so a later conflicting endpoint is removed.
    - Main APIs:
      - `apply_secondary_target_rules(...) -> (OrientedLineTargets, stats)`
      - `replace_low_continuity_target_segments(...)`
