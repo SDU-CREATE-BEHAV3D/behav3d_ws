@@ -119,6 +119,7 @@ The objective is to keep each stage isolated, testable, and reusable from:
      - `normalized_width_to_mm(...)`
      - `minimum_center_distance(...)`
      - `rounded_cylinder_volume_mm3(...)`
+     - `scale_requested_volume_mm3(...)`
 
 10. `generate_print_points.py`
    - Unified print-point generator.
@@ -205,20 +206,21 @@ The objective is to keep each stage isolated, testable, and reusable from:
      ```yaml
      segments:
        - index: 0
+         volume_mm3: 2929.187507
          start:
            plane: "O(...) Z(...)"
          end:
            plane: "O(...) Z(...)"
      ```
-   - Flat dot targets may include requested material volume:
+   - Dot and line targets may include requested material volume:
      ```yaml
      targets:
        - index: 0
          plane: "O(...) Z(...)"
          volume_mm3: 2929.187507
      ```
-     Fixed-width mode omits `volume_mm3` and uses the configured net
-     `dot_steps` fallback.
+     Fixed-width mode omits `volume_mm3`; printing uses the configured net
+     `dot_steps` or `segment_steps` fallback.
    - Main APIs:
      - `build_oriented_line_targets(...) -> OrientedLineTargets`
        keeps candidate positions unchanged and samples the field surface only
@@ -326,6 +328,13 @@ Those overlays can be toggled with checkboxes in the workbench sidebar.
   prototype and keeps the original Open3D simulator intact.
 - ROS `fields_node`/`behav3d_commands` expose `z_lift`, `gradient_lift`, and
   `gradient_walk` through `GeneratePrintCandidates`.
-- `gradient_walk` emits nested `segments:` YAML with `start`/`end` planes.
-  The orchestrator `YamlSession` can parse both this segment schema and the
-  older flat `targets:` schema.
+- Candidate geometry and YAML shape are independent in the field-loop
+  orchestrators. `candidate_mode` selects `z_lift`, `gradient_lift`, or
+  `gradient_walk`; `print_mode` selects flat `targets:` dots or nested
+  `segments:` with `start`/`end` planes. `print_mode: auto` preserves the legacy
+  mapping (`gradient_walk` to segments, all other modes to dots).
+- `gradient_lift` segment output can move each start toward its end by
+  `candidate_segment_start_offset_mm` before secondary rules and YAML writing.
+  The offset is ignored for dots and `gradient_walk`.
+- Variable-width dot and segment entries may carry `volume_mm3`. The
+  orchestrator `YamlSession` parses both YAML shapes.

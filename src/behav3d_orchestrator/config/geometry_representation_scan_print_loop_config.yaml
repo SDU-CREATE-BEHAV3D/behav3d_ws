@@ -5,7 +5,7 @@ geometry_representation_scan_print_loop:
     home_after: false
     timeout_s: 0.0
     debug_mode: false
-    prompt_before_print: false
+    prompt_before_print: true
     prompt_before_scan: false
     enable_scan: true
 
@@ -19,38 +19,33 @@ geometry_representation_scan_print_loop:
     # Half-cylinder scan parameters. Active when scan_type=half_cylinder
     # or scan_type=half_cylinder_side_caps.
     half_use_line_axis: true
-    half_axis_start_x: 0.15
+    half_axis_start_x: 0.06
     half_axis_start_y: 0.85
-    half_axis_start_z: -0.20
-    half_axis_end_x: -0.45
+    half_axis_start_z: 0.35
+    half_axis_end_x: -0.03
     half_axis_end_y: 0.85
-    half_axis_end_z: -0.20
-    half_radius: 0.60
-    half_angle_min_deg: -35.0
-    half_angle_max_deg: 35.0
-    half_n_angle: 5
-    half_n_axis: 7
+    half_axis_end_z: 0.35
+    half_radius: 0.45
+    half_angle_min_deg: -40.0
+    half_angle_max_deg: 40.0
+    half_n_angle: 3
+    half_n_axis: 1
     half_arc_center_dx: 0.0
     half_arc_center_dy: 0.0
     half_arc_center_dz: 1.0
     half_orientation_mode: look_at
     half_roll_deg: 0.0
     half_row_major: false
-    half_center_x: -0.17
-    half_center_y: 0.85
-    half_center_z: 0.90
-    half_height: 0.0
-    half_n_height: 3
 
     # Side-cap parameters. Active when scan_type=half_cylinder_side_caps.
     # endcap_radius <= 0 means reuse half_radius.
     endcap_radius: 0.0
     endcap_angle_min_deg: -35.0
     endcap_angle_max_deg: 35.0
-    endcap_n_angle: 3
+    endcap_n_angle: 2
     endcap_polar_min_deg: 20.0
-    endcap_polar_max_deg: 60.0
-    endcap_n_polar: 3
+    endcap_polar_max_deg: 40.0
+    endcap_n_polar: 2
     endcap_include_start: true
     endcap_include_end: true
     endcap_row_major: false
@@ -60,12 +55,12 @@ geometry_representation_scan_print_loop:
     #   abs_scan_z = highest_generated_target_z + grid_z_off
     #   applied z_off = abs_scan_z - grid_center_z
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
-    grid_width: 0.3
-    grid_height: 0.2
-    grid_center_x: -0.20
+    grid_width: 0.30
+    grid_height: 0.20
+    grid_center_x: -0.06
     grid_center_y: 0.90
     grid_center_z: -0.30
-    grid_z_off: 0.60
+    grid_z_off: 0.65
     grid_nx: 3
     grid_ny: 2
     grid_row_major: false
@@ -95,7 +90,7 @@ geometry_representation_scan_print_loop:
     tsdf_param_update_timeout_s: 8.0
 
     # Here run field made in grasshopper:
-    resume_field_state_path: /home/lab/behav3d_ws/mesh/fields/field_state_init2.npz
+    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G01/field_state_init_line_1_edge.npz
     resume_scan_mesh_path: ""
     scan_before_generate_first_cycle: true
 
@@ -104,34 +99,44 @@ geometry_representation_scan_print_loop:
     candidate_output_dir: "@session/field_loop/cycle_0001"
     candidate_request_timeout_s: 120.0
     candidate_mode: gradient_lift
-    candidate_beads_per_step: 6
+    candidate_beads_per_step: 7
 
     # Width mode selection:
     #   fixed: candidate_bead_separation_mm controls center-to-center spacing.
     #          candidate_bead_width_mm records the nominal fixed bead width.
-    #          targets omit volume_mm3 and printing falls back to dot_steps.
+    #          targets omit volume_mm3 and printing uses the selected mode's
+    #          dot_steps or segment_steps fallback.
     #   field: candidate_width_field_path must be an NPZ containing width_norm
     #          in [0, 1], with the same vertex count/order as the scalar field.
     #          Width maps linearly from min to max; spacing is computed from
     #          neighboring widths and candidate_bead_overlap_mm. Generated
     #          targets contain volume_mm3 and printing converts it to steps.
-    candidate_width_mode: field
+    candidate_width_mode: fixed
 
     # Common to both width modes.
-    candidate_bead_height_mm: 13.0
+    candidate_bead_height_mm: 14.0
 
     # Fixed mode parameters.
-    candidate_bead_separation_mm: 18.0
-    candidate_bead_width_mm: 32.0
+    candidate_bead_separation_mm: 20.0
+    # this doesnt add nothing
+    candidate_bead_width_mm: 28.0
 
     # Field mode parameters. These are ignored in fixed mode.
     candidate_width_field_path: "/home/lab/behav3d_ws/mesh/fields/width_field.npz"
     candidate_bead_width_min_mm: 22.0
     candidate_bead_width_max_mm: 36.0
     candidate_bead_overlap_mm: 4.0
+    # Scales analytic volume_mm3 before writing target YAML. Values below
+    # 1.0 reduce extrusion; values above 1.0 increase it. Ignored in fixed mode
+    # where target YAML has no per-candidate volume.
+    candidate_volume_factor: 1.0
+    # For gradient_lift segment output, move start toward end by this distance.
+    # Ignored for dots and gradient_walk.
+    candidate_segment_start_offset_mm: 6.5
 
     # Print selection. Use "dots" for z_lift/simple point deposition,
-    # "segments" for oriented segment printing, or "auto" to follow YAML shape.
+    # "segments" for oriented segment printing, or "auto" for legacy mode-based
+    # output. This selection is independent from gradient_lift/gradient_walk.
     print_mode: dots
     log_joint_currents: false
 
@@ -139,10 +144,11 @@ geometry_representation_scan_print_loop:
     dot_eef_link: extruder_tcp
     # Net material steps for a fixed-width bead. Do not add retract here:
     # PrintSession sends dot_steps + post_dot_retract_steps, then retracts.
-    # A target volume_mm3 overrides dot_steps after conversion below.
-    dot_steps: 4000
-    # Theoretical calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm) Only used for fields variable width mode.
-    dot_steps_per_mm3: 0.8148733086
+    # A target volume_mm3 overrides the fixed-step fallback for its print mode.
+    dot_steps: 8000
+    # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
+    # Do not tune extrusion with this value; use candidate_volume_factor.
+    extrusion_steps_per_mm3: 0.8148733086
     dot_speed: 2800
     dot_approach_z_offset_m: 0.30
     dot_z_offset_m: 0.06
@@ -163,15 +169,19 @@ geometry_representation_scan_print_loop:
 
     # Segment print mode. Active when print_mode=segments,
     # or print_mode=auto with segments YAML.
-    segment_print_speed: 2950
+    # Net material steps used when a segment has no volume_mm3.
+    segment_steps: 6700
+    # Extruder pulse rate. PrintSession derives TCP speed from segment length
+    # and forward steps so the gated extrusion delivers the requested amount.
+    segment_steps_per_second: 2950
     segment_approach_z_offset_m: 0.40
     segment_travel_z_offset_m: 0.05
-    segment_approach_vel_scale: 0.4
-    segment_travel_vel_scale: 0.4
+    segment_approach_vel_scale: 0.2
+    segment_travel_vel_scale: 0.2
     segment_print_vel_scale: 0.01
-    segment_accel_scale: 0.2
-    segment_target_print_speed_mm_s: 2.6
-    post_segment_wait_s: 1.5
-    post_segment_retract_s: 0.7
+    segment_accel_scale: 0.1
+    post_segment_wait_s: 1.0
+    # Compensation is automatic when both retract values are positive.
+    post_segment_retract_steps: 4900
     post_segment_retract_speed: 7000
     max_cycles: 0

@@ -31,9 +31,9 @@ SCORE_CLOSURE_TRANSLATION_WEIGHT = 2.0
 SCORE_RMS_SPREAD_WEIGHT = 1.0
 SCORE_CLOSURE_ROTATION_WEIGHT_M_PER_RAD = 0.05
 
-SESSION_PATH = "/home/lab/behav3d_ws/captures/260808_173507"
+SESSION_PATH = "/home/lab/behav3d_ws/captures/260810_105335"
 
-scan_folder = "test_capture_2"
+scan_folder = "test_capture"
 
 my_session = Session(SESSION_PATH, scan_folder)
 

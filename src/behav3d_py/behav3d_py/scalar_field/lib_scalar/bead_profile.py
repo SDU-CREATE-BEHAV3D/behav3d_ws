@@ -112,3 +112,18 @@ def rounded_cylinder_volume_mm3(
         + np.pi**2 * core_radius * rounding_radius**2
         + (4.0 / 3.0) * np.pi * rounding_radius**3
     )
+
+
+def scale_requested_volume_mm3(
+    volume_mm3: np.ndarray | float,
+    *,
+    factor: float,
+) -> np.ndarray:
+    """Scale positive requested volumes before target YAML serialization."""
+    values = np.asarray(volume_mm3, dtype=np.float64)
+    scale = float(factor)
+    if np.any(~np.isfinite(values)) or np.any(values <= 0.0):
+        raise ValueError("Requested volumes must be finite and positive.")
+    if not np.isfinite(scale) or scale <= 0.0:
+        raise ValueError(f"Volume factor must be finite and > 0, got {factor}")
+    return values * scale

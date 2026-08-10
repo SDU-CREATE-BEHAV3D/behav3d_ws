@@ -43,6 +43,53 @@ class OrientedLineTargets:
         return points, z_dirs
 
 
+def resolve_target_output_mode(requested_mode: str, candidate_mode: str) -> str:
+    """Resolve target YAML shape without coupling it to candidate generation."""
+    requested = str(requested_mode).strip().lower() or "auto"
+    if requested not in {"auto", "dots", "segments"}:
+        raise ValueError(
+            "target output mode must be one of: auto, dots, segments; "
+            f"got '{requested_mode}'"
+        )
+    if requested != "auto":
+        return requested
+    return (
+        "segments"
+        if str(candidate_mode).strip().lower() == "gradient_walk"
+        else "dots"
+    )
+
+
+def offset_line_target_starts(
+    targets: OrientedLineTargets,
+    offset_distance: float,
+) -> OrientedLineTargets:
+    """Move line starts toward their ends by a fixed distance."""
+    offset = float(offset_distance)
+    if not np.isfinite(offset) or offset < 0.0:
+        raise ValueError(
+            f"offset_distance must be finite and >= 0, got {offset_distance}"
+        )
+    if targets.count == 0 or offset == 0.0:
+        return targets
+
+    directions = targets.end_points - targets.start_points
+    lengths = np.linalg.norm(directions, axis=1)
+    if np.any(lengths <= offset + 1e-9):
+        shortest = float(np.min(lengths))
+        raise ValueError(
+            "segment start offset must be smaller than every segment length: "
+            f"offset={offset:.6f} shortest_segment={shortest:.6f}"
+        )
+    starts = targets.start_points + offset * directions / lengths[:, None]
+    return OrientedLineTargets(
+        start_points=starts,
+        end_points=targets.end_points.copy(),
+        start_z_dirs=targets.start_z_dirs.copy(),
+        end_z_dirs=targets.end_z_dirs.copy(),
+    )
+
+
 def _validate_points(points: np.ndarray, name: str) -> np.ndarray:
     out = np.asarray(points, dtype=np.float64)
     if out.ndim != 2 or out.shape[1] != 3:
@@ -298,8 +345,20 @@ def write_line_targets_yaml(
     targets: OrientedLineTargets,
     position_scale: float,
     base_to_world_yaw_deg: float = 0.0,
+    volumes_mm3: np.ndarray | None = None,
 ) -> None:
     """Write paired line targets as nested segment start/end planes."""
+    volumes = None
+    if volumes_mm3 is not None:
+        volumes = np.asarray(volumes_mm3, dtype=np.float64).reshape(-1)
+        if volumes.shape[0] != targets.count:
+            raise ValueError(
+                "volumes_mm3 length must match line targets: "
+                f"{volumes.shape[0]} vs {targets.count}"
+            )
+        if np.any(~np.isfinite(volumes)) or np.any(volumes <= 0.0):
+            raise ValueError("volumes_mm3 must contain finite positive values.")
+
     out_yaml.parent.mkdir(parents=True, exist_ok=True)
     if targets.count == 0:
         out_yaml.write_text("segments: []\n", encoding="utf-8")
@@ -329,6 +388,8 @@ def write_line_targets_yaml(
             float(position_scale),
         )
         lines.append(f"  - index: {i}")
+        if volumes is not None:
+            lines.append(f"    volume_mm3: {float(volumes[i]):.6f}")
         lines.append("    start:")
         lines.append(f'      plane: "{start_plane}"')
         lines.append("    end:")

@@ -268,11 +268,11 @@ class PrintYamlAndScanSequenceNode(Node):
         print_eef = self._cfg_str(cfg, "print_eef_link")
         dot_steps_n = self._cfg_int(cfg, "dot_steps_n")
         dot_steps_e = self._cfg_int(cfg, "dot_steps_e")
-        dot_steps_per_mm3 = float(
-            cfg.get("dot_steps_per_mm3", THEORETICAL_STEPS_PER_MM3)
+        extrusion_steps_per_mm3 = float(
+            cfg.get("extrusion_steps_per_mm3", THEORETICAL_STEPS_PER_MM3)
         )
-        if not math.isfinite(dot_steps_per_mm3) or dot_steps_per_mm3 <= 0.0:
-            raise ValueError("dot_steps_per_mm3 must be finite and > 0")
+        if not math.isfinite(extrusion_steps_per_mm3) or extrusion_steps_per_mm3 <= 0.0:
+            raise ValueError("extrusion_steps_per_mm3 must be finite and > 0")
         dot_speed = self._cfg_int(cfg, "dot_speed")
         retract_steps = self._cfg_int(cfg, "post_dot_retract_steps")
         retract_speed = self._cfg_int(cfg, "post_dot_retract_speed")
@@ -387,7 +387,7 @@ class PrintYamlAndScanSequenceNode(Node):
                 if volume_mm3 is None
                 else volume_mm3_to_steps(
                     volume_mm3,
-                    steps_per_mm3=dot_steps_per_mm3,
+                    steps_per_mm3=extrusion_steps_per_mm3,
                 )
             )
             forward_steps = compensated_forward_steps(

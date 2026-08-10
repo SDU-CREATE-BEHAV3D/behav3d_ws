@@ -75,6 +75,7 @@ import open3d as o3d
 from lib_scalar.bead_profile import (
     load_normalized_width_map,
     normalized_width_to_mm,
+    rounded_cylinder_volume_mm3,
 )
 from lib_scalar.compute_heat_field import (
     choose_seed_vertex,
@@ -1221,6 +1222,14 @@ def run(
             dtype=np.int32,
         )
         candidate_bead_widths_m = candidate_bead_widths_m[kept_indices]
+        candidate_volumes_mm3 = (
+            rounded_cylinder_volume_mm3(
+                1e3 * candidate_bead_widths_m,
+                float(bead_height_mm),
+            )
+            if width_mode_norm == "field"
+            else None
+        )
         if normal_flip_replaced > 0:
             print(
                 f"[targets] replaced normal-discontinuity segments: "
@@ -1305,6 +1314,7 @@ def run(
             out_yaml=step_segments_yaml,
             targets=line_targets,
             position_scale=float(target_position_scale),
+            volumes_mm3=candidate_volumes_mm3,
         )
         print(
             f"[targets] step {step_index}: saved/applied segment YAML: "

@@ -11,6 +11,7 @@ from trajectory_msgs.msg import JointTrajectory
 from .extrusion_calibration import (
     THEORETICAL_STEPS_PER_MM3,
     compensated_forward_steps,
+    segment_motion_from_steps,
     volume_mm3_to_steps,
 )
 from .joint_current_logger import JointCurrentLogger
@@ -32,7 +33,7 @@ class PrintSession(YamlSession):
         targets: Sequence[PoseStamped],
         volumes_mm3: Optional[Sequence[Optional[float]]] = None,
         dot_steps: int = 11000,
-        dot_steps_per_mm3: float = THEORETICAL_STEPS_PER_MM3,
+        steps_per_mm3: float = THEORETICAL_STEPS_PER_MM3,
         dot_speed: int = 1200,
         approach_z_offset_m: float = 0.40,
         dot_z_offset_m: float = 0.04,
@@ -72,7 +73,7 @@ class PrintSession(YamlSession):
             if volume is None
             else volume_mm3_to_steps(
                 float(volume),
-                steps_per_mm3=float(dot_steps_per_mm3),
+                steps_per_mm3=float(steps_per_mm3),
             )
             for volume in volume_list
         ]
@@ -450,16 +451,17 @@ class PrintSession(YamlSession):
         self,
         *,
         segments: Sequence[TargetSegment],
-        print_speed: int = 800,
+        segment_steps: int,
+        steps_per_mm3: float = THEORETICAL_STEPS_PER_MM3,
+        steps_per_second: int = 800,
         approach_z_offset_m: float = 0.40,
         travel_z_offset_m: float = 0.04,
         approach_vel_scale: float = 0.10,
         travel_vel_scale: float = 0.10,
         print_vel_scale: float = 0.01,
         accel_scale: float = 0.05,
-        target_print_speed_mm_s: float = 0.0,
         post_segment_wait_s: float = 0.0,
-        post_segment_retract_s: float = 0.0,
+        post_segment_retract_steps: int = 0,
         post_segment_retract_speed: int = 0,
         eef_link: str = "extruder_tcp",
         timeout_s: Optional[float] = None,
@@ -474,6 +476,64 @@ class PrintSession(YamlSession):
         segment_list = list(segments)
         if not segment_list:
             return {"ok": False, "stage": "parse_segments", "error": "Need at least 1 segment."}
+
+        retract_enabled = (
+            int(post_segment_retract_steps) > 0
+            and int(post_segment_retract_speed) > 0
+        )
+        retract_steps = int(post_segment_retract_steps) if retract_enabled else 0
+        extrusion_requests: list[dict] = []
+        for seg in segment_list:
+            material_steps = (
+                int(segment_steps)
+                if seg.volume_mm3 is None
+                else volume_mm3_to_steps(
+                    float(seg.volume_mm3),
+                    steps_per_mm3=float(steps_per_mm3),
+                )
+            )
+            forward_steps = compensated_forward_steps(
+                material_steps,
+                retract_steps=retract_steps,
+                retract_enabled=retract_enabled,
+            )
+            segment_length_mm = 1e3 * self._euclidean_distance(seg.start, seg.end)
+            target_duration_s, target_speed_mm_s = segment_motion_from_steps(
+                segment_length_mm,
+                forward_steps=forward_steps,
+                steps_per_second=int(steps_per_second),
+            )
+            extrusion_requests.append(
+                {
+                    "volume_mm3": seg.volume_mm3,
+                    "material_steps": material_steps,
+                    "retract_steps": retract_steps,
+                    "forward_steps": forward_steps,
+                    "segment_length_mm": segment_length_mm,
+                    "target_duration_s": target_duration_s,
+                    "target_speed_mm_s": target_speed_mm_s,
+                }
+            )
+
+        variable_volume_count = sum(
+            seg.volume_mm3 is not None for seg in segment_list
+        )
+        material_step_values = [
+            int(request["material_steps"]) for request in extrusion_requests
+        ]
+        target_speed_values = [
+            float(request["target_speed_mm_s"]) for request in extrusion_requests
+        ]
+        log.info(
+            "[print_session:segments] Extrusion requests prepared: "
+            f"segments={len(segment_list)} variable_volume={variable_volume_count} "
+            f"default_material_steps={int(segment_steps)} "
+            f"material_steps_range=({min(material_step_values)}, {max(material_step_values)}) "
+            f"steps_per_second={int(steps_per_second)} "
+            f"retract_compensation={retract_steps} "
+            f"target_speed_mm_s_range=({min(target_speed_values):.3f}, "
+            f"{max(target_speed_values):.3f})"
+        )
 
         flattened: list[PoseStamped] = []
         for seg in segment_list:
@@ -529,6 +589,7 @@ class PrintSession(YamlSession):
                 return {"ok": False, "stage": "approach_first_segment", "error": res.get("error", "unknown")}
 
             for pos, seg in enumerate(segment_list):
+                extrusion_request = extrusion_requests[pos]
                 start_travel = self._with_z_offset(seg.start, float(travel_z_offset_m))
                 end_travel = self._with_z_offset(seg.end, float(travel_z_offset_m))
 
@@ -586,7 +647,9 @@ class PrintSession(YamlSession):
                     segment=seg,
                     seed_vel_scale=float(print_vel_scale),
                     seed_accel_scale=float(accel_scale),
-                    target_print_speed_mm_s=float(target_print_speed_mm_s),
+                    target_print_speed_mm_s=float(
+                        extrusion_request["target_speed_mm_s"]
+                    ),
                     timeout_s=timeout_s,
                 )
                 if not plan_res.get("ok", False):
@@ -597,18 +660,20 @@ class PrintSession(YamlSession):
                     }
                 else:
                     metrics = plan_res.get("metrics", {})
-                    if float(target_print_speed_mm_s) > 0.0:
-                        log.info(
-                            "[print_session:segments] Tuned segment "
-                            f"{seg.index}: target_speed={float(target_print_speed_mm_s):.3f}mm/s "
-                            f"distance={float(metrics.get('distance_m', 0.0)):.6f}m "
-                            f"target_duration={float(metrics.get('target_duration_s', 0.0)):.3f}s "
-                            f"planned_duration={float(metrics.get('planned_duration_s', 0.0)):.3f}s "
-                            f"error={float(metrics.get('duration_error_s', 0.0)):+.3f}s "
-                            f"v={float(metrics.get('vel_scale', print_vel_scale)):.5f} "
-                            f"a={float(metrics.get('accel_scale', accel_scale)):.5f} "
-                            f"attempts={int(metrics.get('attempts', 1))}"
-                        )
+                    log.info(
+                        "[print_session:segments] Tuned segment "
+                        f"{seg.index}: material_steps={int(extrusion_request['material_steps'])} "
+                        f"forward_steps={int(extrusion_request['forward_steps'])} "
+                        f"steps_per_second={int(steps_per_second)} "
+                        f"target_speed={float(extrusion_request['target_speed_mm_s']):.3f}mm/s "
+                        f"distance={float(metrics.get('distance_m', 0.0)):.6f}m "
+                        f"target_duration={float(metrics.get('target_duration_s', 0.0)):.3f}s "
+                        f"planned_duration={float(metrics.get('planned_duration_s', 0.0)):.3f}s "
+                        f"error={float(metrics.get('duration_error_s', 0.0)):+.3f}s "
+                        f"v={float(metrics.get('vel_scale', print_vel_scale)):.5f} "
+                        f"a={float(metrics.get('accel_scale', accel_scale)):.5f} "
+                        f"attempts={int(metrics.get('attempts', 1))}"
+                    )
                     if not self.wait_if_paused(f"print segment {seg.index}"):
                         raise RuntimeError("ROS shutdown while waiting for global resume.")
                     with self.defer_pause():
@@ -621,7 +686,7 @@ class PrintSession(YamlSession):
                         on_res = self.run_sync(
                             self.extruder.setExtruder(
                                 True,
-                                speed=int(print_speed),
+                                speed=int(steps_per_second),
                                 reverse=False,
                                 enqueue=False,
                             ),
@@ -683,17 +748,33 @@ class PrintSession(YamlSession):
 
                     if (
                         res.get("ok", False)
-                        and float(post_segment_retract_s) > 0.0
+                        and int(post_segment_retract_steps) > 0
                         and int(post_segment_retract_speed) > 0
                     ):
+                        self.joint_current_logger.mark_event(
+                            "retract_start",
+                            extruder_on=False,
+                            item_kind="segment_retract",
+                            item_index=int(seg.index),
+                        )
                         retract_res = self.run_sync(
-                            self.extruder.print_time(
-                                secs=float(post_segment_retract_s),
+                            self.extruder.print_steps(
+                                steps=int(post_segment_retract_steps),
                                 speed=int(post_segment_retract_speed),
                                 reverse=True,
                                 enqueue=False,
                             ),
-                            timeout_s=_step_timeout(float(post_segment_retract_s) + 3.0),
+                            timeout_s=_step_timeout(
+                                int(post_segment_retract_steps)
+                                / int(post_segment_retract_speed)
+                                + 3.0
+                            ),
+                        )
+                        self.joint_current_logger.mark_event(
+                            "retract_stop",
+                            extruder_on=False,
+                            item_kind="segment",
+                            item_index=int(seg.index),
                         )
                         if not retract_res.get("ok", False):
                             res = {
@@ -765,6 +846,7 @@ class PrintSession(YamlSession):
                 "skipped": len(segment_list) - printed,
                 "failed_segments": failed_segments,
                 "printed_targets": printed_targets,
+                "extrusion_requests": extrusion_requests,
             }
         finally:
             if publish_markers:

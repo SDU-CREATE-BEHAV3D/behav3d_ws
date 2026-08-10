@@ -27,6 +27,7 @@ try:
         load_normalized_width_map,
         normalized_width_to_mm,
         rounded_cylinder_volume_mm3,
+        scale_requested_volume_mm3,
     )
     from behav3d_py.scalar_field.lib_scalar.extract_phi_contour import extract_phi_contour
     from behav3d_py.scalar_field.lib_scalar.generate_print_points import generate_print_points
@@ -36,6 +37,8 @@ try:
     from behav3d_py.scalar_field.lib_scalar.loop_simulation import position_field_with_attempts
     from behav3d_py.scalar_field.lib_scalar.print_targets import (
         build_candidate_segment_targets,
+        offset_line_target_starts,
+        resolve_target_output_mode,
         write_fixed_z_targets_yaml,
         write_line_targets_yaml,
         write_point_targets_yaml,
@@ -51,11 +54,14 @@ except Exception as exc:  # pragma: no cover
     load_normalized_width_map = None
     normalized_width_to_mm = None
     rounded_cylinder_volume_mm3 = None
+    scale_requested_volume_mm3 = None
     extract_phi_contour = None
     generate_print_points = None
     load_triangle_mesh_arrays = None
     position_field_with_attempts = None
     build_candidate_segment_targets = None
+    offset_line_target_starts = None
+    resolve_target_output_mode = None
     write_fixed_z_targets_yaml = None
     write_line_targets_yaml = None
     write_point_targets_yaml = None
@@ -193,6 +199,9 @@ class FieldsNode(Node):
         self.declare_parameter("candidate_bead_width_min_mm", 20.0)
         self.declare_parameter("candidate_bead_width_max_mm", 40.0)
         self.declare_parameter("candidate_bead_overlap_mm", 4.0)
+        self.declare_parameter("candidate_volume_factor", 1.0)
+        self.declare_parameter("candidate_segment_start_offset_mm", 0.0)
+        self.declare_parameter("target_output_mode", "auto")
         self.declare_parameter("walk_distance_mm", 12.0)
         self.declare_parameter("walk_step_mm", 1.0)
         self.declare_parameter("walk_max_steps", 32)
@@ -532,6 +541,14 @@ class FieldsNode(Node):
                     "candidate_bead_width_mm must be finite and > 0, "
                     f"got {fixed_bead_width_mm}"
                 )
+            volume_factor = float(
+                self.get_parameter("candidate_volume_factor").value
+            )
+            if not np.isfinite(volume_factor) or volume_factor <= 0.0:
+                raise ValueError(
+                    "candidate_volume_factor must be finite and > 0, "
+                    f"got {volume_factor}"
+                )
 
             field_bead_widths_m = None
             bead_overlap_mm_used = 0.0
@@ -589,6 +606,19 @@ class FieldsNode(Node):
                 raise ValueError(
                     f"Unsupported candidate_mode: '{candidate_mode}'. "
                     "Use 'z_lift', 'gradient_lift', or 'gradient_walk'."
+                )
+
+            target_output_mode = resolve_target_output_mode(
+                str(self.get_parameter("target_output_mode").value),
+                candidate_mode,
+            )
+            if (
+                target_output_mode == "segments"
+                and candidate_mode not in ("gradient_lift", "gradient_walk")
+            ):
+                raise ValueError(
+                    "Segment target output requires candidate_mode "
+                    "'gradient_lift' or 'gradient_walk'."
                 )
 
             orient_with_tangent = bool(req.orient_with_tangent)
@@ -671,6 +701,25 @@ class FieldsNode(Node):
                 orient_with_tangent=bool(orient_with_tangent),
                 fixed_z_dir=(targets_zx, targets_zy, targets_zz),
             )
+            segment_start_offset_mm = float(
+                self.get_parameter("candidate_segment_start_offset_mm").value
+            )
+            if (
+                not np.isfinite(segment_start_offset_mm)
+                or segment_start_offset_mm < 0.0
+            ):
+                raise ValueError(
+                    "candidate_segment_start_offset_mm must be finite and >= 0, "
+                    f"got {segment_start_offset_mm}"
+                )
+            if (
+                target_output_mode == "segments"
+                and candidate_mode == "gradient_lift"
+            ):
+                line_targets = offset_line_target_starts(
+                    line_targets,
+                    1e-3 * segment_start_offset_mm,
+                )
 
             line_targets, secondary_stats = apply_secondary_target_rules(
                 line_targets,
@@ -691,9 +740,12 @@ class FieldsNode(Node):
             candidate_points = np.asarray(line_targets.end_points, dtype=np.float64)
             candidate_volumes_mm3 = None
             if candidate_bead_widths_m is not None:
-                candidate_volumes_mm3 = rounded_cylinder_volume_mm3(
-                    1e3 * candidate_bead_widths_m,
-                    float(bead_height_mm_used),
+                candidate_volumes_mm3 = scale_requested_volume_mm3(
+                    rounded_cylinder_volume_mm3(
+                        1e3 * candidate_bead_widths_m,
+                        float(bead_height_mm_used),
+                    ),
+                    factor=volume_factor,
                 )
             width_detail = (
                 f"overlap_mm={bead_overlap_mm_used:.3f} "
@@ -749,12 +801,13 @@ class FieldsNode(Node):
                     raise RuntimeError(f"Failed to write candidates PLY: {debug_candidates_path}")
                 candidate_written = str(debug_candidates_path)
 
-            if candidate_mode == "gradient_walk":
+            if target_output_mode == "segments":
                 write_line_targets_yaml(
                     out_yaml=targets_yaml_path,
                     targets=line_targets,
                     position_scale=target_position_scale,
                     base_to_world_yaw_deg=target_base_to_world_yaw_deg,
+                    volumes_mm3=candidate_volumes_mm3,
                 )
             elif orient_with_tangent and candidate_points.shape[0] > 0:
                 write_point_targets_yaml(
@@ -784,7 +837,9 @@ class FieldsNode(Node):
                 f"contour_segments={int(contour_lines.shape[0])} "
                 f"candidates={int(candidate_points.shape[0])} "
                 f"walk_distance_mm={walk_distance_mm_used:.3f} "
-                f"width_mode={width_mode}"
+                f"width_mode={width_mode} volume_factor={volume_factor:.6f} "
+                f"target_output_mode={target_output_mode} "
+                f"segment_start_offset_mm={segment_start_offset_mm:.3f}"
             )
             res.resolved_field_state_path = str(field_state_path)
             res.resolved_scan_mesh_path = str(scan_paths[0])

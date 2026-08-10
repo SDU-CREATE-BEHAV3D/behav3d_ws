@@ -256,10 +256,16 @@ Field command usage notes:
 - Variable-width settings are parameters of `/behav3d_fields`, synchronized by
   the field-loop orchestrators before candidate generation. A width NPZ must
   contain `width_norm` in `[0, 1]` with the scalar field's vertex count/order.
-- Flat variable-width dot targets receive analytic `volume_mm3`; fixed-width
-  dots omit it. DDS voxel occupancy is not used to calculate requested volume.
-- `gradient_walk` uses the `walk_*` parameters, forces tangent orientation,
-  and emits nested `segments:` with `start`/`end` planes in `targets.yaml`.
+- Variable-width dot and segment targets receive analytic `volume_mm3`;
+  fixed-width targets omit it. `candidate_volume_factor` scales analytic volume
+  before YAML; DDS voxel occupancy is not used to calculate requested volume.
+- `candidate_mode` controls candidate geometry; the orchestrator `print_mode`
+  independently selects flat `targets:` dots or nested `segments:` output.
+  `print_mode=auto` maps `gradient_walk` to segments and other modes to dots.
+- `gradient_walk` uses the `walk_*` parameters and forces tangent orientation.
+  `gradient_lift` segment output may move each start toward its end using
+  `candidate_segment_start_offset_mm`; the setting is ignored for dots and
+  `gradient_walk`.
 - If `orient_with_tangent=true`, target orientation is sampled from the scalar tangent field; optional orientation clamp is applied with `clamp_to_cone` and `cone_max_tilt_deg`.
 - Base-link to world target reorientation is applied inside `fields_node` at YAML generation time (`base_to_world_yaw_deg`, default falls back to node parameter `target_base_to_world_yaw_deg`).
 
@@ -344,11 +350,23 @@ atomic and honors pause after the extruder is safely off.
 Dot-print invariants:
 - Configured `dot_steps` is net bead material, never bead plus retract.
 - A target `volume_mm3` overrides `dot_steps` and is converted with
-  `dot_steps_per_mm3`; this calibration is otherwise unused.
+  `extrusion_steps_per_mm3`.
+- Keep `extrusion_steps_per_mm3` as a physical unit conversion. Variable-width
+  extrusion tuning belongs in `candidate_volume_factor` upstream of YAML.
 - When retract is enabled, `PrintSession` sends
   `net_bead_steps + post_dot_retract_steps`, then performs the reverse retract.
 - The canonical YAML schema is in `command_format.md`; print configuration is
   documented in `src/behav3d_orchestrator/README.md`.
+
+Segment-print invariants:
+- `segment_steps` is net material for segments without `volume_mm3`; a supplied
+  volume is converted with `extrusion_steps_per_mm3`.
+- `segment_steps_per_second` is the extruder pulse rate. `PrintSession` derives
+  target duration and TCP speed from forward steps and segment length.
+- `post_segment_retract_steps` is added to the forward request before the same
+  explicit reverse step command runs. Do not compensate it in `segment_steps`.
+- `segment_print_vel_scale` is only the initial trajectory-tuning seed; there is
+  no manually configured segment TCP speed.
 
 Global control flow:
 1. Publish `std_msgs/String(data="stop")` on `/behav3d/control`.

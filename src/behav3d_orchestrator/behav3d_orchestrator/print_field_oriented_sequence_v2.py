@@ -94,12 +94,13 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"field_base_z_offset={rt.field_base_z_offset:.4f}, "
             f"field_position_target=({rt.field_position_target_x:.3f},{rt.field_position_target_y:.3f}), "
             f"print_mode={rt.print_mode}, log_joint_currents={rt.log_joint_currents}, "
-            f"dot_steps={rt.dot_steps}, dot_steps_per_mm3={rt.dot_steps_per_mm3:.9f}, "
+            f"dot_steps={rt.dot_steps}, extrusion_steps_per_mm3={rt.extrusion_steps_per_mm3:.9f}, "
             f"walk_distance_mm={rt.candidate_walk_distance_mm:.1f}, "
-            f"segment_print_speed={rt.segment_print_speed}, segment_print_v={rt.segment_print_vel_scale:.3f}, "
-            f"segment_target_print_speed_mm_s={rt.segment_target_print_speed_mm_s:.3f}, "
+            f"segment_steps={rt.segment_steps}, "
+            f"segment_steps_per_second={rt.segment_steps_per_second}, "
+            f"segment_print_v={rt.segment_print_vel_scale:.3f}, "
             f"post_segment_wait_s={rt.post_segment_wait_s:.3f}, "
-            f"post_segment_retract_s={rt.post_segment_retract_s:.3f}, "
+            f"post_segment_retract_steps={rt.post_segment_retract_steps}, "
             f"post_segment_retract_speed={rt.post_segment_retract_speed}, "
             f"oriented_targets_enable={rt.oriented_targets_enable}, "
             f"clamp_to_cone={rt.oriented_clamp_to_cone}, cone_max_tilt_deg={rt.oriented_cone_max_tilt_deg:.1f}, "
@@ -545,6 +546,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     bead_width_min_mm=rt.candidate_bead_width_min_mm,
                     bead_width_max_mm=rt.candidate_bead_width_max_mm,
                     bead_overlap_mm=rt.candidate_bead_overlap_mm,
+                    volume_factor=rt.candidate_volume_factor,
+                    target_output_mode=rt.print_mode,
+                    segment_start_offset_mm=rt.candidate_segment_start_offset_mm,
                     timeout_s=rt.field_position_param_timeout_s,
                 )
 
@@ -730,16 +734,17 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     )
                     print_res = self.print_session.run_print_segments(
                         segments=preview_segments,
-                        print_speed=rt.segment_print_speed,
+                        segment_steps=rt.segment_steps,
+                        steps_per_mm3=rt.extrusion_steps_per_mm3,
+                        steps_per_second=rt.segment_steps_per_second,
                         approach_z_offset_m=rt.segment_approach_z_offset_m,
                         travel_z_offset_m=rt.segment_travel_z_offset_m,
                         approach_vel_scale=rt.segment_approach_vel_scale,
                         travel_vel_scale=rt.segment_travel_vel_scale,
                         print_vel_scale=rt.segment_print_vel_scale,
                         accel_scale=rt.segment_accel_scale,
-                        target_print_speed_mm_s=rt.segment_target_print_speed_mm_s,
                         post_segment_wait_s=rt.post_segment_wait_s,
-                        post_segment_retract_s=rt.post_segment_retract_s,
+                        post_segment_retract_steps=rt.post_segment_retract_steps,
                         post_segment_retract_speed=rt.post_segment_retract_speed,
                         timeout_s=rt.timeout_s,
                         joint_current_log_dir=(
@@ -757,7 +762,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         targets=preview_targets,
                         volumes_mm3=preview_volumes_mm3,
                         dot_steps=rt.dot_steps,
-                        dot_steps_per_mm3=rt.dot_steps_per_mm3,
+                        steps_per_mm3=rt.extrusion_steps_per_mm3,
                         dot_speed=rt.dot_speed,
                         approach_z_offset_m=rt.dot_approach_z_offset_m,
                         dot_z_offset_m=rt.dot_z_offset_m,
@@ -1240,15 +1245,24 @@ class PrintFieldOrientedSequenceV2Node(Node):
         bead_width_min_mm: float,
         bead_width_max_mm: float,
         bead_overlap_mm: float,
+        volume_factor: float,
+        target_output_mode: str,
+        segment_start_offset_mm: float,
         timeout_s: float,
     ) -> None:
         params = [
+            Parameter("target_output_mode", value=str(target_output_mode)),
             Parameter("candidate_width_mode", value=str(width_mode)),
             Parameter("candidate_bead_width_mm", value=float(bead_width_mm)),
             Parameter("candidate_width_field_path", value=str(width_field_path)),
             Parameter("candidate_bead_width_min_mm", value=float(bead_width_min_mm)),
             Parameter("candidate_bead_width_max_mm", value=float(bead_width_max_mm)),
             Parameter("candidate_bead_overlap_mm", value=float(bead_overlap_mm)),
+            Parameter("candidate_volume_factor", value=float(volume_factor)),
+            Parameter(
+                "candidate_segment_start_offset_mm",
+                value=float(segment_start_offset_mm),
+            ),
         ]
         node_name = self._set_fields_node_params(
             fields_node_name=fields_node_name,
@@ -1263,6 +1277,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"range_mm=({float(bead_width_min_mm):.3f}, "
             f"{float(bead_width_max_mm):.3f}) "
             f"overlap_mm={float(bead_overlap_mm):.3f} "
+            f"volume_factor={float(volume_factor):.6f} "
+            f"target_output_mode={str(target_output_mode)} "
+            f"segment_start_offset_mm={float(segment_start_offset_mm):.3f} "
             f"field='{str(width_field_path)}'"
         )
 
@@ -1420,6 +1437,16 @@ class PrintFieldOrientedSequenceV2Node(Node):
         candidate_bead_overlap_mm = self._cfg_float(
             cfg, "candidate_bead_overlap_mm"
         )
+        candidate_volume_factor = self._cfg_float(
+            cfg, "candidate_volume_factor"
+        )
+        if candidate_volume_factor <= 0.0:
+            raise ValueError("candidate_volume_factor must be > 0")
+        candidate_segment_start_offset_mm = self._cfg_float(
+            cfg, "candidate_segment_start_offset_mm"
+        )
+        if candidate_segment_start_offset_mm < 0.0:
+            raise ValueError("candidate_segment_start_offset_mm must be >= 0")
         if candidate_width_mode == "fixed" and candidate_bead_width_mm <= 0.0:
             raise ValueError("candidate_bead_width_mm must be > 0 in fixed mode")
         if candidate_width_mode == "field":
@@ -1460,9 +1487,9 @@ class PrintFieldOrientedSequenceV2Node(Node):
         print_mode = self._cfg_str(cfg, "print_mode")
         log_joint_currents = self._cfg_bool(cfg, "log_joint_currents")
         dot_steps = self._cfg_int(cfg, "dot_steps")
-        dot_steps_per_mm3 = self._cfg_float(cfg, "dot_steps_per_mm3")
-        if dot_steps_per_mm3 <= 0.0:
-            raise ValueError("dot_steps_per_mm3 must be > 0")
+        extrusion_steps_per_mm3 = self._cfg_float(cfg, "extrusion_steps_per_mm3")
+        if extrusion_steps_per_mm3 <= 0.0:
+            raise ValueError("extrusion_steps_per_mm3 must be > 0")
         dot_speed = self._cfg_int(cfg, "dot_speed")
         dot_approach_z_offset_m = self._cfg_float(cfg, "dot_approach_z_offset_m")
         dot_z_offset_m = self._cfg_float(cfg, "dot_z_offset_m")
@@ -1473,16 +1500,20 @@ class PrintFieldOrientedSequenceV2Node(Node):
         post_dot_retract_steps = self._cfg_int(cfg, "post_dot_retract_steps")
         post_dot_retract_speed = self._cfg_int(cfg, "post_dot_retract_speed")
         dot_eef_link = self._cfg_str(cfg, "dot_eef_link")
-        segment_print_speed = self._cfg_int(cfg, "segment_print_speed")
+        segment_steps = self._cfg_int(cfg, "segment_steps")
+        if segment_steps <= 0:
+            raise ValueError("segment_steps must be > 0")
+        segment_steps_per_second = self._cfg_int(cfg, "segment_steps_per_second")
+        if segment_steps_per_second <= 0:
+            raise ValueError("segment_steps_per_second must be > 0")
         segment_approach_z_offset_m = self._cfg_float(cfg, "segment_approach_z_offset_m")
         segment_travel_z_offset_m = self._cfg_float(cfg, "segment_travel_z_offset_m")
         segment_approach_vel_scale = self._cfg_float(cfg, "segment_approach_vel_scale")
         segment_travel_vel_scale = self._cfg_float(cfg, "segment_travel_vel_scale")
         segment_print_vel_scale = self._cfg_float(cfg, "segment_print_vel_scale")
         segment_accel_scale = self._cfg_float(cfg, "segment_accel_scale")
-        segment_target_print_speed_mm_s = self._cfg_float(cfg, "segment_target_print_speed_mm_s")
         post_segment_wait_s = self._cfg_float(cfg, "post_segment_wait_s")
-        post_segment_retract_s = self._cfg_float(cfg, "post_segment_retract_s")
+        post_segment_retract_steps = self._cfg_int(cfg, "post_segment_retract_steps")
         post_segment_retract_speed = self._cfg_int(cfg, "post_segment_retract_speed")
         max_cycles = self._cfg_int(cfg, "max_cycles")
         prompt_before_next_cycle = self._cfg_bool(cfg, "prompt_before_next_cycle")
@@ -1594,6 +1625,8 @@ class PrintFieldOrientedSequenceV2Node(Node):
             'candidate_bead_width_min_mm',
             'candidate_bead_width_max_mm',
             'candidate_bead_overlap_mm',
+            'candidate_volume_factor',
+            'candidate_segment_start_offset_mm',
             'candidate_walk_distance_mm',
             'candidate_walk_step_mm',
             'candidate_walk_max_steps',
@@ -1616,7 +1649,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             'print_mode',
             'log_joint_currents',
             'dot_steps',
-            'dot_steps_per_mm3',
+            'extrusion_steps_per_mm3',
             'dot_speed',
             'dot_approach_z_offset_m',
             'dot_z_offset_m',
@@ -1627,16 +1660,16 @@ class PrintFieldOrientedSequenceV2Node(Node):
             'post_dot_retract_steps',
             'post_dot_retract_speed',
             'dot_eef_link',
-            'segment_print_speed',
+            'segment_steps',
+            'segment_steps_per_second',
             'segment_approach_z_offset_m',
             'segment_travel_z_offset_m',
             'segment_approach_vel_scale',
             'segment_travel_vel_scale',
             'segment_print_vel_scale',
             'segment_accel_scale',
-            'segment_target_print_speed_mm_s',
             'post_segment_wait_s',
-            'post_segment_retract_s',
+            'post_segment_retract_steps',
             'post_segment_retract_speed',
             'max_cycles',
             'prompt_before_next_cycle'

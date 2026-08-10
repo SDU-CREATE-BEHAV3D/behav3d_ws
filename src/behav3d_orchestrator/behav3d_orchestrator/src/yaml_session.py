@@ -23,6 +23,7 @@ class TargetSegment:
     index: int
     start: PoseStamped
     end: PoseStamped
+    volume_mm3: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -438,7 +439,7 @@ class YamlSession(ControlAwareSession):
         Parse `segments` YAML into ordered start/end PoseStamped pairs.
 
         Supported segment item shapes:
-        - {index: 0, start: {plane: "..."}, end: {plane: "..."}}
+        - {index: 0, start: {plane: "..."}, end: {plane: "..."}, volume_mm3: 1.0}
         - {index: 0, start_index: 0, end_index: 1} with a sibling `targets` list
         """
         if yaml is None:
@@ -601,7 +602,27 @@ class YamlSession(ControlAwareSession):
                     "Segment entry missing supported fields. Use start/end targets or start_index/end_index."
                 )
 
-            ordered.append((idx, pos, TargetSegment(index=idx, start=start, end=end)))
+            volume_mm3: Optional[float] = None
+            if item.get("volume_mm3") is not None:
+                volume_mm3 = float(item["volume_mm3"])
+                if not math.isfinite(volume_mm3) or volume_mm3 <= 0.0:
+                    raise ValueError(
+                        "Segment volume_mm3 must be finite and > 0. "
+                        f"index={idx} value={item['volume_mm3']}"
+                    )
+
+            ordered.append(
+                (
+                    idx,
+                    pos,
+                    TargetSegment(
+                        index=idx,
+                        start=start,
+                        end=end,
+                        volume_mm3=volume_mm3,
+                    ),
+                )
+            )
 
         ordered.sort(key=lambda row: (row[0], row[1]))
         return [seg for _, _, seg in ordered]

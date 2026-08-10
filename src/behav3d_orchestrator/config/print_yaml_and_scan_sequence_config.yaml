@@ -23,8 +23,10 @@ print_yaml_and_scan_sequence:
     dot_steps_n: 100
     dot_steps_e: 18800
     # Used only when a YAML target provides volume_mm3; it overrides N/E steps.
-    # Theoretical calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
-    dot_steps_per_mm3: 0.8148733086
+    # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
+    # Do not use this conversion constant to tune extrusion. Adjust the source
+    # volume_mm3 instead.
+    extrusion_steps_per_mm3: 0.8148733086
     dot_speed: 2800
     # Compensation is automatic when both retract values are positive.
     post_dot_retract_steps: 200

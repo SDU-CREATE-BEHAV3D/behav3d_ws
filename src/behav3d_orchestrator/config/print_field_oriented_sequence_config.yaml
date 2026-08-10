@@ -153,7 +153,8 @@ print_field_oriented_sequence:
     # Width mode selection:
     #   fixed: candidate_bead_separation_mm controls center-to-center spacing.
     #          candidate_bead_width_mm records the nominal fixed bead width.
-    #          targets omit volume_mm3 and printing falls back to dot_steps.
+    #          targets omit volume_mm3 and printing uses the selected mode's
+    #          dot_steps or segment_steps fallback.
     #   field: candidate_width_field_path must be an NPZ containing width_norm
     #          in [0, 1], with the same vertex count/order as the scalar field.
     #          Width maps linearly from min to max; spacing is computed from
@@ -173,6 +174,13 @@ print_field_oriented_sequence:
     candidate_bead_width_min_mm: 20.0
     candidate_bead_width_max_mm: 40.0
     candidate_bead_overlap_mm: 4.0
+    # Scales analytic volume_mm3 before writing target YAML. Values below
+    # 1.0 reduce extrusion; values above 1.0 increase it. Ignored in fixed mode
+    # where target YAML has no per-candidate volume.
+    candidate_volume_factor: 1.0
+    # For gradient_lift segment output, move start toward end by this distance.
+    # Ignored for dots and gradient_walk.
+    candidate_segment_start_offset_mm: 2.0
     # If gradient walk mode
     candidate_walk_distance_mm: 10.0
     candidate_walk_step_mm: 0.5
@@ -190,7 +198,8 @@ print_field_oriented_sequence:
     candidate_marker_clear_before: true
 
     # Print selection. Use "dots" for z_lift/simple point deposition,
-    # "segments" for oriented segment printing, or "auto" to follow YAML shape.
+    # "segments" for oriented segment printing, or "auto" for legacy mode-based
+    # output. This selection is independent from gradient_lift/gradient_walk.
     print_mode: dots
     log_joint_currents: true
 
@@ -198,10 +207,11 @@ print_field_oriented_sequence:
     dot_eef_link: extruder_tcp
     # Net material steps for a fixed-width bead. Do not add retract here:
     # PrintSession sends dot_steps + post_dot_retract_steps, then retracts.
-    # A target volume_mm3 overrides dot_steps after conversion below.
+    # A target volume_mm3 overrides the fixed-step fallback for its print mode.
     dot_steps: 4500
-    # Theoretical calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
-    dot_steps_per_mm3: 0.8148733086
+    # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
+    # Do not tune extrusion with this value; use candidate_volume_factor.
+    extrusion_steps_per_mm3: 0.8148733086
     dot_speed: 2700
     dot_approach_z_offset_m: 0.30
     dot_z_offset_m: 0.04
@@ -222,16 +232,20 @@ print_field_oriented_sequence:
 
     # Segment print mode. Active when print_mode=segments,
     # or print_mode=auto with segments YAML.
-    segment_print_speed: 2950
+    # Net material steps used when a segment has no volume_mm3.
+    segment_steps: 9850
+    # Extruder pulse rate. PrintSession derives TCP speed from segment length
+    # and forward steps so the gated extrusion delivers the requested amount.
+    segment_steps_per_second: 2950
     segment_approach_z_offset_m: 0.40
     segment_travel_z_offset_m: 0.05
     segment_approach_vel_scale: 0.4
     segment_travel_vel_scale: 0.4
     segment_print_vel_scale: 0.01
     segment_accel_scale: 0.2
-    segment_target_print_speed_mm_s: 2.6
     post_segment_wait_s: 1.5
-    post_segment_retract_s: 0.7
+    # Compensation is automatic when both retract values are positive.
+    post_segment_retract_steps: 4900
     post_segment_retract_speed: 7000
     max_cycles: 0
     prompt_before_next_cycle: true

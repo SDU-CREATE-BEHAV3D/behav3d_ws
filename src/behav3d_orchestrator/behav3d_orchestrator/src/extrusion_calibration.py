@@ -63,3 +63,26 @@ def compensated_forward_steps(
             f"forward_steps={forward_steps}"
         )
     return forward_steps
+
+
+def segment_motion_from_steps(
+    segment_length_mm: float,
+    *,
+    forward_steps: int,
+    steps_per_second: int,
+) -> tuple[float, float]:
+    """Return ``(duration_s, tcp_speed_mm_s)`` for a gated segment extrusion."""
+    length = float(segment_length_mm)
+    steps = int(forward_steps)
+    rate = int(steps_per_second)
+    if not math.isfinite(length) or length <= 0.0:
+        raise ValueError(
+            f"segment_length_mm must be finite and > 0, got {segment_length_mm}"
+        )
+    if steps <= 0:
+        raise ValueError(f"forward_steps must be > 0, got {forward_steps}")
+    if rate <= 0:
+        raise ValueError(f"steps_per_second must be > 0, got {steps_per_second}")
+
+    duration_s = steps / rate
+    return duration_s, length / duration_s

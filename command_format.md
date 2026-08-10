@@ -48,9 +48,31 @@ targets:
 - `plane` uses millimetres for `O(...)`; `Z(...)` is the target normal.
 - `volume_mm3` is optional and must be finite and positive when present.
 - If `volume_mm3` is absent, dot printing uses the configured net `dot_steps`.
-- If it is present, `PrintSession` converts it with `dot_steps_per_mm3`.
+- If it is present, `PrintSession` converts it with the configured
+  steps-per-volume calibration.
 - Do not add width, DDS profile, deposition, or retract fields to this contract.
 
-Variable-width field generation adds `volume_mm3` to flat dot targets. Fixed
-width generation omits it. Nested `segments:` retain their `start`/`end` plane
-contract and do not carry per-dot volume.
+## Segment target contract
+
+Segment printing uses nested start/end planes and the same optional material
+volume:
+
+```yaml
+segments:
+  - index: 0
+    volume_mm3: 2929.187507
+    start:
+      plane: "O(100.0,-800.0,120.0) Z(0.0,0.0,1.0)"
+    end:
+      plane: "O(100.0,-800.0,133.0) Z(0.0,0.0,1.0)"
+```
+
+- If `volume_mm3` is absent, segment printing uses `segment_steps`.
+- If present, it is converted with `extrusion_steps_per_mm3` in the field-loop
+  orchestrators.
+- `PrintSession` derives segment duration and TCP speed from material steps,
+  retract compensation, `segment_steps_per_second`, and start/end distance.
+
+Variable-width field generation adds `volume_mm3` to dot and segment targets.
+Fixed-width generation omits it. The generated value already includes
+`candidate_volume_factor`.

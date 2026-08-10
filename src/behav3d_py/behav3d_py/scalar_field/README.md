@@ -23,7 +23,7 @@ Loop flow:
 5. Recompute `phi` against the current scan proxy.
 6. Extract `phi=0` contour and geodesic offset contour.
 7. Generate candidates with the selected mode.
-8. Write the accepted step as `segments:` target YAML.
+8. Write the accepted step using the selected dot or segment YAML contract.
 9. Read that same segment YAML back and add DDS deposits from the segment
    targets. `dot` mode uses each `end`; `line` mode sweeps `start -> end`.
 10. Extract the DDS implicit surface as a mesh proxy.
@@ -43,6 +43,13 @@ Important behavior:
 - `gradient_walk` and `gradient_lift` keep generated target positions and write
   tangent-based target Z directions; modes without explicit target orientation
   fall back to world `+Z`.
+- In the ROS field loops, `candidate_mode` controls candidate geometry while
+  `print_mode` independently selects flat dots or start/end segments.
+  `print_mode=auto` retains the legacy mapping where only `gradient_walk`
+  selects segments automatically.
+- For `gradient_lift` segments, `candidate_segment_start_offset_mm` moves the
+  start toward the end before secondary rules and YAML serialization. It is
+  ignored for dots and `gradient_walk`.
 - Secondary target rules run after candidate generation and before
   visualization/YAML/DDS.
 - The normal-continuity rule applies to `gradient_lift`: target segments with
@@ -66,6 +73,9 @@ Important behavior:
 - Heat and width are sampled on contour source points before lift/walk. Heat
   orders the greedy selection; spacing suppresses neighbors after each pick.
   See `lib_scalar/README.md` for the detailed two-stage spacing algorithm.
+- ROS variable-width generation writes analytic `volume_mm3` for dot or segment
+  targets and can scale it with `candidate_volume_factor` immediately before
+  YAML serialization.
 - The magenta geodesic offset line is a diagnostic/reference line. In
   `gradient_walk`, candidates are selected from the `phi=0` contour and walked
   over the scalar field, so the magenta line is not the print path.

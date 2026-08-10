@@ -8,6 +8,7 @@ from .bead_profile import (
     minimum_center_distance,
     normalized_width_to_mm,
     rounded_cylinder_volume_mm3,
+    scale_requested_volume_mm3,
 )
 from .extract_phi_contour import (
     compute_geodesic_from_phi_contour,
@@ -36,6 +37,8 @@ from .loop_simulation import (
 from .print_targets import (
     OrientedLineTargets,
     build_candidate_segment_targets,
+    offset_line_target_starts,
+    resolve_target_output_mode,
     build_oriented_line_targets,
     orient_points_with_tangent,
     write_fixed_z_targets_yaml,
@@ -75,9 +78,12 @@ __all__ = [
     "normalized_width_to_mm",
     "minimum_center_distance",
     "rounded_cylinder_volume_mm3",
+    "scale_requested_volume_mm3",
     "OrientedLineTargets",
     "orient_points_with_tangent",
     "build_candidate_segment_targets",
+    "offset_line_target_starts",
+    "resolve_target_output_mode",
     "build_oriented_line_targets",
     "write_point_targets_yaml",
     "write_fixed_z_targets_yaml",

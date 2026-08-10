@@ -8,6 +8,7 @@ from behav3d_py.scalar_field.lib_scalar.bead_profile import (
     minimum_center_distance,
     normalized_width_to_mm,
     rounded_cylinder_volume_mm3,
+    scale_requested_volume_mm3,
 )
 from behav3d_py.scalar_field.lib_scalar.generate_print_points import (
     generate_print_points,
@@ -46,6 +47,19 @@ def test_equal_width_and_height_is_a_sphere():
     expected = (4.0 / 3.0) * math.pi * (diameter / 2.0) ** 3
     actual = rounded_cylinder_volume_mm3(diameter, diameter)
     assert float(actual) == pytest.approx(expected)
+
+
+def test_requested_volume_factor_scales_analytic_volume():
+    scaled = scale_requested_volume_mm3(
+        np.array([1000.0, 2000.0]),
+        factor=0.85,
+    )
+    assert scaled.tolist() == pytest.approx([850.0, 1700.0])
+
+
+def test_requested_volume_factor_must_be_positive():
+    with pytest.raises(ValueError, match="Volume factor"):
+        scale_requested_volume_mm3(1000.0, factor=0.0)
 
 
 def test_candidate_selection_uses_variable_width_spacing():
