@@ -5,9 +5,12 @@ geometry_representation_scan_print_loop:
     home_after: false
     timeout_s: 0.0
     debug_mode: false
-    prompt_before_print: false
+    prompt_before_print: true
     prompt_before_scan: false
     enable_scan: true
+    # Read-only phi-contour/target offset estimation between consecutive cycles.
+    # It never changes candidates, robot motion, or extrusion commands.
+    contour_offset_estimation: true
 
     # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
     scan_type: grid_sweep
@@ -90,7 +93,7 @@ geometry_representation_scan_print_loop:
     tsdf_param_update_timeout_s: 8.0
 
     # Here run field made in grasshopper:
-    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G05/Export files/E02_G05_Updated2.npz
+    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G05/Export files/E02_G02_Final_Adapted2.npz
     resume_scan_mesh_path: ""
     scan_before_generate_first_cycle: true
 
@@ -164,13 +167,13 @@ geometry_representation_scan_print_loop:
     oriented_targets_enable: true
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
-    oriented_cone_max_tilt_deg: 20.0
+    oriented_cone_max_tilt_deg: 5.0
     oriented_base_to_world_yaw_deg: 180.0
 
     # Segment print mode. Active when print_mode=segments,
     # or print_mode=auto with segments YAML.
     # Net material steps used when a segment has no volume_mm3.
-    segment_steps: 5000
+    segment_steps: 4500
     # Extruder pulse rate. PrintSession derives TCP speed from segment length
     # and forward steps so the gated extrusion delivers the requested amount.
     segment_steps_per_second: 2800

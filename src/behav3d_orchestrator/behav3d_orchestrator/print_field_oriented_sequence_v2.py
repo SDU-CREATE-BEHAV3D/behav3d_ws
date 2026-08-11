@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import rclpy
 from behav3d_orchestrator.src.field_loop_session import FieldLoopSession
+from behav3d_orchestrator.src.contour_offset_logger import ContourOffsetLogger
 from behav3d_orchestrator.src.print_session import PrintSession
 from behav3d_orchestrator.src.remote_parameters import set_remote_parameters
 from behav3d_orchestrator.src.scan_session import ScanSession
@@ -49,6 +50,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         self.session = FieldLoopSession(self)
         self.print_session = PrintSession(self)
         self.scan_session = ScanSession(self)
+        self.contour_offset_logger = ContourOffsetLogger()
         self.control_pause = self.session.control_pause
 
         self._worker = threading.Thread(target=self._run, daemon=True)
@@ -88,6 +90,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             f"run_generate_candidates={rt.run_generate_candidates}, max_cycles={rt.max_cycles}, "
             f"candidate_mode={rt.candidate_mode}, "
             f"candidate_width_mode={rt.candidate_width_mode}, "
+            f"contour_offset_estimation={rt.contour_offset_estimation}, "
             f"field_position_target_enabled={rt.field_use_position_target}, "
             f"field_seed_level={rt.field_seed_level:.4f}, "
             f"field_require_full_hit={rt.field_require_full_hit}, "
@@ -116,6 +119,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         field_center_xyz: Optional[tuple[float, float, float]] = None
         last_generated_targets: List[PoseStamped] = []
         reference_scan_orientation: Optional[tuple[float, float, float, float]] = None
+        pending_contour_offset_record: Optional[Path] = None
 
         try:
             if rt.home_before_scan:
@@ -584,6 +588,30 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     raise RuntimeError(f"generate_print_candidates failed: {cand_res.get('error')}")
 
                 cand_metrics = cand_res.get("metrics", {})
+                if pending_contour_offset_record is not None:
+                    post_contour_path = str(
+                        cand_metrics.get("debug_contour_ply_path", "")
+                    ).strip()
+                    try:
+                        offset_result = self.contour_offset_logger.evaluate_cycle(
+                            pending_contour_offset_record,
+                            post_phi_contour_path=post_contour_path,
+                        )
+                        log.info(
+                            "[contour_offset] Evaluated: "
+                            f"valid={offset_result.get('valid_target_count', 0)}/"
+                            f"{offset_result.get('target_count', 0)} "
+                            f"median_mm={offset_result.get('scan_offset_median_mm')} "
+                            f"mad_mm={offset_result.get('scan_offset_mad_mm')} "
+                            f"confidence={offset_result.get('confidence', 0.0):.3f}"
+                        )
+                    except Exception as exc:
+                        log.warn(
+                            "[contour_offset] Evaluation failed; "
+                            f"loop is unaffected. error='{exc}'"
+                        )
+                    finally:
+                        pending_contour_offset_record = None
                 log.info(
                     "[print_field_oriented] Candidates generated: "
                     f"count={cand_metrics.get('candidate_count', 0)} "
@@ -785,9 +813,6 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         f"stage={print_res.get('stage')} error={print_res.get('error', 'unknown')}"
                     )
                     break
-                if not self._wait_if_control_paused(f"after print for {cycle_tag}"):
-                    break
-
                 printed_count = int(print_res.get("printed", 0))
                 skipped_count = int(print_res.get("skipped", 0))
                 if preview_segments:
@@ -800,7 +825,39 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         "[print_field_oriented] Print dots completed: "
                         f"printed={printed_count} skipped={skipped_count} / targets={print_res.get('targets', 0)}"
                     )
+
+                if rt.contour_offset_estimation:
+                    try:
+                        pending_contour_offset_record = self.contour_offset_logger.begin_cycle(
+                            cycle_root=cycle_root,
+                            cycle_number=cycle_number,
+                            phi_contour_path=str(
+                                cand_metrics.get("debug_contour_ply_path", "")
+                            ),
+                            candidate_settings={
+                                "candidate_mode": rt.candidate_mode,
+                                "bead_height_mm": rt.candidate_bead_height_mm,
+                                "target_output_yaw_deg": (
+                                    rt.oriented_base_to_world_yaw_deg
+                                ),
+                            },
+                            dot_targets=preview_targets if not use_segments else (),
+                            segments=preview_segments if use_segments else (),
+                        )
+                        log.info(
+                            "[contour_offset] Cycle opened: "
+                            f"'{pending_contour_offset_record}' phi_contour='"
+                            f"{cand_metrics.get('debug_contour_ply_path', '')}'"
+                        )
+                    except Exception as exc:
+                        pending_contour_offset_record = None
+                        log.warn(
+                            "[contour_offset] Failed to open cycle; printing is unaffected. "
+                            f"error='{exc}'"
+                        )
                 last_generated_targets = list(preview_targets)
+                if not self._wait_if_control_paused(f"after print for {cycle_tag}"):
+                    break
 
                 print_cycle_index += 1
 
@@ -923,6 +980,19 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         "[print_field_oriented] run_reconstruction=False after scan; "
                         "next cycle will reuse previous scan mesh unless candidate_scan_mesh_path is set."
                     )
+                    if pending_contour_offset_record is not None:
+                        try:
+                            self.contour_offset_logger.close_without_post_contour(
+                                pending_contour_offset_record,
+                                reason="scan or reconstruction disabled",
+                            )
+                        except Exception as exc:
+                            log.warn(
+                                "[contour_offset] Failed to close unavailable observation. "
+                                f"error='{exc}'"
+                            )
+                        finally:
+                            pending_contour_offset_record = None
 
             if rt.home_after:
                 self.session.run_sync(
@@ -1322,6 +1392,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
         prompt_before_print = self._cfg_bool(cfg, "prompt_before_print")
         prompt_before_scan = self._cfg_bool(cfg, "prompt_before_scan")
         enable_scan = self._cfg_bool(cfg, "enable_scan")
+        contour_offset_estimation = self._cfg_bool(cfg, "contour_offset_estimation")
 
         frame_id = self._cfg_str(cfg, "frame_id")
         scan_eef_link = self._cfg_str(cfg, "scan_eef_link")
@@ -1528,6 +1599,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
             'prompt_before_print',
             'prompt_before_scan',
             'enable_scan',
+            'contour_offset_estimation',
             'frame_id',
             'scan_eef_link',
             'scan_type',

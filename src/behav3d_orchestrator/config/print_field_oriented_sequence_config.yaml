@@ -8,6 +8,9 @@ print_field_oriented_sequence:
     prompt_before_print: false
     prompt_before_scan: false
     enable_scan: true
+    # Read-only phi-contour/target offset estimation between consecutive cycles.
+    # It never changes candidates, robot motion, or extrusion commands.
+    contour_offset_estimation: true
 
     # Initial table grid sweep
     frame_id: world
