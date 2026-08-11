@@ -85,9 +85,12 @@ For each segment, `PrintSession` computes:
 4. `target_tcp_speed_mm_s = segment_length_mm / target_duration_s`.
 
 The planner iteratively tunes its velocity and acceleration scales to that
-duration before enabling the extruder and executing the segment. Therefore
-`segment_print_vel_scale` is an initial planner seed, not the extrusion amount.
-After printing, retract runs as an explicit reverse `print_steps` command.
+duration. Once the trajectory is fixed, `PrintSession` adjusts the commanded
+step rate to `forward_steps / planned_duration_s`, then starts finite forward
+`PrintSteps` and trajectory execution as one parallel command group. The cycle
+waits for both operations before continuing. Therefore `segment_print_vel_scale`
+is an initial planner seed, not the extrusion amount. After both operations
+finish, retract runs as an explicit reverse `print_steps` command.
 Theoretical `extrusion_steps_per_mm3` is a unit conversion; tune requested
 material upstream with `candidate_volume_factor`.
 

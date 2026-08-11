@@ -1,11 +1,11 @@
 geometry_representation_scan_print_loop:
   ros__parameters:
     # Global flow
-    home_before_scan: true
+    home_before_scan: false
     home_after: false
     timeout_s: 0.0
     debug_mode: false
-    prompt_before_print: true
+    prompt_before_print: false
     prompt_before_scan: false
     enable_scan: true
 
@@ -55,14 +55,14 @@ geometry_representation_scan_print_loop:
     #   abs_scan_z = highest_generated_target_z + grid_z_off
     #   applied z_off = abs_scan_z - grid_center_z
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
-    grid_width: 0.30
-    grid_height: 0.20
-    grid_center_x: -0.06
+    grid_width: 0.35
+    grid_height: 0.35
+    grid_center_x: 0.00
     grid_center_y: 0.90
-    grid_center_z: -0.30
-    grid_z_off: 0.65
+    grid_center_z: -0.1
+    grid_z_off: 0.6
     grid_nx: 3
-    grid_ny: 2
+    grid_ny: 3
     grid_row_major: false
     grid_use_tf_orientation: false
     field_center_sign_x: -1.0
@@ -90,7 +90,7 @@ geometry_representation_scan_print_loop:
     tsdf_param_update_timeout_s: 8.0
 
     # Here run field made in grasshopper:
-    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G01/field_state_init_line_1_edge.npz
+    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G05/Export files/E02_G05_Updated2.npz
     resume_scan_mesh_path: ""
     scan_before_generate_first_cycle: true
 
@@ -99,7 +99,7 @@ geometry_representation_scan_print_loop:
     candidate_output_dir: "@session/field_loop/cycle_0001"
     candidate_request_timeout_s: 120.0
     candidate_mode: gradient_lift
-    candidate_beads_per_step: 7
+    candidate_beads_per_step: 10
 
     # Width mode selection:
     #   fixed: candidate_bead_separation_mm controls center-to-center spacing.
@@ -114,7 +114,7 @@ geometry_representation_scan_print_loop:
     candidate_width_mode: fixed
 
     # Common to both width modes.
-    candidate_bead_height_mm: 14.0
+    candidate_bead_height_mm: 15.0
 
     # Fixed mode parameters.
     candidate_bead_separation_mm: 20.0
@@ -122,8 +122,8 @@ geometry_representation_scan_print_loop:
     candidate_bead_width_mm: 28.0
 
     # Field mode parameters. These are ignored in fixed mode.
-    candidate_width_field_path: "/home/lab/behav3d_ws/mesh/fields/width_field.npz"
-    candidate_bead_width_min_mm: 22.0
+    candidate_width_field_path: "/home/lab/behav3d_ws/Week_02_experiments/G02/export/width_field.npz"
+    candidate_bead_width_min_mm: 14.0
     candidate_bead_width_max_mm: 36.0
     candidate_bead_overlap_mm: 4.0
     # Scales analytic volume_mm3 before writing target YAML. Values below
@@ -132,12 +132,12 @@ geometry_representation_scan_print_loop:
     candidate_volume_factor: 1.0
     # For gradient_lift segment output, move start toward end by this distance.
     # Ignored for dots and gradient_walk.
-    candidate_segment_start_offset_mm: 6.5
+    candidate_segment_start_offset_mm: 8.0
 
     # Print selection. Use "dots" for z_lift/simple point deposition,
     # "segments" for oriented segment printing, or "auto" for legacy mode-based
     # output. This selection is independent from gradient_lift/gradient_walk.
-    print_mode: dots
+    print_mode: segments
     log_joint_currents: false
 
     # Dot print mode. Active when print_mode=dots, or print_mode=auto with targets YAML.
@@ -145,16 +145,16 @@ geometry_representation_scan_print_loop:
     # Net material steps for a fixed-width bead. Do not add retract here:
     # PrintSession sends dot_steps + post_dot_retract_steps, then retracts.
     # A target volume_mm3 overrides the fixed-step fallback for its print mode.
-    dot_steps: 8000
+    dot_steps: 6000
     # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
     # Do not tune extrusion with this value; use candidate_volume_factor.
     extrusion_steps_per_mm3: 0.8148733086
     dot_speed: 2800
     dot_approach_z_offset_m: 0.30
     dot_z_offset_m: 0.06
-    dot_pre_vel_scale: 0.3
-    dot_print_vel_scale: 0.24
-    dot_accel_scale: 0.24
+    dot_pre_vel_scale: 0.2
+    dot_print_vel_scale: 0.2
+    dot_accel_scale: 0.2
     dot_dwell_s: 0.5
     # Compensation is automatic when both retract values are positive.
     post_dot_retract_steps: 5000
@@ -164,24 +164,24 @@ geometry_representation_scan_print_loop:
     oriented_targets_enable: true
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
-    oriented_cone_max_tilt_deg: 30.0
+    oriented_cone_max_tilt_deg: 20.0
     oriented_base_to_world_yaw_deg: 180.0
 
     # Segment print mode. Active when print_mode=segments,
     # or print_mode=auto with segments YAML.
     # Net material steps used when a segment has no volume_mm3.
-    segment_steps: 6700
+    segment_steps: 5000
     # Extruder pulse rate. PrintSession derives TCP speed from segment length
     # and forward steps so the gated extrusion delivers the requested amount.
-    segment_steps_per_second: 2950
-    segment_approach_z_offset_m: 0.40
-    segment_travel_z_offset_m: 0.05
+    segment_steps_per_second: 2800
+    segment_approach_z_offset_m: 0.4
+    segment_travel_z_offset_m: 0.12
     segment_approach_vel_scale: 0.2
     segment_travel_vel_scale: 0.2
     segment_print_vel_scale: 0.01
     segment_accel_scale: 0.1
     post_segment_wait_s: 1.0
     # Compensation is automatic when both retract values are positive.
-    post_segment_retract_steps: 4900
+    post_segment_retract_steps: 5000
     post_segment_retract_speed: 7000
     max_cycles: 0

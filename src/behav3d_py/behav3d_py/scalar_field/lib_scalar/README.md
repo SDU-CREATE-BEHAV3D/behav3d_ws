@@ -199,7 +199,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Builds oriented point or line targets from candidate geometry.
    - Keeps generated target positions unchanged, samples scalar-tangent
      orientation from the field surface, optionally clamps target Z directions
-     to a cone, and writes point YAML or nested line-segment YAML.
+     to a cone, and writes point YAML or nested line-segment YAML. Line targets
+     sample only the start tangent and copy it to the end frame.
      Target-orientation visualization is standardized through
      `viz.make_target_orientation_sticks(...)` as fixed 8 mm x 1 mm rods.
    - Line target YAML schema:
@@ -223,8 +224,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
      `dot_steps` or `segment_steps` fallback.
    - Main APIs:
      - `build_oriented_line_targets(...) -> OrientedLineTargets`
-       keeps candidate positions unchanged and samples the field surface only
-       to compute tangent-based target orientation.
+       keeps candidate positions unchanged, samples tangent orientation at each
+       start, and reuses it for the corresponding end.
      - `write_line_targets_yaml(...)`
      - `write_fixed_z_targets_yaml(...)`
 
@@ -232,8 +233,8 @@ The objective is to keep each stage isolated, testable, and reusable from:
    - Secondary target rules applied after candidate generation and before
      visualization/YAML/DDS.
    - Current rules:
-     - normal-continuity replacement for `gradient_lift` targets with
-       `dot(start_Z, end_Z) < 0.5`,
+     - normal-continuity replacement for externally built targets with
+       `dot(start_Z, end_Z) < 0.5`; generated line targets share one orientation,
      - endpoint-spacing pruning using either fixed spacing or the per-pair
        width/overlap distance.
        This second check uses Euclidean distance between final endpoints after

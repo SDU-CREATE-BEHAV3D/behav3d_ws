@@ -187,7 +187,7 @@ def build_oriented_line_targets(
     clamp_to_cone: bool = False,
     cone_max_tilt_deg: float = 45.0,
 ) -> OrientedLineTargets:
-    """Build oriented start/end target pairs from candidate line geometry."""
+    """Build line targets using the start tangent for both endpoint frames."""
     starts = _validate_points(start_points, "start_points")
     ends = _validate_points(end_points, "end_points")
     if starts.shape != ends.shape:
@@ -197,11 +197,8 @@ def build_oriented_line_targets(
         empty = np.zeros((0, 3), dtype=np.float64)
         return OrientedLineTargets(empty, empty, empty, empty)
 
-    paired_points = np.empty((2 * starts.shape[0], 3), dtype=np.float64)
-    paired_points[0::2] = starts
-    paired_points[1::2] = ends
-    oriented_points, z_dirs = orient_points_with_tangent(
-        paired_points,
+    oriented_starts, start_z_dirs = orient_points_with_tangent(
+        starts,
         field_vertices_world,
         field_faces,
         field_scalar,
@@ -210,10 +207,10 @@ def build_oriented_line_targets(
         cone_max_tilt_deg=float(cone_max_tilt_deg),
     )
     return OrientedLineTargets(
-        start_points=oriented_points[0::2],
-        end_points=oriented_points[1::2],
-        start_z_dirs=z_dirs[0::2],
-        end_z_dirs=z_dirs[1::2],
+        start_points=oriented_starts,
+        end_points=ends.copy(),
+        start_z_dirs=start_z_dirs,
+        end_z_dirs=start_z_dirs.copy(),
     )
 
 

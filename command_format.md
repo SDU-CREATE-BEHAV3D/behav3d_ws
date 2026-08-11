@@ -72,6 +72,9 @@ segments:
   orchestrators.
 - `PrintSession` derives segment duration and TCP speed from material steps,
   retract compensation, `segment_steps_per_second`, and start/end distance.
+- Forward extrusion uses a finite `PrintSteps` request in parallel with the
+  planned motion. The effective step rate is synchronized to the final planned
+  duration, and retract starts only after both forward actions finish.
 
 Variable-width field generation adds `volume_mm3` to dot and segment targets.
 Fixed-width generation omits it. The generated value already includes

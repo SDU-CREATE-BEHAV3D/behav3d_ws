@@ -43,6 +43,8 @@ Important behavior:
 - `gradient_walk` and `gradient_lift` keep generated target positions and write
   tangent-based target Z directions; modes without explicit target orientation
   fall back to world `+Z`.
+- Segment orientation is sampled only at `start`; the same normalized `Z(...)`
+  is copied to `end`, so segment execution keeps one constant tool orientation.
 - In the ROS field loops, `candidate_mode` controls candidate geometry while
   `print_mode` independently selects flat dots or start/end segments.
   `print_mode=auto` retains the legacy mapping where only `gradient_walk`
@@ -52,12 +54,9 @@ Important behavior:
   ignored for dots and `gradient_walk`.
 - Secondary target rules run after candidate generation and before
   visualization/YAML/DDS.
-- The normal-continuity rule applies to `gradient_lift`: target segments with
-  low start/end `Z(...)` continuity (`dot < 0.5`, more than about 60 degrees
-  apart) are replaced. The new segment keeps the original start point and ends
-  half a bead height past the original segment midpoint along the average target
-  direction. Its `Z(...)` direction is the average target direction. Disable it
-  with `--disable-normal-continuity-rule`.
+- The low-continuity replacement helper remains available for externally built
+  targets, but generated segments now share their start orientation at both
+  endpoints and therefore do not trigger it.
 - The endpoint-spacing rule removes later targets whose `end` point violates
   the active fixed or variable spacing rule.
 - `--candidate-width-mode fixed` preserves fixed candidate spacing and requires

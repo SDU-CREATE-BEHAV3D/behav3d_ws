@@ -266,7 +266,7 @@ Field command usage notes:
   `gradient_lift` segment output may move each start toward its end using
   `candidate_segment_start_offset_mm`; the setting is ignored for dots and
   `gradient_walk`.
-- If `orient_with_tangent=true`, target orientation is sampled from the scalar tangent field; optional orientation clamp is applied with `clamp_to_cone` and `cone_max_tilt_deg`.
+- If `orient_with_tangent=true`, target orientation is sampled from the scalar tangent field; optional orientation clamp is applied with `clamp_to_cone` and `cone_max_tilt_deg`. Segment targets sample the start orientation once and copy it to the end frame.
 - Base-link to world target reorientation is applied inside `fields_node` at YAML generation time (`base_to_world_yaw_deg`, default falls back to node parameter `target_base_to_world_yaw_deg`).
 
 Fields node implementation:
@@ -361,8 +361,11 @@ Dot-print invariants:
 Segment-print invariants:
 - `segment_steps` is net material for segments without `volume_mm3`; a supplied
   volume is converted with `extrusion_steps_per_mm3`.
-- `segment_steps_per_second` is the extruder pulse rate. `PrintSession` derives
-  target duration and TCP speed from forward steps and segment length.
+- `segment_steps_per_second` is the nominal extruder pulse rate. `PrintSession`
+  derives target duration and TCP speed from forward steps and segment length,
+  then adjusts the commanded rate to the final planned duration.
+- Finite forward `PrintSteps` and trajectory execution run as one parallel
+  group. The session waits for both before wait/retract processing.
 - `post_segment_retract_steps` is added to the forward request before the same
   explicit reverse step command runs. Do not compensate it in `segment_steps`.
 - `segment_print_vel_scale` is only the initial trajectory-tuning seed; there is

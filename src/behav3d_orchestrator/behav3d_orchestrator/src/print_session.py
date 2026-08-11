@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import threading
 import time
 from typing import Optional, Sequence
 
@@ -590,6 +591,7 @@ class PrintSession(YamlSession):
 
             for pos, seg in enumerate(segment_list):
                 extrusion_request = extrusion_requests[pos]
+                retract_res: Optional[dict] = None
                 start_travel = self._with_z_offset(seg.start, float(travel_z_offset_m))
                 end_travel = self._with_z_offset(seg.end, float(travel_z_offset_m))
 
@@ -660,11 +662,39 @@ class PrintSession(YamlSession):
                     }
                 else:
                     metrics = plan_res.get("metrics", {})
+                    planned_duration_s = float(
+                        metrics.get(
+                            "planned_duration_s",
+                            extrusion_request["target_duration_s"],
+                        )
+                    )
+                    if not math.isfinite(planned_duration_s) or planned_duration_s <= 0.0:
+                        raise RuntimeError(
+                            "Planned segment duration must be finite and positive, "
+                            f"got {planned_duration_s}"
+                        )
+                    synchronized_steps_per_second = max(
+                        1,
+                        int(
+                            math.floor(
+                                int(extrusion_request["forward_steps"])
+                                / planned_duration_s
+                                + 0.5
+                            )
+                        ),
+                    )
+                    extrusion_request.update(
+                        {
+                            "planned_duration_s": planned_duration_s,
+                            "commanded_steps_per_second": synchronized_steps_per_second,
+                        }
+                    )
                     log.info(
                         "[print_session:segments] Tuned segment "
                         f"{seg.index}: material_steps={int(extrusion_request['material_steps'])} "
                         f"forward_steps={int(extrusion_request['forward_steps'])} "
-                        f"steps_per_second={int(steps_per_second)} "
+                        f"nominal_steps_per_second={int(steps_per_second)} "
+                        f"commanded_steps_per_second={synchronized_steps_per_second} "
                         f"target_speed={float(extrusion_request['target_speed_mm_s']):.3f}mm/s "
                         f"distance={float(metrics.get('distance_m', 0.0)):.6f}m "
                         f"target_duration={float(metrics.get('target_duration_s', 0.0)):.3f}s "
@@ -677,62 +707,81 @@ class PrintSession(YamlSession):
                     if not self.wait_if_paused(f"print segment {seg.index}"):
                         raise RuntimeError("ROS shutdown while waiting for global resume.")
                     with self.defer_pause():
+                        parallel_done = threading.Event()
+                        parallel_lock = threading.Lock()
+                        parallel_results: dict[str, dict] = {}
+
+                        def _parallel_done(name: str):
+                            def _store(result: dict) -> None:
+                                with parallel_lock:
+                                    parallel_results[name] = result
+                                    if len(parallel_results) == 2:
+                                        parallel_done.set()
+
+                            return _store
+
                         self.joint_current_logger.mark_event(
                             "extruder_on_request",
                             extruder_on=True,
                             item_kind="segment",
                             item_index=int(seg.index),
                         )
-                        on_res = self.run_sync(
-                            self.extruder.setExtruder(
-                                True,
-                                speed=int(steps_per_second),
-                                reverse=False,
-                                enqueue=False,
-                            ),
-                            timeout_s=timeout_s,
+                        extruder_on = True
+                        print_steps_item = self.extruder.print_steps(
+                            steps=int(extrusion_request["forward_steps"]),
+                            speed=synchronized_steps_per_second,
+                            reverse=False,
+                            on_done=_parallel_done("extrusion"),
+                            enqueue=False,
                         )
-                        if not on_res.get("ok", False):
+                        motion_item = self.motion.exec(
+                            on_done=_parallel_done("motion"),
+                            enqueue=False,
+                        )
+                        self.run_group([print_steps_item, motion_item])
+                        parallel_timeout_s = _step_timeout(
+                            planned_duration_s + 5.0
+                        )
+                        if not parallel_done.wait(parallel_timeout_s):
+                            res = {
+                                "ok": False,
+                                "stage": "parallel_segment_timeout",
+                                "error": (
+                                    "Timed out waiting for parallel PrintSteps and "
+                                    "motion execution."
+                                ),
+                            }
+                        else:
+                            step_res = parallel_results["extrusion"]
+                            motion_res = parallel_results["motion"]
+                            extruder_on = False
                             self.joint_current_logger.mark_event(
-                                "extruder_on_failed",
+                                "extruder_off",
                                 extruder_on=False,
                                 item_kind="segment",
                                 item_index=int(seg.index),
                             )
-                            res = {
-                                "ok": False,
-                                "stage": "extruder_on",
-                                "error": on_res.get("error", "unknown"),
-                            }
-                        else:
-                            extruder_on = True
-                            exec_res = self.run_sync(self.motion.exec(enqueue=False), timeout_s=timeout_s)
-                            if not exec_res.get("ok", False):
+                            if step_res.get("ok", False):
+                                extrusion_request["accepted_forward_steps"] = int(
+                                    step_res.get("metrics", {}).get(
+                                        "accepted_steps",
+                                        extrusion_request["forward_steps"],
+                                    )
+                                )
+                            if not step_res.get("ok", False):
+                                res = {
+                                    "ok": False,
+                                    "stage": "print_segment_steps",
+                                    "error": step_res.get("error", "unknown"),
+                                }
+                            elif not motion_res.get("ok", False):
                                 res = {
                                     "ok": False,
                                     "stage": "exec_segment",
-                                    "error": exec_res.get("error", "unknown"),
+                                    "error": motion_res.get("error", "unknown"),
                                 }
                             else:
-                                res = self.run_sync(
-                                    self.extruder.setExtruder(False, enqueue=False),
-                                    timeout_s=timeout_s,
-                                )
-                                if not res.get("ok", False):
-                                    res = {
-                                        "ok": False,
-                                        "stage": "extruder_off",
-                                        "error": res.get("error", "unknown"),
-                                    }
-                                else:
-                                    extruder_on = False
-                                    self.joint_current_logger.mark_event(
-                                        "extruder_off",
-                                        extruder_on=False,
-                                        item_kind="segment",
-                                        item_index=int(seg.index),
-                                    )
-                                    res = {"ok": True}
+                                res = {"ok": True}
 
                     if res.get("ok", False) and float(post_segment_wait_s) > 0.0:
                         wait_res = self.run_sync(
@@ -782,6 +831,59 @@ class PrintSession(YamlSession):
                                 "stage": "post_segment_retract",
                                 "error": retract_res.get("error", "unknown"),
                             }
+
+                    accepted_forward_steps = extrusion_request.get(
+                        "accepted_forward_steps"
+                    )
+                    if accepted_forward_steps is not None:
+                        if not retract_enabled:
+                            accepted_retract_steps = 0
+                            accepted_net_steps: Optional[int] = int(
+                                accepted_forward_steps
+                            )
+                            retract_status = "disabled"
+                        elif retract_res is not None and retract_res.get("ok", False):
+                            accepted_retract_steps = int(
+                                retract_res.get("metrics", {}).get(
+                                    "accepted_steps",
+                                    retract_steps,
+                                )
+                            )
+                            accepted_net_steps = max(
+                                0,
+                                int(accepted_forward_steps)
+                                - accepted_retract_steps,
+                            )
+                            retract_status = "accepted"
+                        else:
+                            accepted_retract_steps = 0
+                            accepted_net_steps = None
+                            retract_status = "failed_or_not_run"
+
+                        extrusion_request.update(
+                            {
+                                "accepted_retract_steps": accepted_retract_steps,
+                                "accepted_net_steps": accepted_net_steps,
+                            }
+                        )
+                        net_detail = (
+                            str(accepted_net_steps)
+                            if accepted_net_steps is not None
+                            else "unknown"
+                        )
+                        log.info(
+                            "[print_session:segments] Segment step result "
+                            f"{seg.index}: requested_material_steps="
+                            f"{int(extrusion_request['material_steps'])} "
+                            f"requested_forward_steps="
+                            f"{int(extrusion_request['forward_steps'])} "
+                            f"commanded_rate_steps_s="
+                            f"{int(extrusion_request['commanded_steps_per_second'])} "
+                            f"accepted_forward_steps={int(accepted_forward_steps)} "
+                            f"accepted_retract_steps={accepted_retract_steps} "
+                            f"retract_status={retract_status} "
+                            f"accepted_net_steps={net_detail}"
+                        )
 
                 if not res.get("ok", False):
                     if extruder_on:
