@@ -7,6 +7,7 @@ ros2 run behav3d_orchestrator geometry_representation_scan_print_loop
 from __future__ import annotations
 
 import os
+import shutil
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -135,23 +136,8 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 if not self._wait_if_control_paused("after home_before_scan"):
                     return
 
-            field_state_path = str(rt.resume_field_state_path).strip()
-            if not field_state_path:
-                raise RuntimeError("resume_field_state_path is required.")
-
-            field_center_raw = self.session.compute_field_center_from_state(field_state_path)
-            field_center_xy_mapped = self.session.map_field_center_xy(
-                x=float(field_center_raw[0]),
-                y=float(field_center_raw[1]),
-                sign_x=rt.field_center_sign_x,
-                sign_y=rt.field_center_sign_y,
-                offset_x=rt.field_center_offset_x,
-                offset_y=rt.field_center_offset_y,
-            )
-            field_center_xyz = (
-                float(field_center_xy_mapped[0]),
-                float(field_center_xy_mapped[1]),
-                float(field_center_raw[2]),
+            field_state_path, field_center_raw, field_center_xyz = (
+                self._load_configured_field_state(rt)
             )
 
             mesh_path = str(rt.resume_scan_mesh_path).strip()
@@ -265,6 +251,28 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 refresh_runtime_config(
                     f"cycle loop start {first_print_cycle_number + print_cycle_index:04d}"
                 )
+                (
+                    configured_field_state_path,
+                    configured_field_center_raw,
+                    configured_field_center_xyz,
+                ) = self._load_configured_field_state(rt)
+                if (
+                    configured_field_state_path != field_state_path
+                    or configured_field_center_xyz != field_center_xyz
+                ):
+                    log.warn(
+                        "[geometry_representation_scan_print_loop] Runtime field state "
+                        f"updated: '{field_state_path}' -> "
+                        f"'{configured_field_state_path}', "
+                        f"center_raw=({configured_field_center_raw[0]:.4f}, "
+                        f"{configured_field_center_raw[1]:.4f}, "
+                        f"{configured_field_center_raw[2]:.4f}), "
+                        f"center_scan=({configured_field_center_xyz[0]:.4f}, "
+                        f"{configured_field_center_xyz[1]:.4f}, "
+                        f"{configured_field_center_xyz[2]:.4f})"
+                    )
+                field_state_path = configured_field_state_path
+                field_center_xyz = configured_field_center_xyz
 
                 if rt.max_cycles > 0 and print_cycle_index >= rt.max_cycles:
                     log.info(f"[geometry_representation_scan_print_loop] Reached max_cycles={rt.max_cycles}.")
@@ -473,8 +481,10 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                     gate_res = self.session.run_sync(
                         self.session.util.input(
                             prompt=(
-                                f"[geometry_representation_scan_print_loop:{cycle_tag}] Debug gate: press ENTER to print targets "
-                                "(type 'q' + ENTER to stop)."
+                                f"[geometry_representation_scan_print_loop:{cycle_tag}] "
+                                "Debug gate: press ENTER to print targets, "
+                                "'r' + ENTER to rescan this cycle, or "
+                                "'q' + ENTER to stop."
                             ),
                             enqueue=False,
                         ),
@@ -484,6 +494,44 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                     if gate_value == "q":
                         log.warn("[geometry_representation_scan_print_loop] Print execution stopped by user.")
                         break
+                    if gate_value == "r":
+                        rescan_cfg = self._load_runtime_config(runtime_config_path)
+                        rt.__dict__.update(
+                            self._parse_runtime_state(
+                                rescan_cfg,
+                                run_session_path,
+                            ).__dict__
+                        )
+                        (
+                            rescan_field_state_path,
+                            rescan_field_center_raw,
+                            rescan_field_center_xyz,
+                        ) = self._load_configured_field_state(rt)
+                        log.info(
+                            "[geometry_representation_scan_print_loop] "
+                            f"Runtime config reloaded for rescan of {cycle_tag}: "
+                            f"{runtime_config_path}; field_state='"
+                            f"{rescan_field_state_path}', center_raw=("
+                            f"{rescan_field_center_raw[0]:.4f}, "
+                            f"{rescan_field_center_raw[1]:.4f}, "
+                            f"{rescan_field_center_raw[2]:.4f})"
+                        )
+                        mesh_path = self._rescan_cycle(
+                            rt=rt,
+                            runtime_config_path=runtime_config_path,
+                            run_session_path=run_session_path,
+                            run_session_arg=run_session_arg,
+                            cycle_root=cycle_root,
+                            cycle_tag=cycle_tag,
+                            last_generated_targets=last_generated_targets,
+                        )
+                        field_state_path = rescan_field_state_path
+                        field_center_xyz = rescan_field_center_xyz
+                        log.info(
+                            "[geometry_representation_scan_print_loop] "
+                            f"Rescan complete for {cycle_tag}; regenerating candidates."
+                        )
+                        continue
 
                 print_mode_norm = str(rt.print_mode or "auto").strip().lower()
                 if print_mode_norm not in ("auto", "segments", "dots"):
@@ -611,22 +659,10 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 next_cycle_scan_capture_folder = f"{next_cycle_root}/scan"
                 next_cycle_scan_folder = f"field_loop/{next_cycle_tag}/scan"
 
-                if last_generated_targets:
-                    highest_prev_z = max(float(t.pose.position.z) for t in last_generated_targets)
-                    abs_scan_z = highest_prev_z + float(rt.grid_z_off)
-                    cycle_scan_z_off = abs_scan_z - float(rt.grid_center_z)
-                    z_msg = (
-                        f"highest_generated_z={highest_prev_z:.4f}m + grid_z_off={rt.grid_z_off:.4f}m "
-                        f"=> abs_scan_z={abs_scan_z:.4f}m, "
-                        f"center_z={rt.grid_center_z:.4f}m => applied_z_off={cycle_scan_z_off:.4f}m"
-                    )
-                else:
-                    cycle_scan_z_off = float(rt.grid_z_off)
-                    abs_scan_z = float(rt.grid_center_z) + float(cycle_scan_z_off)
-                    z_msg = (
-                        f"fallback(no printed targets): z_off={cycle_scan_z_off:.4f}m "
-                        f"=> abs_scan_z={abs_scan_z:.4f}m"
-                    )
+                cycle_scan_z_off, z_msg = self._cycle_scan_height(
+                    rt,
+                    last_generated_targets,
+                )
 
                 log.info(
                     f"[geometry_representation_scan_print_loop] ===== scan_for_{next_cycle_tag} ===== "
@@ -731,6 +767,172 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             log.error(f"[geometry_representation_scan_print_loop] Sequence failed: {exc}")
         finally:
             rclpy.shutdown()
+
+    @staticmethod
+    def _cycle_scan_height(
+        rt: SimpleNamespace,
+        last_generated_targets: List[PoseStamped],
+    ) -> tuple[float, str]:
+        if last_generated_targets:
+            highest_prev_z = max(
+                float(target.pose.position.z)
+                for target in last_generated_targets
+            )
+            abs_scan_z = highest_prev_z + float(rt.grid_z_off)
+            cycle_scan_z_off = abs_scan_z - float(rt.grid_center_z)
+            message = (
+                f"highest_generated_z={highest_prev_z:.4f}m + "
+                f"grid_z_off={rt.grid_z_off:.4f}m "
+                f"=> abs_scan_z={abs_scan_z:.4f}m, "
+                f"center_z={rt.grid_center_z:.4f}m "
+                f"=> applied_z_off={cycle_scan_z_off:.4f}m"
+            )
+            return cycle_scan_z_off, message
+
+        cycle_scan_z_off = float(rt.grid_z_off)
+        abs_scan_z = float(rt.grid_center_z) + cycle_scan_z_off
+        message = (
+            f"fallback(no printed targets): z_off={cycle_scan_z_off:.4f}m "
+            f"=> abs_scan_z={abs_scan_z:.4f}m"
+        )
+        return cycle_scan_z_off, message
+
+    def _load_configured_field_state(
+        self,
+        rt: SimpleNamespace,
+    ) -> tuple[str, tuple[float, float, float], tuple[float, float, float]]:
+        field_state_path = str(rt.resume_field_state_path).strip()
+        if not field_state_path:
+            raise RuntimeError("resume_field_state_path is required.")
+
+        field_center_raw = self.session.compute_field_center_from_state(
+            field_state_path
+        )
+        field_center_xy_mapped = self.session.map_field_center_xy(
+            x=float(field_center_raw[0]),
+            y=float(field_center_raw[1]),
+            sign_x=rt.field_center_sign_x,
+            sign_y=rt.field_center_sign_y,
+            offset_x=rt.field_center_offset_x,
+            offset_y=rt.field_center_offset_y,
+        )
+        field_center_xyz = (
+            float(field_center_xy_mapped[0]),
+            float(field_center_xy_mapped[1]),
+            float(field_center_raw[2]),
+        )
+        return field_state_path, field_center_raw, field_center_xyz
+
+    def _rescan_cycle(
+        self,
+        *,
+        rt: SimpleNamespace,
+        runtime_config_path: str,
+        run_session_path: Path,
+        run_session_arg: str,
+        cycle_root: str,
+        cycle_tag: str,
+        last_generated_targets: List[PoseStamped],
+    ) -> str:
+        if not rt.enable_scan:
+            raise RuntimeError(
+                f"Cannot rescan {cycle_tag}: enable_scan=false in the reloaded config."
+            )
+        if not rt.run_reconstruction:
+            raise RuntimeError(
+                f"Cannot rescan {cycle_tag}: run_reconstruction=false in the reloaded "
+                "config; regenerated candidates require a fresh mesh."
+            )
+
+        cycle_root_path = Path(cycle_root).expanduser().resolve()
+        field_loop_root = (run_session_path / "field_loop").resolve()
+        try:
+            relative_cycle = cycle_root_path.relative_to(field_loop_root)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Refusing to replace rescan files outside {field_loop_root}: "
+                f"{cycle_root_path}"
+            ) from exc
+        if relative_cycle.parts != (cycle_tag,):
+            raise RuntimeError(
+                "Refusing to replace rescan files because the cycle path does not "
+                f"match {cycle_tag}: {cycle_root_path}"
+            )
+
+        scan_path = cycle_root_path / "scan"
+        candidates_path = cycle_root_path / "candidates"
+        config_snapshot_path = cycle_root_path / "config" / Path(
+            runtime_config_path
+        ).name
+        for output_path in (scan_path, candidates_path):
+            if output_path.exists():
+                shutil.rmtree(output_path)
+        if config_snapshot_path.exists():
+            config_snapshot_path.unlink()
+
+        capture_folder = f"{cycle_root_path}/scan"
+        scan_folder = f"field_loop/{cycle_tag}/scan"
+        cycle_scan_z_off, z_message = self._cycle_scan_height(
+            rt,
+            last_generated_targets,
+        )
+        self.get_logger().warn(
+            "[geometry_representation_scan_print_loop] "
+            f"Replacing scan and candidate outputs for {cycle_tag}: "
+            f"scan='{scan_path}', candidates='{candidates_path}', {z_message}"
+        )
+
+        scan_targets = self._run_configured_scan(
+            cfg=rt.config,
+            scan_type=rt.scan_type,
+            target=None,
+            width=rt.grid_width,
+            height=rt.grid_height,
+            center_x=float(rt.grid_center_x),
+            center_y=float(rt.grid_center_y),
+            center_z=float(rt.grid_center_z),
+            z_off=cycle_scan_z_off,
+            nx=rt.grid_nx,
+            ny=rt.grid_ny,
+            row_major=rt.grid_row_major,
+            use_tf_orientation=rt.grid_use_tf_orientation,
+            capture_folder=capture_folder,
+            timeout_s=rt.timeout_s,
+            frame_id=rt.frame_id,
+            vel_scale=rt.scan_vel_scale,
+            accel_scale=rt.scan_accel_scale,
+            settle_s=rt.scan_settle_s,
+        )
+        if not scan_targets:
+            raise RuntimeError(f"Rescan produced 0 targets for {cycle_tag}.")
+        if not self._wait_if_control_paused(f"after rescan for {cycle_tag}"):
+            raise RuntimeError(f"Rescan interrupted after capture for {cycle_tag}.")
+
+        mesh_path, _ = self._run_reconstruction_for_scan(
+            session_path=run_session_arg,
+            scan_folder=scan_folder,
+            reconstruct_device=rt.reconstruct_device,
+            reconstruct_request_timeout_s=rt.reconstruct_request_timeout_s,
+            wait_reconstruction_outputs=rt.wait_reconstruction_outputs,
+            color_to_depth_wait_timeout_s=rt.color_to_depth_wait_timeout_s,
+            tsdf_wait_timeout_s=rt.tsdf_wait_timeout_s,
+            mesh_prefer=rt.mesh_prefer,
+            mesh_update_wait_timeout_s=rt.mesh_update_wait_timeout_s,
+            mesh_update_request_timeout_s=rt.mesh_update_request_timeout_s,
+            tsdf_center_crop_enable=rt.tsdf_center_crop_enable,
+            tsdf_center_crop_width=rt.tsdf_center_crop_width,
+            tsdf_center_crop_height=rt.tsdf_center_crop_height,
+            tsdf_center_crop_apply_to_depth=rt.tsdf_center_crop_apply_to_depth,
+            tsdf_aabb_crop_enable=rt.tsdf_aabb_crop_enable,
+            tsdf_aabb_crop_min=rt.tsdf_aabb_crop_min,
+            tsdf_aabb_crop_max=rt.tsdf_aabb_crop_max,
+            tsdf_param_update_timeout_s=rt.tsdf_param_update_timeout_s,
+        )
+        if not self._wait_if_control_paused(
+            f"after reconstruction for rescan of {cycle_tag}"
+        ):
+            raise RuntimeError(f"Rescan interrupted after reconstruction for {cycle_tag}.")
+        return mesh_path
 
     def _run_configured_scan(
         self,

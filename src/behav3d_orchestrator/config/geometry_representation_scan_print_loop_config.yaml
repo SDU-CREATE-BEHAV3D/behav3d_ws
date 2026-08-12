@@ -22,20 +22,22 @@ geometry_representation_scan_print_loop:
     # Half-cylinder scan parameters. Active when scan_type=half_cylinder
     # or scan_type=half_cylinder_side_caps.
     half_use_line_axis: true
-    half_axis_start_x: 0.04
-    half_axis_start_y: 0.75
-    half_axis_start_z: -0.04
-    half_axis_end_x: 0.04
-    half_axis_end_y: 1.05
-    half_axis_end_z: -0.04
-    half_radius: 0.40
-    half_angle_min_deg: -45.0
-    half_angle_max_deg: 45.0
-    half_n_angle: 5
-    half_n_axis: 3
+    half_axis_start_x: -0.28
+    half_axis_start_y: 0.85
+    half_axis_start_z: 0.02
+    half_axis_end_x: 0.25
+    half_axis_end_y: 1.15
+    half_axis_end_z: 0.02
+    half_radius: 0.3
+    half_angle_min_deg: 20.0
+    half_angle_max_deg: 20.0
+    half_n_angle: 3
+    half_n_axis: 4
     half_arc_center_dx: 0.0
     half_arc_center_dy: 0.0
     half_arc_center_dz: 1.0
+
+
     # Constrain optical Z toward the line and choose X/Y automatically from
     # the current camera orientation, avoiding an explicit wrist-roll target.
     half_orientation_mode: look_at_current_roll
@@ -67,11 +69,11 @@ geometry_representation_scan_print_loop:
     #   abs_scan_z = highest_generated_target_z + grid_z_off
     #   applied z_off = abs_scan_z - grid_center_z
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
-    grid_width: 0.50
-    grid_height: 0.50
+    grid_width: 0.45
+    grid_height: 0.45
     grid_center_x: 0.00
     grid_center_y: 0.92
-    grid_center_z: 0.02
+    grid_center_z: 0.00
     grid_z_off: 0.60
     grid_nx: 4
     grid_ny: 4
@@ -102,7 +104,7 @@ geometry_representation_scan_print_loop:
     tsdf_param_update_timeout_s: 8.0
 
     # Here run field made in grasshopper:
-    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G04/experiment 02/600WIDE V BOTTOM.npz
+    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G04/experiment 02/RECOVERY1.npz
     resume_scan_mesh_path: ""
     scan_before_generate_first_cycle: true
 
@@ -126,7 +128,7 @@ geometry_representation_scan_print_loop:
     candidate_width_mode: fixed
 
     # Common to both width modes.
-    candidate_bead_height_mm: 15.0
+    candidate_bead_height_mm: 17.0
 
     # Fixed mode parameters.
     candidate_bead_separation_mm: 20.0
@@ -136,7 +138,7 @@ geometry_representation_scan_print_loop:
     # Field mode parameters. These are ignored in fixed mode.
     candidate_width_field_path: "/home/lab/behav3d_ws/Week_02_experiments/G02/Export top part/width_field_2.npz"
     candidate_bead_width_min_mm: 14.0
-    candidate_bead_width_max_mm: 15.0
+    candidate_bead_width_max_mm: 1.0
     candidate_bead_overlap_mm: 3.0
     # Scales analytic volume_mm3 before writing target YAML. Values below
     # 1.0 reduce extrusion; values above 1.0 increase it. Ignored in fixed mode
@@ -144,7 +146,7 @@ geometry_representation_scan_print_loop:
     candidate_volume_factor: 1.0
     # For gradient_lift segment output, move start toward end by this distance.
     # Ignored for dots and gradient_walk.
-    candidate_segment_start_offset_mm: 5.0
+    candidate_segment_start_offset_mm: 8.0
 
     # Print selection. Use "dots" for z_lift/simple point deposition,
     # "segments" for oriented segment printing, or "auto" for legacy mode-based
@@ -182,16 +184,17 @@ geometry_representation_scan_print_loop:
     # Segment print mode. Active when print_mode=segments,
     # or print_mode=auto with segments YAML.
     # Net material steps used when a segment has no volume_mm3.
-    segment_steps: 6000
+    segment_steps: 5000
     # Extruder pulse rate. PrintSession derives TCP speed from segment length
     # and forward steps so the gated extrusion delivers the requested amount.
     segment_steps_per_second: 2700
-    segment_approach_z_offset_m: 0.4
+    segment_approach_z_offset_m: 0.35
     segment_travel_z_offset_m: 0.12
-    segment_approach_vel_scale: 0.2
+    segment_approach_vel_scale: 0.15
     segment_travel_vel_scale: 0.2
-    segment_print_vel_scale: 0.01
+    segment_print_vel_scale: 0.016
     segment_accel_scale: 0.1
+    # Segment print mode. Active when print_mode=segments,
     post_segment_wait_s: 1.0
     # Compensation is automatic when both retract values are positive.
     post_segment_retract_steps: 5000
