@@ -17,6 +17,9 @@ from .control_session import ControlAwareSession
 from .scan_sequences import fibonacci, grid_sweep, half_cylinder, half_cylinder_side_caps
 
 
+STALE_FRAME_ERROR_PREFIX = "STALE_CAMERA_FRAME:"
+
+
 class ScanSession(ControlAwareSession):
     """
     Shared scan execution helpers.
@@ -98,6 +101,7 @@ class ScanSession(ControlAwareSession):
         exec_ok = 0
         captures_ok = 0
         failed_targets: list[dict[str, Any]] = []
+        fatal_capture_error = ""
 
         try:
             for i, ps in enumerate(target_list):
@@ -175,6 +179,13 @@ class ScanSession(ControlAwareSession):
                 if not cap_res.get("ok", False):
                     err = str(cap_res.get("error", "unknown"))
                     failed_targets.append({"index": i, "stage": "capture", "error": err})
+                    if err.startswith(STALE_FRAME_ERROR_PREFIX):
+                        fatal_capture_error = err
+                        log.error(
+                            f"[scan_session] Frozen camera frame detected at target {i}; "
+                            "stopping the scan immediately."
+                        )
+                        break
                     log.warn(f"[scan_session] Capture failed at target {i}: {err}")
                     continue
                 captures_ok += 1
@@ -185,8 +196,11 @@ class ScanSession(ControlAwareSession):
                 except TimeoutError:
                     log.warn("[scan_session] delete_markers timed out.")
 
-        ok = captures_ok > 0 or (debug and plan_ok > 0)
-        if ok:
+        ok = not fatal_capture_error and (captures_ok > 0 or (debug and plan_ok > 0))
+        if fatal_capture_error:
+            stage = "capture"
+            error = fatal_capture_error
+        elif ok:
             stage = "done"
             error = ""
         elif plan_ok <= 0:

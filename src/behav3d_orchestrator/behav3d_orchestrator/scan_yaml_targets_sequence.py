@@ -13,7 +13,7 @@ from behav3d_utils import target_builder as tb
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 
-from .src.scan_session import ScanSession
+from .src.scan_session import STALE_FRAME_ERROR_PREFIX, ScanSession
 from .src.yaml_session import YamlSession
 
 try:
@@ -259,6 +259,10 @@ class ScanYamlTargetsSequenceNode(Node):
                 if not capture_res.get("ok", False):
                     error = str(capture_res.get("error", "unknown"))
                     failed_targets.append({"index": seq_idx, "stage": "capture", "error": error})
+                    if error.startswith(STALE_FRAME_ERROR_PREFIX):
+                        raise RuntimeError(
+                            "Frozen camera frame detected; stopping scan immediately. " + error
+                        )
                     log.warn(f"[scan_yaml_targets] Capture failed for {target_label}: {error}")
                     continue
 

@@ -2,7 +2,7 @@ scan_yaml_targets_sequence:
   ros__parameters:
     # Target input. Plane origins are millimetres; Z is the target's Z axis.
     # These path/frame values are fixed after startup. Restart to change them.
-    yaml_path: /home/lab/behav3d_ws/yaml/A02/G10_obj_3.yaml
+    yaml_path: /home/lab/behav3d_ws/Week_02_experiments/G01/BasePrint/PushingPushPlanes.yaml
     frame_id: world
 
     # Capture location. scan_folder may be empty to derive it from
@@ -14,7 +14,7 @@ scan_yaml_targets_sequence:
     # Camera link used both for planning and as the roll reference. After the
     # optional home, its current X/Y orientation is preserved while each target
     # Z from the YAML becomes the desired optical axis. Restart to change it.
-    eef_link: femto_color_optical_calib
+    eef_link: extruder_tcp
 
     # Motion and per-plane behavior. The file is reloaded before every target,
     # so these values may be tuned while the sequence is running.

@@ -16,7 +16,11 @@ from tf2_ros import Buffer, TransformListener
 from behav3d_interfaces.srv import Capture
 from sensor_msgs.msg import Image  # only for type hints
 
+from .capture_validation import find_identical_capture_files
 from .femto_capture import FemtoCapture, stamp_to_ns
+
+
+STALE_FRAME_ERROR_PREFIX = 'STALE_CAMERA_FRAME:'
 
 
 class SenseNode(Node):
@@ -206,23 +210,29 @@ class SenseNode(Node):
             yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
         tmp.replace(mpath)
 
-    def _append_capture_entry(self, session_dir: Path, stamp_ns: int, initial_fields: dict) -> dict:
-        mpath = self._manifest_path(session_dir)
-        data = self._read_manifest(mpath)
-        data.setdefault('captures', [])
-        idx = len(data['captures'])
-        entry = {
+    def _build_capture_entry(self, idx: int, stamp_ns: int, fields: dict) -> dict:
+        return {
             'index': idx,
             'stamp_ns': int(stamp_ns),
             'timestamp': self._now_iso(),
-            'color': initial_fields.get('color', None),
-            'depth': initial_fields.get('depth', None),
-            'ir': initial_fields.get('ir', None),
-            'T_base_tool0': initial_fields.get('T_base_tool0', None),
+            'color': fields.get('color', None),
+            'depth': fields.get('depth', None),
+            'ir': fields.get('ir', None),
+            'T_base_tool0': fields.get('T_base_tool0', None),
         }
-        data['captures'].append(entry)
-        self._write_manifest(mpath, data)
-        return entry
+
+    def _remove_capture_files(self, idx: int) -> None:
+        """Remove all image artifacts written for an uncommitted capture index."""
+        tag = f'i{idx}'
+        for subfolder in ('color_raw', 'depth_raw', 'ir_raw'):
+            folder = self.current_capture_dir / subfolder
+            for path in folder.glob(f'*_{tag}.*'):
+                try:
+                    path.unlink()
+                except OSError as exc:
+                    self.get_logger().warn(
+                        f'Failed to remove rejected capture file {path}: {exc}'
+                    )
 
     # ================= TF pose =================
     def _lookup_T_base_tool0(self):
@@ -261,10 +271,21 @@ class SenseNode(Node):
                 response.message = f'Failed to set folder: {e}'
                 return response
 
+        try:
+            self._ensure_capture_folder(self.current_capture_dir)
+            self._ensure_manifest(self.current_capture_dir)
+            mpath = self._manifest_path(self.current_capture_dir)
+            manifest = self._read_manifest(mpath)
+            captures = manifest.setdefault('captures', [])
+            idx = len(captures)
+            previous_capture = captures[-1] if captures else None
+        except Exception as e:
+            response.success = False
+            response.message = f'Failed to prepare capture: {e}'
+            return response
+
         stamp_now_ns = int(self.get_clock().now().nanoseconds)
         fields = {'color': None, 'depth': None, 'ir': None, 'T_base_tool0': None}
-        entry = self._append_capture_entry(self.current_capture_dir, stamp_now_ns, fields)
-        idx = entry['index']
 
         # Pick color/depth
         color_msg = None
@@ -301,20 +322,66 @@ class SenseNode(Node):
             else:
                 self.get_logger().warn('No IR frame available to save.')
 
+        requested_images = {
+            'color': bool(request.do_rgb),
+            'depth': bool(request.do_depth),
+            'ir': bool(request.do_ir),
+        }
+        missing = [
+            field
+            for field, requested in requested_images.items()
+            if requested and not fields[field]
+        ]
+        if missing:
+            self._remove_capture_files(idx)
+            message = f'Failed to save requested image data: {", ".join(missing)}'
+            self.get_logger().error(message)
+            response.success = False
+            response.message = message
+            return response
+
+        duplicates = find_identical_capture_files(
+            self.current_capture_dir,
+            previous_capture,
+            fields,
+        )
+        if duplicates:
+            duplicate_fields = ', '.join(sorted(duplicates))
+            comparisons = '; '.join(
+                f'{field} matches {previous.name}'
+                for field, (previous, _current) in sorted(duplicates.items())
+            )
+            self._remove_capture_files(idx)
+            message = (
+                f'{STALE_FRAME_ERROR_PREFIX} exact duplicate capture detected '
+                f'({duplicate_fields}); {comparisons}. '
+                'Camera stream may be disconnected or frozen.'
+            )
+            self.get_logger().error(message)
+            response.success = False
+            response.message = message
+            return response
+
         if request.do_pose:
             fields['T_base_tool0'] = self._lookup_T_base_tool0()
 
-        # Update manifest
-        mpath = self._manifest_path(self.current_capture_dir)
-        data = self._read_manifest(mpath)
+        # Commit the manifest only after all requested images pass validation.
         try:
-            data['captures'][idx].update(fields)
-            self._write_manifest(mpath, data)
+            captures.append(self._build_capture_entry(idx, stamp_now_ns, fields))
+            self._write_manifest(mpath, manifest)
         except Exception as e:
-            self.get_logger().warn(f'Failed to update manifest: {e}')
+            self._remove_capture_files(idx)
+            message = f'Failed to commit capture manifest: {e}'
+            self.get_logger().error(message)
+            response.success = False
+            response.message = message
+            return response
 
         saved = [k for k, v in fields.items() if v]
-        self.get_logger().info(f'Capture #{idx} saved -> {", ".join(saved) if saved else "none"} in {self.current_capture_dir}')
+        self.get_logger().info(
+            f'Capture #{idx} saved -> '
+            f'{", ".join(saved) if saved else "none"} in {self.current_capture_dir}'
+        )
         response.success = True
         response.message = f'Captured #{idx} in {self.current_capture_dir}'
         return response
