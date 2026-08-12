@@ -69,14 +69,14 @@ geometry_representation_scan_print_loop:
     #   abs_scan_z = highest_generated_target_z + grid_z_off
     #   applied z_off = abs_scan_z - grid_center_z
     # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
-    grid_width: 0.45
-    grid_height: 0.45
-    grid_center_x: 0.00
+    grid_width: 0.15
+    grid_height: 0.15
+    grid_center_x: 0.01
     grid_center_y: 0.92
-    grid_center_z: 0.00
+    grid_center_z: 0.06
     grid_z_off: 0.60
-    grid_nx: 4
-    grid_ny: 4
+    grid_nx: 2
+    grid_ny: 2
     grid_row_major: false
     grid_use_tf_orientation: false
     field_center_sign_x: -1.0
@@ -104,7 +104,7 @@ geometry_representation_scan_print_loop:
     tsdf_param_update_timeout_s: 8.0
 
     # Here run field made in grasshopper:
-    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G04/experiment 02/RECOVERY1.npz
+    resume_field_state_path: /home/lab/behav3d_ws/Week_02_experiments/G04/experiment 02/recovery4.npz
     resume_scan_mesh_path: ""
     scan_before_generate_first_cycle: true
 
@@ -148,6 +148,17 @@ geometry_representation_scan_print_loop:
     # Ignored for dots and gradient_walk.
     candidate_segment_start_offset_mm: 8.0
 
+    # Optional extruder-vs-scan collision filter. A rejected candidate removes
+    # this geodesic neighborhood from the contour polyline, then selection
+    # continues until candidate_beads_per_step is filled or the contour ends.
+    use_collision: true
+    collision_exclusion_radius_mm: 3.5
+    collision_threshold_mm: 1.5
+    collision_samples_per_segment: 3
+    # Ignore the nozzle-tip neighborhood so intended TCP contact is allowed.
+    collision_tcp_exclusion_radius_mm: 10.0
+    collision_extruder_mesh_path: /home/lab/behav3d_ws/src/custom_workcell/ur20_workcell/meshes/ram_extruder_v2_simplified.dae
+
     # Print selection. Use "dots" for z_lift/simple point deposition,
     # "segments" for oriented segment printing, or "auto" for legacy mode-based
     # output. This selection is independent from gradient_lift/gradient_walk.
@@ -178,13 +189,13 @@ geometry_representation_scan_print_loop:
     oriented_targets_enable: true
     oriented_tangent_sign: 1.0
     oriented_clamp_to_cone: true
-    oriented_cone_max_tilt_deg: 40.0
+    oriented_cone_max_tilt_deg: 25.0
     oriented_base_to_world_yaw_deg: 180.0
 
     # Segment print mode. Active when print_mode=segments,
     # or print_mode=auto with segments YAML.
     # Net material steps used when a segment has no volume_mm3.
-    segment_steps: 5000
+    segment_steps: 4000
     # Extruder pulse rate. PrintSession derives TCP speed from segment length
     # and forward steps so the gated extrusion delivers the requested amount.
     segment_steps_per_second: 2700

@@ -26,7 +26,7 @@ DEFAULT_EXTRUDER_MESH = (
     / "meshes"
     / "ram_extruder_v2_simplified.dae"
 )
-TOOL0_TCP_XYZ = (-0.00391, 0.47471, 0.08024)
+TOOL0_TCP_XYZ = (-0.00551, 0.47304, 0.0822)
 TOOL0_TCP_RPY = (1.5641113421, 0.0, 0.0)
 START_ADJUST_FRACTIONS = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
 PLANE_PATTERN = re.compile(r"([A-Za-z]+)\(([^)]*)\)")
@@ -155,9 +155,11 @@ def any_orthonormal(vector: np.ndarray) -> np.ndarray:
 
 def rotation_from_z(z_axis: np.ndarray, *, x_guess: np.ndarray) -> np.ndarray:
     z = normalize(z_axis)
-    x = np.asarray(x_guess, dtype=np.float64)
-    x = x - float(np.dot(x, z)) * z
-    x = any_orthonormal(z) if np.linalg.norm(x) < 1e-9 else normalize(x)
+    # Match the fixed-reference free roll used by the YAML target executor.
+    x_reference = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    if abs(float(z[0])) > 0.95:
+        x_reference = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    x = normalize(x_reference - float(np.dot(x_reference, z)) * z)
     y = normalize(np.cross(z, x))
     return np.column_stack((x, y, z))
 

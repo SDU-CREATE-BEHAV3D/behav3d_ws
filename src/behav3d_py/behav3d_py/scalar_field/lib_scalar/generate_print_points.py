@@ -11,6 +11,7 @@ Selection rule:
 from __future__ import annotations
 
 import heapq
+from typing import Callable
 
 import numpy as np
 
@@ -22,6 +23,12 @@ from .geometry import (
     sample_vertex_scalar_on_surface,
 )
 from .types import PrintPointSet
+
+
+CandidateValidator = Callable[
+    [np.ndarray, np.ndarray, np.ndarray, int],
+    bool,
+]
 
 
 def _deduplicate_polyline_points(
@@ -249,6 +256,66 @@ def _gradient_lift_points(
     return source_points + h * t_dir
 
 
+def _preview_candidate_geometry(
+    *,
+    source_point: np.ndarray,
+    mode: str,
+    lift_height: float,
+    field_vertices_world: np.ndarray,
+    field_faces: np.ndarray | None,
+    field_scalar: np.ndarray,
+    walk_distance: float,
+    walk_step: float,
+    walk_max_steps: int,
+    walk_tangent_sign: float,
+    walk_start_fraction: float,
+    clamp_to_cone: bool,
+    cone_max_tilt_deg: float,
+    agent_phi_scalar: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Build one provisional endpoint/start pair for pre-selection validation."""
+    source = np.asarray(source_point, dtype=np.float64).reshape(1, 3)
+    endpoint = source.copy()
+    segment_start = source.copy()
+    if mode == "z_lift":
+        endpoint[:, 2] += float(lift_height)
+    elif mode == "gradient_lift":
+        if field_faces is None:
+            raise ValueError("field_faces is required for candidate_mode='gradient_lift'")
+        endpoint = _gradient_lift_points(
+            source_points=source,
+            field_vertices_world=field_vertices_world,
+            field_faces=np.asarray(field_faces, dtype=np.int32),
+            field_scalar=field_scalar,
+            lift_height=float(lift_height),
+            tangent_sign=float(walk_tangent_sign),
+        )
+    elif mode == "gradient_walk":
+        if field_faces is None:
+            raise ValueError("field_faces is required for candidate_mode='gradient_walk'")
+        agent_result = run_agent_walk(
+            source_points=source,
+            field_vertices_world=field_vertices_world,
+            field_faces=np.asarray(field_faces, dtype=np.int32),
+            field_scalar=field_scalar,
+            config=AgentWalkConfig(
+                target_distance=float(walk_distance),
+                step_size=float(walk_step),
+                max_steps=int(walk_max_steps),
+                tangent_sign=float(walk_tangent_sign),
+                segment_start_fraction=float(walk_start_fraction),
+                clamp_to_cone=bool(clamp_to_cone),
+                cone_max_tilt_deg=float(cone_max_tilt_deg),
+            ),
+            phi_scalar=agent_phi_scalar,
+        )
+        if agent_result.points.shape[0] == 0:
+            return None
+        endpoint = agent_result.points
+        segment_start = agent_result.segment_start_points
+    return endpoint[0].copy(), segment_start[0].copy()
+
+
 def generate_print_points(
     polyline_points: np.ndarray,
     polyline_lines: np.ndarray,
@@ -273,6 +340,8 @@ def generate_print_points(
     agent_phi_scalar: np.ndarray | None = None,
     field_bead_widths: np.ndarray | None = None,
     bead_overlap: float = 0.0,
+    candidate_validator: CandidateValidator | None = None,
+    validator_rejection_radius: float = 0.0,
 ) -> PrintPointSet:
     """Select print points and optionally post-process candidate locations.
 
@@ -280,6 +349,8 @@ def generate_print_points(
     - pick scalar minima on polyline with spacing suppression.
     - when `field_bead_widths` is provided, suppress each pair using
       `(width_i + width_j) / 2 - bead_overlap` instead of `min_spacing`.
+    - when `candidate_validator` rejects a provisional target, remove only its
+      configured polyline neighborhood and continue looking for replacements.
 
     Candidate modes:
     - `polyline`: output selected polyline points.
@@ -303,6 +374,12 @@ def generate_print_points(
     if k < 0:
         raise ValueError(f"count must be >= 0, got {count}")
     spacing = max(0.0, float(min_spacing))
+    rejection_radius = float(validator_rejection_radius)
+    if not np.isfinite(rejection_radius) or rejection_radius < 0.0:
+        raise ValueError(
+            "validator_rejection_radius must be finite and >= 0, "
+            f"got {validator_rejection_radius}"
+        )
     mode = str(candidate_mode).strip().lower()
     if mode not in ("polyline", "z_lift", "gradient_lift", "gradient_walk"):
         raise ValueError(
@@ -404,6 +481,7 @@ def generate_print_points(
 
     valid = unique_valid.copy()
     selected: list[int] = []
+    rejected_by_validator = 0
 
     while len(selected) < k:
         valid_idx = np.flatnonzero(valid)
@@ -411,6 +489,48 @@ def generate_print_points(
             break
 
         local_min_i = int(valid_idx[np.argmin(scalar_vals[valid_idx])])
+
+        if candidate_validator is not None:
+            preview = _preview_candidate_geometry(
+                source_point=unique_points[local_min_i],
+                mode=mode,
+                lift_height=float(lift_height),
+                field_vertices_world=field_vertices_world,
+                field_faces=field_faces,
+                field_scalar=field_scalar,
+                walk_distance=float(walk_distance),
+                walk_step=float(walk_step),
+                walk_max_steps=int(walk_max_steps),
+                walk_tangent_sign=float(walk_tangent_sign),
+                walk_start_fraction=float(walk_start_fraction),
+                clamp_to_cone=bool(clamp_to_cone),
+                cone_max_tilt_deg=float(cone_max_tilt_deg),
+                agent_phi_scalar=agent_phi_scalar,
+            )
+            accepted = False
+            if preview is not None:
+                endpoint, provisional_start = preview
+                accepted = bool(
+                    candidate_validator(
+                        unique_points[local_min_i].copy(),
+                        endpoint,
+                        provisional_start,
+                        local_min_i,
+                    )
+                )
+            if not accepted:
+                rejected_by_validator += 1
+                valid[local_min_i] = False
+                if rejection_radius > 0.0:
+                    rejected_zone = _dijkstra_with_limit(
+                        adj,
+                        local_min_i,
+                        limit=rejection_radius,
+                    )
+                    for idx in rejected_zone:
+                        valid[int(idx)] = False
+                continue
+
         selected.append(local_min_i)
         valid[local_min_i] = False
 
@@ -503,4 +623,5 @@ def generate_print_points(
             if bead_width_vals is not None
             else None
         ),
+        rejected_by_validator=rejected_by_validator,
     )

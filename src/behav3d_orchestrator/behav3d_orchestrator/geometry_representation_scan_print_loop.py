@@ -105,6 +105,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             f"max_cycles={rt.max_cycles}, "
             f"candidate_mode={rt.candidate_mode}, "
             f"candidate_width_mode={rt.candidate_width_mode}, "
+            f"use_collision={rt.use_collision}, "
             f"contour_offset_estimation={rt.contour_offset_estimation}, "
             f"print_mode={rt.print_mode}, log_joint_currents={rt.log_joint_currents}, "
             f"dot_steps={rt.dot_steps}, extrusion_steps_per_mm3={rt.extrusion_steps_per_mm3:.9f}, "
@@ -1251,6 +1252,27 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 "candidate_segment_start_offset_mm",
                 value=rt.candidate_segment_start_offset_mm,
             ),
+            Parameter("use_collision", value=rt.use_collision),
+            Parameter(
+                "collision_exclusion_radius_mm",
+                value=rt.collision_exclusion_radius_mm,
+            ),
+            Parameter(
+                "collision_threshold_mm",
+                value=rt.collision_threshold_mm,
+            ),
+            Parameter(
+                "collision_samples_per_segment",
+                value=rt.collision_samples_per_segment,
+            ),
+            Parameter(
+                "collision_tcp_exclusion_radius_mm",
+                value=rt.collision_tcp_exclusion_radius_mm,
+            ),
+            Parameter(
+                "collision_extruder_mesh_path",
+                value=rt.collision_extruder_mesh_path,
+            ),
         ]
         node_name = set_remote_parameters(
             self,
@@ -1269,6 +1291,11 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             f"volume_factor={rt.candidate_volume_factor:.6f} "
             f"target_output_mode={rt.print_mode} "
             f"segment_start_offset_mm={rt.candidate_segment_start_offset_mm:.3f} "
+            f"use_collision={rt.use_collision} "
+            f"collision_exclusion_radius_mm={rt.collision_exclusion_radius_mm:.3f} "
+            f"collision_threshold_mm={rt.collision_threshold_mm:.3f} "
+            f"collision_samples={rt.collision_samples_per_segment} "
+            f"collision_tcp_exclusion_radius_mm={rt.collision_tcp_exclusion_radius_mm:.3f} "
             f"field='{rt.candidate_width_field_path}'"
         )
 
@@ -1375,6 +1402,32 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         )
         if candidate_segment_start_offset_mm < 0.0:
             raise ValueError("candidate_segment_start_offset_mm must be >= 0")
+        use_collision = self._cfg_bool(cfg, "use_collision")
+        collision_exclusion_radius_mm = self._cfg_float(
+            cfg,
+            "collision_exclusion_radius_mm",
+        )
+        collision_threshold_mm = self._cfg_float(cfg, "collision_threshold_mm")
+        collision_samples_per_segment = self._cfg_int(
+            cfg,
+            "collision_samples_per_segment",
+        )
+        collision_tcp_exclusion_radius_mm = self._cfg_float(
+            cfg,
+            "collision_tcp_exclusion_radius_mm",
+        )
+        collision_extruder_mesh_path = self._cfg_str(
+            cfg,
+            "collision_extruder_mesh_path",
+        )
+        if collision_exclusion_radius_mm < 0.0:
+            raise ValueError("collision_exclusion_radius_mm must be >= 0")
+        if collision_threshold_mm < 0.0:
+            raise ValueError("collision_threshold_mm must be >= 0")
+        if collision_samples_per_segment < 1:
+            raise ValueError("collision_samples_per_segment must be >= 1")
+        if collision_tcp_exclusion_radius_mm < 0.0:
+            raise ValueError("collision_tcp_exclusion_radius_mm must be >= 0")
         if candidate_width_mode == "fixed" and candidate_bead_width_mm <= 0.0:
             raise ValueError("candidate_bead_width_mm must be > 0 in fixed mode")
         if candidate_width_mode == "field":
@@ -1495,6 +1548,12 @@ class GeometryRepresentationScanPrintLoopNode(Node):
             'candidate_bead_overlap_mm',
             'candidate_volume_factor',
             'candidate_segment_start_offset_mm',
+            'use_collision',
+            'collision_exclusion_radius_mm',
+            'collision_threshold_mm',
+            'collision_samples_per_segment',
+            'collision_tcp_exclusion_radius_mm',
+            'collision_extruder_mesh_path',
             'oriented_targets_enable',
             'oriented_tangent_sign',
             'oriented_clamp_to_cone',

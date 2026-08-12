@@ -30,6 +30,11 @@ try:
         scale_requested_volume_mm3,
     )
     from behav3d_py.scalar_field.lib_scalar.extract_phi_contour import extract_phi_contour
+    from behav3d_py.scalar_field.lib_scalar.extruder_collision import (
+        DEFAULT_EXTRUDER_MESH,
+        ExtruderCollisionChecker,
+        rotate_about_world_z,
+    )
     from behav3d_py.scalar_field.lib_scalar.generate_print_points import generate_print_points
     from behav3d_py.scalar_field.lib_scalar.geometry import (
         load_triangle_mesh_arrays,
@@ -56,6 +61,9 @@ except Exception as exc:  # pragma: no cover
     rounded_cylinder_volume_mm3 = None
     scale_requested_volume_mm3 = None
     extract_phi_contour = None
+    DEFAULT_EXTRUDER_MESH = None
+    ExtruderCollisionChecker = None
+    rotate_about_world_z = None
     generate_print_points = None
     load_triangle_mesh_arrays = None
     position_field_with_attempts = None
@@ -201,6 +209,15 @@ class FieldsNode(Node):
         self.declare_parameter("candidate_bead_overlap_mm", 4.0)
         self.declare_parameter("candidate_volume_factor", 1.0)
         self.declare_parameter("candidate_segment_start_offset_mm", 0.0)
+        self.declare_parameter("use_collision", False)
+        self.declare_parameter("collision_exclusion_radius_mm", 5.0)
+        self.declare_parameter("collision_threshold_mm", 1.0)
+        self.declare_parameter("collision_samples_per_segment", 5)
+        self.declare_parameter("collision_tcp_exclusion_radius_mm", 10.0)
+        self.declare_parameter(
+            "collision_extruder_mesh_path",
+            str(DEFAULT_EXTRUDER_MESH or ""),
+        )
         self.declare_parameter("target_output_mode", "auto")
         self.declare_parameter("walk_distance_mm", 12.0)
         self.declare_parameter("walk_step_mm", 1.0)
@@ -658,6 +675,158 @@ class FieldsNode(Node):
             if not np.isfinite(target_base_to_world_yaw_deg):
                 raise ValueError("target_base_to_world_yaw_deg must be a finite value.")
 
+            segment_start_offset_mm = float(
+                self.get_parameter("candidate_segment_start_offset_mm").value
+            )
+            if (
+                not np.isfinite(segment_start_offset_mm)
+                or segment_start_offset_mm < 0.0
+            ):
+                raise ValueError(
+                    "candidate_segment_start_offset_mm must be finite and >= 0, "
+                    f"got {segment_start_offset_mm}"
+                )
+
+            use_collision = bool(self.get_parameter("use_collision").value)
+            collision_validator = None
+            collision_exclusion_radius_m = 0.0
+            if use_collision:
+                collision_exclusion_radius_mm = float(
+                    self.get_parameter("collision_exclusion_radius_mm").value
+                )
+                collision_threshold_mm = float(
+                    self.get_parameter("collision_threshold_mm").value
+                )
+                collision_samples = int(
+                    self.get_parameter("collision_samples_per_segment").value
+                )
+                collision_tcp_exclusion_radius_mm = float(
+                    self.get_parameter("collision_tcp_exclusion_radius_mm").value
+                )
+                if (
+                    not np.isfinite(collision_exclusion_radius_mm)
+                    or collision_exclusion_radius_mm < 0.0
+                ):
+                    raise ValueError(
+                        "collision_exclusion_radius_mm must be finite and >= 0, "
+                        f"got {collision_exclusion_radius_mm}"
+                    )
+                if not np.isfinite(collision_threshold_mm) or collision_threshold_mm < 0.0:
+                    raise ValueError(
+                        "collision_threshold_mm must be finite and >= 0, "
+                        f"got {collision_threshold_mm}"
+                    )
+                if collision_samples < 1:
+                    raise ValueError(
+                        "collision_samples_per_segment must be >= 1, "
+                        f"got {collision_samples}"
+                    )
+                if (
+                    not np.isfinite(collision_tcp_exclusion_radius_mm)
+                    or collision_tcp_exclusion_radius_mm < 0.0
+                ):
+                    raise ValueError(
+                        "collision_tcp_exclusion_radius_mm must be finite and >= 0, "
+                        f"got {collision_tcp_exclusion_radius_mm}"
+                    )
+
+                extruder_mesh_raw = str(
+                    self.get_parameter("collision_extruder_mesh_path").value
+                ).strip()
+                extruder_mesh_path = _resolve_input_path(
+                    extruder_mesh_raw,
+                    session_dir,
+                    self._captures_root,
+                )
+                if extruder_mesh_path is None or not extruder_mesh_path.is_file():
+                    raise FileNotFoundError(
+                        "Collision extruder mesh not found: "
+                        f"{extruder_mesh_raw or extruder_mesh_path}"
+                    )
+                checker = ExtruderCollisionChecker.from_open3d_mesh(
+                    scan_mesh,
+                    extruder_mesh_path=extruder_mesh_path,
+                    threshold_mm=collision_threshold_mm,
+                    tcp_exclusion_radius_mm=collision_tcp_exclusion_radius_mm,
+                    target_yaw_deg=target_base_to_world_yaw_deg,
+                )
+                collision_exclusion_radius_m = 1e-3 * collision_exclusion_radius_mm
+
+                def _collision_validator(
+                    source_point: np.ndarray,
+                    endpoint: np.ndarray,
+                    provisional_start: np.ndarray,
+                    polyline_index: int,
+                ) -> bool:
+                    provisional_targets = build_candidate_segment_targets(
+                        candidate_points=np.asarray(endpoint, dtype=np.float64).reshape(1, 3),
+                        segment_start_points=np.asarray(
+                            provisional_start,
+                            dtype=np.float64,
+                        ).reshape(1, 3),
+                        candidate_mode=candidate_mode,
+                        field_vertices_world=pose.field_vertices_world,
+                        field_faces=field_faces,
+                        field_scalar=heat_norm,
+                        tangent_sign=float(tangent_sign),
+                        clamp_to_cone=bool(clamp_to_cone),
+                        cone_max_tilt_deg=float(cone_max_tilt_deg),
+                        orient_with_tangent=bool(orient_with_tangent),
+                        fixed_z_dir=(targets_zx, targets_zy, targets_zz),
+                    )
+                    if (
+                        target_output_mode == "segments"
+                        and candidate_mode == "gradient_lift"
+                    ):
+                        provisional_targets = offset_line_target_starts(
+                            provisional_targets,
+                            1e-3 * segment_start_offset_mm,
+                        )
+
+                    if target_output_mode == "segments":
+                        start = provisional_targets.start_points[0]
+                        end = provisional_targets.end_points[0]
+                        start_z = provisional_targets.start_z_dirs[0]
+                        end_z = provisional_targets.end_z_dirs[0]
+                        samples = collision_samples
+                    else:
+                        start = provisional_targets.end_points[0]
+                        end = start
+                        start_z = provisional_targets.end_z_dirs[0]
+                        end_z = start_z
+                        samples = 1
+
+                    result = checker.check_segment(
+                        start=rotate_about_world_z(
+                            np.asarray(start).reshape(1, 3),
+                            target_base_to_world_yaw_deg,
+                        )[0],
+                        end=rotate_about_world_z(
+                            np.asarray(end).reshape(1, 3),
+                            target_base_to_world_yaw_deg,
+                        )[0],
+                        start_z=rotate_about_world_z(
+                            np.asarray(start_z).reshape(1, 3),
+                            target_base_to_world_yaw_deg,
+                        )[0],
+                        end_z=rotate_about_world_z(
+                            np.asarray(end_z).reshape(1, 3),
+                            target_base_to_world_yaw_deg,
+                        )[0],
+                        samples=samples,
+                    )
+                    if result.collides:
+                        self.get_logger().info(
+                            "Collision filter rejected candidate: "
+                            f"polyline_index={polyline_index} "
+                            f"min_distance_mm={result.min_distance_mm:.3f} "
+                            f"sample_alpha={result.alpha} "
+                            f"source={np.asarray(source_point).tolist()}"
+                        )
+                    return not result.collides
+
+                collision_validator = _collision_validator
+
             candidates = generate_print_points(
                 polyline_points=contour_points,
                 polyline_lines=contour_lines,
@@ -680,6 +849,8 @@ class FieldsNode(Node):
                 agent_phi_scalar=pose.phi,
                 field_bead_widths=field_bead_widths_m,
                 bead_overlap=1e-3 * bead_overlap_mm_used,
+                candidate_validator=collision_validator,
+                validator_rejection_radius=collision_exclusion_radius_m,
             )
             candidate_points = candidates.points
             candidate_bead_widths_m = (
@@ -701,17 +872,6 @@ class FieldsNode(Node):
                 orient_with_tangent=bool(orient_with_tangent),
                 fixed_z_dir=(targets_zx, targets_zy, targets_zz),
             )
-            segment_start_offset_mm = float(
-                self.get_parameter("candidate_segment_start_offset_mm").value
-            )
-            if (
-                not np.isfinite(segment_start_offset_mm)
-                or segment_start_offset_mm < 0.0
-            ):
-                raise ValueError(
-                    "candidate_segment_start_offset_mm must be finite and >= 0, "
-                    f"got {segment_start_offset_mm}"
-                )
             if (
                 target_output_mode == "segments"
                 and candidate_mode == "gradient_lift"
@@ -762,6 +922,14 @@ class FieldsNode(Node):
                 f"width_mode={width_mode} "
                 f"{width_detail}"
             )
+            if use_collision:
+                self.get_logger().info(
+                    "Collision candidate filter applied: "
+                    f"rejected={candidates.rejected_by_validator} "
+                    f"accepted_before_secondary={candidates.points.shape[0]} "
+                    f"final={line_targets.count} "
+                    f"exclusion_radius_mm={1e3 * collision_exclusion_radius_m:.3f}"
+                )
 
             out_dir = _resolve_output_dir(
                 req.output_dir,

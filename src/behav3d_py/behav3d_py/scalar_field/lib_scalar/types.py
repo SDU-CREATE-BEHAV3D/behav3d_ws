@@ -67,3 +67,4 @@ class PrintPointSet:
     surface_points: np.ndarray | None = None
     segment_start_points: np.ndarray | None = None
     bead_widths: np.ndarray | None = None
+    rejected_by_validator: int = 0
