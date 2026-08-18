@@ -150,7 +150,7 @@ geometry_representation_scan_print_loop:
     # Optional extruder-vs-scan collision filter. A rejected candidate removes
     # this geodesic neighborhood from the contour polyline, then selection
     # continues until candidate_beads_per_step is filled or the contour ends.
-    use_collision: false
+    use_collision: true
     collision_exclusion_radius_mm: 2.0
     collision_threshold_mm: 2.2
     collision_samples_per_segment: 3
