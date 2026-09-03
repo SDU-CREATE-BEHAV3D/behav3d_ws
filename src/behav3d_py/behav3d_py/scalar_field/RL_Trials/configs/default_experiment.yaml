@@ -1,0 +1,93 @@
+schema_version: 1
+experiment_name: field_state_init2_point_bead_fixture
+random_seed: 0
+
+paths:
+  # Paths are relative to the workspace root.
+  field_state: mesh/fields/field_state_init2.npz
+  width_field: mesh/fields/width_field.npz
+  scan_mesh: mesh/ScanMesh.stl
+
+scan:
+  scale: 0.001
+  yaw_deg: 180.0
+
+goal:
+  representation: open_2p5d_surface
+  vertex_count: 5721
+  face_count: 11147
+  connected_components: 1
+  area_m2: 0.08018726390699071
+  initial_vertical_ray_hit_count: 5721
+  initial_phi_min_m: -0.005758697509765626
+  initial_phi_median_m: 0.12441693115234374
+  initial_phi_max_m: 0.2959978942871094
+  fill_direction: world_z
+  envelope: vertical_sweep_from_initial_scan
+
+completion:
+  evaluator: vertical_phi
+  area_weighted: true
+  fill_tolerance_mm: 2.0
+  overbuild_tolerance_mm: 4.0
+  success_completed_area_fraction: 0.99
+
+scalar_fields:
+  heat_order: low_to_high
+  width_key: width_norm
+  width_min_mm: 16.0
+  width_max_mm: 36.0
+  nominal_overlap_reference_mm: 4.0
+
+dds:
+  deposit_mode: point
+  voxel_size_mm: 2.0
+  occupancy_threshold: 0.5
+  domain_source: field
+  # At least the 36 mm maximum width is needed; extra room permits bounded
+  # positional/orientation exploration without clipping bead support.
+  padding_mm: 40.0
+
+action:
+  deposits_per_step: 1
+  target_reference: bead_top
+  cone_axis: world_positive_z
+  cone_max_tilt_deg: 30.0
+  contact_ray_direction: negative_deposition_z
+  contact_distance_min_mm: 10.0
+  contact_distance_max_mm: 16.0
+  bead_height_mode: contact_hit_distance
+  bead_height_min_mm: 10.0
+  bead_height_max_mm: 16.0
+  tangential_offset_limit_mm: 4.0
+  initial_width_mode: sample_goal_width
+  future_width_action_min_mm: 16.0
+  future_width_action_max_mm: 36.0
+
+overlap:
+  metric: lateral_geometric_overlap_mm
+  target_mm: 4.0
+  tolerance_mm: 1.0
+
+episode:
+  max_deposits: 500
+  max_consecutive_no_progress: 20
+  max_consecutive_invalid_actions: 20
+
+baseline:
+  policy: current_heuristic_only_for_evaluation
+  candidate_mode: gradient_lift
+  beads_per_step: 7
+  behavior_cloning: false
+
+ppo:
+  initialization: random
+  behavior_cloning: false
+
+# These are recommended starting values, not frozen decisions. Phase 0 is
+# complete only after they are accepted or revised and promoted into the
+# active evaluator/reward configuration.
+pending_decisions:
+  reward_weights:
+    recommended: null
+    reason: set only after geometric reward-component audit

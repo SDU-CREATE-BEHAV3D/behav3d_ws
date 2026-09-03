@@ -243,7 +243,8 @@ written by default.
 ## Conceptual Notes
 
 - `phi = z_field - z_scan - clearance`.
-- Viable field points are usually those with `phi <= iso`.
+- In the current implementation, viable/unprinted field points are those with
+  `phi > iso`; printed/reached points are those with `phi <= iso`.
 - The cyan contour is `phi=0`.
 - The magenta contour is a geodesic offset over the field mesh from the cyan
   contour. It is not a Euclidean offset in free space.
