@@ -81,17 +81,19 @@ the initial scan and the goal surface. A future directional DDS/SDF evaluator
 will replace this assumption when testing geometry that is not representable
 as one vertical height per `(x, y)` location.
 
-The 10-16 mm height range initially has the following precise meaning:
+The 10-16 mm height range has the following precise meaning:
 
-1. PPO selects a continuous source point on the interpolated `phi=0`
-   polyline and a deposition direction `Z`.
-2. The decoder raycasts from the proposed top target in direction `-Z`.
-3. The action is contact-valid only when the first hit is 10-16 mm away.
-4. The hit distance becomes that deposit's DDS `BeadProfile.height`.
+1. PPO selects a sampled source point `S` on the interpolated `phi=0`
+   polyline, a height `h`, and a deposition direction `Z`.
+2. The top-referenced DDS target is `O = S + h Z`.
+3. The decoder raycasts from `O` in direction `-Z`.
+4. The action is contact-valid only when the hit is within the 10-16 mm range
+   and returns sufficiently close to the intended source `S`.
 
 This makes the DDS bead extend from its top-referenced target back to existing
-geometry without a gap. Height is derived from the proposed pose and contact
-ray in the first version; it is not an additional independent PPO action.
+geometry without a gap. Height is selected by the agent and then verified by
+the contact ray; the environment does not silently replace it with a different
+height.
 
 The supplied `gradient_lift` command remains the heuristic baseline. Its
 `beads_per_step=7` setting does not define the RL action: the RL environment
@@ -136,31 +138,30 @@ polyline but must never substitute it with frontier vertices.
 
 ## Safe Action Space
 
-The first environment will apply one point bead per RL step. The proposed
-hybrid action is:
+The first environment will apply one point bead per RL step. At each step it
+will sample `N` source points uniformly by arc length from every current
+`phi=0` polyline. These are temporary source candidates, not goal vertices or
+print targets. The proposed hybrid policy action is:
 
 ```text
-polyline_segment_id    discrete segment on the interpolated phi=0 contour
-segment_fraction       continuous position inside that segment
-offset_tangent_1       bounded local positional adjustment
-offset_tangent_2       bounded local positional adjustment
+source_index           discrete choice among N sampled polyline sources
+bead_height            continuous value in the 10-16 mm range
 cone_tilt              bounded orientation tilt
 cone_azimuth           orientation direction around the cone axis
-bead_width             bounded DDS width control
+width_delta            bounded correction from the interpolated width map
 ```
 
 The action decoder will:
 
-1. resolve a continuous source point and local frame on the interpolated
-   `phi=0` polyline;
-2. apply the bounded tangential offset;
-3. construct the deposition `Z` direction directly inside the allowed cone;
-4. raycast opposite `Z` to find pre-existing geometry;
-5. require that contact to fall inside the configured distance range;
-6. compute the top-referenced DDS target `O` from the contact point and bead
-   height;
-7. create the candidate DDS `PointDeposit`;
-8. validate DDS-domain containment, collision, and later robot reachability.
+1. resolve the selected continuous source `S` on the interpolated `phi=0`
+   polyline;
+2. construct the deposition `Z` direction directly inside the allowed cone;
+3. compute the top-referenced target `O = S + h Z`;
+4. raycast opposite `Z` and verify the intended contact and height;
+5. interpolate the width map and apply the policy's bounded width correction;
+6. create the candidate DDS `PointDeposit`;
+7. validate DDS-domain containment and the existing extruder collision proxy;
+8. later add robot reachability and swept-path validation.
 
 The decoder must not generate an arbitrary orientation and clamp it afterward.
 Direct cone parameterization preserves useful PPO action gradients and avoids
@@ -170,6 +171,13 @@ Invalid actions leave the fabrication state unchanged, receive a bounded
 invalid-action penalty, and are reported by reason. Repeated invalid actions
 may terminate the episode. Collision and domain violations will never be
 executed merely because their learned reward might be favorable.
+
+A collision selected by PPO is not silently replaced with another random
+action. It is rejected, the DDS state stays unchanged, and the policy receives
+the configured `-10` collision penalty. This is deliberately dominant relative
+to total normalized completion (approximately `+1`) while remaining finite for
+stable PPO advantages. The collision checker remains a hard safety shield even
+after the policy learns to avoid it.
 
 Volume will not be an action in the first version. The current DDS geometry is
 controlled by `BeadProfile(width, height)`, and the scalar DDS loop does not
@@ -190,6 +198,7 @@ reward =
   - width_error_penalty
   - action_cost
   - invalid_action_penalty
+  - 10 * collision_indicator
 ```
 
 Definitions:
@@ -203,6 +212,8 @@ Definitions:
   width field interpolated at the continuous action point;
 - `action_cost`: small bead/material cost that discourages endless episodes;
 - `invalid_action_penalty`: applied when the safety decoder rejects an action.
+- `collision_indicator`: `1` when the extruder proxy reports collision and `0`
+  otherwise; its configured contribution is exactly `-10`.
 
 “Minimizing empty goal difference,” “not advancing,” and “leaving gaps” must
 not be added as three independent dense penalties because they measure nearly
@@ -270,7 +281,12 @@ They verify:
 - the fill tolerance classifies known height samples correctly;
 - vertical raycasting against a known plane returns the expected gap;
 - visualization data is built as DDS `TriangleMesh` and `PointCloud` objects
-  with the expected state colors and frontier points.
+  with the expected state colors and frontier points;
+- action sources are sampled by physical polyline length, independently of
+  heat and mesh-segment count;
+- sampled height, cone direction, target construction, and width stay inside
+  their configured bounds;
+- contact validity and extruder collision rejection remain separate results.
 
 Run them with:
 
@@ -305,18 +321,19 @@ The magenta line is extracted with the existing
 `lib_scalar.extract_phi_contour.extract_phi_contour` implementation used by
 the scalar-field pipeline. It is not reconstructed from the cyan points.
 
-“Continuous position inside a segment” is a possible future action
-parameterization, not a target generator implemented at this stage. If a
-polyline segment has endpoints `A` and `B`, a scalar `u` in `[0, 1]` identifies
+The candidate sampler uses an internal continuous position inside each segment.
+If a polyline segment has endpoints `A` and `B`, a random scalar `u` in
+`[0, 1]` identifies
 
 ```text
 P(u) = (1-u) A + u B
 ```
 
-Thus `u=0` gives `A`, `u=0.5` the midpoint, and `u=1` gives `B`. `P(u)` is a
-continuous source point on the true interpolated intersection, not necessarily
-the final print target. The action decoder may later derive a target from it
-using bounded offset, contact raycasting, bead height, and orientation.
+Thus `u=0` gives `A`, `u=0.5` the midpoint, and `u=1` gives `B`. `P(u)` is the
+source `S` on the true interpolated intersection, not the final print target.
+The sampler is uniform by total polyline arc length, so triangle tessellation
+does not change spatial probability. `u` and raw triangle-segment indices are
+implementation details and are not exposed as user-facing CLI parameters.
 
 For a headless run or a reproducible image, save a screenshot under the
 isolated experiment folder:
@@ -333,6 +350,45 @@ PyVista conversion path to avoid requiring an interactive Qt window. This
 visualization currently shows the initial scan evaluation; it is also the base
 that will be updated with accumulated DDS beads in Phase 2.
 
+### Action-pool and collision-proxy preview
+
+This pre-training diagnostic samples complete proposals without using heat or
+gradient for selection. Each proposal contains a polyline source `S`, height,
+orientation, width variation, and resulting target `O`. It verifies contact,
+runs the existing `ExtruderCollisionChecker`, and renders one random valid DDS
+bead:
+
+```bash
+cd /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials
+/bin/python3 scripts/visualize_action_candidates.py
+```
+
+Colors:
+
+- magenta: interpolated `phi=0` source polyline;
+- yellow: contact- and collision-valid proposals;
+- red: extruder-collision proxy rejection;
+- blue: contact-ray rejection;
+- green: one random valid proposal and its DDS bead preview.
+
+The configured 30-degree cone may contain no collisions in this initial open
+fixture; that is a valid result. To exercise the collision rejection with a
+deliberately wider diagnostic cone:
+
+```bash
+/bin/python3 scripts/visualize_action_candidates.py \
+  --candidate-count 128 \
+  --cone-max-tilt-deg 60
+```
+
+The 60-degree override tests the classifier only; it does not change the
+configured 30-degree training limit. A reproducible headless render can be
+saved with `--screenshot outputs/action_candidates.png`.
+
+The random valid selection in this script is only a smoke test. During PPO
+training, a collision chosen by the policy will be rejected and penalized; the
+environment will not silently execute another proposal.
+
 ### Phase 2 — Headless incremental DDS state
 
 - [ ] Wrap the initial scan and mutable DDS bead field in an episode state.
@@ -346,17 +402,20 @@ Exit condition: thousands of bead steps can run reproducibly in headless mode.
 
 ### Phase 3 — Safe action decoder
 
-- [ ] Extract and preserve the continuous interpolated `phi=0` scan/goal
+- [x] Extract and preserve the continuous interpolated `phi=0` scan/goal
   intersection polyline.
-- [ ] Build valid continuous action points from polyline segments, without
+- [x] Build random continuous action points from polyline segments, without
   treating goal or frontier vertices as print targets.
-- [ ] Implement bounded tangential offsets.
-- [ ] Implement direct cone parameterization for `Z`.
-- [ ] Implement contact raycasting and top-referenced `O` construction.
-- [ ] Add width bounds and `BeadProfile` creation.
+- [x] Sample `Z` directly and uniformly in solid angle inside the cone.
+- [x] Implement contact raycasting and top-referenced `O = S + h Z`
+  construction for preview candidates.
+- [x] Add height and width bounds, width-map variation, and DDS
+  `BeadProfile` preview creation.
 - [ ] Reject no-contact, out-of-domain, degenerate, and collision actions with
   typed reason codes.
-- [ ] Add collision checks against initial scan plus accumulated DDS geometry.
+- [x] Integrate the existing extruder collision proxy against the initial scan
+  for candidate diagnostics.
+- [ ] Rebuild collision checks against accumulated DDS geometry per RL step.
 
 Exit condition: every accepted action is a valid DDS point deposit touching
 pre-existing geometry.
@@ -401,8 +460,10 @@ Exit condition: PPO has reproducible lower and upper-reference baselines.
 ### Phase 7 — PPO environment and training
 
 - [ ] Add the Gymnasium-compatible environment inside `RL_Trials/`.
-- [ ] Implement a masked categorical polyline-segment head and continuous
-  heads for segment position, offset, orientation, and width.
+- [ ] Implement a categorical sampled-source head and continuous heads for
+  height, cone orientation, and width correction.
+- [ ] Reject and penalize policy-selected collisions by `-10` without silently
+  executing a replacement action.
 - [ ] Train PPO from random initialization; no behavior cloning.
 - [ ] Begin with fixed `+Z` and fixed width, then progressively enable offset,
   cone orientation, and variable width.
@@ -448,8 +509,8 @@ The first experiment intentionally uses:
 - one fixed goal and scan fixture;
 - point deposits only;
 - one bead per environment step;
-- fixed bead height;
-- initially fixed width and `+Z` orientation;
+- variable 10-16 mm height, cone orientation, and bounded width correction in
+  the action-space diagnostic;
 - vertical-ray goal completion;
 - direct DDS incremental updates;
 - PPO from random initialization;
@@ -473,6 +534,7 @@ RL_Trials/
     fixture_io.py
     goal_evaluator.py
     visualization.py
+    action_candidates.py
     env.py
     dds_state.py
     action_decoder.py
@@ -482,9 +544,11 @@ RL_Trials/
   tests/
     test_goal_evaluator.py
     test_visualization.py
+    test_action_candidates.py
   scripts/
     evaluate_fixture.py
     visualize_goal_evaluation.py
+    visualize_action_candidates.py
   outputs/                 # ignored/generated artifacts
 ```
 

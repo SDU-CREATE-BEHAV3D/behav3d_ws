@@ -90,6 +90,52 @@ def load_scan_mesh_arrays(
     return vertices @ rotation.T, faces
 
 
+def load_npz_vertex_scalar(
+    path: Path,
+    *,
+    key: str,
+    expected_count: int,
+) -> FloatArray:
+    """Load one finite per-vertex scalar array from an NPZ file."""
+
+    with np.load(path, allow_pickle=False) as payload:
+        if key not in payload:
+            raise KeyError(f"NPZ file does not contain '{key}': {path}")
+        values = np.asarray(payload[key], dtype=np.float64).reshape(-1)
+    if values.shape[0] != int(expected_count):
+        raise ValueError(
+            f"'{key}' must contain {expected_count} values, got {values.shape[0]}"
+        )
+    if not np.all(np.isfinite(values)):
+        raise ValueError(f"'{key}' must contain only finite values")
+    return values
+
+
+def load_configured_goal_fields(
+    config: dict[str, Any],
+    workspace_root: Path,
+    *,
+    expected_count: int,
+) -> tuple[FloatArray, FloatArray]:
+    """Load aligned goal heat and normalized-width vertex fields."""
+
+    paths = config["paths"]
+    field_state_path = resolve_workspace_path(workspace_root, str(paths["field_state"]))
+    width_field_path = resolve_workspace_path(workspace_root, str(paths["width_field"]))
+    width_key = str(config["scalar_fields"]["width_key"])
+    heat = load_npz_vertex_scalar(
+        field_state_path,
+        key="heat_norm",
+        expected_count=expected_count,
+    )
+    width = load_npz_vertex_scalar(
+        width_field_path,
+        key=width_key,
+        expected_count=expected_count,
+    )
+    return heat, width
+
+
 def load_configured_geometry(
     config: dict[str, Any],
     workspace_root: Path,

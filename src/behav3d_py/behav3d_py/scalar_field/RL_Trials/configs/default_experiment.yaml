@@ -7,6 +7,7 @@ paths:
   field_state: mesh/fields/field_state_init2.npz
   width_field: mesh/fields/width_field.npz
   scan_mesh: mesh/ScanMesh.stl
+  extruder_mesh: src/custom_workcell/ur20_workcell/meshes/ram_extruder_v2_simplified.dae
 
 scan:
   scale: 0.001
@@ -30,6 +31,7 @@ goal:
 intersection:
   deposition_boundary: interpolated_phi_zero_polyline
   preserve_scan_goal_polyline: true
+  iso_level_m: 0.0
 
 vertex_frontier:
   definition: unfilled_vertex_adjacent_to_filled_vertex
@@ -67,13 +69,36 @@ action:
   contact_ray_direction: negative_deposition_z
   contact_distance_min_mm: 10.0
   contact_distance_max_mm: 16.0
-  bead_height_mode: contact_hit_distance
+  bead_height_mode: agent_selected_then_contact_validated
   bead_height_min_mm: 10.0
   bead_height_max_mm: 16.0
-  tangential_offset_limit_mm: 4.0
-  initial_width_mode: sample_goal_width
-  future_width_action_min_mm: 16.0
-  future_width_action_max_mm: 36.0
+  width_mode: agent_delta_from_interpolated_goal_width
+  bead_width_min_mm: 16.0
+  bead_width_max_mm: 36.0
+
+candidate_pool:
+  count: 64
+  preview_mode: random_complete_action_proposals
+  source_sampling: uniform_polyline_arc_length
+  direction_sampling: uniform_solid_angle_in_cone
+  width_delta_min_mm: -4.0
+  width_delta_max_mm: 4.0
+  contact_source_tolerance_mm: 1.0
+  max_generation_attempts: 5
+
+collision:
+  checker: existing_extruder_mesh_vertex_distance_proxy
+  threshold_mm: 1.0
+  tcp_exclusion_radius_mm: 10.0
+  preview_behavior: classify_and_select_random_valid
+  training_behavior: reject_action_keep_state_and_penalize
+  silently_replace_policy_action: false
+
+reward:
+  # Deliberately dominant relative to total normalized completion (~+1).
+  # Keep it finite so PPO advantage/value estimates remain numerically stable.
+  collision_penalty: -10.0
+  collision_terminates_episode: false
 
 overlap:
   metric: lateral_geometric_overlap_mm
