@@ -60,7 +60,6 @@ def test_partial_fill_produces_mesh_frontier(square_goal) -> None:
         z_scan=np.array([1.0, 1.0, 0.98, 0.98]),
         has_hit=np.ones(4, dtype=bool),
         fill_tolerance_m=0.002,
-        overbuild_tolerance_m=0.004,
     )
 
     assert result.filled.tolist() == [True, True, False, False]
@@ -87,7 +86,7 @@ def test_completed_goal_inside_positive_tolerance(square_goal) -> None:
     assert result.metrics.mean_remaining_gap_m == pytest.approx(0.0)
 
 
-def test_overbuilt_vertices_are_also_filled(square_goal) -> None:
+def test_scan_above_goal_is_completed_without_a_second_state(square_goal) -> None:
     vertices, faces = square_goal
     result = evaluate_goal_from_height_samples(
         vertices,
@@ -95,14 +94,10 @@ def test_overbuilt_vertices_are_also_filled(square_goal) -> None:
         z_scan=np.full(4, 1.010),
         has_hit=np.ones(4, dtype=bool),
         fill_tolerance_m=0.002,
-        overbuild_tolerance_m=0.004,
     )
 
     assert np.all(result.filled)
-    assert np.all(result.overbuilt)
     assert result.metrics.completed_area_fraction == pytest.approx(1.0)
-    assert result.metrics.overbuilt_area_fraction == pytest.approx(1.0)
-    assert result.metrics.mean_overbuild_beyond_tolerance_m == pytest.approx(0.006)
 
 
 def test_vertical_raycast_backend_hits_planar_scan(square_goal) -> None:

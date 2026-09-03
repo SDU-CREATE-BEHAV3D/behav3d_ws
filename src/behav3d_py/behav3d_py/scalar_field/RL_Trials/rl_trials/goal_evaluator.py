@@ -29,19 +29,15 @@ class GoalMetrics:
     resolved_vertex_count: int
     filled_vertex_count: int
     unfilled_vertex_count: int
-    overbuilt_vertex_count: int
     frontier_vertex_count: int
     total_area_m2: float
     resolved_area_fraction: float
     completed_area_fraction: float
     unfilled_area_fraction: float
-    overbuilt_area_fraction: float
     frontier_area_fraction: float
     mean_remaining_gap_m: float
     p95_remaining_gap_m: float
     max_remaining_gap_m: float
-    mean_overbuild_beyond_tolerance_m: float
-    max_overbuild_beyond_tolerance_m: float
 
     def to_dict(self) -> dict[str, int | float]:
         """Return a serialization-friendly metrics mapping."""
@@ -55,12 +51,10 @@ class GoalEvaluation:
 
     phi: FloatArray
     gap_to_completion: FloatArray
-    overbuild_beyond_tolerance: FloatArray
     has_hit: BoolArray
     filled: BoolArray
     unfilled: BoolArray
     unresolved: BoolArray
-    overbuilt: BoolArray
     frontier: BoolArray
     vertex_area_weights: FloatArray
     edges: IntArray
@@ -207,13 +201,14 @@ def evaluate_goal_from_height_samples(
     *,
     clearance_m: float = 0.0,
     fill_tolerance_m: float = 0.002,
-    overbuild_tolerance_m: float = 0.004,
 ) -> GoalEvaluation:
     """Evaluate completion from vertical scan-height samples.
 
     `gap_to_completion` is zero inside the accepted fill band and positive
     above it. Ray misses receive infinite gap and are explicitly unresolved.
-    A deeply negative phi is both filled and overbuilt.
+    Negative phi remains completed goal in this first evaluator. It is not
+    labeled as overbuild: real overbuild will later be defined from DDS
+    material outside the permitted goal envelope.
     """
 
     vertices = _vertices(goal_vertices_world, "goal_vertices_world")
@@ -229,25 +224,15 @@ def evaluate_goal_from_height_samples(
     if not np.isfinite(clearance):
         raise ValueError("clearance_m must be finite")
     fill_tolerance = _nonnegative_finite(fill_tolerance_m, "fill_tolerance_m")
-    overbuild_tolerance = _nonnegative_finite(
-        overbuild_tolerance_m,
-        "overbuild_tolerance_m",
-    )
 
     phi = np.full(vertices.shape[0], np.nan, dtype=np.float64)
     phi[hit] = vertices[hit, 2] - scan_heights[hit] - clearance
     filled = hit & (phi <= fill_tolerance)
     unresolved = ~hit
     unfilled = ~filled
-    overbuilt = hit & (phi < -overbuild_tolerance)
 
     gap_to_completion = np.full(vertices.shape[0], np.inf, dtype=np.float64)
     gap_to_completion[hit] = np.maximum(phi[hit] - fill_tolerance, 0.0)
-    overbuild_depth = np.zeros(vertices.shape[0], dtype=np.float64)
-    overbuild_depth[hit] = np.maximum(
-        -phi[hit] - overbuild_tolerance,
-        0.0,
-    )
 
     weights = vertex_area_weights(vertices, faces)
     edges = goal_mesh_edges(faces, vertex_count=vertices.shape[0])
@@ -265,27 +250,16 @@ def evaluate_goal_from_height_samples(
         if resolved_area > 0.0
         else 0.0
     )
-    overbuilt_weights = weights[overbuilt]
-    overbuilt_depths = overbuild_depth[overbuilt]
-    overbuilt_area = float(np.sum(overbuilt_weights))
-    mean_overbuild = (
-        float(np.sum(overbuilt_weights * overbuilt_depths) / overbuilt_area)
-        if overbuilt_area > 0.0
-        else 0.0
-    )
-
     metrics = GoalMetrics(
         vertex_count=int(vertices.shape[0]),
         resolved_vertex_count=int(np.count_nonzero(hit)),
         filled_vertex_count=int(np.count_nonzero(filled)),
         unfilled_vertex_count=int(np.count_nonzero(unfilled)),
-        overbuilt_vertex_count=int(np.count_nonzero(overbuilt)),
         frontier_vertex_count=int(np.count_nonzero(frontier)),
         total_area_m2=total_area,
         resolved_area_fraction=area_fraction(hit),
         completed_area_fraction=area_fraction(filled),
         unfilled_area_fraction=area_fraction(unfilled),
-        overbuilt_area_fraction=area_fraction(overbuilt),
         frontier_area_fraction=area_fraction(frontier),
         mean_remaining_gap_m=mean_gap,
         p95_remaining_gap_m=_weighted_quantile(
@@ -296,21 +270,15 @@ def evaluate_goal_from_height_samples(
         max_remaining_gap_m=(
             float(np.max(resolved_gaps)) if resolved_gaps.size else 0.0
         ),
-        mean_overbuild_beyond_tolerance_m=mean_overbuild,
-        max_overbuild_beyond_tolerance_m=(
-            float(np.max(overbuilt_depths)) if overbuilt_depths.size else 0.0
-        ),
     )
 
     return GoalEvaluation(
         phi=_readonly(phi, np.float64),
         gap_to_completion=_readonly(gap_to_completion, np.float64),
-        overbuild_beyond_tolerance=_readonly(overbuild_depth, np.float64),
         has_hit=_readonly(hit, np.bool_),
         filled=_readonly(filled, np.bool_),
         unfilled=_readonly(unfilled, np.bool_),
         unresolved=_readonly(unresolved, np.bool_),
-        overbuilt=_readonly(overbuilt, np.bool_),
         frontier=frontier,
         vertex_area_weights=weights,
         edges=edges,
@@ -361,7 +329,6 @@ def evaluate_goal_with_vertical_rays(
     *,
     clearance_m: float = 0.0,
     fill_tolerance_m: float = 0.002,
-    overbuild_tolerance_m: float = 0.004,
     z_top: float | None = None,
 ) -> GoalEvaluation:
     """Raycast the scan and evaluate the goal in one call."""
@@ -379,5 +346,4 @@ def evaluate_goal_with_vertical_rays(
         has_hit,
         clearance_m=clearance_m,
         fill_tolerance_m=fill_tolerance_m,
-        overbuild_tolerance_m=overbuild_tolerance_m,
     )

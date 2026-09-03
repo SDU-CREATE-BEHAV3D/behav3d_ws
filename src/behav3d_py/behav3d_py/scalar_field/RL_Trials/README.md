@@ -18,7 +18,7 @@ reached while balancing:
 - the intended heat-field order,
 - agreement with the width field,
 - sufficient contact with existing geometry,
-- limited excessive overlap and overbuild,
+- limited excessive overlap and, later, DDS material outside the goal envelope,
 - collision-free and reachable target poses,
 - efficient use of bead count or deposited material.
 
@@ -38,11 +38,13 @@ For the current vertical-ray implementation:
 
 - `phi > iso`: viable/unprinted goal region;
 - `phi <= iso`: printed/reached goal region;
-- `phi << iso`: possible overbuild, depending on the selected tolerance;
 - no scan/raycast hit: unresolved and not completed.
 
-Before training, the terms `unprinted`, `filled`, and `overbuilt` must be used
-explicitly in the RL code instead of relying on the ambiguous word `viable`.
+Before training, the terms `unprinted` and `filled` must be used explicitly in
+the RL code instead of relying on the ambiguous word `viable`. Negative `phi`
+is still completed goal in this first vertical evaluator. It is not called
+overbuild: overbuild will only be introduced after it can be measured as DDS
+material outside the permitted goal envelope.
 
 ## Selected Development Fixture
 
@@ -81,7 +83,8 @@ as one vertical height per `(x, y)` location.
 
 The 10-16 mm height range initially has the following precise meaning:
 
-1. PPO selects a goal anchor and deposition direction `Z`.
+1. PPO selects a continuous source point on the interpolated `phi=0`
+   polyline and a deposition direction `Z`.
 2. The decoder raycasts from the proposed top target in direction `-Z`.
 3. The action is contact-valid only when the first hit is 10-16 mm away.
 4. The hit distance becomes that deposit's DDS `BeadProfile.height`.
@@ -125,13 +128,20 @@ Vertex contributions to goal completion must be weighted by their associated
 mesh area. Counting vertices directly would make the result depend on mesh
 triangulation density.
 
+`frontier` is retained as an auxiliary mesh-connectivity feature and debugging
+signal. A goal vertex is a measurement sample, **not a print target**. The
+continuous interpolated `phi=0` scan/goal intersection polyline remains the
+geometric deposition boundary; a policy action may be parameterized from that
+polyline but must never substitute it with frontier vertices.
+
 ## Safe Action Space
 
 The first environment will apply one point bead per RL step. The proposed
 hybrid action is:
 
 ```text
-anchor_id              discrete goal/frontier location
+polyline_segment_id    discrete segment on the interpolated phi=0 contour
+segment_fraction       continuous position inside that segment
 offset_tangent_1       bounded local positional adjustment
 offset_tangent_2       bounded local positional adjustment
 cone_tilt              bounded orientation tilt
@@ -141,7 +151,8 @@ bead_width             bounded DDS width control
 
 The action decoder will:
 
-1. resolve the selected anchor and its local frame;
+1. resolve a continuous source point and local frame on the interpolated
+   `phi=0` polyline;
 2. apply the bounded tangential offset;
 3. construct the deposition `Z` direction directly inside the allowed cone;
 4. raycast opposite `Z` to find pre-existing geometry;
@@ -175,7 +186,6 @@ separately. The initial structure is:
 reward =
     progress_reward
   + heat_order_reward
-  - overbuild_penalty
   - overlap_band_penalty
   - width_error_penalty
   - action_cost
@@ -187,11 +197,10 @@ Definitions:
 - `progress_reward`: increase in area-weighted completed goal fraction;
 - `heat_order_reward`: favors newly completed area with the intended heat
   priority, without requiring the heuristic contour-selection rule;
-- `overbuild_penalty`: new material outside the permitted goal envelope;
 - `overlap_band_penalty`: hinge penalty below or above a desired contact/
   overlap interval, so zero contact and excessive overlap are both undesirable;
 - `width_error_penalty`: normalized difference between selected width and the
-  width field sampled at the action anchor;
+  width field interpolated at the continuous action point;
 - `action_cost`: small bead/material cost that discourages endless episodes;
 - `invalid_action_penalty`: applied when the safety decoder rejects an action.
 
@@ -201,7 +210,7 @@ the same failure. Dense area progress, a small action cost, and a terminal
 remaining-gap penalty cover them without accidental triple weighting.
 
 An episode succeeds when area-weighted completion exceeds its threshold while
-overbuild and overlap remain inside their allowed limits. It terminates on
+overlap remains inside its allowed limits. It terminates on
 success, bead/material budget exhaustion, excessive consecutive non-progress,
 or repeated invalid actions.
 
@@ -214,9 +223,9 @@ or repeated invalid actions.
   width range, scan transform, and contact-ray interpretation.
 - [x] Classify this goal as an open target surface and use a vertical swept
   region from the initial scan for the first 2.5D evaluator.
-- [x] Define exact filled, overbuilt, overlap, and episode-success semantics.
+- [x] Define exact filled, overlap, and episode-success semantics.
 - [x] Add a fixed random seed and a machine-readable fixture configuration.
-- [x] Confirm or revise the proposed completion, overbuild, overlap, action,
+- [x] Confirm or revise the proposed completion, overlap, action,
   and episode-budget values listed in the fixture configuration.
 
 Exit condition: the same geometry always produces the same initial metrics.
@@ -226,28 +235,25 @@ Exit condition: the same geometry always produces the same initial metrics.
 - [x] Implement area weights for goal vertices.
 - [x] Implement the current vertical-ray `phi` evaluator as a regression
   backend.
-- [x] Return explicit per-vertex `gap`, `filled`, `unfilled`, `overbuilt`, and
-  `frontier` arrays.
-- [x] Add summary metrics for completed area, remaining gap, and overbuild.
-- [x] Add tests for empty, partially completed, completed, and overbuilt cases.
+- [x] Return explicit per-vertex `gap`, `filled`, `unfilled`, and `frontier`
+  arrays.
+- [x] Add summary metrics for completed area and remaining gap.
+- [x] Add tests for empty, partially completed, and completed cases.
 
 Exit condition: goal completion can be measured without running a policy.
 
 Fixture evaluation command:
 
 ```bash
-PYTHONPATH=/home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials \
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials/scripts/evaluate_fixture.py
 ```
 
-Initial fixture result with a 2 mm fill tolerance and 4 mm overbuild
-tolerance:
+Initial fixture result with a 2 mm fill tolerance:
 
 ```text
 resolved area:  100.0000%
 completed area:   3.2404%
 frontier area:    1.6929%
-overbuilt area:   0.7952%
 mean remaining gap: 129.617 mm
 maximum remaining gap: 293.998 mm
 ```
@@ -261,7 +267,7 @@ They verify:
   area-weighted rather than dependent on vertex density;
 - ray misses remain unresolved and cannot count as completed goal;
 - an empty/partial state produces the expected unfilled and frontier regions;
-- the fill and overbuild tolerances classify known height samples correctly;
+- the fill tolerance classifies known height samples correctly;
 - vertical raycasting against a known plane returns the expected gap;
 - visualization data is built as DDS `TriangleMesh` and `PointCloud` objects
   with the expected state colors and frontier points.
@@ -270,8 +276,12 @@ Run them with:
 
 ```bash
 cd /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials
-PYTHONPATH=. pytest -q
+python3 -m pytest -q
 ```
+
+Test modules under `tests/` are collected by pytest; they are not standalone
+visual applications. Running `python3 tests/test_visualization.py` directly
+does not configure the project import path or invoke pytest.
 
 ### DDS visualization
 
@@ -279,7 +289,6 @@ The initial state can be inspected interactively using DDS geometry and its
 viewer:
 
 ```bash
-PYTHONPATH=/home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials \
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials/scripts/visualize_goal_evaluation.py
 ```
 
@@ -287,25 +296,42 @@ The colors mean:
 
 - orange: unfilled goal;
 - green: filled goal;
-- purple: overbuilt goal;
 - dark blue-gray: unresolved goal;
-- cyan points: fill frontier;
+- cyan points: auxiliary vertex frontier, never print targets;
+- magenta line: continuous interpolated `phi=0` scan/goal intersection;
 - transparent gray: current scan mesh.
+
+The magenta line is extracted with the existing
+`lib_scalar.extract_phi_contour.extract_phi_contour` implementation used by
+the scalar-field pipeline. It is not reconstructed from the cyan points.
+
+“Continuous position inside a segment” is a possible future action
+parameterization, not a target generator implemented at this stage. If a
+polyline segment has endpoints `A` and `B`, a scalar `u` in `[0, 1]` identifies
+
+```text
+P(u) = (1-u) A + u B
+```
+
+Thus `u=0` gives `A`, `u=0.5` the midpoint, and `u=1` gives `B`. `P(u)` is a
+continuous source point on the true interpolated intersection, not necessarily
+the final print target. The action decoder may later derive a target from it
+using bounded offset, contact raycasting, bead height, and orientation.
 
 For a headless run or a reproducible image, save a screenshot under the
 isolated experiment folder:
 
 ```bash
-PYTHONPATH=/home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials \
 python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials/scripts/visualize_goal_evaluation.py \
   --screenshot /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials/outputs/initial_goal_evaluation.png
 ```
 
-Both modes use the same DDS `TriangleMesh`/`PointCloud` scene construction and
-the exact arrays returned by the completion evaluator. The screenshot mode
-uses DDS's PyVista conversion path to avoid requiring an interactive Qt
-window. This visualization currently shows the initial scan evaluation; it is
-also the base that will be updated with accumulated DDS beads in Phase 2.
+Both modes use the same DDS `TriangleMesh`/`PointCloud` scene construction, the
+exact arrays returned by the completion evaluator, and the scalar pipeline's
+existing DDS line-segment visualization helper. The screenshot mode uses DDS's
+PyVista conversion path to avoid requiring an interactive Qt window. This
+visualization currently shows the initial scan evaluation; it is also the base
+that will be updated with accumulated DDS beads in Phase 2.
 
 ### Phase 2 — Headless incremental DDS state
 
@@ -320,8 +346,10 @@ Exit condition: thousands of bead steps can run reproducibly in headless mode.
 
 ### Phase 3 — Safe action decoder
 
-- [ ] Build valid anchor candidates from unfilled, contact-reachable goal
-  regions without using the old heat-minimum rule.
+- [ ] Extract and preserve the continuous interpolated `phi=0` scan/goal
+  intersection polyline.
+- [ ] Build valid continuous action points from polyline segments, without
+  treating goal or frontier vertices as print targets.
 - [ ] Implement bounded tangential offsets.
 - [ ] Implement direct cone parameterization for `Z`.
 - [ ] Implement contact raycasting and top-referenced `O` construction.
@@ -353,8 +381,7 @@ goal meshes.
 - [ ] Log raw and weighted reward terms on every step.
 - [ ] Test progress monotonicity and ensure excessive width cannot exploit
   vertex-only completion.
-- [ ] Test desired-overlap, zero-contact, excessive-overlap, gap, and overbuild
-  scenarios.
+- [ ] Test desired-overlap, zero-contact, excessive-overlap, and gap scenarios.
 - [ ] Implement success, budget, stagnation, and invalid-action termination.
 - [ ] Create a reward-audit report for deterministic hand-authored actions.
 
@@ -374,8 +401,8 @@ Exit condition: PPO has reproducible lower and upper-reference baselines.
 ### Phase 7 — PPO environment and training
 
 - [ ] Add the Gymnasium-compatible environment inside `RL_Trials/`.
-- [ ] Implement a masked categorical anchor head and continuous parameter
-  heads for offset, orientation, and width.
+- [ ] Implement a masked categorical polyline-segment head and continuous
+  heads for segment position, offset, orientation, and width.
 - [ ] Train PPO from random initialization; no behavior cloning.
 - [ ] Begin with fixed `+Z` and fixed width, then progressively enable offset,
   cone orientation, and variable width.
@@ -393,6 +420,8 @@ does not increase invalid-action rates during evaluation.
   initial alignment within calibrated bounds.
 - [ ] Add a DDS/SDF directional goal evaluator for geometry that is not a
   vertical height field.
+- [ ] Define overbuild from DDS material outside the permitted goal envelope;
+  do not infer it merely from negative per-vertex `phi`.
 - [ ] Compare the fast training evaluator against the full DDS surface-mesh and
   raycasting pipeline.
 - [ ] Run voxel-resolution convergence checks.

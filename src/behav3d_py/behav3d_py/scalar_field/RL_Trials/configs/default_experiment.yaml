@@ -14,6 +14,8 @@ scan:
 
 goal:
   representation: open_2p5d_surface
+  vertex_role: evaluation_and_observation_sample
+  vertices_are_print_targets: false
   vertex_count: 5721
   face_count: 11147
   connected_components: 1
@@ -25,11 +27,19 @@ goal:
   fill_direction: world_z
   envelope: vertical_sweep_from_initial_scan
 
+intersection:
+  deposition_boundary: interpolated_phi_zero_polyline
+  preserve_scan_goal_polyline: true
+
+vertex_frontier:
+  definition: unfilled_vertex_adjacent_to_filled_vertex
+  role: auxiliary_observation_and_debug_only
+  use_as_print_target: false
+
 completion:
   evaluator: vertical_phi
   area_weighted: true
   fill_tolerance_mm: 2.0
-  overbuild_tolerance_mm: 4.0
   success_completed_area_fraction: 0.99
 
 scalar_fields:
@@ -50,6 +60,7 @@ dds:
 
 action:
   deposits_per_step: 1
+  source_geometry: interpolated_phi_zero_polyline
   target_reference: bead_top
   cone_axis: world_positive_z
   cone_max_tilt_deg: 30.0
