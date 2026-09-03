@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 experiment_name: field_state_init2_point_bead_fixture
 random_seed: 0
 
@@ -56,33 +56,45 @@ dds:
   voxel_size_mm: 2.0
   occupancy_threshold: 0.5
   domain_source: field
-  # At least the 36 mm maximum width is needed; extra room permits bounded
-  # positional/orientation exploration without clipping bead support.
   padding_mm: 40.0
 
 action:
   deposits_per_step: 1
+  policy_representation: direct_continuous
+  normalized_box: [-1.0, 1.0]
+  dimensions:
+    - source_coord
+    - height_ctrl
+    - orient_x
+    - orient_y
+    - width_ctrl
   source_geometry: interpolated_phi_zero_polyline
+  source_parameterization: cumulative_physical_arc_length
+  random_candidate_selection: false
   target_reference: bead_top
   cone_axis: world_positive_z
+  cone_parameterization: concentric_square_to_disk
   cone_max_tilt_deg: 30.0
+  zero_orientation_is_vertical: true
   contact_ray_direction: negative_deposition_z
   contact_distance_min_mm: 10.0
   contact_distance_max_mm: 16.0
-  bead_height_mode: agent_selected_then_contact_validated
+  bead_height_mode: policy_selected_then_contact_validated
   bead_height_min_mm: 10.0
   bead_height_max_mm: 16.0
-  width_mode: agent_delta_from_interpolated_goal_width
-  bead_width_min_mm: 16.0
-  bead_width_max_mm: 36.0
-
-candidate_pool:
-  count: 64
-  preview_mode: random_complete_action_proposals
-  source_sampling: uniform_polyline_arc_length
-  direction_sampling: uniform_solid_angle_in_cone
+  width_mode: policy_delta_from_interpolated_goal_width
   width_delta_min_mm: -4.0
   width_delta_max_mm: 4.0
+  bead_width_min_mm: 16.0
+  bead_width_max_mm: 36.0
+  invalid_width_behavior: reject_and_penalize
+
+# Random proposals remain only for diagnostics and the constrained-random
+# baseline. PPO does not select from this pool.
+candidate_diagnostics:
+  count: 64
+  source_sampling: uniform_polyline_arc_length
+  direction_sampling: uniform_solid_angle_in_cone
   contact_source_tolerance_mm: 1.0
   max_generation_attempts: 5
 
@@ -90,15 +102,19 @@ collision:
   checker: existing_extruder_mesh_vertex_distance_proxy
   threshold_mm: 1.0
   tcp_exclusion_radius_mm: 10.0
-  preview_behavior: classify_and_select_random_valid
+  preview_behavior: classify_only
   training_behavior: reject_action_keep_state_and_penalize
   silently_replace_policy_action: false
 
 reward:
-  # Deliberately dominant relative to total normalized completion (~+1).
-  # Keep it finite so PPO advantage/value estimates remain numerically stable.
+  # Collision remains a hard safety rejection plus an explicit learning signal.
   collision_penalty: -10.0
   collision_terminates_episode: false
+  # Stability terms are dimensionless raw costs and should be logged separately.
+  # Their final weights are deliberately not frozen before reward auditing.
+  tilt_cost: normalized_quadratic
+  cantilever_cost: lateral_shift_over_bead_width_squared
+  tilt_is_weak_regularizer: true
 
 overlap:
   metric: lateral_geometric_overlap_mm
@@ -115,14 +131,14 @@ baseline:
   candidate_mode: gradient_lift
   beads_per_step: 7
   behavior_cloning: false
+  constrained_random_uses_candidate_sampler: true
 
 ppo:
   initialization: random
   behavior_cloning: false
+  action_space: Box(-1, 1, shape=(5,))
+  direct_action_decoder: rl_trials.action_decoder.decode_continuous_action
 
-# These are recommended starting values, not frozen decisions. Phase 0 is
-# complete only after they are accepted or revised and promoted into the
-# active evaluator/reward configuration.
 pending_decisions:
   reward_weights:
     recommended: null
