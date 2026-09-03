@@ -6,6 +6,7 @@ from .action_candidates import (
     sample_action_candidates,
     validate_action_candidates,
 )
+from .action_decoder import DecodedAction, decode_continuous_action
 from .goal_evaluator import (
     GoalEvaluation,
     GoalMetrics,
@@ -18,10 +19,12 @@ from .visualization import EvaluationScene, build_evaluation_scene
 __all__ = [
     "ActionCandidateBatch",
     "CandidateValidation",
+    "DecodedAction",
     "GoalEvaluation",
     "GoalMetrics",
     "EvaluationScene",
     "build_evaluation_scene",
+    "decode_continuous_action",
     "evaluate_goal_from_height_samples",
     "evaluate_goal_with_vertical_rays",
     "sample_action_candidates",
