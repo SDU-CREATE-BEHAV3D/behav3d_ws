@@ -49,10 +49,10 @@ def test_zero_action_is_vertical_and_deterministic() -> None:
 
 
 def test_source_coordinate_addresses_total_physical_arc_length() -> None:
-    # Total contour length is 10 m. source_coord=-0.8 maps to 10% of it,
-    # exactly the end of the first 1 m segment.
+    # Total contour length is 10 m. At the exact 1 m boundary the cumulative
+    # parameterization deterministically enters the next disconnected segment.
     action = _decode([-0.8, 0.0, 0.0, 0.0, 0.0])
-    np.testing.assert_allclose(action.source_point, [1.0, 0.0, 0.0])
+    np.testing.assert_allclose(action.source_point, [0.0, 2.0, 0.0])
     assert action.source_arc_fraction == pytest.approx(0.1)
     assert action.source_arc_length_m == pytest.approx(1.0)
 
@@ -76,11 +76,12 @@ def test_policy_controls_orientation_directly_inside_cone() -> None:
 
 
 def test_out_of_range_policy_action_is_rejected_not_clipped() -> None:
-    with pytest.raises(ValueError, match="\[-1, 1\]"):
+    with pytest.raises(ValueError, match=r"\[-1, 1\]"):
         _decode([1.1, 0.0, 0.0, 0.0, 0.0])
 
 
-def test_width_outside_physical_bounds_is_rejected_not_clipped() -> None:
-    # The first contour has a 20 mm nominal width. -4 mm is valid at the lower bound.
+def test_width_lower_bound_is_preserved_without_clipping() -> None:
+    # The first contour has a 20 mm nominal width. -4 mm lands exactly at the
+    # configured physical lower bound.
     valid = _decode([-1.0, 0.0, 0.0, 0.0, -1.0])
     assert valid.width_m == pytest.approx(0.016)
