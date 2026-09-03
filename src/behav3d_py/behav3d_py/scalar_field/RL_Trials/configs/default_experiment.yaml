@@ -1,6 +1,5 @@
-schema_version: 2
+schema_version: 5
 experiment_name: field_state_init2_point_bead_fixture
-random_seed: 0
 
 paths:
   # Paths are relative to the workspace root.
@@ -14,7 +13,8 @@ scan:
   yaw_deg: 180.0
 
 goal:
-  representation: open_2p5d_surface
+  representation: open_triangle_surface_3d
+  current_fixture_evaluator: vertical_height_rays
   vertex_role: evaluation_and_observation_sample
   vertices_are_print_targets: false
   vertex_count: 5721
@@ -29,8 +29,8 @@ goal:
   envelope: vertical_sweep_from_initial_scan
 
 intersection:
-  deposition_boundary: interpolated_phi_zero_polyline
-  preserve_scan_goal_polyline: true
+  deposition_boundary: interpolated_phi_zero_segment_union_3d
+  preserve_scan_goal_contour: true
   iso_level_m: 0.0
 
 vertex_frontier:
@@ -68,9 +68,11 @@ action:
     - orient_x
     - orient_y
     - width_ctrl
-  source_geometry: interpolated_phi_zero_polyline
-  source_parameterization: cumulative_physical_arc_length
-  random_candidate_selection: false
+  source_geometry: interpolated_phi_zero_segment_union_3d
+  source_parameterization: canonical_component_cumulative_arc_length
+  component_order: lexicographic_minimum_3d_coordinate
+  segment_order: welded_contour_connectivity
+  disconnected_contours: deterministic_component_concatenation
   target_reference: bead_top
   cone_axis: world_positive_z
   cone_parameterization: concentric_square_to_disk
@@ -79,6 +81,7 @@ action:
   contact_ray_direction: negative_deposition_z
   contact_distance_min_mm: 10.0
   contact_distance_max_mm: 16.0
+  contact_source_tolerance_mm: 1.0
   bead_height_mode: policy_selected_then_contact_validated
   bead_height_min_mm: 10.0
   bead_height_max_mm: 16.0
@@ -89,21 +92,24 @@ action:
   bead_width_max_mm: 36.0
   invalid_width_behavior: reject_and_penalize
 
-# Random proposals remain only for diagnostics and the constrained-random
-# baseline. PPO does not select from this pool.
-candidate_diagnostics:
-  count: 64
-  source_sampling: uniform_polyline_arc_length
-  direction_sampling: uniform_solid_angle_in_cone
-  contact_source_tolerance_mm: 1.0
-  max_generation_attempts: 5
+observation:
+  contour_sample_count: 256
+  contour_sampling: canonical_component_arc_midpoints
+  component_allocation: one_minimum_then_length_proportional
+  contour_features:
+    - source_coord
+    - position_xyz
+    - heat
+    - target_width
+    - component_index
+    - valid_mask
+  samples_are_candidate_actions: false
 
 collision:
   checker: existing_extruder_mesh_vertex_distance_proxy
   threshold_mm: 1.0
   tcp_exclusion_radius_mm: 10.0
-  preview_behavior: classify_only
-  training_behavior: reject_action_keep_state_and_penalize
+  rejection_behavior: keep_state_and_penalize
   silently_replace_policy_action: false
 
 reward:
@@ -122,19 +128,22 @@ overlap:
   tolerance_mm: 1.0
 
 episode:
+  state_backend: incremental_dds_simulator
+  reset_behavior: clear_deposits_and_reuse_dense_fields
+  initial_scan_role: immutable_raycast_geometry
+  current_material_mesh: initial_scan_plus_dds_surface_triangle_soup
   max_deposits: 500
   max_consecutive_no_progress: 20
   max_consecutive_invalid_actions: 20
 
 baseline:
   policy: current_heuristic_only_for_evaluation
-  candidate_mode: gradient_lift
+  command: gradient_lift
   beads_per_step: 7
   behavior_cloning: false
-  constrained_random_uses_candidate_sampler: true
 
 ppo:
-  initialization: random
+  initialization: from_scratch
   behavior_cloning: false
   action_space: Box(-1, 1, shape=(5,))
   direct_action_decoder: rl_trials.action_decoder.decode_continuous_action

@@ -1,23 +1,9 @@
 """Deterministic decoder for direct continuous RL bead actions.
 
-The policy owns the fabrication action. No random candidate pool sits between
-PPO and the geometry. A normalized five-dimensional action in ``[-1, 1]^5`` is
-mapped directly to a source point on the current ``phi=0`` contour, bead
-height, deposition orientation, and width correction.
-
-Action layout::
-
-    [source_coord, height_ctrl, orient_x, orient_y, width_ctrl]
-
-``source_coord`` addresses the complete current contour by cumulative physical
-arc length. ``orient_x`` and ``orient_y`` are mapped from the square to a unit
-disk and then to a tilt cone. This keeps the neutral policy output
-``orient_x = orient_y = 0`` exactly vertical and avoids the singular/wrapped
-``tilt + azimuth`` parameterization at zero tilt.
-
-This module only decodes the requested action. Contact, collision, DDS-domain,
-and robot-safety checks remain explicit downstream validators so an invalid
-policy action can be rejected and penalized rather than silently replaced.
+The policy emits ``[source, height, orient_x, orient_y, width]`` in
+``[-1, 1]^5``. A shared :class:`ContourParameterization` maps ``source`` to
+the current 3D contour; the remaining controls map to physical bead geometry.
+No random candidate generation occurs between PPO and execution.
 """
 
 from __future__ import annotations
@@ -27,9 +13,9 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
+from .contour_parameterization import ContourParameterization
 
 FloatArray = npt.NDArray[np.float64]
-IntArray = npt.NDArray[np.int32]
 
 
 @dataclass(frozen=True)
@@ -51,25 +37,6 @@ class DecodedAction:
     tilt_deg: float
     azimuth_rad: float
     width_delta_m: float
-
-
-def _as_points(values: npt.ArrayLike, name: str) -> FloatArray:
-    result = np.asarray(values, dtype=np.float64)
-    if result.ndim != 2 or result.shape[1] != 3:
-        raise ValueError(f"{name} must have shape (N, 3), got {result.shape}")
-    if not np.all(np.isfinite(result)):
-        raise ValueError(f"{name} must contain only finite values")
-    return result
-
-
-def _as_lines(values: npt.ArrayLike, point_count: int) -> IntArray:
-    raw = np.asarray(values)
-    if raw.ndim != 2 or raw.shape[1] != 2:
-        raise ValueError(f"contour_lines must have shape (M, 2), got {raw.shape}")
-    result = raw.astype(np.int32, copy=False)
-    if result.size and (np.any(result < 0) or np.any(result >= point_count)):
-        raise ValueError("contour_lines contains an invalid point index")
-    return result
 
 
 def _per_point(values: npt.ArrayLike, point_count: int, name: str) -> FloatArray:
@@ -104,16 +71,10 @@ def _normalized_action(values: npt.ArrayLike) -> FloatArray:
 
 
 def _square_to_disk(x: float, y: float) -> tuple[float, float]:
-    """Shirley-Chiu concentric square-to-disk map.
-
-    This deterministic map covers the complete unit disk without clipping.
-    The origin maps exactly to the origin, which means a zero-centered policy
-    initially requests a vertical deposition direction.
-    """
+    """Map the square to a disk while preserving the exact neutral origin."""
 
     if x == 0.0 and y == 0.0:
         return 0.0, 0.0
-
     if abs(x) > abs(y):
         radius = x
         angle = (np.pi / 4.0) * (y / x)
@@ -123,45 +84,10 @@ def _square_to_disk(x: float, y: float) -> tuple[float, float]:
     return float(radius * np.cos(angle)), float(radius * np.sin(angle))
 
 
-def _source_on_contour(
-    *,
-    points: FloatArray,
-    lines: IntArray,
-    arc_fraction: float,
-) -> tuple[FloatArray, int, float, float]:
-    starts = points[lines[:, 0]]
-    ends = points[lines[:, 1]]
-    lengths = np.linalg.norm(ends - starts, axis=1)
-    usable = lengths > 1e-12
-    if not np.any(usable):
-        raise ValueError("phi contour contains no non-degenerate segments")
-
-    usable_indices = np.flatnonzero(usable)
-    usable_lengths = lengths[usable]
-    cumulative = np.cumsum(usable_lengths)
-    total_length = float(cumulative[-1])
-    distance = float(arc_fraction) * total_length
-
-    if distance >= total_length:
-        local_usable_index = usable_lengths.shape[0] - 1
-        segment_fraction = 1.0
-    else:
-        local_usable_index = int(np.searchsorted(cumulative, distance, side="right"))
-        previous = 0.0 if local_usable_index == 0 else float(cumulative[local_usable_index - 1])
-        segment_fraction = (distance - previous) / float(usable_lengths[local_usable_index])
-
-    segment_index = int(usable_indices[local_usable_index])
-    start = starts[segment_index]
-    end = ends[segment_index]
-    source = (1.0 - segment_fraction) * start + segment_fraction * end
-    return source, segment_index, float(segment_fraction), distance
-
-
 def decode_continuous_action(
     *,
     normalized_action: npt.ArrayLike,
-    contour_points: npt.ArrayLike,
-    contour_lines: npt.ArrayLike,
+    contour: ContourParameterization,
     contour_heat: npt.ArrayLike,
     contour_widths_m: npt.ArrayLike,
     height_min_m: float,
@@ -172,40 +98,33 @@ def decode_continuous_action(
     width_min_m: float,
     width_max_m: float,
 ) -> DecodedAction:
-    """Decode one PPO action directly into one geometric bead proposal.
-
-    No random sampling is performed here. The same state and normalized action
-    always produce the same requested bead action.
-    """
+    """Decode one PPO action directly into one geometric bead proposal."""
 
     action = _normalized_action(normalized_action)
-    points = _as_points(contour_points, "contour_points")
-    lines = _as_lines(contour_lines, points.shape[0])
-    if lines.shape[0] == 0:
-        raise ValueError("cannot decode an action from an empty phi contour")
-    heat_at_points = _per_point(contour_heat, points.shape[0], "contour_heat")
+    if not isinstance(contour, ContourParameterization):
+        raise TypeError("contour must be a ContourParameterization")
+    heat_at_points = _per_point(
+        contour_heat,
+        contour.points.shape[0],
+        "contour_heat",
+    )
     widths_at_points = _per_point(
         contour_widths_m,
-        points.shape[0],
+        contour.points.shape[0],
         "contour_widths_m",
     )
     if np.any(widths_at_points <= 0.0):
         raise ValueError("contour_widths_m values must be positive")
 
-    source_arc_fraction = 0.5 * (float(action[0]) + 1.0)
-    source, segment_index, segment_fraction, source_arc_length_m = _source_on_contour(
-        points=points,
-        lines=lines,
-        arc_fraction=source_arc_fraction,
-    )
-    line = lines[segment_index]
+    location = contour.locate(float(action[0]))
+    line = contour.lines[location.segment_index]
     heat = float(
-        (1.0 - segment_fraction) * heat_at_points[line[0]]
-        + segment_fraction * heat_at_points[line[1]]
+        (1.0 - location.segment_fraction) * heat_at_points[line[0]]
+        + location.segment_fraction * heat_at_points[line[1]]
     )
     width_map_m = float(
-        (1.0 - segment_fraction) * widths_at_points[line[0]]
-        + segment_fraction * widths_at_points[line[1]]
+        (1.0 - location.segment_fraction) * widths_at_points[line[0]]
+        + location.segment_fraction * widths_at_points[line[1]]
     )
 
     height_alpha = 0.5 * (float(action[1]) + 1.0)
@@ -242,20 +161,20 @@ def decode_continuous_action(
             "reject and penalize instead of clipping"
         )
 
-    target = source + height_m * z_axis
+    target = location.point + height_m * z_axis
     return DecodedAction(
         normalized_action=action.copy(),
-        source_point=source,
+        source_point=location.point.copy(),
         target_point=target,
         z_axis=z_axis,
         height_m=float(height_m),
         width_map_m=width_map_m,
         width_m=float(width_m),
         heat=heat,
-        source_arc_fraction=source_arc_fraction,
-        source_arc_length_m=source_arc_length_m,
-        contour_segment_index=segment_index,
-        segment_fraction=segment_fraction,
+        source_arc_fraction=location.arc_fraction,
+        source_arc_length_m=location.arc_length_m,
+        contour_segment_index=location.segment_index,
+        segment_fraction=location.segment_fraction,
         tilt_deg=float(np.rad2deg(tilt_rad)),
         azimuth_rad=azimuth_rad,
         width_delta_m=float(width_delta_m),

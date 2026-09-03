@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 from dds.geometry import PointCloud, TriangleMesh
 
 from .goal_evaluator import GoalEvaluation
-
 
 UNFILLED_COLOR = np.array([230, 126, 34], dtype=np.uint8)
 FILLED_COLOR = np.array([46, 204, 113], dtype=np.uint8)
@@ -85,3 +85,91 @@ def build_evaluation_scene(
         phi_contour_points=contour_points,
         phi_contour_lines=contour_lines,
     )
+
+
+def add_evaluation_scene_to_plotter(
+    plotter: Any,
+    scene: EvaluationScene,
+    pyvista_module: Any,
+    *,
+    hide_scan: bool = False,
+    scan_opacity: float = 0.32,
+    goal_opacity: float = 0.82,
+    frontier_size: float = 4.0,
+) -> None:
+    """Add the common scan, goal, and frontier scene to a PyVista plotter."""
+
+    from dds.viz.converters import point_cloud_to_polydata, triangle_mesh_to_polydata
+
+    if not hide_scan:
+        plotter.add_mesh(
+            triangle_mesh_to_polydata(scene.scan_mesh, pyvista_module),
+            color="#95a5a6",
+            opacity=scan_opacity,
+            smooth_shading=False,
+        )
+    plotter.add_mesh(
+        triangle_mesh_to_polydata(scene.goal_mesh, pyvista_module),
+        scalars="vertex_colors",
+        rgb=True,
+        opacity=goal_opacity,
+        show_edges=True,
+        smooth_shading=False,
+        show_scalar_bar=False,
+    )
+    if not scene.frontier_points.is_empty:
+        plotter.add_mesh(
+            point_cloud_to_polydata(scene.frontier_points, pyvista_module),
+            scalars="point_colors",
+            rgb=True,
+            point_size=frontier_size,
+            render_points_as_spheres=True,
+            show_scalar_bar=False,
+        )
+
+
+def add_evaluation_scene_to_viewer(
+    viewer: Any,
+    scene: EvaluationScene,
+    *,
+    hide_scan: bool = False,
+    scan_opacity: float = 0.32,
+    goal_opacity: float = 0.82,
+    frontier_size: float = 4.0,
+) -> None:
+    """Add the common scan, goal, and frontier scene to a DDS Viewer."""
+
+    from dds.viz import MeshStyle, PointCloudStyle
+
+    if not hide_scan:
+        viewer.add_mesh(
+            scene.scan_mesh,
+            name="initial_scan",
+            style=MeshStyle(
+                color="#95a5a6",
+                opacity=scan_opacity,
+                show_edges=False,
+                smooth_shading=False,
+            ),
+        )
+    viewer.add_mesh(
+        scene.goal_mesh,
+        name="classified_goal",
+        style=MeshStyle(
+            color=None,
+            opacity=goal_opacity,
+            show_edges=True,
+            smooth_shading=False,
+        ),
+    )
+    if not scene.frontier_points.is_empty:
+        viewer.add_point_cloud(
+            scene.frontier_points,
+            name="vertex_frontier",
+            style=PointCloudStyle(
+                color=None,
+                size=frontier_size,
+                render_as_spheres=True,
+                opacity=1.0,
+            ),
+        )

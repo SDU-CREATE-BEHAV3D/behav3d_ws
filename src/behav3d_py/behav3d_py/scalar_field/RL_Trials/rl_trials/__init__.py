@@ -1,12 +1,19 @@
 """Isolated RL experiments for DDS bead deposition."""
 
-from .action_candidates import (
-    ActionCandidateBatch,
-    CandidateValidation,
-    sample_action_candidates,
-    validate_action_candidates,
-)
 from .action_decoder import DecodedAction, decode_continuous_action
+from .action_validation import (
+    ActionRejectionReason,
+    ActionValidation,
+    validate_decoded_action,
+)
+from .contour_observation import ContourObservation, sample_contour_observation
+from .contour_parameterization import (
+    ContourLocation,
+    ContourParameterization,
+    ContourSamples,
+)
+from .dds_adapter import point_deposit_from_action
+from .episode_state import DDSEpisodeState, EpisodeGeometrySnapshot, EpisodeTransition
 from .goal_evaluator import (
     GoalEvaluation,
     GoalMetrics,
@@ -15,22 +22,27 @@ from .goal_evaluator import (
     vertex_area_weights,
 )
 from .rewards import cantilever_ratio_cost, normalized_tilt_cost
-from .visualization import EvaluationScene, build_evaluation_scene
 
 __all__ = [
-    "ActionCandidateBatch",
-    "CandidateValidation",
+    "ActionRejectionReason",
+    "ActionValidation",
+    "ContourLocation",
+    "ContourObservation",
+    "ContourParameterization",
+    "ContourSamples",
+    "DDSEpisodeState",
     "DecodedAction",
+    "EpisodeGeometrySnapshot",
+    "EpisodeTransition",
     "GoalEvaluation",
     "GoalMetrics",
-    "EvaluationScene",
-    "build_evaluation_scene",
     "cantilever_ratio_cost",
     "decode_continuous_action",
     "evaluate_goal_from_height_samples",
     "evaluate_goal_with_vertical_rays",
     "normalized_tilt_cost",
-    "sample_action_candidates",
-    "validate_action_candidates",
+    "point_deposit_from_action",
+    "sample_contour_observation",
+    "validate_decoded_action",
     "vertex_area_weights",
 ]

@@ -20,9 +20,14 @@ if str(SCALAR_FIELD_ROOT) not in sys.path:
 
 from lib_scalar.extract_phi_contour import extract_phi_contour
 from lib_scalar.viz_dds import add_line_segments, attach_viewer
+
 from rl_trials.fixture_io import load_configured_geometry, load_experiment_config
 from rl_trials.goal_evaluator import evaluate_goal_with_vertical_rays
-from rl_trials.visualization import build_evaluation_scene
+from rl_trials.visualization import (
+    add_evaluation_scene_to_plotter,
+    add_evaluation_scene_to_viewer,
+    build_evaluation_scene,
+)
 
 if TYPE_CHECKING:
     from rl_trials.goal_evaluator import GoalMetrics
@@ -55,35 +60,10 @@ def save_screenshot(
     """Render DDS geometry off-screen through the DDS PyVista converters."""
 
     import pyvista as pv
-    from dds.viz.converters import point_cloud_to_polydata, triangle_mesh_to_polydata
 
     plotter = pv.Plotter(off_screen=True, window_size=(1400, 900))
     plotter.set_background("#f5f6f8")
-    if not hide_scan:
-        plotter.add_mesh(
-            triangle_mesh_to_polydata(scene.scan_mesh, pv),
-            color="#95a5a6",
-            opacity=0.32,
-            smooth_shading=False,
-        )
-    plotter.add_mesh(
-        triangle_mesh_to_polydata(scene.goal_mesh, pv),
-        scalars="vertex_colors",
-        rgb=True,
-        opacity=0.82,
-        show_edges=True,
-        smooth_shading=False,
-        show_scalar_bar=False,
-    )
-    if not scene.frontier_points.is_empty:
-        plotter.add_mesh(
-            point_cloud_to_polydata(scene.frontier_points, pv),
-            scalars="point_colors",
-            rgb=True,
-            point_size=4.0,
-            render_points_as_spheres=True,
-            show_scalar_bar=False,
-        )
+    add_evaluation_scene_to_plotter(plotter, scene, pv, hide_scan=hide_scan)
     if scene.phi_contour_lines.shape[0] > 0:
         overlay = attach_viewer(plotter)
         add_line_segments(
@@ -167,45 +147,18 @@ def main() -> None:
         print(f"Saved DDS goal-evaluation screenshot: {screenshot}")
         return
 
-    from dds.viz import MeshStyle, PointCloudStyle, Viewer
+    from dds.viz import Viewer
 
     viewer = Viewer(
         title="RL Trials — DDS Goal Evaluation",
         off_screen=args.screenshot is not None,
     )
     with viewer.batch():
-        if not args.hide_scan:
-            viewer.add_mesh(
-                scene.scan_mesh,
-                name="initial_scan",
-                style=MeshStyle(
-                    color="#95a5a6",
-                    opacity=0.32,
-                    show_edges=False,
-                    smooth_shading=False,
-                ),
-            )
-        viewer.add_mesh(
-            scene.goal_mesh,
-            name="classified_goal",
-            style=MeshStyle(
-                color=None,
-                opacity=0.82,
-                show_edges=True,
-                smooth_shading=False,
-            ),
+        add_evaluation_scene_to_viewer(
+            viewer,
+            scene,
+            hide_scan=bool(args.hide_scan),
         )
-        if not scene.frontier_points.is_empty:
-            viewer.add_point_cloud(
-                scene.frontier_points,
-                name="frontier",
-                style=PointCloudStyle(
-                    color=None,
-                    size=4.0,
-                    render_as_spheres=True,
-                    opacity=1.0,
-                ),
-            )
 
     if scene.phi_contour_lines.shape[0] > 0:
         add_line_segments(

@@ -1,32 +1,84 @@
-# RL Trials for DDS Bead Deposition
+# RL Trials for Direct DDS Bead Deposition
 
-This directory contains the isolated experimental track for reinforcement-
-learning-based bead placement. Code, configurations, logs, checkpoints, and
-results specific to RL must remain under `RL_Trials/` unless integration with
-an existing scalar-field or DDS API is strictly necessary.
+This directory is the isolated experimental track for reinforcement-learning
+control of DDS bead deposition. RL-specific code, configuration, tests,
+checkpoints, and results remain under `RL_Trials/` until an integration with an
+existing scalar-field or DDS API is necessary.
 
-The first learning approach will be PPO trained from scratch. The current
-heuristic planner will be retained only as an evaluation baseline; it will not
-be used for behavior cloning or policy initialization.
+The policy formulation is direct and continuous. PPO does not rank or select
+from a generated pool of targets.
 
-## Objective
+## Architecture
 
-Learn a sequential policy that deposits DDS beads until the goal geometry is
-reached while balancing:
+The intended step pipeline is:
 
-- progress over the goal surface,
-- the intended heat-field order,
-- agreement with the width field,
-- sufficient contact with existing geometry,
-- limited excessive overlap and, later, DDS material outside the goal envelope,
-- collision-free and reachable target poses,
-- efficient use of bead count or deposited material.
+```text
+observation
+  -> PPO continuous action
+  -> deterministic geometric decoder
+  -> contact/domain/collision validation
+  -> DDS deposit or rejection
+  -> reward and next observation
+```
 
-The policy will have freedom to choose bead location and orientation inside a
-geometrically safe action space. Safety and geometric validity are constraints,
-not behaviors that PPO must learn by trial and error.
+For a fixed state and action, decoding and validation are deterministic. An
+invalid action is reported by reason, is not corrected, and must not be
+replaced. The future environment will leave DDS state unchanged and apply the
+configured penalty.
 
-## Current Geometry Convention
+The previous generated action-pool path has been removed. The existing
+`gradient_lift` planner remains only as an external evaluation baseline; it is
+not policy input, training data, or behavior-cloning initialization.
+
+## Continuous action space
+
+One PPO step emits:
+
+```text
+a = [source_coord, height_ctrl, orient_x, orient_y, width_ctrl]
+a in [-1, 1]^5
+```
+
+The components map as follows:
+
+| Component | Mapping |
+| --- | --- |
+| `source_coord` | Cumulative physical arc length over canonically ordered 3D contour components |
+| `height_ctrl` | Linear map to the configured bead-height interval |
+| `orient_x`, `orient_y` | Concentric square-to-disk map followed by the configured orientation cone |
+| `width_ctrl` | Bounded correction to the width field interpolated at the source |
+
+`orient_x=orient_y=0` is exactly vertical. Increasing their magnitude
+increases tilt continuously; their direction controls azimuth. The decoder
+does not clamp arbitrary orientations into the cone because that would make
+different policy outputs collapse to the same executed action.
+
+The normalized `source_coord` maps linearly to `[0, total_contour_length]`.
+Before applying it, the decoder welds duplicated endpoints from the extracted
+segment soup, traces every non-branching component continuously, chooses a
+canonical direction, and sorts disconnected components by their minimum 3D
+coordinate. This makes the mapping independent of mesh-face iteration order.
+
+The components are then concatenated deterministically. Crossing a component
+boundary can produce a spatial jump, but the future observation will expose the
+current contour and the coordinate assigned to every contour sample.
+
+Given the selected height `h` and unit deposition direction `Z`, the
+top-referenced DDS target is:
+
+```text
+O = S + h Z
+```
+
+The same decoded values are used by validation, DDS conversion, logging, and
+visualization. `rl_trials.dds_adapter.point_deposit_from_action` is the single
+conversion point from `DecodedAction` to a DDS `PointDeposit`.
+
+The parameterization is deterministic for a fixed state. It does not use heat
+or reward values to reorder the contour, so those fields inform PPO without
+silently changing the meaning of its action.
+
+## Geometry convention
 
 The current scalar pipeline uses:
 
@@ -34,161 +86,105 @@ The current scalar pipeline uses:
 phi = z_goal - z_scan - clearance
 ```
 
-For the current vertical-ray implementation:
+For the initial vertical-ray evaluator:
 
-- `phi > iso`: viable/unprinted goal region;
-- `phi <= iso`: printed/reached goal region;
-- no scan/raycast hit: unresolved and not completed.
+- `phi > iso`: unfilled goal region;
+- `phi <= iso`: filled/reached goal region;
+- no scan/raycast hit: unresolved and never completed.
 
-Before training, the terms `unprinted` and `filled` must be used explicitly in
-the RL code instead of relying on the ambiguous word `viable`. Negative `phi`
-is still completed goal in this first vertical evaluator. It is not called
-overbuild: overbuild will only be introduced after it can be measured as DDS
-material outside the permitted goal envelope.
+Goal vertices are area-weighted measurement locations, not print targets. The
+auxiliary mesh frontier is useful as an observation/debug signal, but the
+continuous union of interpolated `phi=0` segments remains the deposition
+boundary.
 
-## Selected Development Fixture
-
-The machine-readable configuration has the general name
-`configs/default_experiment.yaml`. Although its initial values point to the
-`field_state_init2` development fixture, the same file structure can be copied
-for other goal/scan/width combinations without tying the configuration name to
-a particular mesh.
-
-The first deterministic fixture is based on the existing DDS scalar-loop
-inputs:
+The selected development fixture is configured in
+`configs/default_experiment.yaml`:
 
 ```text
-field state: mesh/fields/field_state_init2.npz
-width field: mesh/fields/width_field.npz
-scan mesh:   mesh/ScanMesh.stl
-scan scale:  0.001
-scan yaw:    180 degrees
-width range: 16-36 mm
-nominal overlap reference: 4 mm
-bead/contact height range: 10-16 mm
-orientation cone: 30 degrees around world +Z
+field state:          mesh/fields/field_state_init2.npz
+width field:          mesh/fields/width_field.npz
+scan mesh:            mesh/ScanMesh.stl
+scan scale/yaw:       0.001 / 180 degrees
+bead width:           16-36 mm
+bead height/contact:  10-16 mm
+orientation cone:     30 degrees around world +Z
+DDS voxel size:       2 mm
 ```
 
-The field state and width map both contain 5721 aligned per-vertex entries.
-The goal has 11147 faces, one connected component, an area of approximately
-`0.08019 m^2`, and an open boundary, so it is not a watertight target volume.
-After applying the requested scan scale and yaw, every goal vertex receives an
-initial vertical-ray hit.
+Source selection is defined on 3D contour segments: components may overlap in
+`(x, y)`, vary in `z`, and be disconnected. The current fixture completion
+evaluator is still based on vertical rays and therefore assumes one relevant
+height per `(x, y)` sample. A directional DDS/SDF evaluator will be needed
+before the complete state and reward pipeline supports arbitrary 3D surfaces.
 
-For the first evaluator, this fixture is therefore treated as an open 2.5D
-target surface. The permitted material region is the vertical sweep between
-the initial scan and the goal surface. A future directional DDS/SDF evaluator
-will replace this assumption when testing geometry that is not representable
-as one vertical height per `(x, y)` location.
+## Validation and rejection
 
-The 10-16 mm height range has the following precise meaning:
+`validate_decoded_action` consumes exactly one `DecodedAction`. It does not
+generate alternatives. Validation proceeds in this order:
 
-1. PPO selects a sampled source point `S` on the interpolated `phi=0`
-   polyline, a height `h`, and a deposition direction `Z`.
-2. The top-referenced DDS target is `O = S + h Z`.
-3. The decoder raycasts from `O` in direction `-Z`.
-4. The action is contact-valid only when the hit is within the 10-16 mm range
-   and returns sufficiently close to the intended source `S`.
+1. Raycast from `O` along `-Z` against the current scan/material surface.
+2. Verify contact distance and return proximity to the intended source `S`.
+3. Verify that the conservative DDS bead support bounds fit in the episode
+   domain.
+4. Run the existing extruder collision proxy.
 
-This makes the DDS bead extend from its top-referenced target back to existing
-geometry without a gap. Height is selected by the agent and then verified by
-the contact ray; the environment does not silently replace it with a different
-height.
+Stable rejection codes are:
 
-The supplied `gradient_lift` command remains the heuristic baseline. Its
-`beads_per_step=7` setting does not define the RL action: the RL environment
-will use one point deposit per step. Because the command does not specify
-`--dds-deposit-mode`, its current DDS default is `dot`.
+```text
+no_contact
+contact_distance_out_of_bounds
+contact_source_mismatch
+out_of_domain
+collision
+```
 
-## Per-Vertex Observation
+Collision is evaluated only after contact and domain checks pass. The future
+environment contract is:
 
-The goal mesh is represented by vertices connected through its triangle faces.
-Each goal vertex is one local measurement location, not one independent action.
+```text
+valid action   -> apply its DDS PointDeposit -> update state
+invalid action -> apply nothing              -> keep state -> penalize reason
+```
 
-For a goal vertex `i`, the initial observation proposal is:
+Robot reachability, self-collision, environment collision, and swept-path
+checks remain future safety layers. No raw policy action may bypass them when
+robot-facing integration begins.
 
-| Feature | Meaning | Static or dynamic |
+## Observation draft
+
+Each goal vertex is a local measurement location. Proposed features are:
+
+| Feature | Meaning | Kind |
 | --- | --- | --- |
-| `position_local` | Goal-vertex XYZ in a normalized goal coordinate frame | Static |
-| `normal` | Local goal-surface direction | Static |
-| `neighbors` | Vertices connected to `i` by goal-mesh edges | Static |
-| `heat_norm` | Desired sequence priority at that location | Static |
-| `width_target` | Desired nominal bead width at that location | Static |
-| `gap` | Remaining distance from existing material to the goal | Dynamic |
-| `filled` | Whether `gap` is within the completion tolerance | Dynamic |
-| `frontier` | Whether `i` is unfilled and adjacent to a filled region | Dynamic |
-| `contact_reachable` | Whether a ray can reach existing geometry within the allowed range | Dynamic |
-| `local_occupancy` | Amount/pattern of DDS material near `i` | Dynamic |
-| `local_overlap` | Existing repeated coverage near `i` | Dynamic |
-| `distance_last` | Distance from `i` to the previous deposited target | Dynamic |
+| `position_local` | Normalized goal-space XYZ | Static |
+| `normal` | Goal-surface direction | Static |
+| `neighbors` | Goal-mesh connectivity | Static |
+| `area_weight` | Associated surface area | Static |
+| `heat_norm` | Desired sequence priority | Static |
+| `width_target` | Nominal local bead width | Static |
+| `gap` | Remaining distance to goal | Dynamic |
+| `filled` | Gap within completion tolerance | Dynamic |
+| `frontier` | Unfilled vertex adjacent to filled region | Dynamic |
+| `contact_reachable` | Existing material reachable inside height bounds | Dynamic |
+| `local_occupancy` | Nearby DDS material | Dynamic |
+| `local_overlap` | Repeated local coverage | Dynamic |
+| `distance_last` | Distance to previous deposited target | Dynamic |
 
-The observation also needs episode-level values such as completed-area
-fraction, step count, remaining bead/material budget, consecutive non-progress
-steps, and the previous action.
+Global features will include completed-area fraction, step and material
+budgets, consecutive invalid/non-progress steps, and the previous action.
 
-Vertex contributions to goal completion must be weighted by their associated
-mesh area. Counting vertices directly would make the result depend on mesh
-triangulation density.
+The future observation should also expose deterministic samples from the union
+of current contour components. Each sample should include its normalized
+`source_coord`, 3D position, heat, target width, normal, local occupancy, and a
+validity mask. `ContourParameterization.sample` and
+`sample_contour_observation` now implement the fixed-budget geometric, heat,
+and width portion. Samples condition PPO and explain what each source interval
+means in the current state; they are not candidate actions.
 
-`frontier` is retained as an auxiliary mesh-connectivity feature and debugging
-signal. A goal vertex is a measurement sample, **not a print target**. The
-continuous interpolated `phi=0` scan/goal intersection polyline remains the
-geometric deposition boundary; a policy action may be parameterized from that
-polyline but must never substitute it with frontier vertices.
+## Reward draft
 
-## Safe Action Space
-
-The first environment will apply one point bead per RL step. At each step it
-will sample `N` source points uniformly by arc length from every current
-`phi=0` polyline. These are temporary source candidates, not goal vertices or
-print targets. The proposed hybrid policy action is:
-
-```text
-source_index           discrete choice among N sampled polyline sources
-bead_height            continuous value in the 10-16 mm range
-cone_tilt              bounded orientation tilt
-cone_azimuth           orientation direction around the cone axis
-width_delta            bounded correction from the interpolated width map
-```
-
-The action decoder will:
-
-1. resolve the selected continuous source `S` on the interpolated `phi=0`
-   polyline;
-2. construct the deposition `Z` direction directly inside the allowed cone;
-3. compute the top-referenced target `O = S + h Z`;
-4. raycast opposite `Z` and verify the intended contact and height;
-5. interpolate the width map and apply the policy's bounded width correction;
-6. create the candidate DDS `PointDeposit`;
-7. validate DDS-domain containment and the existing extruder collision proxy;
-8. later add robot reachability and swept-path validation.
-
-The decoder must not generate an arbitrary orientation and clamp it afterward.
-Direct cone parameterization preserves useful PPO action gradients and avoids
-many different raw actions collapsing to the same executed action.
-
-Invalid actions leave the fabrication state unchanged, receive a bounded
-invalid-action penalty, and are reported by reason. Repeated invalid actions
-may terminate the episode. Collision and domain violations will never be
-executed merely because their learned reward might be favorable.
-
-A collision selected by PPO is not silently replaced with another random
-action. It is rejected, the DDS state stays unchanged, and the policy receives
-the configured `-10` collision penalty. This is deliberately dominant relative
-to total normalized completion (approximately `+1`) while remaining finite for
-stable PPO advantages. The collision checker remains a hard safety shield even
-after the policy learns to avoid it.
-
-Volume will not be an action in the first version. The current DDS geometry is
-controlled by `BeadProfile(width, height)`, and the scalar DDS loop does not
-apply YAML `volume_mm3` to the simulated geometry. Width is therefore the first
-meaningful geometric control. Volume can be added after defining and testing a
-calibrated mapping from process volume to bead width and height.
-
-## Reward Draft
-
-All reward components must be normalized to comparable ranges and logged
-separately. The initial structure is:
+Raw reward components must be normalized and logged separately. The intended
+shape is:
 
 ```text
 reward =
@@ -198,359 +194,213 @@ reward =
   - width_error_penalty
   - action_cost
   - invalid_action_penalty
-  - 10 * collision_indicator
+  - collision_penalty
+  - lambda_tilt * normalized_tilt_cost
+  - lambda_cantilever * cantilever_ratio_cost
 ```
 
-Definitions:
-
-- `progress_reward`: increase in area-weighted completed goal fraction;
-- `heat_order_reward`: favors newly completed area with the intended heat
-  priority, without requiring the heuristic contour-selection rule;
-- `overlap_band_penalty`: hinge penalty below or above a desired contact/
-  overlap interval, so zero contact and excessive overlap are both undesirable;
-- `width_error_penalty`: normalized difference between selected width and the
-  width field interpolated at the continuous action point;
-- `action_cost`: small bead/material cost that discourages endless episodes;
-- `invalid_action_penalty`: applied when the safety decoder rejects an action.
-- `collision_indicator`: `1` when the extruder proxy reports collision and `0`
-  otherwise; its configured contribution is exactly `-10`.
-
-“Minimizing empty goal difference,” “not advancing,” and “leaving gaps” must
-not be added as three independent dense penalties because they measure nearly
-the same failure. Dense area progress, a small action cost, and a terminal
-remaining-gap penalty cover them without accidental triple weighting.
-
-An episode succeeds when area-weighted completion exceeds its threshold while
-overlap remains inside its allowed limits. It terminates on
-success, bead/material budget exhaustion, excessive consecutive non-progress,
-or repeated invalid actions.
-
-## Step-by-Step Implementation
-
-### Phase 0 — Freeze definitions and fixtures
-
-- [x] Select one small goal/scan pair as the deterministic development fixture.
-- [x] Record the known units, DDS defaults, cone limit, bead-height range,
-  width range, scan transform, and contact-ray interpretation.
-- [x] Classify this goal as an open target surface and use a vertical swept
-  region from the initial scan for the first 2.5D evaluator.
-- [x] Define exact filled, overlap, and episode-success semantics.
-- [x] Add a fixed random seed and a machine-readable fixture configuration.
-- [x] Confirm or revise the proposed completion, overlap, action,
-  and episode-budget values listed in the fixture configuration.
-
-Exit condition: the same geometry always produces the same initial metrics.
-
-### Phase 1 — Goal completion evaluator
-
-- [x] Implement area weights for goal vertices.
-- [x] Implement the current vertical-ray `phi` evaluator as a regression
-  backend.
-- [x] Return explicit per-vertex `gap`, `filled`, `unfilled`, and `frontier`
-  arrays.
-- [x] Add summary metrics for completed area and remaining gap.
-- [x] Add tests for empty, partially completed, and completed cases.
-
-Exit condition: goal completion can be measured without running a policy.
-
-Fixture evaluation command:
-
-```bash
-python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials/scripts/evaluate_fixture.py
-```
-
-Initial fixture result with a 2 mm fill tolerance:
+The implemented stability costs are:
 
 ```text
-resolved area:  100.0000%
-completed area:   3.2404%
-frontier area:    1.6929%
-mean remaining gap: 129.617 mm
-maximum remaining gap: 293.998 mm
+normalized_tilt_cost = (theta / theta_max)^2
+cantilever_ratio_cost = (lateral_shift / bead_width)^2
 ```
 
-### What the current tests cover
+Their weights should remain weak. They prefer near-vertical deposition when
+other outcomes are equal without preventing useful tilt for progress,
+overlap, or collision avoidance. Completion progress, remaining gap, and
+stagnation must not be represented by several redundant dense penalties.
 
-The tests are small deterministic geometry checks; they do not train PPO yet.
-They verify:
+## Current implementation
 
-- triangle area is distributed correctly to goal vertices, so completion is
-  area-weighted rather than dependent on vertex density;
-- ray misses remain unresolved and cannot count as completed goal;
-- an empty/partial state produces the expected unfilled and frontier regions;
-- the fill tolerance classifies known height samples correctly;
-- vertical raycasting against a known plane returns the expected gap;
-- visualization data is built as DDS `TriangleMesh` and `PointCloud` objects
-  with the expected state colors and frontier points;
-- action sources are sampled by physical polyline length, independently of
-  heat and mesh-segment count;
-- sampled height, cone direction, target construction, and width stay inside
-  their configured bounds;
-- contact validity and extruder collision rejection remain separate results.
+Implemented:
 
-Run them with:
+- area-weighted goal completion and vertical-ray gap evaluation;
+- explicit filled, unfilled, unresolved, and frontier state;
+- deterministic five-dimensional direct action decoding;
+- canonical 3D arc-length parameterization independent of face ordering;
+- deterministic concatenation of disconnected contour components;
+- fixed-budget component-aware contour samples whose coordinates round-trip
+  through the same parameterization used by the decoder;
+- direct height, cone orientation, and width-field correction;
+- conversion of one decoded action to one DDS `PointDeposit`;
+- typed contact, DDS-domain, and extruder-collision validation;
+- mutable incremental DDS episode state with cheap reset;
+- accepted-deposit application and mutation-free physical rejection;
+- immutable DDS snapshots with implicit and additive-coverage fields;
+- current raycast geometry built from the initial scan and DDS surface;
+- goal/phi/contour recomputation from the current material geometry;
+- pure tilt and cantilever reward components;
+- goal-state and direct-action visualization.
+
+Not yet implemented:
+
+- application/rejection of actions inside `env.step`;
+- dynamic observations over accumulated DDS material;
+- complete reward aggregation and termination;
+- Gymnasium environment and PPO training;
+- collision rebuilding against accumulated DDS geometry;
+- robot reachability and swept-path validation.
+
+## Setup and tests
+
+3DP-DDS requires Python 3.9 or newer. From this directory, install the local
+DDS visualization extras and the scalar-pipeline dependencies in an isolated
+environment:
 
 ```bash
-cd /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials
-python3 -m pytest -q
+python -m pip install pytest open3d potpourri3d pyyaml pycollada
+python -m pip install -e "../../../../../external/3DP-DDS[viz]"
 ```
 
-Test modules under `tests/` are collected by pytest; they are not standalone
-visual applications. Running `python3 tests/test_visualization.py` directly
-does not configure the project import path or invoke pytest.
-
-### DDS visualization
-
-The initial state can be inspected interactively using DDS geometry and its
-viewer:
+Run the complete deterministic suite from `RL_Trials/`:
 
 ```bash
-python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials/scripts/visualize_goal_evaluation.py
+python -m pytest tests -v
 ```
 
-The colors mean:
+Test files are pytest modules, not visualization programs. Running
+`python tests/test_visualization.py` directly does not invoke pytest or set the
+project import path correctly.
 
-- orange: unfilled goal;
-- green: filled goal;
-- dark blue-gray: unresolved goal;
-- cyan points: auxiliary vertex frontier, never print targets;
-- magenta line: continuous interpolated `phi=0` scan/goal intersection;
-- transparent gray: current scan mesh.
+The tests cover:
 
-The magenta line is extracted with the existing
-`lib_scalar.extract_phi_contour.extract_phi_contour` implementation used by
-the scalar-field pipeline. It is not reconstructed from the cyan points.
+- area-weighted completion, frontier classification, and unresolved rays;
+- vertical raycasting against known scan geometry;
+- DDS-native goal visualization data;
+- direct action determinism and normalized bounds;
+- continuous canonical traversal of unordered contour segment soups;
+- disconnected 3D components and line-order-independent source selection;
+- deterministic component-aware observation samples and source round-trips;
+- direct orientation, height, target, and width construction;
+- DDS `PointDeposit` conversion;
+- contact, domain, and collision rejection without action replacement;
+- accepted/rejected DDS state transitions, immutable snapshots, reset, and
+  current-material mesh construction;
+- tilt and cantilever reward costs.
 
-The candidate sampler uses an internal continuous position inside each segment.
-If a polyline segment has endpoints `A` and `B`, a random scalar `u` in
-`[0, 1]` identifies
+## Visualization
 
-```text
-P(u) = (1-u) A + u B
-```
-
-Thus `u=0` gives `A`, `u=0.5` the midpoint, and `u=1` gives `B`. `P(u)` is the
-source `S` on the true interpolated intersection, not the final print target.
-The sampler is uniform by total polyline arc length, so triangle tessellation
-does not change spatial probability. `u` and raw triangle-segment indices are
-implementation details and are not exposed as user-facing CLI parameters.
-
-For a headless run or a reproducible image, save a screenshot under the
-isolated experiment folder:
+Visualize the evaluated goal and current `phi=0` contour:
 
 ```bash
-python3 /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials/scripts/visualize_goal_evaluation.py \
-  --screenshot /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials/outputs/initial_goal_evaluation.png
+python scripts/visualize_goal_evaluation.py
 ```
 
-Both modes use the same DDS `TriangleMesh`/`PointCloud` scene construction, the
-exact arrays returned by the completion evaluator, and the scalar pipeline's
-existing DDS line-segment visualization helper. The screenshot mode uses DDS's
-PyVista conversion path to avoid requiring an interactive Qt window. This
-visualization currently shows the initial scan evaluation; it is also the base
-that will be updated with accumulated DDS beads in Phase 2.
-
-### Action-pool and collision-proxy preview
-
-This pre-training diagnostic samples complete proposals without using heat or
-gradient for selection. Each proposal contains a polyline source `S`, height,
-orientation, width variation, and resulting target `O`. It verifies contact,
-runs the existing `ExtruderCollisionChecker`, and renders one random valid DDS
-bead:
+Visualize one explicit direct action (the default is the neutral action):
 
 ```bash
-cd /home/lab/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/RL_Trials
-/bin/python3 scripts/visualize_action_candidates.py
+python scripts/visualize_direct_action.py --action 0 0 0 0 0
 ```
 
-Colors:
-
-- magenta: interpolated `phi=0` source polyline;
-- yellow: contact- and collision-valid proposals;
-- red: extruder-collision proxy rejection;
-- blue: contact-ray rejection;
-- green: one random valid proposal and its DDS bead preview.
-
-The configured 30-degree cone may contain no collisions in this initial open
-fixture; that is a valid result. To exercise the collision rejection with a
-deliberately wider diagnostic cone:
+Example with a different source, tilt, and width correction:
 
 ```bash
-/bin/python3 scripts/visualize_action_candidates.py \
-  --candidate-count 128 \
-  --cone-max-tilt-deg 60
+python scripts/visualize_direct_action.py --action -0.4 0.2 0.6 -0.3 -0.2
 ```
 
-The 60-degree override tests the classifier only; it does not change the
-configured 30-degree training limit. A reproducible headless render can be
-saved with `--screenshot outputs/action_candidates.png`.
+Save reproducible headless renders:
 
-The random valid selection in this script is only a smoke test. During PPO
-training, a collision chosen by the policy will be rejected and penalized; the
-environment will not silently execute another proposal.
+```bash
+python scripts/visualize_goal_evaluation.py \
+  --screenshot outputs/goal_evaluation.png
+python scripts/visualize_direct_action.py \
+  --action 0 0 0 0 0 \
+  --screenshot outputs/direct_action.png
+```
 
-### Phase 2 — Headless incremental DDS state
+Direct-action colors:
 
-- [ ] Wrap the initial scan and mutable DDS bead field in an episode state.
-- [ ] Apply one DDS deposit without YAML serialization or visualization.
-- [ ] Compute action-local before/after occupancy for progress and overlap.
-- [ ] Avoid marching-cubes mesh extraction on every training step.
-- [ ] Support cheap `reset()` without leaking state between episodes.
-- [ ] Add deterministic replay of an explicit action sequence.
+- magenta: exact interpolated `phi=0` contour;
+- cyan: decoded source `S`;
+- green: accepted proposed action;
+- blue: contact rejection;
+- orange: DDS-domain rejection;
+- red: collision rejection.
 
-Exit condition: thousands of bead steps can run reproducibly in headless mode.
+The proposed bead is rendered for diagnosis even when rejected, but the script
+does not update episode state or execute the deposit.
 
-### Phase 3 — Safe action decoder
+## Roadmap
 
-- [x] Extract and preserve the continuous interpolated `phi=0` scan/goal
-  intersection polyline.
-- [x] Build random continuous action points from polyline segments, without
-  treating goal or frontier vertices as print targets.
-- [x] Sample `Z` directly and uniformly in solid angle inside the cone.
-- [x] Implement contact raycasting and top-referenced `O = S + h Z`
-  construction for preview candidates.
-- [x] Add height and width bounds, width-map variation, and DDS
-  `BeadProfile` preview creation.
-- [ ] Reject no-contact, out-of-domain, degenerate, and collision actions with
-  typed reason codes.
-- [x] Integrate the existing extruder collision proxy against the initial scan
-  for candidate diagnostics.
-- [ ] Rebuild collision checks against accumulated DDS geometry per RL step.
+### 1. Gymnasium integration of the headless episode state
 
-Exit condition: every accepted action is a valid DDS point deposit touching
-pre-existing geometry.
+- Connect `DDSEpisodeState` to `env.reset()` and `env.step()`.
+- Rebuild contact/collision helpers from the current material mesh when its
+  geometry revision changes.
+- Compute local before/after occupancy for progress and overlap.
+- Add deterministic replay of explicit action sequences.
 
-### Phase 4 — Observation builder
+### 2. Observation and reward
 
-- [ ] Produce static per-vertex features: normalized position, normal,
-  connectivity, heat, width, and area.
-- [ ] Produce dynamic features: gap, fill state, frontier, contact reachability,
-  local occupancy/overlap, and distance to the previous bead.
-- [ ] Build a fixed-size candidate set with padding and a validity mask for PPO.
-- [ ] Add global episode features and normalize every numeric channel.
-- [ ] Test that two different DDS states over the same goal produce different
-  observations.
+- Build static and dynamic per-vertex features.
+- Add normals and current-material occupancy to the implemented contour
+  position/heat/width samples.
+- Add normalized global episode features.
+- Implement and log each reward term independently.
+- Audit hand-authored good/bad direct actions before training.
 
-Exit condition: observation shape and semantics are stable across resets and
-goal meshes.
+### 3. Gymnasium and PPO
 
-### Phase 5 — Reward and termination
+- Implement `Box(-1, 1, shape=(5,))` as the only policy action space.
+- Connect `env.step(action)` to decode, validate, DDS update/rejection, reward,
+  and observation.
+- Train PPO from scratch without behavior cloning.
+- Compare only against the external heuristic under identical metrics.
 
-- [ ] Implement each reward component independently.
-- [ ] Log raw and weighted reward terms on every step.
-- [ ] Test progress monotonicity and ensure excessive width cannot exploit
-  vertex-only completion.
-- [ ] Test desired-overlap, zero-contact, excessive-overlap, and gap scenarios.
-- [ ] Implement success, budget, stagnation, and invalid-action termination.
-- [ ] Create a reward-audit report for deterministic hand-authored actions.
+### 4. Generalization and robot safety
 
-Exit condition: simple good/bad action pairs are ranked correctly for explicit
-geometric reasons.
+- Separate training and held-out goal meshes.
+- Add calibrated geometry/process perturbations.
+- Compare the fast evaluator with full DDS surface evaluation.
+- Add IK, workspace, collision, and swept-path safety before robot execution.
 
-### Phase 6 — Non-learning baselines
-
-- [ ] Implement constrained random selection.
-- [ ] Implement one-step greedy selection using the exact RL reward.
-- [ ] Optionally implement short-horizon CEM or beam search.
-- [ ] Evaluate the current heuristic only as an external baseline under the
-  same metrics; do not use its actions as PPO training data.
-
-Exit condition: PPO has reproducible lower and upper-reference baselines.
-
-### Phase 7 — PPO environment and training
-
-- [ ] Add the Gymnasium-compatible environment inside `RL_Trials/`.
-- [ ] Implement a categorical sampled-source head and continuous heads for
-  height, cone orientation, and width correction.
-- [ ] Reject and penalize policy-selected collisions by `-10` without silently
-  executing a replacement action.
-- [ ] Train PPO from random initialization; no behavior cloning.
-- [ ] Begin with fixed `+Z` and fixed width, then progressively enable offset,
-  cone orientation, and variable width.
-- [ ] Run multiple headless environments with independent deterministic seeds.
-- [ ] Save configs, checkpoints, learning curves, evaluation metrics, and
-  action/reward traces under `RL_Trials/outputs/`.
-
-Exit condition: PPO consistently exceeds constrained-random performance and
-does not increase invalid-action rates during evaluation.
-
-### Phase 8 — Generalization and fidelity
-
-- [ ] Train and evaluate on separate goal meshes.
-- [ ] Randomize scan error, bead width/height response, DDS threshold, and
-  initial alignment within calibrated bounds.
-- [ ] Add a DDS/SDF directional goal evaluator for geometry that is not a
-  vertical height field.
-- [ ] Define overbuild from DDS material outside the permitted goal envelope;
-  do not infer it merely from negative per-vertex `phi`.
-- [ ] Compare the fast training evaluator against the full DDS surface-mesh and
-  raycasting pipeline.
-- [ ] Run voxel-resolution convergence checks.
-
-Exit condition: held-out performance remains stable and the fast evaluator
-agrees with full geometric validation within selected tolerances.
-
-### Phase 9 — Robot-facing safety and integration
-
-- [ ] Add IK, workspace, self-collision, environment-collision, and path-swept
-  collision validation.
-- [ ] Keep a non-learning safety shield between policy output and execution.
-- [ ] Export accepted actions through the existing target/YAML contract only
-  after simulation validation.
-- [ ] Validate first in dry-run and simulation modes, then with conservative
-  physical trials and post-deposition scans.
-
-Exit condition: no raw policy action can bypass robot safety validation.
-
-## Initial Experiment Scope
-
-The first experiment intentionally uses:
-
-- one fixed goal and scan fixture;
-- point deposits only;
-- one bead per environment step;
-- variable 10-16 mm height, cone orientation, and bounded width correction in
-  the action-space diagnostic;
-- vertical-ray goal completion;
-- direct DDS incremental updates;
-- PPO from random initialization;
-- the old heuristic only as an evaluation baseline.
-
-This narrow start is a curriculum, not the final policy restriction. Freedom is
-added one controlled dimension at a time so failures can be attributed to the
-action space, evaluator, reward, or optimizer rather than all four at once.
-
-## Proposed Directory Layout
-
-Create subdirectories only when their first implementation is added:
+## Directory layout
 
 ```text
 RL_Trials/
-  .gitignore
-  README.md
   configs/
     default_experiment.yaml
   rl_trials/
+    action_decoder.py
+    action_validation.py
+    contour_observation.py
+    contour_parameterization.py
+    dds_adapter.py
+    episode_state.py
     fixture_io.py
     goal_evaluator.py
-    visualization.py
-    action_candidates.py
-    env.py
-    dds_state.py
-    action_decoder.py
-    observations.py
     rewards.py
-    policies.py
+    visualization.py
   tests/
+    conftest.py
+    test_action_decoder.py
+    test_action_validation.py
+    test_contour_parameterization.py
+    test_episode_state.py
     test_goal_evaluator.py
+    test_rewards.py
     test_visualization.py
-    test_action_candidates.py
   scripts/
     evaluate_fixture.py
+    visualize_direct_action.py
     visualize_goal_evaluation.py
-    visualize_action_candidates.py
-  outputs/                 # ignored/generated artifacts
+  outputs/                 # ignored generated artifacts
 ```
 
-No RL runtime dependency is added to the existing ROS or scalar-field packages
-until the isolated environment and its dependency boundary have been tested.
+## Handoff note
+
+Branch: `dev_luc_rl_direct_action`.
+
+Implemented: the policy emits `[source, height, orient_x, orient_y, width]` in
+`[-1, 1]^5`. `source` deterministically addresses the canonical 3D `phi=0`
+contour by arc length, including disconnected components. Random candidates
+were removed from the PPO path. Validation, incremental DDS episode state,
+reset/rejection behavior, deterministic contour observations, tests, and the
+direct-action visualizer are in place.
+
+Next: implement the Gymnasium `reset()`/`step()` environment, refresh validators
+when `geometry_revision` changes, finish observation/reward assembly, and
+connect PPO training. Current goal evaluation uses vertical ray casting; the
+scan plus DDS surface is a triangle soup, not a boolean mesh union. Start with
+`python -m pytest tests -v`.
