@@ -14,6 +14,7 @@ from .action_validation import ActionRejectionReason, ActionValidation
 from .contour_parameterization import ContourParameterization
 from .dds_adapter import point_deposit_from_action
 from .goal_evaluator import GoalEvaluation, evaluate_goal_with_vertical_rays
+from .raycasting import MeshRaycaster
 
 if TYPE_CHECKING:
     from dds import Deposit, SimulationResult
@@ -149,6 +150,7 @@ class DDSEpisodeState:
             self.initial_scan_vertices,
             self.initial_scan_faces,
         )
+        self._raycaster_cache: MeshRaycaster | None = None
 
     @property
     def attempted_steps(self) -> int:
@@ -198,6 +200,7 @@ class DDSEpisodeState:
             self.initial_scan_vertices,
             self.initial_scan_faces,
         )
+        self._raycaster_cache = None
 
     def apply_validated_action(
         self,
@@ -232,6 +235,7 @@ class DDSEpisodeState:
         self._last_rejection_reasons = ()
         self._result_cache = None
         self._material_mesh_cache = None
+        self._raycaster_cache = None
         return EpisodeTransition(
             attempted_step=attempted_step,
             accepted=True,
@@ -270,6 +274,14 @@ class DDSEpisodeState:
         )
         return self._material_mesh_cache
 
+    def current_material_raycaster(self) -> MeshRaycaster:
+        """Return one reusable raycasting scene for the geometry revision."""
+
+        if self._raycaster_cache is None:
+            vertices, faces = self.current_material_mesh()
+            self._raycaster_cache = MeshRaycaster(vertices, faces)
+        return self._raycaster_cache
+
     def geometry_snapshot(
         self,
         *,
@@ -284,6 +296,7 @@ class DDSEpisodeState:
         from lib_scalar.extract_phi_contour import extract_phi_contour
 
         material_vertices, material_faces = self.current_material_mesh()
+        raycaster = self.current_material_raycaster()
         evaluation = evaluate_goal_with_vertical_rays(
             goal_vertices,
             goal_faces,
@@ -291,6 +304,7 @@ class DDSEpisodeState:
             material_faces,
             clearance_m=clearance_m,
             fill_tolerance_m=fill_tolerance_m,
+            raycaster=raycaster,
         )
         contour_points, contour_lines = extract_phi_contour(
             vertices=goal_vertices,

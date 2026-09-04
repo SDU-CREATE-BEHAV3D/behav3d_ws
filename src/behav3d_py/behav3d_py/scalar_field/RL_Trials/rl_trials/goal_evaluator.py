@@ -15,6 +15,8 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import numpy.typing as npt
 
+from .raycasting import MeshRaycaster
+
 
 FloatArray = npt.NDArray[np.float64]
 BoolArray = npt.NDArray[np.bool_]
@@ -292,10 +294,9 @@ def vertical_raycast_scan_heights(
     scan_faces: npt.ArrayLike,
     *,
     z_top: float | None = None,
+    raycaster: MeshRaycaster | None = None,
 ) -> tuple[FloatArray, BoolArray]:
     """Cast world -Z rays using the current scalar-pipeline convention."""
-
-    import open3d as o3d
 
     goal_vertices = _vertices(goal_vertices_world, "goal_vertices_world")
     scan_vertices = _vertices(scan_vertices_world, "scan_vertices_world")
@@ -304,17 +305,17 @@ def vertical_raycast_scan_heights(
     if not np.isfinite(top) or top <= float(np.max(scan_vertices[:, 2])):
         raise ValueError("z_top must be finite and above the scan mesh")
 
-    tensor_mesh = o3d.t.geometry.TriangleMesh()
-    tensor_mesh.vertex["positions"] = o3d.core.Tensor(scan_vertices.astype(np.float32))
-    tensor_mesh.triangle["indices"] = o3d.core.Tensor(faces.astype(np.int32))
-    scene = o3d.t.geometry.RaycastingScene()
-    scene.add_triangles(tensor_mesh)
-
-    rays = np.zeros((goal_vertices.shape[0], 6), dtype=np.float32)
-    rays[:, :2] = goal_vertices[:, :2]
-    rays[:, 2] = top
-    rays[:, 5] = -1.0
-    t_hit = scene.cast_rays(o3d.core.Tensor(rays))["t_hit"].numpy()
+    active_raycaster = (
+        MeshRaycaster(scan_vertices, faces) if raycaster is None else raycaster
+    )
+    if not isinstance(active_raycaster, MeshRaycaster):
+        raise TypeError("raycaster must be a MeshRaycaster")
+    origins = np.empty_like(goal_vertices)
+    origins[:, :2] = goal_vertices[:, :2]
+    origins[:, 2] = top
+    directions = np.zeros_like(goal_vertices)
+    directions[:, 2] = -1.0
+    t_hit = active_raycaster.cast_distances(origins, directions)
     hit = np.isfinite(t_hit)
     z_scan = np.full(goal_vertices.shape[0], np.nan, dtype=np.float64)
     z_scan[hit] = top - t_hit[hit]
@@ -330,6 +331,7 @@ def evaluate_goal_with_vertical_rays(
     clearance_m: float = 0.0,
     fill_tolerance_m: float = 0.002,
     z_top: float | None = None,
+    raycaster: MeshRaycaster | None = None,
 ) -> GoalEvaluation:
     """Raycast the scan and evaluate the goal in one call."""
 
@@ -338,6 +340,7 @@ def evaluate_goal_with_vertical_rays(
         scan_vertices_world,
         scan_faces,
         z_top=z_top,
+        raycaster=raycaster,
     )
     return evaluate_goal_from_height_samples(
         goal_vertices_world,

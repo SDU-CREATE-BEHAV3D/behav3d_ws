@@ -29,9 +29,11 @@ class DecodedAction:
     height_m: float
     width_map_m: float
     width_m: float
+    width_valid: bool
     heat: float
     source_arc_fraction: float
     source_arc_length_m: float
+    source_component_index: int
     contour_segment_index: int
     segment_fraction: float
     tilt_deg: float
@@ -147,19 +149,43 @@ def decode_continuous_action(
         dtype=np.float64,
     )
 
+    width_min_m = float(width_min_m)
+    width_max_m = float(width_max_m)
+    if (
+        not np.isfinite(width_min_m)
+        or not np.isfinite(width_max_m)
+        or width_min_m <= 0.0
+        or width_max_m < width_min_m
+    ):
+        raise ValueError(
+            f"invalid physical bead-width bounds: ({width_min_m}, {width_max_m})"
+        )
+    configured_delta_min = float(width_delta_min_m)
+    configured_delta_max = float(width_delta_max_m)
+    if (
+        not np.isfinite(configured_delta_min)
+        or not np.isfinite(configured_delta_max)
+        or configured_delta_max < configured_delta_min
+    ):
+        raise ValueError(
+            "invalid configured width-delta bounds: "
+            f"({width_delta_min_m}, {width_delta_max_m})"
+        )
+    feasible_delta_min = max(configured_delta_min, width_min_m - width_map_m)
+    feasible_delta_max = min(configured_delta_max, width_max_m - width_map_m)
+    if feasible_delta_max < feasible_delta_min:
+        raise ValueError(
+            "width map and configured correction contain no physically valid width"
+        )
     width_delta_alpha = 0.5 * (float(action[4]) + 1.0)
     width_delta_m = _bounded(
         width_delta_alpha,
-        width_delta_min_m,
-        width_delta_max_m,
-        "width delta",
+        feasible_delta_min,
+        feasible_delta_max,
+        "feasible width delta",
     )
     width_m = width_map_m + width_delta_m
-    if width_m < float(width_min_m) or width_m > float(width_max_m):
-        raise ValueError(
-            "policy-selected width lies outside physical bead-width bounds; "
-            "reject and penalize instead of clipping"
-        )
+    width_valid = True
 
     target = location.point + height_m * z_axis
     return DecodedAction(
@@ -170,9 +196,11 @@ def decode_continuous_action(
         height_m=float(height_m),
         width_map_m=width_map_m,
         width_m=float(width_m),
+        width_valid=width_valid,
         heat=heat,
         source_arc_fraction=location.arc_fraction,
         source_arc_length_m=location.arc_length_m,
+        source_component_index=location.component_index,
         contour_segment_index=location.segment_index,
         segment_fraction=location.segment_fraction,
         tilt_deg=float(np.rad2deg(tilt_rad)),

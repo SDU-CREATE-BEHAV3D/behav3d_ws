@@ -1,5 +1,5 @@
-schema_version: 5
-experiment_name: field_state_init2_point_bead_fixture
+schema_version: 10
+experiment_name: direct_dds_bead_ppo
 
 paths:
   # Paths are relative to the workspace root.
@@ -81,18 +81,20 @@ action:
   contact_ray_direction: negative_deposition_z
   contact_distance_min_mm: 10.0
   contact_distance_max_mm: 16.0
-  contact_source_tolerance_mm: 1.0
+  contact_distance_numeric_epsilon_mm: 0.001
+  contact_source_error_role: diagnostic_only
   bead_height_mode: policy_selected_then_contact_validated
   bead_height_min_mm: 10.0
   bead_height_max_mm: 16.0
-  width_mode: policy_delta_from_interpolated_goal_width
+  width_mode: policy_mapped_to_local_feasible_interval
   width_delta_min_mm: -4.0
   width_delta_max_mm: 4.0
   bead_width_min_mm: 16.0
   bead_width_max_mm: 36.0
-  invalid_width_behavior: reject_and_penalize
+  invalid_width_behavior: configuration_error_only
 
 observation:
+  space: Dict(contour, global)
   contour_sample_count: 256
   contour_sampling: canonical_component_arc_midpoints
   component_allocation: one_minimum_then_length_proportional
@@ -104,6 +106,15 @@ observation:
     - component_index
     - valid_mask
   samples_are_candidate_actions: false
+  global_features:
+    - completed_area_fraction
+    - accepted_deposit_fraction
+    - attempted_step_fraction
+    - consecutive_invalid_fraction
+    - consecutive_no_progress_fraction
+    - has_contour
+    - component_count_fraction
+    - previous_action
 
 collision:
   checker: existing_extruder_mesh_vertex_distance_proxy
@@ -113,9 +124,15 @@ collision:
   silently_replace_policy_action: false
 
 reward:
+  # Penalties are positive cost magnitudes and are subtracted from reward.
   # Collision remains a hard safety rejection plus an explicit learning signal.
-  collision_penalty: -10.0
+  collision_penalty: 10.0
   collision_terminates_episode: false
+  # Provisional Gym rollout weights; audit before a long PPO run.
+  progress_scale: 100.0
+  invalid_action_penalty: 1.0
+  tilt_weight: 0.01
+  cantilever_weight: 0.01
   # Stability terms are dimensionless raw costs and should be logged separately.
   # Their final weights are deliberately not frozen before reward auditing.
   tilt_cost: normalized_quadratic
@@ -133,8 +150,10 @@ episode:
   initial_scan_role: immutable_raycast_geometry
   current_material_mesh: initial_scan_plus_dds_surface_triangle_soup
   max_deposits: 500
+  max_attempted_steps: 1000
   max_consecutive_no_progress: 20
   max_consecutive_invalid_actions: 20
+  min_progress_area_fraction: 1.0e-8
 
 baseline:
   policy: current_heuristic_only_for_evaluation
@@ -145,8 +164,32 @@ baseline:
 ppo:
   initialization: from_scratch
   behavior_cloning: false
+  implementation: stable_baselines3.PPO
+  policy: MultiInputPolicy
+  bounded_distribution: gsde_tanh_squash
+  device: cpu
   action_space: Box(-1, 1, shape=(5,))
   direct_action_decoder: rl_trials.action_decoder.decode_continuous_action
+  environment: rl_trials.gym_env.DirectBeadDepositionEnv
+  observation_space: Dict(contour, global)
+  defaults:
+    total_timesteps: 10240
+    n_steps: 128
+    batch_size: 64
+    n_epochs: 10
+    learning_rate: 3.0e-4
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    # Wider source exploration, interior-biased physical controls.
+    action_log_std_init:
+      source_coord: -1.5
+      height_ctrl: -2.5
+      orient_x: -2.0
+      orient_y: -2.0
+      width_ctrl: -2.5
+    sde_sample_frequency: 1
+    checkpoint_frequency: 1024
 
 pending_decisions:
   reward_weights:

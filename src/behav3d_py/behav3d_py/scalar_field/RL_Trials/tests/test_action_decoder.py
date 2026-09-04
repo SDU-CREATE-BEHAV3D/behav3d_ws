@@ -196,3 +196,23 @@ def test_branched_contour_is_rejected_explicitly() -> None:
 def test_width_lower_bound_is_preserved_without_clipping() -> None:
     valid = _decode([-0.5, 0.0, 0.0, 0.0, -1.0])
     assert valid.width_m == pytest.approx(0.016)
+    assert valid.width_valid
+
+
+def test_width_control_is_mapped_into_local_feasible_interval() -> None:
+    action = _decode(
+        [-1.0, 0.0, 0.0, 0.0, -1.0],
+        width=np.full(POINTS.shape[0], 0.016),
+    )
+
+    assert action.width_m == pytest.approx(0.016)
+    assert action.width_delta_m == pytest.approx(0.0)
+    assert action.width_valid
+
+    upper = _decode(
+        [-1.0, 0.0, 0.0, 0.0, 1.0],
+        width=np.full(POINTS.shape[0], 0.036),
+    )
+    assert upper.width_m == pytest.approx(0.036)
+    assert upper.width_delta_m == pytest.approx(0.0)
+    assert upper.width_valid

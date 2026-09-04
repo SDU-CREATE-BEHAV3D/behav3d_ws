@@ -95,6 +95,8 @@ def _status_style(validation: ActionValidation) -> tuple[str, str, np.ndarray]:
         return "accepted", "#00e676", ACCEPTED_COLOR
     if validation.collides:
         return "rejected: collision", "#e74c3c", COLLISION_REJECTED_COLOR
+    if not validation.width_valid:
+        return "rejected: width", "#f39c12", DOMAIN_REJECTED_COLOR
     if not validation.contact_valid:
         return "rejected: contact", "#3498db", CONTACT_REJECTED_COLOR
     return "rejected: DDS domain", "#f39c12", DOMAIN_REJECTED_COLOR
@@ -334,8 +336,8 @@ def main() -> None:
         scan_faces=scan_faces,
         contact_distance_min_m=1e-3 * float(action_config["contact_distance_min_mm"]),
         contact_distance_max_m=1e-3 * float(action_config["contact_distance_max_mm"]),
-        contact_source_tolerance_m=1e-3
-        * float(action_config["contact_source_tolerance_mm"]),
+        contact_distance_epsilon_m=1e-3
+        * float(action_config["contact_distance_numeric_epsilon_mm"]),
         domain=_episode_domain(goal_vertices, config),
         collision_checker=collision_checker,
     )
@@ -357,6 +359,7 @@ def main() -> None:
         "width_map_mm": 1e3 * decoded.width_map_m,
         "width_delta_mm": 1e3 * decoded.width_delta_m,
         "width_mm": 1e3 * decoded.width_m,
+        "width_valid": validation.width_valid,
         "tilt_deg": decoded.tilt_deg,
         "heat": decoded.heat,
         "valid": validation.valid,

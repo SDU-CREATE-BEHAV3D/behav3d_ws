@@ -68,6 +68,7 @@ def _valid_validation(action: DecodedAction) -> ActionValidation:
     deposit = point_deposit_from_action(action)
     support_min, support_max = deposit.support_bounds()
     return ActionValidation(
+        width_valid=action.width_valid,
         contact_hit_point=action.source_point.copy(),
         contact_distance_m=action.height_m,
         contact_source_error_m=0.0,
@@ -166,6 +167,29 @@ def test_current_material_mesh_combines_initial_scan_and_dds_surface() -> None:
     np.testing.assert_array_equal(faces[: SCAN_FACES.shape[0]], SCAN_FACES)
     assert vertices.shape[0] > initial_vertices.shape[0]
     assert faces.shape[0] > initial_faces.shape[0]
+
+
+def test_material_raycaster_is_reused_until_geometry_revision_changes() -> None:
+    state = _state()
+    initial = state.current_material_raycaster()
+
+    assert state.current_material_raycaster() is initial
+
+    action = _action()
+    rejected = replace(
+        _valid_validation(action),
+        contact_valid=False,
+        valid=False,
+        rejection_reasons=(ActionRejectionReason.NO_CONTACT,),
+    )
+    state.apply_validated_action(action, rejected)
+    assert state.current_material_raycaster() is initial
+
+    state.apply_validated_action(action, _valid_validation(action))
+    updated = state.current_material_raycaster()
+
+    assert updated is not initial
+    assert state.current_material_raycaster() is updated
 
 
 def test_geometry_snapshot_recomputes_phi_and_shared_contour() -> None:

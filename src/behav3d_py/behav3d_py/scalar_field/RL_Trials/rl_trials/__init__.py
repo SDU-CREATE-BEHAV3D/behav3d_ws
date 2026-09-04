@@ -22,6 +22,7 @@ from .goal_evaluator import (
     vertex_area_weights,
 )
 from .rewards import cantilever_ratio_cost, normalized_tilt_cost
+from .raycasting import MeshRaycaster
 
 __all__ = [
     "ActionRejectionReason",
@@ -36,6 +37,7 @@ __all__ = [
     "EpisodeTransition",
     "GoalEvaluation",
     "GoalMetrics",
+    "MeshRaycaster",
     "cantilever_ratio_cost",
     "decode_continuous_action",
     "evaluate_goal_from_height_samples",

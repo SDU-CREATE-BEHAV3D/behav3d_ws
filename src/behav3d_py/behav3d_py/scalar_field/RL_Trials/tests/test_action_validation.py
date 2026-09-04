@@ -83,7 +83,7 @@ def _validate(
         scan_faces=SCAN_FACES,
         contact_distance_min_m=0.010,
         contact_distance_max_m=0.016,
-        contact_source_tolerance_m=1e-5,
+        contact_distance_epsilon_m=1e-6,
         domain=_domain() if domain is None else domain,
         collision_checker=collision_checker,
     )
@@ -124,6 +124,20 @@ def test_collision_rejects_action_without_replacing_it() -> None:
     assert checker.calls == 1
 
 
+def test_invalid_width_is_typed_and_skips_collision_without_clipping() -> None:
+    checker = _CollisionChecker(collides=False)
+    action = replace(_decode(), width_m=0.040, width_valid=False)
+
+    result = _validate(action, collision_checker=checker)
+
+    assert not result.valid
+    assert not result.width_valid
+    assert result.rejection_reasons == (ActionRejectionReason.INVALID_WIDTH,)
+    assert result.contact_valid
+    assert not result.collision_checked
+    assert checker.calls == 0
+
+
 def test_missing_contact_rejects_action_before_collision_check() -> None:
     checker = _CollisionChecker(collides=False)
     result = validate_decoded_action(
@@ -132,7 +146,7 @@ def test_missing_contact_rejects_action_before_collision_check() -> None:
         scan_faces=SCAN_FACES,
         contact_distance_min_m=0.010,
         contact_distance_max_m=0.016,
-        contact_source_tolerance_m=1e-5,
+        contact_distance_epsilon_m=1e-6,
         domain=_domain(),
         collision_checker=checker,
     )
@@ -151,7 +165,7 @@ def test_contact_distance_outside_height_bounds_has_specific_reason() -> None:
         scan_faces=SCAN_FACES,
         contact_distance_min_m=0.014,
         contact_distance_max_m=0.016,
-        contact_source_tolerance_m=1e-5,
+        contact_distance_epsilon_m=1e-6,
         domain=_domain(),
         collision_checker=None,
     )
@@ -160,7 +174,7 @@ def test_contact_distance_outside_height_bounds_has_specific_reason() -> None:
     assert result.rejection_reasons == (ActionRejectionReason.CONTACT_DISTANCE,)
 
 
-def test_contact_hit_must_return_to_decoded_source() -> None:
+def test_contact_source_error_is_diagnostic_only() -> None:
     action = _decode()
     inconsistent = replace(
         action,
@@ -168,8 +182,26 @@ def test_contact_hit_must_return_to_decoded_source() -> None:
     )
     result = _validate(inconsistent)
 
-    assert not result.valid
-    assert result.rejection_reasons == (ActionRejectionReason.CONTACT_SOURCE_MISMATCH,)
+    assert result.valid
+    assert result.contact_valid
+    assert result.rejection_reasons == ()
+    assert result.contact_source_error_m == pytest.approx(0.010)
+
+
+def test_contact_distance_allows_only_configured_numeric_epsilon() -> None:
+    result = validate_decoded_action(
+        action=_decode(),
+        scan_vertices=SCAN_VERTICES,
+        scan_faces=SCAN_FACES,
+        contact_distance_min_m=0.0130005,
+        contact_distance_max_m=0.016,
+        contact_distance_epsilon_m=1e-6,
+        domain=_domain(),
+        collision_checker=None,
+    )
+
+    assert result.valid
+    assert result.contact_valid
 
 
 def test_out_of_domain_action_skips_collision_check() -> None:
