@@ -1,0 +1,2944 @@
+{
+  "schema": "behav3d.recorded_recovery_results.v1",
+  "frame": "ur20_base_link",
+  "units": "m",
+  "missing_case": {
+    "id": "missing",
+    "title": "Recorded discrepancy \u00b7 C5:T7",
+    "evidence": {
+      "status": "missing",
+      "observation_fraction": 0.9365205843293493,
+      "expected_within_tolerance_voxels": 3114,
+      "missing_voxels": 412,
+      "missing_fraction": 0.11684628474191719,
+      "observed_within_tolerance_voxels": 1326,
+      "extra_voxels": 0,
+      "extra_fraction": 0.0
+    },
+    "tolerance_sensitive": true,
+    "tolerance_sweep": [
+      {
+        "tolerance_mm": 2.0,
+        "status": "missing_and_extra",
+        "observation_fraction": 0.9365205843293493,
+        "expected_within_tolerance_voxels": 1075,
+        "missing_voxels": 2451,
+        "missing_fraction": 0.6951219512195121,
+        "observed_within_tolerance_voxels": 1057,
+        "extra_voxels": 269,
+        "extra_fraction": 0.2028657616892911
+      },
+      {
+        "tolerance_mm": 4.0,
+        "status": "missing",
+        "observation_fraction": 0.9365205843293493,
+        "expected_within_tolerance_voxels": 1957,
+        "missing_voxels": 1569,
+        "missing_fraction": 0.4449801474758934,
+        "observed_within_tolerance_voxels": 1244,
+        "extra_voxels": 82,
+        "extra_fraction": 0.06184012066365008
+      },
+      {
+        "tolerance_mm": 6.0,
+        "status": "missing",
+        "observation_fraction": 0.9365205843293493,
+        "expected_within_tolerance_voxels": 2535,
+        "missing_voxels": 991,
+        "missing_fraction": 0.2810550198525241,
+        "observed_within_tolerance_voxels": 1288,
+        "extra_voxels": 38,
+        "extra_fraction": 0.02865761689291101
+      },
+      {
+        "tolerance_mm": 8.0,
+        "status": "missing",
+        "observation_fraction": 0.9365205843293493,
+        "expected_within_tolerance_voxels": 2884,
+        "missing_voxels": 642,
+        "missing_fraction": 0.1820760068065797,
+        "observed_within_tolerance_voxels": 1316,
+        "extra_voxels": 10,
+        "extra_fraction": 0.007541478129713424
+      },
+      {
+        "tolerance_mm": 10.0,
+        "status": "missing",
+        "observation_fraction": 0.9365205843293493,
+        "expected_within_tolerance_voxels": 3114,
+        "missing_voxels": 412,
+        "missing_fraction": 0.11684628474191719,
+        "observed_within_tolerance_voxels": 1326,
+        "extra_voxels": 0,
+        "extra_fraction": 0.0
+      },
+      {
+        "tolerance_mm": 12.0,
+        "status": "within_tolerance",
+        "observation_fraction": 0.9365205843293493,
+        "expected_within_tolerance_voxels": 3277,
+        "missing_voxels": 249,
+        "missing_fraction": 0.0706182643221781,
+        "observed_within_tolerance_voxels": 1326,
+        "extra_voxels": 0,
+        "extra_fraction": 0.0
+      }
+    ],
+    "physical_failure_confirmed": false,
+    "strategies": [
+      {
+        "id": "normal2",
+        "name": "Normal: first two archived candidates",
+        "targets": [
+          {
+            "label": "C6:T1",
+            "top_m": [
+              0.05226,
+              -0.84751,
+              -0.09766
+            ],
+            "axis": [
+              0.279776268442101,
+              -0.039968038348871575,
+              0.9592329203729177
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          },
+          {
+            "label": "C6:T2",
+            "top_m": [
+              0.04376,
+              -0.88166,
+              -0.0906
+            ],
+            "axis": [
+              0.3011313679370974,
+              0.0,
+              0.9535826651341417
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          }
+        ],
+        "basis": "unchanged archived order",
+        "upper_surface_diagnostics": [
+          {
+            "label": "C6:T1",
+            "base_m": [
+              0.04778357970492638,
+              -0.846870511386418,
+              -0.11300772672596668
+            ],
+            "base_to_upper_surface_mm": 0.2748344233355626,
+            "ray_hit": true
+          },
+          {
+            "label": "C6:T2",
+            "base_m": [
+              0.03894189811300644,
+              -0.88166,
+              -0.10585732264214627
+            ],
+            "base_to_upper_surface_mm": 0.6262768119652123,
+            "ray_hit": true
+          }
+        ],
+        "inspection_criterion": "Reassess the same region with fixed registration/tolerances; track missing and extra evidence and unknown coverage.",
+        "field_goal_validity": "not_replayed",
+        "avoidance_validity": "not_replayed",
+        "robot_feasibility": "unverified",
+        "mechanical_effect": "unvalidated",
+        "executable": false,
+        "robot_commands": [],
+        "metrics": {
+          "candidate_count": 2,
+          "missing_reference_samples_inside_proposed_solids": 0,
+          "missing_reference_sample_count": 398,
+          "observed_reference_samples_inside_proposed_solids": 0,
+          "sampled_solid_outside_issued_cycle5_fraction": 0.9261805140466228,
+          "outside_basis": "outside prior-cycle issued beads, NOT outside final product goal",
+          "sample_basis": "DDS surface-band reference samples, NOT missing material volume"
+        }
+      },
+      {
+        "id": "priority2",
+        "name": "Prioritize the discrepancy region: two candidates",
+        "targets": [
+          {
+            "label": "C6:T7",
+            "top_m": [
+              0.26947000000000004,
+              -0.8479500000000001,
+              -0.09626000000000001
+            ],
+            "axis": [
+              -0.3510900714593327,
+              0.08024915919070462,
+              0.9328964755919413
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          },
+          {
+            "label": "C6:T6",
+            "top_m": [
+              0.27963,
+              -0.89174,
+              -0.10035
+            ],
+            "axis": [
+              -0.279776268442101,
+              -0.039968038348871575,
+              0.9592329203729177
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          }
+        ],
+        "basis": "same archived candidate pool; changed order only",
+        "upper_surface_diagnostics": [
+          {
+            "label": "C6:T7",
+            "base_m": [
+              0.2750874411433494,
+              -0.8492339865470514,
+              -0.11118634360947108
+            ],
+            "base_to_upper_surface_mm": -0.1641738410750465,
+            "ray_hit": true
+          },
+          {
+            "label": "C6:T6",
+            "base_m": [
+              0.2841064202950736,
+              -0.891100511386418,
+              -0.11569772672596668
+            ],
+            "base_to_upper_surface_mm": 0.12014532488120733,
+            "ray_hit": true
+          }
+        ],
+        "inspection_criterion": "Reassess the same region with fixed registration/tolerances; track missing and extra evidence and unknown coverage.",
+        "field_goal_validity": "not_replayed",
+        "avoidance_validity": "not_replayed",
+        "robot_feasibility": "unverified",
+        "mechanical_effect": "unvalidated",
+        "executable": false,
+        "robot_commands": [],
+        "metrics": {
+          "candidate_count": 2,
+          "missing_reference_samples_inside_proposed_solids": 0,
+          "missing_reference_sample_count": 398,
+          "observed_reference_samples_inside_proposed_solids": 266,
+          "sampled_solid_outside_issued_cycle5_fraction": 0.9982132221560452,
+          "outside_basis": "outside prior-cycle issued beads, NOT outside final product goal",
+          "sample_basis": "DDS surface-band reference samples, NOT missing material volume"
+        }
+      },
+      {
+        "id": "repair1",
+        "name": "Local repair probe: one recorded-size bead",
+        "targets": [
+          {
+            "label": "repair-probe",
+            "top_m": [
+              0.2822051213095404,
+              -0.8639775793027349,
+              -0.1105114400121202
+            ],
+            "axis": [
+              -0.28866083348090577,
+              0.059722931065014986,
+              0.9555668970402398
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "recorded missing-reference centroid; issued dimensions and axis"
+          }
+        ],
+        "basis": "new geometry proposal; not generated by the field planner",
+        "upper_surface_diagnostics": [
+          {
+            "label": "repair-probe",
+            "base_m": [
+              0.2868236946452349,
+              -0.8649331461997751,
+              -0.12580051036476403
+            ],
+            "base_to_upper_surface_mm": -17.226945350186735,
+            "ray_hit": true
+          }
+        ],
+        "inspection_criterion": "Reassess the same region with fixed registration/tolerances; track missing and extra evidence and unknown coverage.",
+        "field_goal_validity": "not_replayed",
+        "avoidance_validity": "not_replayed",
+        "robot_feasibility": "unverified",
+        "mechanical_effect": "unvalidated",
+        "executable": false,
+        "robot_commands": [],
+        "metrics": {
+          "candidate_count": 1,
+          "missing_reference_samples_inside_proposed_solids": 385,
+          "missing_reference_sample_count": 398,
+          "observed_reference_samples_inside_proposed_solids": 6,
+          "sampled_solid_outside_issued_cycle5_fraction": 0.6416219439475254,
+          "outside_basis": "outside prior-cycle issued beads, NOT outside final product goal",
+          "sample_basis": "DDS surface-band reference samples, NOT missing material volume"
+        }
+      },
+      {
+        "id": "normal7",
+        "name": "Reference: full archived batch of seven",
+        "targets": [
+          {
+            "label": "C6:T1",
+            "top_m": [
+              0.05226,
+              -0.84751,
+              -0.09766
+            ],
+            "axis": [
+              0.279776268442101,
+              -0.039968038348871575,
+              0.9592329203729177
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          },
+          {
+            "label": "C6:T2",
+            "top_m": [
+              0.04376,
+              -0.88166,
+              -0.0906
+            ],
+            "axis": [
+              0.3011313679370974,
+              0.0,
+              0.9535826651341417
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          },
+          {
+            "label": "C6:T3",
+            "top_m": [
+              0.09,
+              -0.81589,
+              -0.09948000000000001
+            ],
+            "axis": [
+              0.3094589199216646,
+              -0.06987782062747265,
+              0.948341851372843
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          },
+          {
+            "label": "C6:T4",
+            "top_m": [
+              0.05583,
+              -0.9140900000000001,
+              -0.08939
+            ],
+            "axis": [
+              0.30996900464922517,
+              0.03999600059990002,
+              0.9499050142476254
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          },
+          {
+            "label": "C6:T5",
+            "top_m": [
+              0.09469,
+              -0.9462100000000001,
+              -0.09726000000000001
+            ],
+            "axis": [
+              0.3304298383666582,
+              0.07009117783535174,
+              0.9412243880747232
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          },
+          {
+            "label": "C6:T6",
+            "top_m": [
+              0.27963,
+              -0.89174,
+              -0.10035
+            ],
+            "axis": [
+              -0.279776268442101,
+              -0.039968038348871575,
+              0.9592329203729177
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          },
+          {
+            "label": "C6:T7",
+            "top_m": [
+              0.26947000000000004,
+              -0.8479500000000001,
+              -0.09626000000000001
+            ],
+            "axis": [
+              -0.3510900714593327,
+              0.08024915919070462,
+              0.9328964755919413
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified"
+          }
+        ],
+        "basis": "cost reference, not equal budget",
+        "upper_surface_diagnostics": [
+          {
+            "label": "C6:T1",
+            "base_m": [
+              0.04778357970492638,
+              -0.846870511386418,
+              -0.11300772672596668
+            ],
+            "base_to_upper_surface_mm": 0.2748344233355626,
+            "ray_hit": true
+          },
+          {
+            "label": "C6:T2",
+            "base_m": [
+              0.03894189811300644,
+              -0.88166,
+              -0.10585732264214627
+            ],
+            "base_to_upper_surface_mm": 0.6262768119652123,
+            "ray_hit": true
+          },
+          {
+            "label": "C6:T3",
+            "base_m": [
+              0.08504865728125337,
+              -0.8147719548699605,
+              -0.1146534696219655
+            ],
+            "base_to_upper_surface_mm": 0.18749108074118948,
+            "ray_hit": true
+          },
+          {
+            "label": "C6:T4",
+            "base_m": [
+              0.050870495925612394,
+              -0.9147299360095985,
+              -0.10458848022796201
+            ],
+            "base_to_upper_surface_mm": 1.0103525558757127,
+            "ray_hit": true
+          },
+          {
+            "label": "C6:T5",
+            "base_m": [
+              0.08940312258613346,
+              -0.9473314588453657,
+              -0.11231959020919559
+            ],
+            "base_to_upper_surface_mm": 0.16408507546793183,
+            "ray_hit": true
+          },
+          {
+            "label": "C6:T6",
+            "base_m": [
+              0.2841064202950736,
+              -0.891100511386418,
+              -0.11569772672596668
+            ],
+            "base_to_upper_surface_mm": 0.12014532488120733,
+            "ray_hit": true
+          },
+          {
+            "label": "C6:T7",
+            "base_m": [
+              0.2750874411433494,
+              -0.8492339865470514,
+              -0.11118634360947108
+            ],
+            "base_to_upper_surface_mm": -0.1641738410750465,
+            "ray_hit": true
+          }
+        ],
+        "inspection_criterion": "Reassess the same region with fixed registration/tolerances; track missing and extra evidence and unknown coverage.",
+        "field_goal_validity": "not_replayed",
+        "avoidance_validity": "not_replayed",
+        "robot_feasibility": "unverified",
+        "mechanical_effect": "unvalidated",
+        "executable": false,
+        "robot_commands": [],
+        "metrics": {
+          "candidate_count": 7,
+          "missing_reference_samples_inside_proposed_solids": 0,
+          "missing_reference_sample_count": 398,
+          "observed_reference_samples_inside_proposed_solids": 266,
+          "sampled_solid_outside_issued_cycle5_fraction": 0.8896451969709861,
+          "outside_basis": "outside prior-cycle issued beads, NOT outside final product goal",
+          "sample_basis": "DDS surface-band reference samples, NOT missing material volume"
+        }
+      },
+      {
+        "id": "inspect",
+        "name": "Hold deposition and inspect the discrepancy",
+        "targets": [],
+        "basis": "recorded tolerance sensitivity remains unresolved",
+        "upper_surface_diagnostics": [],
+        "inspection_criterion": "Reassess the same region with fixed registration/tolerances; track missing and extra evidence and unknown coverage.",
+        "field_goal_validity": "not_replayed",
+        "avoidance_validity": "not_replayed",
+        "robot_feasibility": "unverified",
+        "mechanical_effect": "unvalidated",
+        "executable": false,
+        "robot_commands": [],
+        "metrics": {
+          "candidate_count": 0,
+          "missing_reference_samples_inside_proposed_solids": 0,
+          "missing_reference_sample_count": 398,
+          "observed_reference_samples_inside_proposed_solids": 0,
+          "sampled_solid_outside_issued_cycle5_fraction": null,
+          "outside_basis": "outside prior-cycle issued beads, NOT outside final product goal",
+          "sample_basis": "DDS surface-band reference samples, NOT missing material volume"
+        }
+      }
+    ],
+    "spatially_unambiguous_missing_count": 398,
+    "rounding_boundary_count": 22,
+    "decision": "compare_recovery_hypotheses_keep_inspection_open",
+    "decision_note": "Geometric reach is insufficient to select deposition. Recorded evidence remains provisional."
+  },
+  "lean_trials": [
+    {
+      "angle_deg": 0,
+      "modified_vertex_count": 0,
+      "affected_candidate_labels": [
+        "C6:T6",
+        "C6:T7"
+      ],
+      "maximum_vertex_displacement_mm": 0.0,
+      "max_archived_target_displacement_mm": 0.0,
+      "strategies": [
+        {
+          "id": "continue",
+          "name": "Continue the archived batch",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.3011313679370974,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.3094589199216646,
+                -0.06987782062747265,
+                0.948341851372843
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.03999600059990002,
+                0.9499050142476254
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666582,
+                0.07009117783535174,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T6",
+              "top_m": [
+                0.27963,
+                -0.89174,
+                -0.10035
+              ],
+              "axis": [
+                -0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T7",
+              "top_m": [
+                0.26947000000000004,
+                -0.8479500000000001,
+                -0.09626000000000001
+              ],
+              "axis": [
+                -0.3510900714593327,
+                0.08024915919070462,
+                0.9328964755919413
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            }
+          ],
+          "basis": "unchanged candidates against changed mesh",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T6",
+              "base_m": [
+                0.2841064202950736,
+                -0.891100511386418,
+                -0.11569772672596668
+              ],
+              "base_to_upper_surface_mm": 0.12014532488120733,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T7",
+              "base_m": [
+                0.2750874411433494,
+                -0.8492339865470514,
+                -0.11118634360947108
+              ],
+              "base_to_upper_surface_mm": -0.1641738410750465,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Track regional displacement and its change after a bounded batch.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 7,
+            "max_target_change_mm": 0.0,
+            "affected_region_candidates": 2,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "defer",
+          "name": "Defer growth in the edited region",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.3011313679370974,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.3094589199216646,
+                -0.06987782062747265,
+                0.948341851372843
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.03999600059990002,
+                0.9499050142476254
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666582,
+                0.07009117783535174,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            }
+          ],
+          "basis": "remove region candidates from this batch; no stabilizing effect assumed",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Check whether the region continues to move before resuming growth.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 5,
+            "max_target_change_mm": 0.0,
+            "affected_region_candidates": 0,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "adapt",
+          "name": "Adapt nearby candidate bases to the edited geometry",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.2797762684421013,
+                -0.03996803834887403,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.30113136793709744,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.30945891992166435,
+                -0.06987782062747168,
+                0.9483418513728432
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.039996000599902534,
+                0.9499050142476253
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666583,
+                0.07009117783535189,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T6",
+              "top_m": [
+                0.27963,
+                -0.89174,
+                -0.10035
+              ],
+              "axis": [
+                -0.27977626844210085,
+                -0.03996803834887403,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T7",
+              "top_m": [
+                0.26947000000000004,
+                -0.8479500000000001,
+                -0.09626000000000003
+              ],
+              "axis": [
+                -0.3510900714593331,
+                0.08024915919070669,
+                0.932896475591941
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            }
+          ],
+          "basis": "counterfactual candidate adaptation; a revised goal field still needs construction",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T6",
+              "base_m": [
+                0.2841064202950736,
+                -0.891100511386418,
+                -0.11569772672596668
+              ],
+              "base_to_upper_surface_mm": 0.12014532488120733,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T7",
+              "base_m": [
+                0.2750874411433494,
+                -0.8492339865470514,
+                -0.11118634360947108
+              ],
+              "base_to_upper_surface_mm": -0.1641738410750465,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Compare the resulting geometry with both original and proposed continuation targets.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 7,
+            "max_target_change_mm": 1.3877787807814457e-14,
+            "affected_region_candidates": 2,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "inspect",
+          "name": "Hold deposition and inspect the whole affected region",
+          "targets": [],
+          "basis": "mechanical stability unresolved",
+          "upper_surface_diagnostics": [],
+          "inspection_criterion": "Measure region pose, deformation, attachment and temporal change.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 0,
+            "max_target_change_mm": 0,
+            "affected_region_candidates": 0,
+            "stability_improvement": null
+          }
+        }
+      ],
+      "decision": "compare_geometry_require_stability_evidence",
+      "physical_failure_confirmed": false,
+      "mechanics_simulated": false
+    },
+    {
+      "angle_deg": 4,
+      "modified_vertex_count": 5728,
+      "affected_candidate_labels": [
+        "C6:T6",
+        "C6:T7"
+      ],
+      "maximum_vertex_displacement_mm": 4.711330404087777,
+      "max_archived_target_displacement_mm": 5.506037172432032,
+      "strategies": [
+        {
+          "id": "continue",
+          "name": "Continue the archived batch",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.3011313679370974,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.3094589199216646,
+                -0.06987782062747265,
+                0.948341851372843
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.03999600059990002,
+                0.9499050142476254
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666582,
+                0.07009117783535174,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T6",
+              "top_m": [
+                0.27963,
+                -0.89174,
+                -0.10035
+              ],
+              "axis": [
+                -0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T7",
+              "top_m": [
+                0.26947000000000004,
+                -0.8479500000000001,
+                -0.09626000000000001
+              ],
+              "axis": [
+                -0.3510900714593327,
+                0.08024915919070462,
+                0.9328964755919413
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            }
+          ],
+          "basis": "unchanged candidates against changed mesh",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T6",
+              "base_m": [
+                0.2841064202950736,
+                -0.891100511386418,
+                -0.11569772672596668
+              ],
+              "base_to_upper_surface_mm": 2.876658674135599,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T7",
+              "base_m": [
+                0.2750874411433494,
+                -0.8492339865470514,
+                -0.11118634360947108
+              ],
+              "base_to_upper_surface_mm": 2.9761525078161877,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Track regional displacement and its change after a bounded batch.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 7,
+            "max_target_change_mm": 0.0,
+            "affected_region_candidates": 2,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "defer",
+          "name": "Defer growth in the edited region",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.3011313679370974,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.3094589199216646,
+                -0.06987782062747265,
+                0.948341851372843
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.03999600059990002,
+                0.9499050142476254
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666582,
+                0.07009117783535174,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            }
+          ],
+          "basis": "remove region candidates from this batch; no stabilizing effect assumed",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Check whether the region continues to move before resuming growth.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 5,
+            "max_target_change_mm": 0.0,
+            "affected_region_candidates": 0,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "adapt",
+          "name": "Adapt nearby candidate bases to the edited geometry",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.2797762684421013,
+                -0.03996803834887403,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.30113136793709744,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.30945891992166435,
+                -0.06987782062747168,
+                0.9483418513728432
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.039996000599902534,
+                0.9499050142476253
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666583,
+                0.07009117783535189,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T6",
+              "top_m": [
+                0.28479239476109286,
+                -0.8917508313393041,
+                -0.10009004785670056
+              ],
+              "axis": [
+                -0.21630277781479834,
+                -0.040644997055383034,
+                0.9754799293291329
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T7",
+              "top_m": [
+                0.2748779493731259,
+                -0.847922463497103,
+                -0.09593988815382117
+              ],
+              "axis": [
+                -0.29198608250448654,
+                0.08197019062177585,
+                0.9529034659781194
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            }
+          ],
+          "basis": "counterfactual candidate adaptation; a revised goal field still needs construction",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T6",
+              "base_m": [
+                0.2882532392061296,
+                -0.891100511386418,
+                -0.11569772672596669
+              ],
+              "base_to_upper_surface_mm": 0.11895339018323792,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T7",
+              "base_m": [
+                0.27954972669319766,
+                -0.8492339865470514,
+                -0.11118634360947108
+              ],
+              "base_to_upper_surface_mm": -0.15850444608006553,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Compare the resulting geometry with both original and proposed continuation targets.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 7,
+            "max_target_change_mm": 5.417485235360397,
+            "affected_region_candidates": 2,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "inspect",
+          "name": "Hold deposition and inspect the whole affected region",
+          "targets": [],
+          "basis": "mechanical stability unresolved",
+          "upper_surface_diagnostics": [],
+          "inspection_criterion": "Measure region pose, deformation, attachment and temporal change.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 0,
+            "max_target_change_mm": 0,
+            "affected_region_candidates": 0,
+            "stability_improvement": null
+          }
+        }
+      ],
+      "decision": "compare_geometry_require_stability_evidence",
+      "physical_failure_confirmed": false,
+      "mechanics_simulated": false
+    },
+    {
+      "angle_deg": 8,
+      "modified_vertex_count": 5728,
+      "affected_candidate_labels": [
+        "C6:T6",
+        "C6:T7"
+      ],
+      "maximum_vertex_displacement_mm": 9.468961749380945,
+      "max_archived_target_displacement_mm": 11.066185324466293,
+      "strategies": [
+        {
+          "id": "continue",
+          "name": "Continue the archived batch",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.3011313679370974,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.3094589199216646,
+                -0.06987782062747265,
+                0.948341851372843
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.03999600059990002,
+                0.9499050142476254
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666582,
+                0.07009117783535174,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T6",
+              "top_m": [
+                0.27963,
+                -0.89174,
+                -0.10035
+              ],
+              "axis": [
+                -0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T7",
+              "top_m": [
+                0.26947000000000004,
+                -0.8479500000000001,
+                -0.09626000000000001
+              ],
+              "axis": [
+                -0.3510900714593327,
+                0.08024915919070462,
+                0.9328964755919413
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            }
+          ],
+          "basis": "unchanged candidates against changed mesh",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T6",
+              "base_m": [
+                0.2841064202950736,
+                -0.891100511386418,
+                -0.11569772672596668
+              ],
+              "base_to_upper_surface_mm": 8.333633727146767,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T7",
+              "base_m": [
+                0.2750874411433494,
+                -0.8492339865470514,
+                -0.11118634360947108
+              ],
+              "base_to_upper_surface_mm": 6.6168473865391295,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Track regional displacement and its change after a bounded batch.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 7,
+            "max_target_change_mm": 0.0,
+            "affected_region_candidates": 2,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "defer",
+          "name": "Defer growth in the edited region",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.3011313679370974,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.3094589199216646,
+                -0.06987782062747265,
+                0.948341851372843
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.03999600059990002,
+                0.9499050142476254
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666582,
+                0.07009117783535174,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            }
+          ],
+          "basis": "remove region candidates from this batch; no stabilizing effect assumed",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Check whether the region continues to move before resuming growth.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 5,
+            "max_target_change_mm": 0.0,
+            "affected_region_candidates": 0,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "adapt",
+          "name": "Adapt nearby candidate bases to the edited geometry",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.2797762684421013,
+                -0.03996803834887403,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.30113136793709744,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.30945891992166435,
+                -0.06987782062747168,
+                0.9483418513728432
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.039996000599902534,
+                0.9499050142476253
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666583,
+                0.07009117783535189,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T6",
+              "top_m": [
+                0.2900519728190381,
+                -0.8917591343009204,
+                -0.0998907767779118
+              ],
+              "axis": [
+                -0.14930240385734012,
+                -0.041163932156395425,
+                0.9879343717534295
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T7",
+              "top_m": [
+                0.28039652745071453,
+                -0.847899052523786,
+                -0.09566773558901091
+              ],
+              "axis": [
+                -0.2287086391982107,
+                0.0834333764540891,
+                0.9699130012787606
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            }
+          ],
+          "basis": "counterfactual candidate adaptation; a revised goal field still needs construction",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T6",
+              "base_m": [
+                0.29244081128075555,
+                -0.891100511386418,
+                -0.11569772672596668
+              ],
+              "base_to_upper_surface_mm": 0.11777350321480473,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T7",
+              "base_m": [
+                0.2840558656778859,
+                -0.8492339865470514,
+                -0.11118634360947108
+              ],
+              "base_to_upper_surface_mm": -0.15316329714562538,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Compare the resulting geometry with both original and proposed continuation targets.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 7,
+            "max_target_change_mm": 10.942685909276298,
+            "affected_region_candidates": 2,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "inspect",
+          "name": "Hold deposition and inspect the whole affected region",
+          "targets": [],
+          "basis": "mechanical stability unresolved",
+          "upper_surface_diagnostics": [],
+          "inspection_criterion": "Measure region pose, deformation, attachment and temporal change.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 0,
+            "max_target_change_mm": 0,
+            "affected_region_candidates": 0,
+            "stability_improvement": null
+          }
+        }
+      ],
+      "decision": "compare_geometry_require_stability_evidence",
+      "physical_failure_confirmed": false,
+      "mechanics_simulated": false
+    },
+    {
+      "angle_deg": 12,
+      "modified_vertex_count": 5728,
+      "affected_candidate_labels": [
+        "C6:T6",
+        "C6:T7"
+      ],
+      "maximum_vertex_displacement_mm": 14.321033145245131,
+      "max_archived_target_displacement_mm": 16.736703665897522,
+      "strategies": [
+        {
+          "id": "continue",
+          "name": "Continue the archived batch",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.3011313679370974,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.3094589199216646,
+                -0.06987782062747265,
+                0.948341851372843
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.03999600059990002,
+                0.9499050142476254
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666582,
+                0.07009117783535174,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T6",
+              "top_m": [
+                0.27963,
+                -0.89174,
+                -0.10035
+              ],
+              "axis": [
+                -0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T7",
+              "top_m": [
+                0.26947000000000004,
+                -0.8479500000000001,
+                -0.09626000000000001
+              ],
+              "axis": [
+                -0.3510900714593327,
+                0.08024915919070462,
+                0.9328964755919413
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            }
+          ],
+          "basis": "unchanged candidates against changed mesh",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T6",
+              "base_m": [
+                0.2841064202950736,
+                -0.891100511386418,
+                -0.11569772672596668
+              ],
+              "base_to_upper_surface_mm": 13.778408458953173,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T7",
+              "base_m": [
+                0.2750874411433494,
+                -0.8492339865470514,
+                -0.11118634360947108
+              ],
+              "base_to_upper_surface_mm": 11.465796093752118,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Track regional displacement and its change after a bounded batch.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 7,
+            "max_target_change_mm": 0.0,
+            "affected_region_candidates": 2,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "defer",
+          "name": "Defer growth in the edited region",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.279776268442101,
+                -0.039968038348871575,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.3011313679370974,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.3094589199216646,
+                -0.06987782062747265,
+                0.948341851372843
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.03999600059990002,
+                0.9499050142476254
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666582,
+                0.07009117783535174,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified"
+            }
+          ],
+          "basis": "remove region candidates from this batch; no stabilizing effect assumed",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Check whether the region continues to move before resuming growth.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 5,
+            "max_target_change_mm": 0.0,
+            "affected_region_candidates": 0,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "adapt",
+          "name": "Adapt nearby candidate bases to the edited geometry",
+          "targets": [
+            {
+              "label": "C6:T1",
+              "top_m": [
+                0.05226,
+                -0.84751,
+                -0.09766
+              ],
+              "axis": [
+                0.2797762684421013,
+                -0.03996803834887403,
+                0.9592329203729177
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T2",
+              "top_m": [
+                0.04376,
+                -0.88166,
+                -0.0906
+              ],
+              "axis": [
+                0.30113136793709744,
+                0.0,
+                0.9535826651341417
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T3",
+              "top_m": [
+                0.09,
+                -0.81589,
+                -0.09948000000000001
+              ],
+              "axis": [
+                0.30945891992166435,
+                -0.06987782062747168,
+                0.9483418513728432
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T4",
+              "top_m": [
+                0.05583,
+                -0.9140900000000001,
+                -0.08939
+              ],
+              "axis": [
+                0.30996900464922517,
+                0.039996000599902534,
+                0.9499050142476253
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T5",
+              "top_m": [
+                0.09469,
+                -0.9462100000000001,
+                -0.09726000000000001
+              ],
+              "axis": [
+                0.3304298383666583,
+                0.07009117783535189,
+                0.9412243880747232
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T6",
+              "top_m": [
+                0.29545077536392034,
+                -0.891764529085522,
+                -0.09976130194747228
+              ],
+              "axis": [
+                -0.0787957648436158,
+                -0.04150110619399839,
+                0.9960265486559001
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            {
+              "label": "C6:T7",
+              "top_m": [
+                0.2860745792403344,
+                -0.8478806080116363,
+                -0.09545331813527144
+              ],
+              "axis": [
+                -0.16105458081112434,
+                0.08458615846344109,
+                0.9833140921374771
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            }
+          ],
+          "basis": "counterfactual candidate adaptation; a revised goal field still needs construction",
+          "upper_surface_diagnostics": [
+            {
+              "label": "C6:T1",
+              "base_m": [
+                0.04778357970492638,
+                -0.846870511386418,
+                -0.11300772672596668
+              ],
+              "base_to_upper_surface_mm": 0.2748344233355626,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T2",
+              "base_m": [
+                0.03894189811300644,
+                -0.88166,
+                -0.10585732264214627
+              ],
+              "base_to_upper_surface_mm": 0.6262768119652123,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T3",
+              "base_m": [
+                0.08504865728125337,
+                -0.8147719548699605,
+                -0.1146534696219655
+              ],
+              "base_to_upper_surface_mm": 0.18749108074118948,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T4",
+              "base_m": [
+                0.050870495925612394,
+                -0.9147299360095985,
+                -0.10458848022796201
+              ],
+              "base_to_upper_surface_mm": 1.0103525558757127,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T5",
+              "base_m": [
+                0.08940312258613346,
+                -0.9473314588453657,
+                -0.11231959020919559
+              ],
+              "base_to_upper_surface_mm": 0.16408507546793183,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T6",
+              "base_m": [
+                0.2967115076014182,
+                -0.891100511386418,
+                -0.11569772672596668
+              ],
+              "base_to_upper_surface_mm": 0.11659406170588804,
+              "ray_hit": true
+            },
+            {
+              "label": "C6:T7",
+              "base_m": [
+                0.2886514525333124,
+                -0.8492339865470514,
+                -0.11118634360947108
+              ],
+              "base_to_upper_surface_mm": -0.14807455923290802,
+              "ray_hit": true
+            }
+          ],
+          "inspection_criterion": "Compare the resulting geometry with both original and proposed continuation targets.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 7,
+            "max_target_change_mm": 16.624307583399503,
+            "affected_region_candidates": 2,
+            "stability_improvement": null
+          }
+        },
+        {
+          "id": "inspect",
+          "name": "Hold deposition and inspect the whole affected region",
+          "targets": [],
+          "basis": "mechanical stability unresolved",
+          "upper_surface_diagnostics": [],
+          "inspection_criterion": "Measure region pose, deformation, attachment and temporal change.",
+          "field_goal_validity": "not_replayed",
+          "avoidance_validity": "not_replayed",
+          "robot_feasibility": "unverified",
+          "mechanical_effect": "unvalidated",
+          "executable": false,
+          "robot_commands": [],
+          "metrics": {
+            "candidate_count": 0,
+            "max_target_change_mm": 0,
+            "affected_region_candidates": 0,
+            "stability_improvement": null
+          }
+        }
+      ],
+      "decision": "compare_geometry_require_stability_evidence",
+      "physical_failure_confirmed": false,
+      "mechanics_simulated": false
+    }
+  ],
+  "execution_authorized": false,
+  "robot_commands": [],
+  "protocol_sha256": "8ca38f3da9659ad41ef43c5a69800b573d243d85b4b401176cb359f119f9a248"
+}

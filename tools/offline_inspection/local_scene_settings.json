@@ -1,0 +1,21 @@
+{
+  "schema": "behav3d.local_scene_settings.v1",
+  "basis": "offline demonstration assumptions; not operating limits",
+  "frame": "ur20_base_link",
+  "units": "m",
+  "distance_m": 0.4,
+  "pool_tilts_deg": [25, 50, 75],
+  "azimuth_samples": 8,
+  "pose_budget": 9,
+  "relation_margin_m": 0.008,
+  "neighbor_margin_m": 0.008,
+  "endpoint_tolerance_m": 0.004,
+  "max_incidence_deg": 75,
+  "camera_envelope": {
+    "basis": "assumed camera body sphere only; not measured or full tool geometry",
+    "margin_m": 0.01,
+    "spheres": [
+      {"name": "demonstration_camera_body", "center_optical_m": [0, 0, -0.05], "radius_m": 0.075}
+    ]
+  }
+}

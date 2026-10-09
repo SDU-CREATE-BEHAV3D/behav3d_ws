@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recovery experiments · recorded scan 6</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;color:#e8eef3;background:#101922}*{box-sizing:border-box}body{margin:0 auto;max-width:1400px;padding:28px}h1{font-size:29px;margin:6px 0 12px}h2{font-size:19px;margin:0 0 12px}p{line-height:1.55;margin:10px 0}small,.muted{color:#adc0ce}a{color:#86e0d2}.eyebrow{font-size:12px;letter-spacing:.12em;color:#86e0d2;text-transform:uppercase}.banner{background:#203646;border-left:3px solid #86e0d2;padding:12px 16px;margin:20px 0}.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}button,select{background:#243747;border:1px solid #536b80;color:inherit;border-radius:5px;padding:8px 11px;font:inherit;font-size:14px}button{cursor:pointer}button.active{background:#2c655f;border-color:#83dccb}label{font-size:14px}.panel{padding:18px;background:#172530;border:1px solid #304655;border-radius:8px;margin-top:16px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stat{padding:14px;background:#203440;border-radius:6px}.stat b{font-size:23px;display:block;margin-top:5px}.table{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:12px 10px;border-bottom:1px solid #354b5a;text-align:left}th{color:#bcd1df}tr.selected{background:#24483f}canvas{display:block;width:100%;height:610px;background:#111e29;border-radius:6px;touch-action:none}.legend{display:flex;gap:17px;flex-wrap:wrap;font-size:13px;margin:12px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.notes{font-size:14px;color:#bacbd6}.warning{color:#f3cf89}details{margin:16px 0}summary{cursor:pointer;color:#b7d9dd}.layout{display:grid;grid-template-columns:1fr 330px;gap:18px}.layout .panel{margin-top:0}#summary{min-height:76px}#strategy{max-width:100%}@media(max-width:900px){body{padding:16px}.layout{grid-template-columns:1fr}.stats{grid-template-columns:1fr}canvas{height:440px}h1{font-size:24px}}
+.layout>*{min-width:0}.panel{min-width:0}.controls label{min-width:0;max-width:100%}select{max-width:100%}.table{max-width:100%}@media(max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}#strategy{display:block;width:100%;margin-top:6px}}
+</style>
+<div class="eyebrow">Experimental recovery · 260728_133013 · metres · ur20_base_link</div>
+<h1>Compare recovery on the recorded artifact</h1>
+<p>Real scan-6 reconstruction, issued bead geometry, Agent007 evidence and the actual next candidate batch. The leaning case edits a copy of this reconstruction by a known amount.</p>
+<div class="banner"><b>What this tests:</b> candidate placement, ordering and geometric consequences. The original scan remains intact. Field/avoidance validation, mechanical recovery and robot execution are not established by this experiment.</div>
+<div class="controls"><button id="missingTab" class="active">1 · Recorded missing-region evidence</button><button id="leanTab">2 · Controlled leaning of this scan</button><label id="angleBox" hidden>Injected lean <select id="angle"><option>0</option><option>4</option><option selected>8</option><option>12</option></select>°</label></div>
+<p id="summary"></p>
+<div class="stats" id="stats"></div>
+<div class="panel"><div class="controls"><label>View proposal <select id="strategy"></select></label><button id="whole">Whole artifact</button><button id="focus">Affected region</button><button id="front">Front</button><button id="top">Top</button></div>
+<div class="layout"><div><canvas id="scene" aria-label="Interactive recorded artifact and recovery proposal"></canvas><p class="notes">Drag to rotate · scroll to zoom. Display points are sampled; diagnostics use the full mesh. Candidate outlines show nominal bead envelopes, not robot paths.</p></div>
+<div class="panel"><h2 id="proposalTitle"></h2><p id="basis" class="notes"></p><p id="outcome"></p><h2>Inspection checkpoint</h2><p id="inspection" class="notes"></p><p class="warning notes">Every proposal remains non-executable. A base-to-surface gap is a ray measurement, not a mechanical support assessment.</p><div class="controls"><label><input type="checkbox" id="ghost" checked> Original scan</label><label><input type="checkbox" id="intended" checked> Issued C5 beads</label><label><input type="checkbox" id="field"> Archived field points</label><label><input type="checkbox" id="unknown"> Unknown evidence</label></div></div></div>
+<div class="legend"><span><i class="dot" style="background:#7497ad"></i>Recorded surface</span><span><i class="dot" style="background:#f1ae72"></i>Edited surface / issued outlines</span><span><i class="dot" style="background:#f5d467"></i>Recorded missing-reference samples</span><span><i class="dot" style="background:#7ce1b7"></i>Proposed deposition</span><span><i class="dot" style="background:#b994ec"></i>Unknown evidence</span></div></div>
+<div class="panel"><h2>Strategy comparison</h2><div class="table"><table id="comparison"></table></div><p class="notes" id="comparisonNote"></p></div>
+<details><summary>Per-candidate upper-surface ray measurements</summary><div class="table"><table id="rays"></table></div></details>
+<details><summary>Recorded discrepancy across DDS tolerances</summary><div class="table"><table id="tolerances"></table></div><p class="notes">These are surface-band reference samples. Their count is not missing material volume, and the 10 mm tolerance is an existing DDS comparison setting, not a robot-position tolerance.</p></details>
+<details><summary>Exact experiment and remaining checks</summary><p>Controlled lean uses a smooth +X shear above Z = −175 mm, with X transition 190–230 mm and a tapered Y region around −870 mm. It retains every mesh triangle. This is a reproducible geometry perturbation; it does not simulate material deformation or new depth images. The recorded discrepancy remains present in this edited scene.</p><p>Candidate dimensions use the recorded C5 bead proxy (36 × 16 mm). The next C6 YAML supplies positions and axes but no dimensions. A local repair probe is centred on the missing-reference samples. An adapted candidate keeps its dimensions and attaches its base to the transformed archived base.</p><p>No automatic winner is declared: the missing evidence is tolerance-sensitive and leaning stability is unmodelled. Supports and pushing need additional models. Goal adaptation here stops at candidate geometry; a revised goal field has not been regenerated.</p><p><a href="protocol.json">Protocol and source hashes</a> · <a href="results.json">All strategies and diagnostics</a> · <a href="manifest.json">Output integrity</a> · <a href="recorded_mesh.npz">Original mesh fixture</a> · <a href="controlled_lean_8deg_mesh.npz">Edited mesh fixture</a></p></details>
+<script>
+const DATA=/*DATA*/;
+const $=id=>document.getElementById(id), canvas=$('scene'), ctx=canvas.getContext('2d');
+let mode='missing', angle=8, planIndex=0, yaw=-.16, pitch=.45, center=[.16,-.87,-.145], span=.40;
+const fmt=(x,n=1)=>x===null?'unknown':Number(x).toFixed(n);
+const trial=()=>DATA.results.lean_trials.find(t=>t.angle_deg===angle);
+const plans=()=>mode==='missing'?DATA.results.missing_case.strategies:trial().strategies;
+const plan=()=>plans()[planIndex];
+function gapRange(p,labels=null){const values=p.upper_surface_diagnostics.filter(r=>!labels||labels.includes(r.label)).map(r=>r.base_to_upper_surface_mm).filter(v=>v!==null);return values.length?fmt(Math.min(...values))+' to '+fmt(Math.max(...values))+' mm':'—'}
+function table(id,heads,rows){$(id).innerHTML='<thead><tr>'+heads.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody>'}
+function stats(items){$('stats').innerHTML=items.map(([k,v])=>'<div class="stat"><small>'+k+'</small><b>'+v+'</b></div>').join('')}
+function update(reset=false){
+ if(reset){planIndex=0;$('strategy').innerHTML=plans().map((p,i)=>`<option value="${i}">${p.name}</option>`).join('')}
+ $('missingTab').classList.toggle('active',mode==='missing');$('leanTab').classList.toggle('active',mode==='lean');$('angleBox').hidden=mode!=='lean';
+ const p=plan();$('proposalTitle').textContent=p.name;$('basis').textContent=p.basis;$('inspection').textContent=p.inspection_criterion;
+ if(mode==='missing'){
+  $('summary').textContent='Observed case: C5:T7 has provisional missing-region evidence. We compare the normal next batch, prioritizing the same archived candidates, a new local repair probe, and inspecting before deposition. No failure has been injected into this case.';
+  stats([['Saved missing count / spatially unambiguous',DATA.results.missing_case.evidence.missing_voxels+' / '+DATA.missing.length],['Observed fraction of expected reference','93.7%'],['Status at 12 mm','Within tolerance']]);
+  $('outcome').textContent=`${p.metrics.missing_reference_samples_inside_proposed_solids} of ${DATA.missing.length} missing-reference samples lie inside the proposed bead solids. This measures geometric reach, not verified repair.`;
+  table('comparison',['Proposal','Candidates','Missing samples inside','Observed samples inside','Base-to-upper-surface gap'],plans().map((r,i)=>`<tr class="${i===planIndex?'selected':''}"><td>${r.name}</td><td>${r.targets.length}</td><td>${r.metrics.missing_reference_samples_inside_proposed_solids} / ${DATA.missing.length}</td><td>${r.metrics.observed_reference_samples_inside_proposed_solids}</td><td>${gapRange(r)}</td></tr>`));
+  $('comparisonNote').textContent='DDS saves 412 missing samples. Its spatial export rounds distances: 398 samples are unambiguously above 10 mm; 22 are at the rounded boundary, of which 14 contribute to the saved count. We exclude all 22 from scoring rather than invent their identities. The first two strategies share a two-candidate budget; the full batch is a cost reference. Observed overlap may include bonding. Outside prior C5 beads does not mean outside the final product goal. These values are not repair-success scores.';
+ }else{
+  const t=trial();$('summary').textContent='Controlled case: the right-hand region of the actual scan is sheared toward +X while its lower portion remains anchored. Angle 0° is the unmodified control. We do not claim this lean occurred in the recording.';
+  stats([['Injected regional lean',angle+'°'],['Maximum mesh displacement',fmt(t.maximum_vertex_displacement_mm)+' mm'],['Changed vertices',t.modified_vertex_count.toLocaleString()]]);
+  $('outcome').textContent=`${p.metrics.affected_region_candidates} candidates in the edited region; maximum candidate change ${fmt(p.metrics.max_target_change_mm)} mm. Mechanical stability remains unvalidated.`;
+  table('comparison',['Proposal','Candidates','In edited region','Max candidate change','Edited-region base gap'],plans().map((r,i)=>`<tr class="${i===planIndex?'selected':''}"><td>${r.name}</td><td>${r.targets.length}</td><td>${r.metrics.affected_region_candidates}</td><td>${fmt(r.metrics.max_target_change_mm)} mm</td><td>${gapRange(r,t.affected_candidate_labels)}</td></tr>`));
+  $('comparisonNote').textContent='Candidate counts differ because deferring the edited region intentionally removes work from this batch. Adapted bases follow the known geometric edit by construction; this is not independent evidence that printing there succeeds.';
+ }
+ table('rays',['Candidate','Base Z − first surface hit','Interpretation'],p.upper_surface_diagnostics.map(r=>`<tr><td>${r.label}</td><td>${fmt(r.base_to_upper_surface_mm)} mm</td><td>${r.ray_hit?'Positive = above; negative = below the upper surface':'No observed mesh hit'}</td></tr>`));
+ draw();
+}
+function project(p){const x=p[0]-center[0],y=p[1]-center[1],z=p[2]-center[2],xx=Math.cos(yaw)*x-Math.sin(yaw)*y, yy=Math.sin(yaw)*x+Math.cos(yaw)*y;const s=canvas.clientWidth/span;return [canvas.clientWidth/2+s*xx,canvas.clientHeight/2-s*(Math.cos(pitch)*z-Math.sin(pitch)*yy)]}
+function dots(points,color,r=1){ctx.fillStyle=color;for(const p of points){const [x,y]=project(p);if(x>=0&&y>=0&&x<canvas.clientWidth&&y<canvas.clientHeight)ctx.fillRect(x-r,y-r,2*r,2*r)}}
+function line(points,color,width=1){ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();points.forEach((p,i)=>{const a=project(p);i?ctx.lineTo(...a):ctx.moveTo(...a)});ctx.stroke()}
+function norm(a){const n=Math.hypot(...a);return a.map(v=>v/n)}function cross(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}
+function outline(b,color,label){const z=norm(b.axis),x=norm(cross(z,Math.abs(z[2])<.9?[0,0,1]:[1,0,0])),y=cross(z,x),c=b.top_m.map((v,i)=>v-z[i]*b.height_m/2),round=Math.min(b.width_m,b.height_m)/2,coreR=b.width_m/2-round,coreZ=b.height_m/2-round;
+ for(const theta of [-Math.PI/2,-Math.PI/4,0,Math.PI/4,Math.PI/2]){const axial=Math.sign(theta)*coreZ+round*Math.sin(theta),radius=coreR+round*Math.cos(theta);const pts=Array.from({length:33},(_,j)=>{const a=j*2*Math.PI/32;return c.map((v,i)=>v+z[i]*axial+radius*(x[i]*Math.cos(a)+y[i]*Math.sin(a)))});line(pts,color,1)}
+ if(label){const p=project(b.top_m);ctx.fillStyle=color;ctx.font='12px system-ui';ctx.fillText(b.label,p[0]+5,p[1]-5)}
+}
+function draw(){const w=canvas.clientWidth,h=canvas.clientHeight,dpr=window.devicePixelRatio||1;if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=w*dpr;canvas.height=h*dpr}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+ if($('field').checked)dots(DATA.field,'#48766d',.8);
+ if($('ghost').checked)dots(DATA.recorded,mode==='missing'?'#68879ba8':'#56708455',.9);
+ if(mode==='lean'){const moved=DATA.lean_scenes[String(angle)],changed=[],same=[];for(let i=0;i<moved.length;i++)(Math.abs(moved[i][0]-DATA.recorded[i][0])>.000001?changed:same).push(moved[i]);dots(same,'#68879ba8',.9);dots(changed,'#e6a06cbb',1)}
+ if(mode==='missing')dots(DATA.missing,'#f5d467',1.4);
+ if(mode==='missing'&&$('unknown').checked)dots(DATA.unknown,'#b994ec',1.2);
+ if($('intended').checked)for(const b of DATA.intended)outline(b,'#d3ad6e65',b.label==='C5:T7');
+ for(const b of plan().targets)outline(b,'#7ce1b7',true);
+ ctx.fillStyle='#c2d1db';ctx.font='12px system-ui';ctx.fillText('X/Y/Z in robot base frame · nominal outlines',15,h-15);
+}
+$('missingTab').onclick=()=>{mode='missing';update(true)};$('leanTab').onclick=()=>{mode='lean';update(true)};$('angle').onchange=e=>{angle=+e.target.value;update()};$('strategy').onchange=e=>{planIndex=+e.target.value;update()};
+$('whole').onclick=()=>{center=[.16,-.87,-.145];span=.40;draw()};$('focus').onclick=()=>{center=[.28,-.855,-.125];span=.125;draw()};$('front').onclick=()=>{yaw=0;pitch=0;draw()};$('top').onclick=()=>{yaw=0;pitch=Math.PI/2;draw()};
+for(const id of ['ghost','intended','field','unknown'])$(id).onchange=draw;
+let drag=null;canvas.onpointerdown=e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId)};canvas.onpointermove=e=>{if(!drag)return;yaw+=(e.clientX-drag[0])*.008;pitch=Math.max(-1.5,Math.min(1.57,pitch+(e.clientY-drag[1])*.008));drag=[e.clientX,e.clientY];draw()};canvas.onpointerup=()=>drag=null;canvas.onpointercancel=()=>drag=null;canvas.addEventListener('wheel',e=>{e.preventDefault();span=Math.max(.05,Math.min(1,span*Math.exp(e.deltaY*.001)));draw()},{passive:false});
+window.addEventListener('resize',draw);
+table('tolerances',['DDS tolerance','Recorded status','Missing-reference samples'],DATA.results.missing_case.tolerance_sweep.map(r=>`<tr><td>${r.tolerance_mm} mm</td><td>${r.status.replaceAll('_',' ')}</td><td>${r.missing_voxels}</td></tr>`));update(true);
+</script></html>

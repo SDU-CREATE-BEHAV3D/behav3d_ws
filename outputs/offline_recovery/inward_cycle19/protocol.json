@@ -1,0 +1,114 @@
+{
+  "schema": "behav3d.inward_lean_protocol.v1",
+  "source_scan": 19,
+  "candidate_cycle": 18,
+  "next_batch_cycle": 19,
+  "frame": "ur20_base_link",
+  "units": "m",
+  "lean_direction": "-X into the inter-wall gap",
+  "lean_parameters": {
+    "x_start_m": 0.19,
+    "x_full_m": 0.21,
+    "y_center_m": -0.875,
+    "y_inner_m": 0.065,
+    "y_outer_m": 0.095,
+    "pivot_z_m": -0.075
+  },
+  "angles_deg": [
+    0,
+    4,
+    8,
+    12
+  ],
+  "default_angle_deg": 8,
+  "screen_settings": {
+    "support_gap_mm": 3.0,
+    "minimum_support_rays": 6,
+    "tool_margin_mm": 2.0,
+    "minimum_center_spacing_mm": 32.0,
+    "path_step_m": 0.003,
+    "settings_status": "experimental screens, not calibrated print-validity thresholds",
+    "spacing_basis": "36 mm nominal proxy minus 4 mm assumed overlap; recorded width map unavailable"
+  },
+  "affected_candidate_labels": [
+    "C19:T7"
+  ],
+  "tool_model": {
+    "sample_count_before_tip_exclusion": 4438,
+    "tip_exclusion_radius_mm": 2.0,
+    "tool_offset_difference_mm": 13.363225658500276,
+    "basis": "repository DAE vertices plus face centroids; two repository TCP transforms, neither verified against the recording",
+    "transforms": {
+      "urdf": {
+        "xyz_m": [
+          0.00508,
+          0.47425,
+          0.09026
+        ],
+        "rpy_rad": [
+          1.5641113421,
+          0.0,
+          0.0
+        ]
+      },
+      "checker_defaults": {
+        "xyz_m": [
+          -0.00551,
+          0.47304,
+          0.0822
+        ],
+        "rpy_rad": [
+          1.5641113421,
+          0.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "sources_sha256": {
+    "/Users/josephnamar/Documents/ChatGPT/SustaniAi sumerschool/agent007-main/outputs/expected_deposition_review_260728_133013_final/cycle_0019/review.json": "043b4a0c6258e77a524330144e1dd7079ae60cc4ac64a6fe1366fcb46c6328d7",
+    "/Users/josephnamar/Documents/ChatGPT/SustaniAi sumerschool/agent007-main/outputs/integrated_evaluation_260728_133013_final/cycle_0019/evaluation/evaluation.json": "4f84d769763d048ffeb1611df4a529ff309e427026fd9cf93bed2659431664ae",
+    "/Users/josephnamar/Documents/ChatGPT/SustaniAi sumerschool/agent007-main/outputs/integrated_evaluation_260728_133013_final/cycle_0019/evaluation/manifest.json": "8780d8880bd8b58c343575f10d93203e4e57e97b346202cf15319a2004813804",
+    "/Users/josephnamar/Documents/ChatGPT/SustaniAi sumerschool/agent007-main/outputs/integrated_evaluation_260728_133013_final/cycle_0019/evaluation/robot_review_packet.json": "0aeefc650483283b6eaf01189815f0dfbc01acc28b74ae3e8285f00e11ed2f2f",
+    "/Users/josephnamar/Documents/ChatGPT/SustaniAi sumerschool/agent007-main/outputs/integrated_evaluation_260728_133013_final/cycle_0019/evaluation/shell.json": "f5ebf53084031ebc5038db79982cb3fbc2cb9c9f163d8bb3acc9d148a01654aa",
+    "/Users/josephnamar/Documents/GitHub/3DP-DDS/outputs/field_loop_260728_133013_cycle_history_corrected/cycles/cycle_0018/voxel_comparison_metrics.json": "793f8f100d0e2fc22d94531b00b943335a26a856dd57da2fb9b4eec149696e51",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/outputs/offline_inspection/frontier_batch/c18-t7/local_scene.json": "ed280b92577a1026f434e1abac98ef987d6f60df196b5053432010da0673fee9",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/extruder_collision.py": "4f925f2c485049d0eff78b49c962d08a95f7fe02d3c6d02c713b05d7bfc671f2",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/custom_workcell/ur20_workcell/meshes/ram_extruder_v2_simplified.dae": "6dfc0bd20a865b1657aa779d2d91c875dbe7c719165098c308ed928e1bf6222c",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/custom_workcell/ur20_workcell/urdf/workcell_macro.xacro": "e61a0979d6021935c7ced4bdedd8c7581a100b58c56ce6e0c8b8ab73c2f4433e",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/assess_local_scene.py": "89dc22385aa413bcba83d9a7682be127015e2a7c4d02960f1745fe30ee3b3dda",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/bead_surface.py": "aa92a1b727575afb8966d3eb8582b6d82695c6a00412d9326e73c7efc43634a3",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/build_frontier_scan.py": "9765eebba344eadee45a52e4fae1e1f8286f5d3ab8092cee652694f74f6d1a65",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/build_grid_supplement.py": "f1920c5cbeebc42402358ecbe9d494c5676887a33296106a4332e39ee809908b",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/build_recorded_demo.py": "228895a01540b51c490b8e8c11af079a9dd16895df6fff87f39060c3ce34eb54",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/compare_recorded.py": "24452532f4d6e394c003a6310e11d61b0bc546c8655a6e946332e4977a3a8abd",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/frontier_scan.py": "a3803f92db1978b44b0dc39fa93adca2c3db22a50e3fe309aa5345a5e96f0093",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/grid_supplement.py": "b0290de8c9ffe7f8c1451d37eac06c975c39a984333262e040d7a63faba5673a",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/local_scene.py": "369fb9ad0a8e2e0a95980666b05a50574375ad7d40a17f34c5fd53c6265d6e95",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/local_scene_settings.json": "591959eeeec17a68dfcf0492709b5a5ecb69bb8b6227adbfe00837ce11d7cda4",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/replay_frontier_cases.py": "a4a4c5eeaa9ecf801ce1fa67ffb263cfb93105564956dee67b2c08c5ed9c179e",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/visibility.py": "bcdd912be59adfd3255759a97b04efac2c0e519f7576e62adc322bae8f95d32a",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/build_experiments.py": "3f3f618b26af364726ccef8aaaa36b0d3bb6a43a7e3f7945cf88afb29efbc895",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/build_inward_lean.py": "77a44b175dc3aae6c72b4c035fe6657078f6c21dbd64c835efe2e0aa39ae835c",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/geometry.py": "470c10ddf187acb45df9a154fb6e29785c0abfd318d4e9c36ffa514d4f3e65ee",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/inward_viewer.html": "ee8b4780563b0b8ff6943af2e713e506a4567ae6511966d00bfd0d4c0a3280b2",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/test_geometry.py": "f50981f46cfcf7330c715bdf101d8015dcdb7640d6a11aec12ccfa289c864936",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/test_viability.py": "e4bd625da1f0de897aa1be5e7bc3ffcdbdb5c1674e42db61bb517338bf3f240d",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/viability.py": "c275010692cbe5ee677facb4ef45b016adc37956aec83148e2b7e4b54d48d3b5",
+    "/Users/josephnamar/Downloads/260728_133013/config/depth_intrinsics.yaml": "2780e1193763456ade0f5c9a9d8103df61bf5e391fbada4d68f932b6ef42d0fb",
+    "/Users/josephnamar/Downloads/260728_133013/config/extrinsics.yaml": "7862d358a7c626e7c7c0a3d9aebf998f4216d0dc66921e3e86ef7d0c57cdeb3c",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0018/candidates/targets.yaml": "b595dea8d61800fed59d34e6df127b22e59227365d5ecb2984f6990851b6f38b",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/candidates/field_print_candidates_cycle.ply": "d040d772c12de1fd29ff1db82af3ef9a047434b33a9adb831c1833f19014794f",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/candidates/targets.yaml": "0488a6bab38455738f87f721466d9c8a0435a91188608019c721a27ad80443e5",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/scan/manifest.yaml": "bf055bec13eec407cfbca63f32ed25fd085c7512674e64ba3ba5e04e6a368541",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/scan/reconstruct/tsdf_surface_mesh.ply": "5548a2353fca8554938f857251d61ce3b8a63a44287e61e70775c3e050ac3a06",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/scan/reconstruct/tsdf_surface_mesh.stl": "fa9ed2902252b55fbe05343cf3006a511b8f223c07bbd67a4e48387e110a698e"
+  },
+  "original_data_unchanged": true,
+  "mechanics_simulated": false,
+  "execution_authorized": false,
+  "goal_and_avoidance": "archived full field/avoidance state unavailable; no goal validity claim",
+  "contact_scope": "approach geometry study; correction, force and release require physical response validation",
+  "next_candidate_dimensions": "C18 nominal dimensions borrowed; C19 YAML has no sizes",
+  "zero_control": "same new geometric screens applied to unmodified scan, revealing model/parameter baseline limitations"
+}

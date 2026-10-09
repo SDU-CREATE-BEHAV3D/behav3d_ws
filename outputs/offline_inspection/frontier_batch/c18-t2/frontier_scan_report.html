@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frontier scan decision</title><style>
+body{font:16px/1.55 system-ui;background:#121c26;color:#edf3f6;max-width:1050px;margin:40px auto;padding:0 24px}
+h1{font-size:28px}h2{font-size:20px}table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border-bottom:1px solid #405366;padding:12px;text-align:left;overflow-wrap:anywhere}
+.table{overflow-x:auto}.decision{padding:18px;background:#213747;border-left:4px solid #78d2cc}
+a{color:#89dce0}small{color:#b9cbd4}</style>
+<h1>Preserve the upper-frontier sweep</h1>
+<p>Recorded replay · C18 → scan 19 · C18:T2</p>
+<p>The frontier scan supplies the closed mesh used with the goal field and ray intersections to generate printing candidates. Inspection views may only be appended.</p>
+<p class="decision"><strong>Keep the sweep and append inspection views</strong><br>
+16 original captures preserved in order · 2 additions · budget 2</p>
+<h2>Inspection request</h2><div class="table"><table><thead><tr><th>Region</th><th>Reason</th><th>Surface objective</th><th>Modeled opportunity</th><th>Result</th></tr></thead><tbody><tr><td>C18:T2</td><td>position deviation review</td><td>side, top</td><td>46.4% → 54.5%</td><td>Additional area predicted; inspection outcome unverified</td></tr></tbody></table></div>
+<p>This percentage describes only the requested nominal surface. It does not measure completeness of the upper-frontier mesh or resolve Agent007's uncertainty. Keeping the sweep preserves its inputs; reconstructed mesh quality and candidate selection still need captured-data validation.</p>
+<h2>Other reviews remain open</h2><ul><li>Registration: Review evidence before changing the scan</li><li>C18:T1: Geometry not assessed in this replay</li><li>C18:T3: Geometry not assessed in this replay</li><li>C18:T4: Review evidence before changing the scan</li><li>C18:T5: Geometry not assessed in this replay</li><li>C18:T6: Review evidence before changing the scan</li><li>C18:T7: Geometry not assessed in this replay</li></ul>
+<p>The report assesses one region. Other labels have not been silently cleared or counted as inspected.</p>
+<h2>Development boundary</h2><p>The existing sweep remains authoritative, including its normal height adjustment in the ROS workflow. This replay reuses the recorded cycle's poses. No future-cycle scan, robot trajectory, capture or candidate plan is executed.</p>
+<p>Selection adds a view only for new modeled opportunity on an explicitly requested region. Repeated observations, angular diversity and sensor quality remain outside this first selection rule.</p>
+<p><a href="frontier_scan.json">Full proposal and provenance</a></p>
+<small>Evaluation: evaluation_da6092bdb259e60d7ba4cd0a7ab738e257ff5347431118a43a49e2358c34af2a</small></html>

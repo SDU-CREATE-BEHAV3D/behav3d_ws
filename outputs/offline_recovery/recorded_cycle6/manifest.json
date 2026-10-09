@@ -1,0 +1,13 @@
+{
+  "schema": "behav3d.recovery_artifacts.v1",
+  "files_sha256": {
+    "recorded_mesh.npz": "9b68e403acdf6183947befefec967150a20efb30b6d4b6ab1ad07c9b4a21e80e",
+    "controlled_lean_8deg_mesh.npz": "860543354ea9386b605edad129185a0444f39b62015c89288e2b3a11d256e00f",
+    "results.json": "49384212f995399064488a946f90453c7c298aa6855fd728a4a0adfb516f6ca0",
+    "viewer.html": "0cd3faaf0ee5f8141c900a467e6b855a3e8fe0ccc009d764cce6b7c6e3534ddf",
+    "protocol.json": "8ca38f3da9659ad41ef43c5a69800b573d243d85b4b401176cb359f119f9a248",
+    "recorded_evidence.npz": "3eff6b5488defc04d589b26fabf9e67fc0c8a1bfb26546a1ee95617d34a668a2"
+  },
+  "source_hashes_unchanged": true,
+  "execution_authorized": false
+}

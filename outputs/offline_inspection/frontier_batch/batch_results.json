@@ -1,0 +1,364 @@
+{
+  "schema": "behav3d.frontier_scan_batch.v1",
+  "cases": [
+    {
+      "label": "C1:T1",
+      "scan_cycle": 2,
+      "selection_reason": "early cap uncertainty",
+      "agent_status": "cap_quality_review",
+      "dds_status": "within_tolerance",
+      "request_actions": [
+        "review_scan_coverage"
+      ],
+      "surface_regions": [
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 0,
+      "decision": "keep_frontier_sweep",
+      "baseline_preserved": true,
+      "eligible_pool_views": 24,
+      "selected_pool_indices": [],
+      "baseline_opportunity_fraction": 0.7083333333333333,
+      "combined_opportunity_fraction": 0.7083333333333333,
+      "request_statuses": [
+        "unresolved_no_new_geometric_opportunity_in_pool"
+      ],
+      "append_distance_m": 0,
+      "append_rotation_deg": 0,
+      "inspection_resolved": false,
+      "elapsed_s": 14.31
+    },
+    {
+      "label": "C1:T3",
+      "scan_cycle": 2,
+      "selection_reason": "early missing-and-extra shape review",
+      "agent_status": "dds_shape_size_review",
+      "dds_status": "missing_and_extra",
+      "request_actions": [
+        "inspect_dds_shape_size"
+      ],
+      "surface_regions": [
+        "side",
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 2,
+      "decision": "keep_frontier_sweep_with_supplement",
+      "baseline_preserved": true,
+      "eligible_pool_views": 24,
+      "selected_pool_indices": [
+        12,
+        17
+      ],
+      "baseline_opportunity_fraction": 0.43837206359001263,
+      "combined_opportunity_fraction": 0.535564672984735,
+      "request_statuses": [
+        "additional_geometric_opportunity_inspection_unverified"
+      ],
+      "append_distance_m": 1.079219762251457,
+      "append_rotation_deg": 169.82525340396708,
+      "inspection_resolved": false,
+      "elapsed_s": 13.1
+    },
+    {
+      "label": "C1:T4",
+      "scan_cycle": 2,
+      "selection_reason": "within-tolerance comparison with broad shape-review suggestion",
+      "agent_status": "within_provisional_position_rule",
+      "dds_status": "within_tolerance",
+      "request_actions": [
+        "inspect_dds_shape_size"
+      ],
+      "surface_regions": [
+        "side",
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 2,
+      "decision": "keep_frontier_sweep_with_supplement",
+      "baseline_preserved": true,
+      "eligible_pool_views": 24,
+      "selected_pool_indices": [
+        15,
+        19
+      ],
+      "baseline_opportunity_fraction": 0.5293033793686901,
+      "combined_opportunity_fraction": 0.6408599925535137,
+      "request_statuses": [
+        "additional_geometric_opportunity_inspection_unverified"
+      ],
+      "append_distance_m": 1.2400405094393934,
+      "append_rotation_deg": 315.25770335673394,
+      "inspection_resolved": false,
+      "elapsed_s": 13.9
+    },
+    {
+      "label": "C5:T1",
+      "scan_cycle": 6,
+      "selection_reason": "repeat the original cap case as a regression control",
+      "agent_status": "cap_quality_review",
+      "dds_status": "missing",
+      "request_actions": [
+        "review_scan_coverage"
+      ],
+      "surface_regions": [
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 0,
+      "decision": "keep_frontier_sweep",
+      "baseline_preserved": true,
+      "eligible_pool_views": 23,
+      "selected_pool_indices": [],
+      "baseline_opportunity_fraction": 0.8750000000000001,
+      "combined_opportunity_fraction": 0.8750000000000001,
+      "request_statuses": [
+        "unresolved_no_new_geometric_opportunity_in_pool"
+      ],
+      "append_distance_m": 0,
+      "append_rotation_deg": 0,
+      "inspection_resolved": false,
+      "elapsed_s": 16.71
+    },
+    {
+      "label": "C5:T3",
+      "scan_cycle": 6,
+      "selection_reason": "identity ambiguity",
+      "agent_status": "paired_identity_review",
+      "dds_status": "missing",
+      "request_actions": [],
+      "surface_regions": [],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 0,
+      "decision": "keep_frontier_sweep",
+      "baseline_preserved": true,
+      "eligible_pool_views": 23,
+      "selected_pool_indices": [],
+      "baseline_opportunity_fraction": null,
+      "combined_opportunity_fraction": null,
+      "request_statuses": [],
+      "append_distance_m": 0,
+      "append_rotation_deg": 0,
+      "inspection_resolved": false,
+      "elapsed_s": 16.64
+    },
+    {
+      "label": "C5:T7",
+      "scan_cycle": 6,
+      "selection_reason": "shape review beside the original case",
+      "agent_status": "dds_shape_size_review",
+      "dds_status": "missing",
+      "request_actions": [
+        "inspect_dds_shape_size"
+      ],
+      "surface_regions": [
+        "side",
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 2,
+      "decision": "keep_frontier_sweep_with_supplement",
+      "baseline_preserved": true,
+      "eligible_pool_views": 23,
+      "selected_pool_indices": [
+        19,
+        16
+      ],
+      "baseline_opportunity_fraction": 0.5436673831587913,
+      "combined_opportunity_fraction": 0.7220108895901414,
+      "request_statuses": [
+        "additional_geometric_opportunity_inspection_unverified"
+      ],
+      "append_distance_m": 1.4288315335043194,
+      "append_rotation_deg": 228.47363703335668,
+      "inspection_resolved": false,
+      "elapsed_s": 17.35
+    },
+    {
+      "label": "C11:T2",
+      "scan_cycle": 12,
+      "selection_reason": "middle-stage shape review",
+      "agent_status": "dds_shape_size_review",
+      "dds_status": "missing",
+      "request_actions": [
+        "inspect_dds_shape_size"
+      ],
+      "surface_regions": [
+        "side",
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 2,
+      "decision": "keep_frontier_sweep_with_supplement",
+      "baseline_preserved": true,
+      "eligible_pool_views": 22,
+      "selected_pool_indices": [
+        20,
+        15
+      ],
+      "baseline_opportunity_fraction": 0.6011233983191966,
+      "combined_opportunity_fraction": 0.6839520039238176,
+      "request_statuses": [
+        "additional_geometric_opportunity_inspection_unverified"
+      ],
+      "append_distance_m": 1.2552017758522398,
+      "append_rotation_deg": 239.11113415557367,
+      "inspection_resolved": false,
+      "elapsed_s": 21.86
+    },
+    {
+      "label": "C11:T3",
+      "scan_cycle": 12,
+      "selection_reason": "middle-stage identity ambiguity",
+      "agent_status": "paired_identity_review",
+      "dds_status": "within_tolerance",
+      "request_actions": [],
+      "surface_regions": [],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 0,
+      "decision": "keep_frontier_sweep",
+      "baseline_preserved": true,
+      "eligible_pool_views": 22,
+      "selected_pool_indices": [],
+      "baseline_opportunity_fraction": null,
+      "combined_opportunity_fraction": null,
+      "request_statuses": [],
+      "append_distance_m": 0,
+      "append_rotation_deg": 0,
+      "inspection_resolved": false,
+      "elapsed_s": 21.15
+    },
+    {
+      "label": "C11:T4",
+      "scan_cycle": 12,
+      "selection_reason": "cap uncertainty with within-tolerance DDS evidence",
+      "agent_status": "cap_quality_review",
+      "dds_status": "within_tolerance",
+      "request_actions": [
+        "review_scan_coverage"
+      ],
+      "surface_regions": [
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 0,
+      "decision": "keep_frontier_sweep",
+      "baseline_preserved": true,
+      "eligible_pool_views": 22,
+      "selected_pool_indices": [],
+      "baseline_opportunity_fraction": 1.0,
+      "combined_opportunity_fraction": 1.0,
+      "request_statuses": [
+        "unresolved_no_new_geometric_opportunity_in_pool"
+      ],
+      "append_distance_m": 0,
+      "append_rotation_deg": 0,
+      "inspection_resolved": false,
+      "elapsed_s": 20.91
+    },
+    {
+      "label": "C18:T2",
+      "scan_cycle": 19,
+      "selection_reason": "late positional discrepancy",
+      "agent_status": "position_deviation_review",
+      "dds_status": "missing",
+      "request_actions": [
+        "inspect_geometry"
+      ],
+      "surface_regions": [
+        "side",
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 2,
+      "decision": "keep_frontier_sweep_with_supplement",
+      "baseline_preserved": true,
+      "eligible_pool_views": 23,
+      "selected_pool_indices": [
+        14,
+        18
+      ],
+      "baseline_opportunity_fraction": 0.46368946696144486,
+      "combined_opportunity_fraction": 0.5448403639980723,
+      "request_statuses": [
+        "additional_geometric_opportunity_inspection_unverified"
+      ],
+      "append_distance_m": 1.2812251568971973,
+      "append_rotation_deg": 243.08066390964524,
+      "inspection_resolved": false,
+      "elapsed_s": 24.8
+    },
+    {
+      "label": "C18:T7",
+      "scan_cycle": 19,
+      "selection_reason": "late shape review",
+      "agent_status": "dds_shape_size_review",
+      "dds_status": "missing",
+      "request_actions": [
+        "inspect_dds_shape_size"
+      ],
+      "surface_regions": [
+        "side",
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 2,
+      "decision": "keep_frontier_sweep_with_supplement",
+      "baseline_preserved": true,
+      "eligible_pool_views": 23,
+      "selected_pool_indices": [
+        8,
+        17
+      ],
+      "baseline_opportunity_fraction": 0.5436673831587913,
+      "combined_opportunity_fraction": 0.6585794134796018,
+      "request_statuses": [
+        "additional_geometric_opportunity_inspection_unverified"
+      ],
+      "append_distance_m": 1.0538981280077468,
+      "append_rotation_deg": 136.717994380567,
+      "inspection_resolved": false,
+      "elapsed_s": 24.88
+    },
+    {
+      "label": "C22:T1",
+      "scan_cycle": 23,
+      "selection_reason": "late insufficient observation",
+      "agent_status": "cap_quality_review",
+      "dds_status": "insufficient_observation",
+      "request_actions": [
+        "review_scan_coverage"
+      ],
+      "surface_regions": [
+        "top"
+      ],
+      "baseline_capture_count": 16,
+      "extra_capture_count": 0,
+      "decision": "keep_frontier_sweep",
+      "baseline_preserved": true,
+      "eligible_pool_views": 23,
+      "selected_pool_indices": [],
+      "baseline_opportunity_fraction": 0.041666666666666664,
+      "combined_opportunity_fraction": 0.041666666666666664,
+      "request_statuses": [
+        "unresolved_no_new_geometric_opportunity_in_pool"
+      ],
+      "append_distance_m": 0,
+      "append_rotation_deg": 0,
+      "inspection_resolved": false,
+      "elapsed_s": 24.79
+    }
+  ],
+  "selection_sha256": "7d4f2b61418eb8c1eaa368e840c7cdea9361553347477fd2a1476134340d254b",
+  "max_extra_views_per_case": 2,
+  "joint_scan_plan": false,
+  "execution_authorized": false,
+  "robot_commands": [],
+  "decision_counts": {
+    "keep_frontier_sweep": 6,
+    "keep_frontier_sweep_with_supplement": 6
+  },
+  "complete": true,
+  "all_cases_succeeded": true
+}

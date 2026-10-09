@@ -1,0 +1,563 @@
+{
+  "schema": "behav3d.focused_inspection_poses.v1",
+  "frame": "ur20_base_link",
+  "units": "m",
+  "focus_m": [
+    0.04119,
+    -0.86314,
+    -0.10978
+  ],
+  "grid": [
+    {
+      "index": 0,
+      "position_m": [
+        -0.01881,
+        -0.9231400000000001,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 1,
+      "position_m": [
+        0.04119,
+        -0.9231400000000001,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 2,
+      "position_m": [
+        0.10119,
+        -0.9231400000000001,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 3,
+      "position_m": [
+        0.10119,
+        -0.86314,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 4,
+      "position_m": [
+        0.04119,
+        -0.86314,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 5,
+      "position_m": [
+        -0.01881,
+        -0.86314,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 6,
+      "position_m": [
+        -0.01881,
+        -0.8031400000000001,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 7,
+      "position_m": [
+        0.04119,
+        -0.8031400000000001,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 8,
+      "position_m": [
+        0.10119,
+        -0.8031400000000001,
+        0.29022000000000003
+      ],
+      "optical_axes_world": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    }
+  ],
+  "cap": [
+    {
+      "index": 0,
+      "position_m": [
+        -0.2160987940768792,
+        -0.9904578480200494,
+        0.1687745584225986
+      ],
+      "optical_axes_world": [
+        [
+          -0.2159660959583606,
+          0.9479918432387209,
+          0.23381640350787322
+        ],
+        [
+          0.7345911265199928,
+          2.7755575615628914e-17,
+          0.6785100418107959
+        ],
+        [
+          0.643221985192198,
+          0.31829462005012343,
+          -0.6963863960564964
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 1,
+      "position_m": [
+        -0.0185333680371804,
+        -1.0605791408990108,
+        0.23293111004949352
+      ],
+      "optical_axes_world": [
+        [
+          0.9887906733426175,
+          -0.07453378906903944,
+          0.12937433515834998
+        ],
+        [
+          1.3877787807814457e-17,
+          -0.8664905507526557,
+          -0.4991934749737418
+        ],
+        [
+          0.14930842009295098,
+          0.49359785224752717,
+          -0.8567777751237338
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 2,
+      "position_m": [
+        0.043701457545302524,
+        -0.8728562524903654,
+        0.2900940889561884
+      ],
+      "optical_axes_world": [
+        [
+          0.9999802891213597,
+          0.00015251522889037,
+          -0.006276791207819707
+        ],
+        [
+          2.710505431213761e-20,
+          -0.9997049274529717,
+          -0.02429111002503498
+        ],
+        [
+          -0.006278643863256322,
+          0.024290631225913243,
+          -0.9996852223904709
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 3,
+      "position_m": [
+        0.10355491559982502,
+        -0.6678957608743972,
+        0.23371716795119452
+      ],
+      "optical_axes_world": [
+        [
+          0.9877709036709459,
+          -0.07704462675231684,
+          -0.1355461816123173
+        ],
+        [
+          0.0,
+          -0.869374585429232,
+          0.49415365040617804
+        ],
+        [
+          -0.15591228899956255,
+          -0.48811059781400706,
+          -0.8587429198779862
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 4,
+      "position_m": [
+        0.23816898231147512,
+        -0.5765089857966557,
+        0.0878103394002294
+      ],
+      "optical_axes_world": [
+        [
+          0.8703421759843065,
+          -0.405446034865737,
+          -0.2794959919472087
+        ],
+        [
+          -2.7755575615628914e-17,
+          -0.5675651050024266,
+          0.8233285198410076
+        ],
+        [
+          -0.49244745577868765,
+          -0.7165775355083608,
+          -0.49397584850057336
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 5,
+      "position_m": [
+        0.3654031032776273,
+        -0.8176958032075171,
+        0.12004751932911926
+      ],
+      "optical_axes_world": [
+        [
+          -0.09268512755296998,
+          0.9935253676236899,
+          -0.06570244301927954
+        ],
+        [
+          0.5783131634545474,
+          -1.3877787807814457e-17,
+          -0.815814859496439
+        ],
+        [
+          -0.8105327581940682,
+          -0.11361049198120737,
+          -0.5745687983227982
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 6,
+      "position_m": [
+        0.24529895035979382,
+        -0.9759820502614562,
+        0.21519108806140624
+      ],
+      "optical_axes_world": [
+        [
+          0.15004474527287703,
+          0.9593834989616735,
+          0.2388930227864636
+        ],
+        [
+          0.8468226950252884,
+          1.3877787807814457e-17,
+          -0.5318752891328072
+        ],
+        [
+          -0.5102723758994845,
+          0.28210512565364065,
+          -0.8124277201535155
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 7,
+      "position_m": [
+        0.18462822940821608,
+        -1.163650082906088,
+        0.1118484377421186
+      ],
+      "optical_axes_world": [
+        [
+          0.9334930179982467,
+          0.2885977277031334,
+          -0.21284298652554468
+        ],
+        [
+          0.0,
+          -0.5935460508782693,
+          -0.8048000282596983
+        ],
+        [
+          -0.35859557352054017,
+          0.7512752072652199,
+          -0.5540710943552964
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    },
+    {
+      "index": 8,
+      "position_m": [
+        -0.13017657602952076,
+        -0.7192992948533385,
+        0.22179706217835654
+      ],
+      "optical_axes_world": [
+        [
+          0.16510378016030083,
+          0.9331058740267338,
+          -0.3194591830478255
+        ],
+        [
+          0.8883693464158192,
+          2.7755575615628914e-17,
+          0.4591295071640794
+        ],
+        [
+          0.4284164400738019,
+          -0.35960176286665363,
+          -0.8289426554458913
+        ]
+      ],
+      "frame": "ur20_base_link",
+      "pose_kind": "camera_optical",
+      "executable": false
+    }
+  ],
+  "executable": false,
+  "checks": {
+    "visibility": "unverified",
+    "depth_quality": "unverified",
+    "ik": "unverified",
+    "collision": "unverified",
+    "transitions": "unverified"
+  },
+  "robot_commands": [],
+  "label": "C5:T1",
+  "candidate_cycle": 5,
+  "scan_cycle": 6,
+  "evidence_reasons": [
+    "partial_angular_coverage",
+    "noncircular_or_fragmented_footprint",
+    "insufficient_complete_views"
+  ],
+  "focus_basis": "issued target; no diagnostic-fit assimilation",
+  "coordinate_mapping": {
+    "yaml_mm_to_base_m_signs": [
+      -1,
+      -1,
+      1
+    ],
+    "basis": "saved DDS flip_x/flip_y, checked against replay target",
+    "scene_basis": "recorded reconstruction base coordinates; no fitted scene transform"
+  },
+  "settings": {
+    "distance_m": 0.4,
+    "grid_width_m": 0.12,
+    "grid_height_m": 0.12,
+    "cap_deg": 60,
+    "settings_status": "demonstration assumptions, not approved operating limits"
+  },
+  "sources": {
+    "/Users/josephnamar/Documents/ChatGPT/SustaniAi sumerschool/agent007-main/outputs/expected_deposition_review_260728_133013_final/cycle_0006/review.json": "113260e375fe93b2e5bbc8620822994f5909fcb377186a92b1c5d9c3dbf938f1",
+    "/Users/josephnamar/Documents/ChatGPT/SustaniAi sumerschool/agent007-main/outputs/candidate_caps_260728_133013_prefix14_validated/cycle_0006/candidate_caps.json": "db89efbbf76beab29bc55ab817c732a598b57dd59d68bed7ed313bcd73b7ed2e",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0006/scan/manifest.yaml": "580dc5d4863808bf084e6c7975eaee91b08cbb09d08fd35a056ec19f80eb88be",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0006/scan/reconstruct/tsdf_surface_rgb_colored.ply": "1a7094102f891f5448829a6f9dbb948558be0ee39402f9207351f00adc18687c",
+    "/Users/josephnamar/Downloads/260728_133013/config/extrinsics.yaml": "7862d358a7c626e7c7c0a3d9aebf998f4216d0dc66921e3e86ef7d0c57cdeb3c",
+    "/Users/josephnamar/Downloads/260728_133013/config/depth_intrinsics.yaml": "2780e1193763456ade0f5c9a9d8103df61bf5e391fbada4d68f932b6ef42d0fb",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0005/candidates/targets.yaml": "1a63bfe72f5225724a4c24c0d793d27756d211e76acfe1dceb4a2816c25aa8ab",
+    "/Users/josephnamar/Documents/GitHub/3DP-DDS/outputs/field_loop_260728_133013_cycle_history_corrected/cycles/cycle_0005/voxel_comparison_metrics.json": "14702795080bdcd2b975f9836997d90ae7eaae1132414d66d381950506199d3d",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0006/scan/reconstruct/tsdf_surface_mesh.ply": "344399e38ec80a74935b5a0cc7fd3f1addd5439ecd29563802911d8978c2cd67"
+  }
+}

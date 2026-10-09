@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local inspection planning · C5:T1</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#111923;color:#e3eaf1;font:15px system-ui}main{max-width:1200px;margin:auto;padding:20px}h1{font-size:22px;margin:0 0 10px}p{line-height:1.5}fieldset{border:0;padding:8px 0;display:flex;gap:14px;flex-wrap:wrap}button,select{font:inherit;padding:7px;background:#253447;color:inherit;border:1px solid #526176;border-radius:5px;max-width:100%}label{display:flex;align-items:center;gap:6px}canvas{display:block;width:100%;height:560px;background:#172331;touch-action:none;border-radius:8px}#detail{white-space:pre-wrap;font:14px ui-monospace;line-height:1.6}.muted{color:#adbac9}table{width:100%;border-collapse:collapse;text-align:left;margin:12px 0}td,th{padding:8px 4px;border-bottom:1px solid #354453}caption{text-align:left;color:#adbac9;margin-bottom:8px}details{margin:12px 0}summary{cursor:pointer}.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px}.swatch{display:inline-block;width:9px;height:9px;margin-right:5px;border-radius:50%}@media(max-width:600px){canvas{height:420px}main{padding:10px}td,th{font-size:12px;padding:7px 3px}fieldset{gap:10px}#detail{font-size:12px}}
+</style>
+<main>
+<h1>Focused inspection · C5:T1 → scan 6</h1>
+<p id="intro">Recorded scene in ur20_base_link · metres. Intended bead shapes define what to inspect; observed geometry blocks sightlines. All poses remain non-executable.</p>
+<div id="summary"></div>
+<fieldset aria-label="Camera patterns">
+<label><input id="grid" type="checkbox" checked>Grid · cyan squares</label>
+<label><input id="supplement" type="checkbox" checked>Extra side views · green</label>
+<label><input id="cap" type="checkbox">Cap · orange circles</label>
+<label><input id="selected" type="checkbox">Earlier local proposal · pink</label>
+<label><input id="direction_pool" type="checkbox">All 24 directions</label>
+<label><input id="recorded" type="checkbox">Recorded cameras</label>
+</fieldset>
+<fieldset aria-label="Geometry layers">
+<label><input id="patch" type="checkbox" checked>Observed cap</label>
+<label><input id="nominal" type="checkbox" checked>Intended top + sides</label>
+<label><input id="neighbors" type="checkbox" checked>Intended neighbors</label>
+<label><input id="blockers" type="checkbox" checked>Selected-view obstructions</label>
+<label><input id="clearance" type="checkbox">Assumed camera envelope</label>
+<label><input id="proximity" type="checkbox">Nearby surface distances</label>
+<label><input id="frustums" type="checkbox">Pinhole frustums</label>
+</fieldset>
+<fieldset aria-label="View controls">
+<label>Extra-view budget <select id="budget" aria-label="Extra-view budget"></select></label>
+<label>Inspect pose <select id="pose"><option value="">All viewpoints</option></select></label>
+<button id="overview">Whole scene</button><button id="focus">Bead + neighbors</button><button id="top">Top view</button>
+</fieldset>
+<canvas id="scene" role="img" aria-label="Rotatable recorded scene, intended bead and neighbors, camera viewpoints, and obstruction diagnostics">3D inspection planning view</canvas>
+<p class="muted">Drag to rotate · scroll to zoom. Numbers identify source poses; lines show selection/capture order, not robot trajectories. Axes are 50 mm long.</p>
+<div class="legend" id="legend"></div>
+<p id="detail" aria-live="polite"></p>
+<details><summary>Earlier comparisons and assumptions</summary><div id="earlier"></div></details>
+</main>
+<script>
+const D=/*DATA*/;
+const L=D.local_scene, C=D.comparison, S=D.grid_supplement;
+const root=document;
+const canvas=root.getElementById('scene'),ctx=canvas.getContext('2d');
+const focus=D.plan.focus_m;
+const ids=['grid','supplement','cap','selected','direction_pool','recorded','patch','nominal','neighbors','blockers','clearance','proximity','frustums','pose','detail'];
+const nodes=Object.fromEntries(ids.map(k=>[k,root.getElementById(k)]));
+let activeSupplement=S?.recommended;
+const groups={grid:D.plan.grid,supplement:activeSupplement?.poses||[],cap:D.plan.cap,recorded:D.recorded,
+ selected:L?.proposal.poses||[],direction_pool:L?.patterns.direction_pool.poses||[]};
+const color={grid:'#65dcf0',supplement:'#a5dca0',cap:'#ffb76d',recorded:'#c4a0ff',selected:'#ee93cc',direction_pool:'#809ba6',patch:'#efd36e'};
+const states={
+ inspection_opportunity_unknown_space:['#c4a0ff','Opportunity · space unverified'],
+ target_region_possible_self_obstruction:['#ffce75','Possible self-obstruction'],
+ neighbor_region_identity_unverified:['#ff8888','Near intended neighbor'],
+ overlapping_target_neighbor_regions:['#ed9dcc','Ambiguous overlap'],
+ unassigned_observed_scene:['#ff8888','Other observed obstruction'],
+ possible_intended_neighbor_obstruction:['#cfa46b','Possible intended-neighbor obstruction'],
+ back_facing_nominal:['#718a9f','Back-facing'],grazing_nominal:['#718a9f','Grazing'],outside_image:['#718a9f','Outside image']
+};
+let yaw=-.7,pitch=.55,zoom=1,center=[.18,-.86,.05],drag=null;
+const pct=v=>v===null?'—':(v*100).toFixed(1)+'%';
+const table=(heads,rows,caption)=>'<table><caption>'+caption+'</caption><thead><tr>'+heads.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(v=>'<td>'+v+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+function selectedRow(){
+ const [kind,index]=nodes.pose.value.split(':');
+ const pose=groups[kind]?.find(p=>p.index===Number(index));
+ const rows=kind==='supplement'?activeSupplement?.assessments:kind==='selected'?L?.proposal.assessments:L?.patterns[kind]?.assessments;
+ return {kind,pose,row:rows?.find(r=>r.index===Number(index))};
+}
+if(L){
+ const rows=['grid','cap','selected'].map(kind=>{const v=kind==='selected'?L.proposal.coverage:L.patterns[kind].coverage;return [kind==='selected'?'Local proposal':kind,groups[kind].length,pct(v.regions.top.opportunity_area_fraction_once),pct(v.regions.side.opportunity_area_fraction_once),pct(v.regions.side.opportunity_area_fraction_three_views)];});
+ root.getElementById('summary').innerHTML=table(['Pattern','Views','Top ≥1','Sides ≥1','Sides ≥3'],rows,'Nominal inspection opportunities after surrounding-geometry checks')+
+ '<p class="muted">Area-weighted opportunities; unknown space remains unverified. Intended-neighbor envelope intersections are excluded. Same criteria apply to all patterns.</p>';
+ const gap=L.side_min_outside_region_surface_distance_m;
+ root.getElementById('summary').innerHTML+='<p>Nearest observed surface outside the target’s 8 mm association region: '+(gap===null?'unknown':(gap*1000).toFixed(1)+' mm')+'. This is a spatial distance, not a verified gap between beads.</p>';
+}else{
+ for(const id of ['selected','direction_pool','neighbors','blockers','clearance','proximity'])nodes[id].disabled=true;
+}
+function populatePoses(){
+ const value=nodes.pose.value;nodes.pose.replaceChildren(new Option('All viewpoints',''));
+ for(const [kind,poses] of Object.entries(groups))for(const p of poses){const o=document.createElement('option');o.value=kind+':'+p.index;o.textContent=(kind==='supplement'?'Extra side view':kind==='selected'?'Earlier local proposal':kind)+' · '+(p.index+1);nodes.pose.append(o);}
+ if([...nodes.pose.options].some(o=>o.value===value))nodes.pose.value=value;
+}
+populatePoses();
+const budgetControl=root.getElementById('budget');
+if(S?.curves.length){
+ S.curves.forEach(r=>budgetControl.append(new Option(String(r.budget),String(r.budget))));
+ budgetControl.value=String(S.recommended.extra_views);
+ const oldSummary=root.getElementById('summary').innerHTML;
+ const rows=S.curves.map(r=>[r.budget,r.extra_views+' / '+r.total_captures,
+ pct(r.combined_coverage.regions.side.opportunity_area_fraction_once),
+ pct(r.combined_coverage.regions.side.opportunity_area_fraction_three_views),
+ r.append_order_metrics.position_order_length_m.toFixed(2)+' m',
+ Math.round(r.append_order_metrics.summed_orientation_change_deg)+'°']);
+ root.getElementById('summary').innerHTML=table(['Budget','Extra / total','Sides ≥1','Sides ≥3','Added length','Rotation'],rows,'Keep the 9-view grid · add only new side opportunities')+
+ '<p id="supplement-note" class="muted"></p><details><summary>Compare fixed patterns</summary>'+oldSummary+'</details>';
+ function updateSupplement(){
+  activeSupplement=S.curves.find(r=>r.budget===Number(budgetControl.value));groups.supplement=activeSupplement.poses;populatePoses();
+  const gain=(activeSupplement.new_side_area_fraction*100).toFixed(1);
+  root.getElementById('supplement-note').textContent='Budget '+activeSupplement.budget+': '+activeSupplement.extra_views+' added views, +'+gain+' percentage points of modeled side opportunity. The grid order is unchanged. Length includes the connection from its last pose; no return or robot trajectory is modeled.'+(activeSupplement.extra_views<activeSupplement.budget?' Further views add no new side area.':'');
+ }
+ updateSupplement();budgetControl.addEventListener('change',()=>{updateSupplement();draw();});
+}else{budgetControl.disabled=true;nodes.supplement.disabled=true;}
+root.getElementById('legend').innerHTML=[['#65dcf0','Intended top'],['#ffb76d','Intended sides'],['#efd36e','Observed patch'],['#c4a0ff','Opportunity · space unknown'],['#ff8888','Observed obstruction'],['#ffce75','Possible self-obstruction'],['#cfa46b','Possible neighbor']].map(([c,t])=>'<span><i class="swatch" style="background:'+c+'"></i>'+t+'</span>').join('');
+if(C){
+ root.getElementById('earlier').innerHTML=table(['Pattern','Observed samples ≥1','≥3','Order length'],Object.entries(C.patterns).map(([k,r])=>[k,r.endpoint_supported_in_at_least_one_view+'/'+r.sample_count,r.endpoint_supported_in_at_least_three_views+'/'+r.sample_count,r.camera_position_order_length_m.toFixed(3)+' m']),'Earlier observed-cap-only test · 4 mm endpoint tolerance');
+}
+root.getElementById('earlier').innerHTML+='<p>Nominal geometry is not measured material. Candidate association uses an 8 mm margin and does not establish identity. Camera body is an assumed 75 mm sphere, 50 mm behind the optical origin, with 10 mm clearance margin. Full tool, robot reachability, interior occupancy, transitions and depth quality are unverified. New directions use 25° / 50° / 75° tilt at 400 mm distance. Inspection angle ≤75° and all distances are demonstration settings.</p>';
+function project(p){let x=p[0]-center[0],y=p[1]-center[1],z=p[2]-center[2];let a=Math.cos(yaw)*x-Math.sin(yaw)*y,b=Math.sin(yaw)*x+Math.cos(yaw)*y;return [canvas.width/2+a*scale(),canvas.height/2+(Math.sin(pitch)*b-Math.cos(pitch)*z)*scale(),Math.cos(pitch)*b+Math.sin(pitch)*z];}
+function scale(){return Math.min(canvas.width,canvas.height)*zoom/1.05;}
+function line(a,b,c,width=1){a=project(a);b=project(b);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.strokeStyle=c;ctx.lineWidth=width;ctx.stroke();}
+function add(a,b,s=1){return a.map((v,i)=>v+s*b[i]);}
+function mark(p,c,r=3,outline=false){const a=project(p);ctx.beginPath();ctx.arc(a[0],a[1],r,0,7);ctx.fillStyle=c;ctx.strokeStyle=c;outline?ctx.stroke():ctx.fill();}
+function label(p,text,c='#e3eaf1'){const a=project(p);ctx.fillStyle=c;ctx.fillText(text,a[0]+7,a[1]-5);}
+function camera(p,kind,isSelected){const pos=p.position_m,axes=p.optical_axes_world,c=color[kind],a=project(pos);ctx.fillStyle=c;ctx.beginPath();if(kind==='grid')ctx.rect(a[0]-4,a[1]-4,8,8);else ctx.arc(a[0],a[1],isSelected?7:4,0,7);ctx.fill();if(kind!=='direction_pool'||isSelected)label(pos,String(p.index+1),c);line(pos,add(pos,axes[2],.06),c,isSelected?3:1);
+ if(isSelected){axes.forEach((v,i)=>line(pos,add(pos,v,.04),['#ed8888','#91d4a1','#8abefa'][i],2));}
+ if(nodes.frustums.checked&&(isSelected||!nodes.pose.value)){const k=D.calibration,dep=.12;const corners=[[0,0],[k.width,0],[k.width,k.height],[0,k.height]].map(([u,v])=>add(add(add(pos,axes[2],dep),axes[0],(u-k.cx)/k.fx*dep),axes[1],(v-k.cy)/k.fy*dep));corners.forEach((c2,i)=>{line(pos,c2,c);line(c2,corners[(i+1)%4],c);});}}
+function draw(){const rect=canvas.getBoundingClientRect();canvas.width=Math.round(rect.width);canvas.height=Math.round(rect.height);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.font='12px system-ui';
+ const current=selectedRow();
+ ctx.fillStyle='#718a9f';for(const p of D.scene.map(project).sort((a,b)=>a[2]-b[2]))ctx.fillRect(p[0],p[1],1.5,1.5);
+ if(nodes.patch.checked)for(const p of D.observed_patch)mark(p,color.patch,2);
+ if(nodes.neighbors.checked&&L)for(const bead of L.neighbors){for(const p of bead.points_m)mark(p,'#829cb5',2,true);label(bead.top_m,bead.label+' (intended)','#bccbdb');}
+ const surface=L?.nominal_surface||C?.nominal_surface;
+ if(nodes.nominal.checked&&surface)surface.points_m.forEach((p,i)=>{const state=current.row?.outcomes[i];mark(p,state?(states[state]?.[0]||'#718a9f'):(surface.regions[i]==='top'?'#65dcf0':'#ffb76d'),3,true);});
+ if(nodes.blockers.checked&&current.row&&current.pose){let shown=0;current.row.blocker_points_m.forEach((p,i)=>{if(!p||shown>=16)return;shown++;const c=states[current.row.outcomes[i]][0];mark(p,c,3);line(current.pose.position_m,p,c+'80');line(p,surface.points_m[i],c+'80');});}
+ if(nodes.proximity.checked&&L)for(let i=0;i<L.proximity.length;i+=6){const p=L.proximity[i].point_m;if(p){line(surface.points_m[i],p,'#a2b3c3');mark(p,'#a2b3c3',2);}}
+ if(nodes.clearance.checked&&current.row)for(const sphere of current.row.clearance.spheres){for(let axis=0;axis<3;axis++){let last=null;for(let i=0;i<=32;i++){const a=i*2*Math.PI/32,v=sphere.center_m.slice();v[(axis+1)%3]+=Math.cos(a)*sphere.radius_with_margin_m;v[(axis+2)%3]+=Math.sin(a)*sphere.radius_with_margin_m;if(last)line(last,v,'#c7b2a0');last=v;}}if(sphere.nearest_observed_point_m)line(sphere.center_m,sphere.nearest_observed_point_m,'#c7b2a0');}
+ mark(focus,'#fff',3);label(focus,'Issued target');
+ for(const [kind,poses] of Object.entries(groups)){if(!nodes[kind].checked)continue;if(kind==='supplement'&&poses.length&&nodes.grid.checked)line(groups.grid[groups.grid.length-1].position_m,poses[0].position_m,color.supplement+'99');poses.forEach((p,i)=>{camera(p,kind,current.kind===kind&&current.pose?.index===p.index);if(i&&kind!=='direction_pool')line(poses[i-1].position_m,p.position_m,color[kind]+'55');});}
+ const origin=add(focus,[-.09,-.09,0]);[[1,0,0],[0,1,0],[0,0,1]].forEach((v,i)=>{line(origin,add(origin,v,.05),['#ed8888','#91d4a1','#8abefa'][i],2);label(add(origin,v,.05),['X','Y','Z'][i]);});
+ let text='Nominal outline samples describe intended material. Solid yellow points are the observed cap.\nSelect a pose to inspect obstruction sources and the assumed body clearance.';
+ if(current.pose){text=current.kind+' pose '+(current.pose.index+1)+' · optical position [m]: '+current.pose.position_m.map(v=>v.toFixed(4)).join(', ');
+ if(current.row){text+='\n'+Object.entries(current.row.counts).map(([k,v])=>(states[k]?.[1]||k)+': '+v).join('\n');const cl=current.row.clearance;text+='\nAssumed-envelope gap to recorded surface: '+(cl.minimum_surface_gap_m===null?'unknown':(cl.minimum_surface_gap_m*1000).toFixed(1)+' mm');text+='\nPossible envelope contacts with intended neighbors: '+(cl.possible_intended_neighbor_contacts?.length||0);text+='\nFull tool clearance: unverified. Pose remains non-executable.';const ids=new Set(current.row.blocker_relations.flatMap(r=>r?.neighbor_labels||[]).concat(current.row.possible_neighbor_labels.flat()));if(ids.size)text+='\nNearby intended candidates implicated: '+Array.from(ids).join(', ');}}
+ nodes.detail.textContent=text;
+}
+for(const k of ids.filter(k=>k!=='detail'))nodes[k].addEventListener('change',draw);
+canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-drag[0])*.008;pitch=Math.max(-1.5,Math.min(1.5,pitch+(e.clientY-drag[1])*.008));drag=[e.clientX,e.clientY];draw();});
+canvas.addEventListener('pointerup',()=>drag=null);canvas.addEventListener('pointercancel',()=>drag=null);
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.3,Math.min(10,zoom*Math.exp(-e.deltaY*.001)));draw();},{passive:false});
+root.getElementById('overview').onclick=()=>{center=[.18,-.86,.05];zoom=1;yaw=-.7;pitch=.55;draw();};
+root.getElementById('focus').onclick=()=>{center=focus.slice();zoom=3;draw();};
+root.getElementById('top').onclick=()=>{pitch=Math.PI/2;yaw=0;draw();};
+new ResizeObserver(draw).observe(canvas);draw();
+</script></html>

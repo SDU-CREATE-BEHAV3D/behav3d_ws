@@ -1,0 +1,32 @@
+{
+  "cases": [
+    "C1:T4",
+    "C5:T7",
+    "C11:T4"
+  ],
+  "folds": "hold out every fourth manifest capture; four fixed folds",
+  "ranking": "new view direction, then camera displacement; no held-out depth or full mesh",
+  "settings": {
+    "raster_mm": 2.0,
+    "search_padding_mm": 8.0,
+    "cap_depth_mm": 8.0,
+    "min_cell_views": 2,
+    "min_cells": 30,
+    "min_views": 3,
+    "angular_bins": 12,
+    "min_angular_bins": 10,
+    "max_circle_residual_mm": 2.5,
+    "max_plane_residual_mm": 2.5,
+    "max_view_spread_mm": 4.0,
+    "max_boundary_clip_fraction": 0.12,
+    "max_neighbour_ambiguity_fraction": 0.3,
+    "neighbour_margin": 0.12
+  },
+  "estimator_source": "/Users/josephnamar/Documents/ChatGPT/SustaniAi sumerschool/agent007-main/src/ocsr/printed_artifacts/candidate_caps.py",
+  "estimator_sha256": "03780e5905d57a9f5deda4503da95c40895544f01b267e66ea1d2c1e45577a36",
+  "local_code_sha256": {
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/replay_depth_holdouts.py": "44aba154afa85a6b0dd581099bcd8c70c7e20ffb3b839bf90bf6d336b07d582f",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/depth_holdout.py": "f58abda928bdf060769d36eed2f64824a31a6d9a8dbe1c0232d658b67cc486e5",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/inspection_policy.py": "21ecb2ce46c2101a5f0d09bf51a05eb5bc16c065cc6cd7605b869b7c0d540c01"
+  }
+}

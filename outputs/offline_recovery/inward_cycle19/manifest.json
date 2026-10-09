@@ -1,0 +1,11 @@
+{
+  "files_sha256": {
+    "recorded_mesh.npz": "6743a1b5229de927ea1894d92ef0bd5e72537a2a235fbfef30e0ddbaa07f93ef",
+    "results.json": "bd4f8468781bc532f24c510ee2fa440f0b67d6f0b586d26c1b70b38565c0f40b",
+    "inward_8deg_mesh.npz": "7e6acb7957c7bc98e801f325bf5c0f1e0ae99ed7e52b86cb9502efeb86728704",
+    "viewer.html": "3eb77eb8dd48adfbcf08945a58d81c69387b4db73c9d00dedcc22a8796964e89",
+    "protocol.json": "004476d7de7ab3b5dac278f472f269bf88b76c92c57352063bdd507ab4b04e9e"
+  },
+  "source_hashes_unchanged": true,
+  "execution_authorized": false
+}

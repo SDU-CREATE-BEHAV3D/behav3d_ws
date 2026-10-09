@@ -1,0 +1,100 @@
+{
+  "cases": [
+    {
+      "label": "C1:T1",
+      "reason": "early cap uncertainty"
+    },
+    {
+      "label": "C1:T3",
+      "reason": "early missing-and-extra shape review"
+    },
+    {
+      "label": "C1:T4",
+      "reason": "within-tolerance comparison with broad shape-review suggestion"
+    },
+    {
+      "label": "C5:T1",
+      "reason": "repeat the original cap case as a regression control"
+    },
+    {
+      "label": "C5:T3",
+      "reason": "identity ambiguity"
+    },
+    {
+      "label": "C5:T7",
+      "reason": "shape review beside the original case"
+    },
+    {
+      "label": "C11:T2",
+      "reason": "middle-stage shape review"
+    },
+    {
+      "label": "C11:T3",
+      "reason": "middle-stage identity ambiguity"
+    },
+    {
+      "label": "C11:T4",
+      "reason": "cap uncertainty with within-tolerance DDS evidence"
+    },
+    {
+      "label": "C18:T2",
+      "reason": "late positional discrepancy"
+    },
+    {
+      "label": "C18:T7",
+      "reason": "late shape review"
+    },
+    {
+      "label": "C22:T1",
+      "reason": "late insufficient observation"
+    }
+  ],
+  "selection_basis": "stage and recorded finding, fixed before scoring",
+  "max_extra_views": 2,
+  "settings": {
+    "schema": "behav3d.local_scene_settings.v1",
+    "basis": "offline demonstration assumptions; not operating limits",
+    "frame": "ur20_base_link",
+    "units": "m",
+    "distance_m": 0.4,
+    "pool_tilts_deg": [
+      25,
+      50,
+      75
+    ],
+    "azimuth_samples": 8,
+    "pose_budget": 9,
+    "relation_margin_m": 0.008,
+    "neighbor_margin_m": 0.008,
+    "endpoint_tolerance_m": 0.004,
+    "max_incidence_deg": 75,
+    "camera_envelope": {
+      "basis": "assumed camera body sphere only; not measured or full tool geometry",
+      "margin_m": 0.01,
+      "spheres": [
+        {
+          "name": "demonstration_camera_body",
+          "center_optical_m": [
+            0,
+            0,
+            -0.05
+          ],
+          "radius_m": 0.075
+        }
+      ]
+    }
+  },
+  "code_sources": {
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/grid_supplement.py": "b0290de8c9ffe7f8c1451d37eac06c975c39a984333262e040d7a63faba5673a",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/local_scene.py": "369fb9ad0a8e2e0a95980666b05a50574375ad7d40a17f34c5fd53c6265d6e95",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/compare_recorded.py": "24452532f4d6e394c003a6310e11d61b0bc546c8655a6e946332e4977a3a8abd",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/build_recorded_demo.py": "228895a01540b51c490b8e8c11af079a9dd16895df6fff87f39060c3ce34eb54",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/frontier_scan.py": "a3803f92db1978b44b0dc39fa93adca2c3db22a50e3fe309aa5345a5e96f0093",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/build_frontier_scan.py": "9765eebba344eadee45a52e4fae1e1f8286f5d3ab8092cee652694f74f6d1a65",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/bead_surface.py": "aa92a1b727575afb8966d3eb8582b6d82695c6a00412d9326e73c7efc43634a3",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/visibility.py": "bcdd912be59adfd3255759a97b04efac2c0e519f7576e62adc322bae8f95d32a",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/replay_frontier_cases.py": "a4a4c5eeaa9ecf801ce1fa67ffb263cfb93105564956dee67b2c08c5ed9c179e",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/assess_local_scene.py": "89dc22385aa413bcba83d9a7682be127015e2a7c4d02960f1745fe30ee3b3dda",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/build_grid_supplement.py": "f1920c5cbeebc42402358ecbe9d494c5676887a33296106a4332e39ee809908b"
+  }
+}
