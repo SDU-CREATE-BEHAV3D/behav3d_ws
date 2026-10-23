@@ -1,0 +1,3836 @@
+{
+  "schema": "behav3d.fixed_goal_replay.v1",
+  "artifact_id": "recording-260728_133013",
+  "frame": "ur20_base_link",
+  "units": "m",
+  "field_sha256": "ccdae5bcb893d40c4dbe510ab685fada659fb7afed2b59cbc334e6bd97019913",
+  "profile": {
+    "count": 7,
+    "min_spacing_m": 0.036,
+    "lift_height_m": 0.016,
+    "candidate_mode": "gradient_lift",
+    "tangent_sign": 1.0,
+    "cone_deg": 30.0,
+    "clearance_m": 0.0,
+    "iso_level_m": 0.0,
+    "status": "inferred_replay_profile"
+  },
+  "field_audit": [
+    {
+      "file": "field_state_init.npz",
+      "vertex_count": 2424,
+      "ordered_vertices_exact": false,
+      "heat_within_color_rounding": false,
+      "compared_heat_vertices": 0,
+      "maximum_heat_color_error": null
+    },
+    {
+      "file": "field_state_init1.npz",
+      "vertex_count": 5188,
+      "ordered_vertices_exact": true,
+      "heat_within_color_rounding": true,
+      "compared_heat_vertices": 3963,
+      "maximum_heat_color_error": 0.0019603793330629227
+    },
+    {
+      "file": "field_state_init2.npz",
+      "vertex_count": 5721,
+      "ordered_vertices_exact": false,
+      "heat_within_color_rounding": false,
+      "compared_heat_vertices": 0,
+      "maximum_heat_color_error": null
+    }
+  ],
+  "baseline": [
+    {
+      "cycle": 1,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 3963,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 6,
+        "reference_count": 6,
+        "ordered_max_mm": 2.41892176884499e-09,
+        "symmetric_nearest_max_mm": 2.41892176884499e-09
+      },
+      "axis_component_max_error": 0.0047665243710037775,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 5,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "cycle": 2,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 4228,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 6,
+        "reference_count": 6,
+        "ordered_max_mm": 1.3491009469706176e-09,
+        "symmetric_nearest_max_mm": 1.3491009469706176e-09
+      },
+      "axis_component_max_error": 0.004759536540879225,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 5,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          1,
+          2,
+          3,
+          5
+        ]
+      }
+    },
+    {
+      "cycle": 3,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 4054,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.1825336774874382e-08,
+        "symmetric_nearest_max_mm": 1.1825336774874382e-08
+      },
+      "axis_component_max_error": 0.00494635161565217,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 7,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 0,
+        "kept_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 4,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 3877,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 8.781773957222728e-09,
+        "symmetric_nearest_max_mm": 8.781773957222728e-09
+      },
+      "axis_component_max_error": 0.004897483207449205,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          1,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 5,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 3629,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 9.365087326944103e-09,
+        "symmetric_nearest_max_mm": 9.365087326944103e-09
+      },
+      "axis_component_max_error": 0.004995480421602749,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 6,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 3461,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.8152058750864684e-09,
+        "symmetric_nearest_max_mm": 1.8152058750864684e-09
+      },
+      "axis_component_max_error": 0.00464169517638946,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 7,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 3250,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.1223720065845514e-09,
+        "symmetric_nearest_max_mm": 1.1223720065845514e-09
+      },
+      "axis_component_max_error": 0.00476905963422096,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 7,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 0,
+        "kept_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 8,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 3074,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.2429134215769419e-08,
+        "symmetric_nearest_max_mm": 1.2429134215769419e-08
+      },
+      "axis_component_max_error": 0.004980708870373496,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          1,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 9,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 2920,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 6,
+        "reference_count": 6,
+        "ordered_max_mm": 0.0,
+        "symmetric_nearest_max_mm": 0.0
+      },
+      "axis_component_max_error": 0.0041747740794011445,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 0,
+        "kept_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "cycle": 10,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 2800,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 6,
+        "reference_count": 6,
+        "ordered_max_mm": 4.20236278801144e-08,
+        "symmetric_nearest_max_mm": 4.20236278801144e-08
+      },
+      "axis_component_max_error": 0.00486856229400974,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 0,
+        "kept_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "cycle": 11,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 2672,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.8840930864289874e-08,
+        "symmetric_nearest_max_mm": 1.8840930864289874e-08
+      },
+      "axis_component_max_error": 0.004877521251045611,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          1,
+          2,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 12,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 2505,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.1377840286421127e-08,
+        "symmetric_nearest_max_mm": 1.1377840286421127e-08
+      },
+      "axis_component_max_error": 0.004955378599394988,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 4,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 3,
+        "kept_indices": [
+          0,
+          2,
+          4,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 13,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 2337,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 2.4848475129935557e-08,
+        "symmetric_nearest_max_mm": 2.4848475129935557e-08
+      },
+      "axis_component_max_error": 0.004646930425954888,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 4,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 3,
+        "kept_indices": [
+          0,
+          1,
+          3,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 14,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 2157,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.007121458055222e-08,
+        "symmetric_nearest_max_mm": 1.007121458055222e-08
+      },
+      "axis_component_max_error": 0.00489141771134477,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 15,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 1968,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 2.6512277908096474e-08,
+        "symmetric_nearest_max_mm": 2.6512277908096474e-08
+      },
+      "axis_component_max_error": 0.004844637627366866,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 5,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 2,
+        "kept_indices": [
+          0,
+          1,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 16,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 1781,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 4.92797530822537e-08,
+        "symmetric_nearest_max_mm": 4.92797530822537e-08
+      },
+      "axis_component_max_error": 0.0045727163262303805,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 5,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 2,
+        "kept_indices": [
+          0,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 17,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 1615,
+        "maximum_heat_color_error": 0.0019603793330629227
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 4.872840949656227e-08,
+        "symmetric_nearest_max_mm": 4.872840949656227e-08
+      },
+      "axis_component_max_error": 0.004845914888432001,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 18,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 1441,
+        "maximum_heat_color_error": 0.0019596930537026935
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 2.3327541675787742e-08,
+        "symmetric_nearest_max_mm": 2.3327541675787742e-08
+      },
+      "axis_component_max_error": 0.004607331417569888,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 6,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 1,
+        "kept_indices": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 19,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 1281,
+        "maximum_heat_color_error": 0.0019596930537026935
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.6227439412704285e-08,
+        "symmetric_nearest_max_mm": 1.6227439412704285e-08
+      },
+      "axis_component_max_error": 0.004991662065573832,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 5,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 2,
+        "kept_indices": [
+          0,
+          1,
+          3,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 20,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 1101,
+        "maximum_heat_color_error": 0.0019596930537026935
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 2.8102846739873675e-08,
+        "symmetric_nearest_max_mm": 2.8102846739873675e-08
+      },
+      "axis_component_max_error": 0.004869041595405084,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 4,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 3,
+        "kept_indices": [
+          0,
+          3,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 21,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 909,
+        "maximum_heat_color_error": 0.0019596930537026935
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.3216158274759731e-06,
+        "symmetric_nearest_max_mm": 1.3216158274759731e-06
+      },
+      "axis_component_max_error": 0.004805899133807301,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 4,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 3,
+        "kept_indices": [
+          0,
+          1,
+          4,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 22,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 818,
+        "maximum_heat_color_error": 0.0019596930537026935
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.0007087080967818e-06,
+        "symmetric_nearest_max_mm": 1.0007087080967818e-06
+      },
+      "axis_component_max_error": 0.004825319293949526,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 4,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 3,
+        "kept_indices": [
+          0,
+          1,
+          2,
+          6
+        ]
+      }
+    },
+    {
+      "cycle": 23,
+      "field_identity": {
+        "ordered_vertices_exact": true,
+        "heat_within_color_rounding": true,
+        "compared_heat_vertices": 670,
+        "maximum_heat_color_error": 0.0019596930537026935
+      },
+      "saved_contour_replay": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.4320244765826815e-08,
+        "symmetric_nearest_max_mm": 1.4320244765826815e-08
+      },
+      "axis_component_max_error": 0.003974596215561288,
+      "matches_archived_within_1e_5_mm": true,
+      "current_rules_count": 3,
+      "current_rules_stats": {
+        "normal_continuity_replaced": 0,
+        "endpoint_spacing_removed": 4,
+        "kept_indices": [
+          0,
+          1,
+          5
+        ]
+      }
+    }
+  ],
+  "upstream": [
+    {
+      "cycle": 6,
+      "contour_comparison": {
+        "actual_count": 308,
+        "reference_count": 308,
+        "ordered_max_mm": 0.31388354795391277,
+        "symmetric_nearest_max_mm": 0.31388354795391277
+      },
+      "viability_mask_mismatches": 0,
+      "candidate_comparison": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 1.1665052348082672,
+        "symmetric_nearest_max_mm": 1.1665052348082672
+      },
+      "status": "upstream_drift_unresolved"
+    },
+    {
+      "cycle": 19,
+      "contour_comparison": {
+        "actual_count": 348,
+        "reference_count": 348,
+        "ordered_max_mm": 143.51933985692665,
+        "symmetric_nearest_max_mm": 0.26642234210409665
+      },
+      "viability_mask_mismatches": 1,
+      "candidate_comparison": {
+        "actual_count": 7,
+        "reference_count": 7,
+        "ordered_max_mm": 0.07341273625414141,
+        "symmetric_nearest_max_mm": 0.07341273625414141
+      },
+      "status": "upstream_drift_unresolved"
+    }
+  ],
+  "width_map": {
+    "vertex_count": 5721,
+    "matches_field_vertex_count": false,
+    "used": false,
+    "reason": "repository width map has a different vertex count; no recorded width map recovered"
+  },
+  "lean_parameters": {
+    "x_start_m": 0.19,
+    "x_full_m": 0.21,
+    "y_center_m": -0.875,
+    "y_inner_m": 0.065,
+    "y_outer_m": 0.095,
+    "pivot_z_m": -0.075
+  },
+  "search_bounds": {
+    "xy_radius_mm": 8.0,
+    "z_change_mm": 12.0,
+    "axis_change_deg": 4.0
+  },
+  "screen_settings": {
+    "support_gap_mm": 3.0,
+    "minimum_support_rays": 6,
+    "tool_margin_mm": 2.0,
+    "minimum_center_spacing_mm": 32.0,
+    "path_step_m": 0.003,
+    "settings_status": "experimental screens, not calibrated print-validity thresholds",
+    "spacing_basis": "36 mm nominal proxy minus 4 mm assumed overlap; recorded width map unavailable"
+  },
+  "tool_model": {
+    "sample_count_before_tip_exclusion": 4438,
+    "tip_exclusion_radius_mm": 2.0,
+    "tool_offset_difference_mm": 13.363225658500276,
+    "basis": "repository DAE vertices plus face centroids; two repository TCP transforms, neither verified against the recording"
+  },
+  "trials": [
+    {
+      "angle_deg": 0,
+      "ordinary_raw_count": 7,
+      "ordinary_current_count": 5,
+      "ordinary_targets": [
+        {
+          "label": "ordinary-1",
+          "top_m": [
+            0.11937637255260752,
+            -0.861064660364327,
+            0.01089246502752124
+          ],
+          "axis": [
+            0.49667904074572866,
+            -0.057531995306114636,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-2",
+          "top_m": [
+            0.1263295885900216,
+            -0.9044809138183784,
+            0.011778581200752945
+          ],
+          "axis": [
+            0.4952451597924307,
+            0.06879121820530362,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-3",
+          "top_m": [
+            0.1682329307756265,
+            -0.937517032243168,
+            -0.02453120679793792
+          ],
+          "axis": [
+            0.48571152457099986,
+            0.11867735630234993,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-4",
+          "top_m": [
+            0.17643331522390335,
+            -0.8320376418642729,
+            -0.010041463057847264
+          ],
+          "axis": [
+            0.4827831645865555,
+            -0.1300784993447831,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-5",
+          "top_m": [
+            0.2296527154423624,
+            -0.9224532110012179,
+            -0.036333685375610186
+          ],
+          "axis": [
+            -0.4871653001480999,
+            -0.1125609627340298,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        }
+      ],
+      "local_search": {
+        "regional_contour_vertices": 100,
+        "unique_generated_targets": 51,
+        "within_local_bounds": 6,
+        "outside_local_bounds": 45,
+        "bounds_failure_counts_nonexclusive": {
+          "xy": 45,
+          "z": 35,
+          "axis": 33
+        }
+      },
+      "candidates": [
+        {
+          "id": "goal-contour-106",
+          "target": {
+            "label": "goal-contour-106",
+            "top_m": [
+              0.2296527154423624,
+              -0.9224532110012179,
+              -0.036333685375610186
+            ],
+            "axis": [
+              -0.4871653001480999,
+              -0.1125609627340298,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.2400820251577699,
+            -0.9200434885890084,
+            -0.048225814569165144
+          ],
+          "search_bounds": {
+            "xy_change_mm": 0.0042052533864418516,
+            "z_change_mm": 0.0036853756101781765,
+            "axis_change_deg": 0.7444394774165004
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-106",
+            "base_gap_mm": 2.599431057565618,
+            "top_above_upper_surface_mm": 152.0057553352324,
+            "support_rays_within_gap": 3,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -3.267118526552329,
+              8.841609113058077
+            ],
+            "minimum_batch_spacing_mm": 64.31428571550781,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 16.907140612602234,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.2296527154423624,
+                  -0.9224532110012179,
+                  -0.036333685375610186
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 11.319400742650032,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.2296527154423624,
+                  -0.9224532110012179,
+                  -0.036333685375610186
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 0.005591614206320744
+        },
+        {
+          "id": "goal-contour-107",
+          "target": {
+            "label": "goal-contour-107",
+            "top_m": [
+              0.23017420883402803,
+              -0.9211223903379664,
+              -0.03487960332949952
+            ],
+            "axis": [
+              -0.48737162965449543,
+              -0.11166420468494499,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.2405620187653201,
+            -0.9187423861197922,
+            -0.04681396484375
+          ],
+          "search_bounds": {
+            "xy_change_mm": 1.4273550071367238,
+            "z_change_mm": 1.450396670500488,
+            "axis_change_deg": 0.692410966942117
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-107",
+            "base_gap_mm": 2.459208065224136,
+            "top_above_upper_surface_mm": 31.241809670428474,
+            "support_rays_within_gap": 4,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -2.9922750125243454,
+              8.949451089795737
+            ],
+            "minimum_batch_spacing_mm": 64.88663713919439,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.241783440113068,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23017420883402803,
+                  -0.9211223903379664,
+                  -0.03487960332949952
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 11.490670032799244,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23017420883402803,
+                  -0.9211223903379664,
+                  -0.03487960332949952
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 2.034942952074372
+        },
+        {
+          "id": "goal-contour-168",
+          "target": {
+            "label": "goal-contour-168",
+            "top_m": [
+              0.23131834979149185,
+              -0.918354948210491,
+              -0.03215000491105981
+            ],
+            "axis": [
+              -0.4886207413339622,
+              -0.10606493830785506,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.24155033762478048,
+            -0.9161338898998231,
+            -0.04424848931862288
+          ],
+          "search_bounds": {
+            "xy_change_mm": 4.421859358407094,
+            "z_change_mm": 4.179995088940201,
+            "axis_change_deg": 0.3718884030908729
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-168",
+            "base_gap_mm": 2.124546596922211,
+            "top_above_upper_surface_mm": 26.108050425713582,
+            "support_rays_within_gap": 5,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -2.469976094566062,
+              10.502323700221563
+            ],
+            "minimum_batch_spacing_mm": 66.35207027158472,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.21888594329357,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23131834979149185,
+                  -0.918354948210491,
+                  -0.03215000491105981
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 10.855638422071934,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23131834979149185,
+                  -0.918354948210491,
+                  -0.03215000491105981
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 6.084833533392391
+        },
+        {
+          "id": "goal-contour-169",
+          "target": {
+            "label": "goal-contour-169",
+            "top_m": [
+              0.230685835847009,
+              -0.9198754579588737,
+              -0.03360582080855624
+            ],
+            "axis": [
+              -0.4874829931196488,
+              -0.1111770273892424,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.2410400264271465,
+            -0.9175140460820109,
+            -0.045573045690624876
+          ],
+          "search_bounds": {
+            "xy_change_mm": 2.7751076778164947,
+            "z_change_mm": 2.7241791914437705,
+            "axis_change_deg": 0.6641946533380927
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-169",
+            "base_gap_mm": 2.343338095551567,
+            "top_above_upper_surface_mm": 30.866525385532217,
+            "support_rays_within_gap": 4,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -2.6215802448821197,
+              9.854994770845865
+            ],
+            "minimum_batch_spacing_mm": 65.51016100013743,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.213180661201477,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.230685835847009,
+                  -0.9198754579588737,
+                  -0.03360582080855624
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 11.275285854935646,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.230685835847009,
+                  -0.9198754579588737,
+                  -0.03360582080855624
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 3.8887497850300496
+        },
+        {
+          "id": "goal-contour-258",
+          "target": {
+            "label": "goal-contour-258",
+            "top_m": [
+              0.23183393113165698,
+              -0.9172382108156808,
+              -0.031152147755677203
+            ],
+            "axis": [
+              -0.4894997283364462,
+              -0.10193142772739577,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.241968554030451,
+            -0.9151278182623211,
+            -0.043351969966265516
+          ],
+          "search_bounds": {
+            "xy_change_mm": 5.650867339586742,
+            "z_change_mm": 5.177852244322805,
+            "axis_change_deg": 0.15737507498315306
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-258",
+            "base_gap_mm": 2.175524365402956,
+            "top_above_upper_surface_mm": 25.465230129008784,
+            "support_rays_within_gap": 4,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -3.0529642001586934,
+              9.797771183628685
+            ],
+            "minimum_batch_spacing_mm": 67.0650026152747,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.007233574986458,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23183393113165698,
+                  -0.9172382108156808,
+                  -0.031152147755677203
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 10.531206615269184,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23183393113165698,
+                  -0.9172382108156808,
+                  -0.031152147755677203
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 7.664362697161897
+        },
+        {
+          "id": "goal-contour-259",
+          "target": {
+            "label": "goal-contour-259",
+            "top_m": [
+              0.23220406905218827,
+              -0.9163223942208449,
+              -0.030367779029921625
+            ],
+            "axis": [
+              -0.49023622063061545,
+              -0.09832826644363504,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.24226619254384468,
+            -0.9143042015250795,
+            -0.04264298041651464
+          ],
+          "search_bounds": {
+            "xy_change_mm": 6.638585791272231,
+            "z_change_mm": 5.962220970078383,
+            "axis_change_deg": 0.14515380773613895
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-259",
+            "base_gap_mm": 2.1253982619806737,
+            "top_above_upper_surface_mm": 24.541165822728534,
+            "support_rays_within_gap": 4,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -3.5188626821123226,
+              10.748682697862117
+            ],
+            "minimum_batch_spacing_mm": 67.62482717898172,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 16.88254438340664,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23220406905218827,
+                  -0.9163223942208449,
+                  -0.030367779029921625
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 10.402634739875793,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23220406905218827,
+                  -0.9163223942208449,
+                  -0.030367779029921625
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 8.922942351272022
+        }
+      ],
+      "axis_limit_ablation": {
+        "scope": "diagnostic only: keep XY/Z bounds and production 30-degree cone; omit extra 4-degree seed-relative bound",
+        "candidates": [],
+        "passes_other_screens": 0
+      },
+      "selected_id": null,
+      "promising_count": 0,
+      "archived_affected_target": {
+        "label": "C19:T7",
+        "top_m": [
+          0.22965000000000002,
+          -0.9224500000000001,
+          -0.03633
+        ],
+        "axis": [
+          -0.4882939515478077,
+          -0.09965182684649136,
+          0.8669708935644749
+        ],
+        "width_m": 0.036000000000000004,
+        "height_m": 0.016,
+        "presence": "intended_only_identity_unverified"
+      },
+      "archived_affected_check": {
+        "label": "C19:T7",
+        "base_gap_mm": 2.5813128764803768,
+        "top_above_upper_surface_mm": 152.00979833871125,
+        "support_rays_within_gap": 3,
+        "support_ray_count": 9,
+        "footprint_gap_range_mm": [
+          -3.258250701167656,
+          9.053356241001273
+        ],
+        "minimum_batch_spacing_mm": 64.31176875191663,
+        "tool_models": {
+          "urdf": {
+            "minimum_sampled_clearance_mm": 16.948195174336433,
+            "near_surface_samples": 0,
+            "waypoint_sample_count": 18,
+            "tool_sample_count": 4438,
+            "margin_mm": 2.0,
+            "screen": "no_sampled_conflict",
+            "worst_position_m": [
+              0.22965000000000002,
+              -0.9224500000000001,
+              -0.03633
+            ],
+            "continuous_collision_verified": false,
+            "inside_outside_verified": false
+          },
+          "checker_defaults": {
+            "minimum_sampled_clearance_mm": 11.296712793409824,
+            "near_surface_samples": 0,
+            "waypoint_sample_count": 18,
+            "tool_sample_count": 4437,
+            "margin_mm": 2.0,
+            "screen": "no_sampled_conflict",
+            "worst_position_m": [
+              0.22965000000000002,
+              -0.9224500000000001,
+              -0.03633
+            ],
+            "continuous_collision_verified": false,
+            "inside_outside_verified": false
+          }
+        },
+        "tcp_model_disagreement": false,
+        "geometric_screen": "reject",
+        "rejection_reasons": [
+          "insufficient_nominal_base_support"
+        ],
+        "field_goal_validity": "not_replayed",
+        "avoidance_map_validity": "not_replayed",
+        "robot_ik": "unverified",
+        "executable": false
+      },
+      "previous_local_proposal": null,
+      "decision": "use_normal_planner",
+      "executable": false,
+      "robot_commands": []
+    },
+    {
+      "angle_deg": 4,
+      "ordinary_raw_count": 7,
+      "ordinary_current_count": 5,
+      "ordinary_targets": [
+        {
+          "label": "ordinary-1",
+          "top_m": [
+            0.11937637255260752,
+            -0.861064660364327,
+            0.01089246502752124
+          ],
+          "axis": [
+            0.49667904074572866,
+            -0.057531995306114636,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-2",
+          "top_m": [
+            0.1263295885900216,
+            -0.9044809138183784,
+            0.011778581200752945
+          ],
+          "axis": [
+            0.4952451597924307,
+            0.06879121820530362,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-3",
+          "top_m": [
+            0.1682329307756265,
+            -0.937517032243168,
+            -0.02453120679793792
+          ],
+          "axis": [
+            0.48571152457099986,
+            0.11867735630234993,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-4",
+          "top_m": [
+            0.17643331522390335,
+            -0.8320376418642729,
+            -0.010041463057847264
+          ],
+          "axis": [
+            0.4827831645865555,
+            -0.1300784993447831,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-5",
+          "top_m": [
+            0.22860339926592557,
+            -0.9227014025589394,
+            -0.03548844702592931
+          ],
+          "axis": [
+            -0.48725406648391983,
+            -0.1121760878925796,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        }
+      ],
+      "local_search": {
+        "regional_contour_vertices": 100,
+        "unique_generated_targets": 51,
+        "within_local_bounds": 5,
+        "outside_local_bounds": 46,
+        "bounds_failure_counts_nonexclusive": {
+          "xy": 46,
+          "z": 38,
+          "axis": 37
+        }
+      },
+      "candidates": [
+        {
+          "id": "goal-contour-114",
+          "target": {
+            "label": "goal-contour-114",
+            "top_m": [
+              0.22860339926592557,
+              -0.9227014025589394,
+              -0.03548844702592931
+            ],
+            "axis": [
+              -0.48725406648391983,
+              -0.1121760878925796,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.2391771373466316,
+            -0.9202671066671605,
+            -0.04724728483040197
+          ],
+          "search_bounds": {
+            "xy_change_mm": 1.4254864976988137,
+            "z_change_mm": 1.2581312886485105,
+            "axis_change_deg": 3.091971935412661
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-114",
+            "base_gap_mm": 1.9772477563599622,
+            "top_above_upper_surface_mm": 152.87167649665034,
+            "support_rays_within_gap": 4,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -3.695223580671245,
+              9.91007623488592
+            ],
+            "minimum_batch_spacing_mm": 63.102416137131485,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.07131788134575,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.22860339926592557,
+                  -0.9227014025589394,
+                  -0.03548844702592931
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 11.089484207332134,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.22860339926592557,
+                  -0.9227014025589394,
+                  -0.03548844702592931
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 1.3663044138747529
+        },
+        {
+          "id": "goal-contour-115",
+          "target": {
+            "label": "goal-contour-115",
+            "top_m": [
+              0.22924259285470663,
+              -0.9207982525996113,
+              -0.033278704957749185
+            ],
+            "axis": [
+              -0.48753988664797865,
+              -0.11092726863704937,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.2397716181570595,
+            -0.918402641388741,
+            -0.04508551117741609
+          ],
+          "search_bounds": {
+            "xy_change_mm": 2.589420359614745,
+            "z_change_mm": 3.4678733568286324,
+            "axis_change_deg": 3.058360373447091
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-115",
+            "base_gap_mm": 2.4103839800423965,
+            "top_above_upper_surface_mm": 34.18992202571457,
+            "support_rays_within_gap": 4,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -2.9359279883175162,
+              10.240451298515223
+            ],
+            "minimum_batch_spacing_mm": 63.842922260436616,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.387690022587776,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.22924259285470663,
+                  -0.9207982525996113,
+                  -0.033278704957749185
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 10.927282273769379,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.22924259285470663,
+                  -0.9207982525996113,
+                  -0.033278704957749185
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 3.49351563494305
+        },
+        {
+          "id": "goal-contour-117",
+          "target": {
+            "label": "goal-contour-117",
+            "top_m": [
+              0.22944056620554942,
+              -0.9203325437377737,
+              -0.03278577663293804
+            ],
+            "axis": [
+              -0.4876166812701336,
+              -0.1105892044781084,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.23994993186082317,
+            -0.9179490682907095,
+            -0.04461253774141549
+          ],
+          "search_bounds": {
+            "xy_change_mm": 3.043019452125111,
+            "z_change_mm": 3.9608016816397793,
+            "axis_change_deg": 3.0495298073153974
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-117",
+            "base_gap_mm": 2.40604565465366,
+            "top_above_upper_surface_mm": 33.16568862357412,
+            "support_rays_within_gap": 4,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -2.8708322037715934,
+              10.523377679983383
+            ],
+            "minimum_batch_spacing_mm": 64.08984509272425,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.39059016108513,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.22944056620554942,
+                  -0.9203325437377737,
+                  -0.03278577663293804
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 10.824264958500862,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.22944056620554942,
+                  -0.9203325437377737,
+                  -0.03278577663293804
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 4.133884712026653
+        },
+        {
+          "id": "goal-contour-259",
+          "target": {
+            "label": "goal-contour-259",
+            "top_m": [
+              0.23060613265907084,
+              -0.9176027870373508,
+              -0.030178335595279184
+            ],
+            "axis": [
+              -0.4897541959157221,
+              -0.10070167616750188,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.24087574489780833,
+            -0.9154911825331821,
+            -0.04226453395886515
+          ],
+          "search_bounds": {
+            "xy_change_mm": 5.879577426091464,
+            "z_change_mm": 6.568242719298633,
+            "axis_change_deg": 2.84636018588107
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-259",
+            "base_gap_mm": 1.9361882895262554,
+            "top_above_upper_surface_mm": 25.794775684029606,
+            "support_rays_within_gap": 4,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -3.6448428843249,
+              10.667624060471413
+            ],
+            "minimum_batch_spacing_mm": 65.69998556417504,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.059864476323128,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23060613265907084,
+                  -0.9176027870373508,
+                  -0.030178335595279184
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 10.04515215754509,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.23060613265907084,
+                  -0.9176027870373508,
+                  -0.030178335595279184
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 7.890034101024327
+        },
+        {
+          "id": "goal-contour-289",
+          "target": {
+            "label": "goal-contour-289",
+            "top_m": [
+              0.22964001859873037,
+              -0.9197748877227618,
+              -0.0321879424902326
+            ],
+            "axis": [
+              -0.48811980741508754,
+              -0.10834691324194606,
+              0.8660254037844387
+            ],
+            "width_m": 0.036000000000000004,
+            "height_m": 0.016,
+            "presence": "intended_only_identity_unverified",
+            "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+          },
+          "source_m": [
+            0.24009910917035282,
+            -0.9174533056817578,
+            -0.04407144707606441
+          ],
+          "search_bounds": {
+            "xy_change_mm": 3.5789465780972947,
+            "z_change_mm": 4.558635824345216,
+            "axis_change_deg": 2.9939420165803696
+          },
+          "executable": false,
+          "check": {
+            "label": "goal-contour-289",
+            "base_gap_mm": 2.3634278892475242,
+            "top_above_upper_surface_mm": 32.926956675695756,
+            "support_rays_within_gap": 5,
+            "support_ray_count": 9,
+            "footprint_gap_range_mm": [
+              -2.738320289338077,
+              11.219552953171618
+            ],
+            "minimum_batch_spacing_mm": 64.3576932015312,
+            "tool_models": {
+              "urdf": {
+                "minimum_sampled_clearance_mm": 17.414208501577377,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4438,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.22964001859873037,
+                  -0.9197748877227618,
+                  -0.0321879424902326
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              },
+              "checker_defaults": {
+                "minimum_sampled_clearance_mm": 10.710291564464569,
+                "near_surface_samples": 0,
+                "waypoint_sample_count": 18,
+                "tool_sample_count": 4437,
+                "margin_mm": 2.0,
+                "screen": "no_sampled_conflict",
+                "worst_position_m": [
+                  0.22964001859873037,
+                  -0.9197748877227618,
+                  -0.0321879424902326
+                ],
+                "continuous_collision_verified": false,
+                "inside_outside_verified": false
+              }
+            },
+            "tcp_model_disagreement": false,
+            "geometric_screen": "reject",
+            "rejection_reasons": [
+              "insufficient_nominal_base_support"
+            ],
+            "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+            "avoidance_map_validity": "not_replayed",
+            "robot_ik": "unverified",
+            "executable": false
+          },
+          "current_endpoint_spacing_pass": true,
+          "promising": false,
+          "displacement_from_archived_mm": 4.930817958353637
+        }
+      ],
+      "axis_limit_ablation": {
+        "scope": "diagnostic only: keep XY/Z bounds and production 30-degree cone; omit extra 4-degree seed-relative bound",
+        "candidates": [],
+        "passes_other_screens": 0
+      },
+      "selected_id": null,
+      "promising_count": 0,
+      "archived_affected_target": {
+        "label": "C19:T7",
+        "top_m": [
+          0.22965000000000002,
+          -0.9224500000000001,
+          -0.03633
+        ],
+        "axis": [
+          -0.4882939515478077,
+          -0.09965182684649136,
+          0.8669708935644749
+        ],
+        "width_m": 0.036000000000000004,
+        "height_m": 0.016,
+        "presence": "intended_only_identity_unverified"
+      },
+      "archived_affected_check": {
+        "label": "C19:T7",
+        "base_gap_mm": -0.6204847280804754,
+        "top_above_upper_surface_mm": 152.00979833871125,
+        "support_rays_within_gap": 4,
+        "support_ray_count": 9,
+        "footprint_gap_range_mm": [
+          -5.486704456546379,
+          8.573956083072806
+        ],
+        "minimum_batch_spacing_mm": 64.31176875191663,
+        "tool_models": {
+          "urdf": {
+            "minimum_sampled_clearance_mm": 15.764124691486359,
+            "near_surface_samples": 0,
+            "waypoint_sample_count": 18,
+            "tool_sample_count": 4438,
+            "margin_mm": 2.0,
+            "screen": "no_sampled_conflict",
+            "worst_position_m": [
+              0.22965000000000002,
+              -0.9224500000000001,
+              -0.03633
+            ],
+            "continuous_collision_verified": false,
+            "inside_outside_verified": false
+          },
+          "checker_defaults": {
+            "minimum_sampled_clearance_mm": 9.71834734082222,
+            "near_surface_samples": 0,
+            "waypoint_sample_count": 18,
+            "tool_sample_count": 4437,
+            "margin_mm": 2.0,
+            "screen": "no_sampled_conflict",
+            "worst_position_m": [
+              0.22965000000000002,
+              -0.9224500000000001,
+              -0.03633
+            ],
+            "continuous_collision_verified": false,
+            "inside_outside_verified": false
+          }
+        },
+        "tcp_model_disagreement": false,
+        "geometric_screen": "reject",
+        "rejection_reasons": [
+          "insufficient_nominal_base_support"
+        ],
+        "field_goal_validity": "not_replayed",
+        "avoidance_map_validity": "not_replayed",
+        "robot_ik": "unverified",
+        "executable": false
+      },
+      "previous_local_proposal": {
+        "id": "adapt-2-12",
+        "target": {
+          "label": "C19:T7",
+          "top_m": [
+            0.23520968474358833,
+            -0.9224021174351061,
+            -0.03016386564943712
+          ],
+          "axis": [
+            -0.5897974628428804,
+            -0.09665916654061808,
+            0.8017455695841256
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified",
+          "proposal_basis": "base attached to controlled deformation; dimensions preserved",
+          "surface_fit_z_shift_mm": 6.582712665140697,
+          "surface_fit_status": "median_footprint_seated; field goal not regenerated"
+        },
+        "check": {
+          "label": "C19:T7",
+          "base_gap_mm": -0.6432472966838785,
+          "top_above_upper_surface_mm": 24.572821779812163,
+          "support_rays_within_gap": 7,
+          "support_ray_count": 9,
+          "footprint_gap_range_mm": [
+            -5.303082165356229,
+            1.5912453202071921
+          ],
+          "minimum_batch_spacing_mm": 68.87371006930923,
+          "tool_models": {
+            "urdf": {
+              "minimum_sampled_clearance_mm": 15.291908755898476,
+              "near_surface_samples": 0,
+              "waypoint_sample_count": 18,
+              "tool_sample_count": 4438,
+              "margin_mm": 2.0,
+              "screen": "no_sampled_conflict",
+              "worst_position_m": [
+                0.23520968474358833,
+                -0.9224021174351061,
+                -0.03016386564943712
+              ],
+              "continuous_collision_verified": false,
+              "inside_outside_verified": false
+            },
+            "checker_defaults": {
+              "minimum_sampled_clearance_mm": 9.831628762185574,
+              "near_surface_samples": 0,
+              "waypoint_sample_count": 18,
+              "tool_sample_count": 4437,
+              "margin_mm": 2.0,
+              "screen": "no_sampled_conflict",
+              "worst_position_m": [
+                0.23520968474358833,
+                -0.9224021174351061,
+                -0.03016386564943712
+              ],
+              "continuous_collision_verified": false,
+              "inside_outside_verified": false
+            }
+          },
+          "tcp_model_disagreement": false,
+          "geometric_screen": "passes_declared_screens",
+          "rejection_reasons": [],
+          "field_goal_validity": "not_replayed",
+          "avoidance_map_validity": "not_replayed",
+          "robot_ik": "unverified",
+          "executable": false
+        },
+        "goal_status": "local_surface_proposal_not_generated_by_goal_planner",
+        "executable": false
+      },
+      "decision": "no_bounded_fixed_goal_candidate_passed",
+      "executable": false,
+      "robot_commands": []
+    },
+    {
+      "angle_deg": 8,
+      "ordinary_raw_count": 7,
+      "ordinary_current_count": 5,
+      "ordinary_targets": [
+        {
+          "label": "ordinary-1",
+          "top_m": [
+            0.11937637255260752,
+            -0.861064660364327,
+            0.01089246502752124
+          ],
+          "axis": [
+            0.49667904074572866,
+            -0.057531995306114636,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-2",
+          "top_m": [
+            0.1263295885900216,
+            -0.9044809138183784,
+            0.011778581200752945
+          ],
+          "axis": [
+            0.4952451597924307,
+            0.06879121820530362,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-3",
+          "top_m": [
+            0.1682329307756265,
+            -0.937517032243168,
+            -0.02453120679793792
+          ],
+          "axis": [
+            0.48571152457099986,
+            0.11867735630234993,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-4",
+          "top_m": [
+            0.17643331522390335,
+            -0.8320376418642729,
+            -0.010041463057847264
+          ],
+          "axis": [
+            0.4827831645865555,
+            -0.1300784993447831,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-5",
+          "top_m": [
+            0.22731041251328035,
+            -0.9230052576189143,
+            -0.03444976102871476
+          ],
+          "axis": [
+            -0.48737938303479683,
+            -0.1116303587408944,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        }
+      ],
+      "local_search": {
+        "regional_contour_vertices": 108,
+        "unique_generated_targets": 55,
+        "within_local_bounds": 0,
+        "outside_local_bounds": 55,
+        "bounds_failure_counts_nonexclusive": {
+          "xy": 49,
+          "z": 45,
+          "axis": 55
+        }
+      },
+      "candidates": [],
+      "axis_limit_ablation": {
+        "scope": "diagnostic only: keep XY/Z bounds and production 30-degree cone; omit extra 4-degree seed-relative bound",
+        "candidates": [
+          {
+            "id": "goal-contour-112",
+            "target": {
+              "label": "goal-contour-112",
+              "top_m": [
+                0.22731041251328035,
+                -0.9230052576189143,
+                -0.03444976102871476
+              ],
+              "axis": [
+                -0.48737938303479683,
+                -0.1116303587408944,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23806143735033652,
+              -0.920542821165571,
+              -0.04604078650820741
+            ],
+            "search_bounds": {
+              "xy_change_mm": 2.584546682788649,
+              "z_change_mm": 2.7246376918711457,
+              "axis_change_deg": 5.829366005667281
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-112",
+              "base_gap_mm": 2.1991266027337475,
+              "top_above_upper_surface_mm": 153.82012106167497,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -3.3173600309886613,
+                13.916093220862514
+              ],
+              "minimum_batch_spacing_mm": 61.61916533552946,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.24870502948761,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22731041251328035,
+                    -0.9230052576189143,
+                    -0.03444976102871476
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 10.757962241768837,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22731041251328035,
+                    -0.9230052576189143,
+                    -0.03444976102871476
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 3.0524218614924883
+          },
+          {
+            "id": "goal-contour-113",
+            "target": {
+              "label": "goal-contour-113",
+              "top_m": [
+                0.22737052183947193,
+                -0.9228429877462547,
+                -0.03426717301677902
+              ],
+              "axis": [
+                -0.4873999871948294,
+                -0.11154036257104466,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23811683197996128,
+              -0.9203837194638124,
+              -0.04586324208691604
+            ],
+            "search_bounds": {
+              "xy_change_mm": 2.607446198630377,
+              "z_change_mm": 2.907225703806887,
+              "axis_change_deg": 5.827456826125908
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-113",
+              "base_gap_mm": 2.247157129089045,
+              "top_above_upper_surface_mm": 153.9624461360649,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -3.268432065295375,
+                11.210651506311905
+              ],
+              "minimum_batch_spacing_mm": 61.68605911696484,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.27171428501606,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22737052183947193,
+                    -0.9228429877462547,
+                    -0.03426717301677902
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 10.73306705802679,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22737052183947193,
+                    -0.9228429877462547,
+                    -0.03426717301677902
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 3.0993088287125237
+          },
+          {
+            "id": "goal-contour-115",
+            "target": {
+              "label": "goal-contour-115",
+              "top_m": [
+                0.2283107113064026,
+                -0.9206043662180271,
+                -0.03187281159579905
+              ],
+              "axis": [
+                -0.48772631667072663,
+                -0.11010467758822055,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23896265633578162,
+              -0.9181996795463029,
+              -0.04356697890698112
+            ],
+            "search_bounds": {
+              "xy_change_mm": 3.9135310098821243,
+              "z_change_mm": 5.301587124786858,
+              "axis_change_deg": 5.797683560815203
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-115",
+              "base_gap_mm": 2.0345753003665616,
+              "top_above_upper_surface_mm": 156.90475305646507,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -3.2590069216824684,
+                11.538212396835759
+              ],
+              "minimum_batch_spacing_mm": 62.82520496053015,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.39734224975109,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.2283107113064026,
+                    -0.9206043662180271,
+                    -0.03187281159579905
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.998212568461895,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.2283107113064026,
+                    -0.9206043662180271,
+                    -0.03187281159579905
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 5.006654245352007
+          },
+          {
+            "id": "goal-contour-262",
+            "target": {
+              "label": "goal-contour-262",
+              "top_m": [
+                0.22935553147645868,
+                -0.9179223334783527,
+                -0.02911974857877614
+              ],
+              "axis": [
+                -0.4900612832472055,
+                -0.09919646496777072,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23976018820412906,
+              -0.9158162598057925,
+              -0.04109086264828078
+            ],
+            "search_bounds": {
+              "xy_change_mm": 6.347940029861118,
+              "z_change_mm": 8.054650141809768,
+              "axis_change_deg": 5.614969108784837
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-262",
+              "base_gap_mm": 1.680209766669258,
+              "top_above_upper_surface_mm": 25.32007791716931,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -4.434009640697602,
+                11.619260583422664
+              ],
+              "minimum_batch_spacing_mm": 64.33217273495526,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.252832651138306,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22935553147645868,
+                    -0.9179223334783527,
+                    -0.02911974857877614
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.54305101186037,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22935553147645868,
+                    -0.9179223334783527,
+                    -0.02911974857877614
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 8.51904932488736
+          },
+          {
+            "id": "goal-contour-263",
+            "target": {
+              "label": "goal-contour-263",
+              "top_m": [
+                0.22934232268427596,
+                -0.9179769232379023,
+                -0.029177899807764026
+              ],
+              "axis": [
+                -0.4900171476346264,
+                -0.09941425966140227,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23975058271637312,
+              -0.9158653043477286,
+              -0.04114490397618104
+            ],
+            "search_bounds": {
+              "xy_change_mm": 6.300450081043531,
+              "z_change_mm": 7.996498912821882,
+              "axis_change_deg": 5.61784194352596
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-263",
+              "base_gap_mm": 1.7032102615430618,
+              "top_above_upper_surface_mm": 25.306853689180873,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -4.432291758944828,
+                11.573597784894849
+              ],
+              "minimum_batch_spacing_mm": 64.3071998408943,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.244040966033936,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22934232268427596,
+                    -0.9179769232379023,
+                    -0.029177899807764026
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.548455476760864,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22934232268427596,
+                    -0.9179769232379023,
+                    -0.029177899807764026
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 8.441304295546562
+          },
+          {
+            "id": "goal-contour-297",
+            "target": {
+              "label": "goal-contour-297",
+              "top_m": [
+                0.22931473410396255,
+                -0.9180594139367155,
+                -0.02926501878928273
+              ],
+              "axis": [
+                -0.4899519009964203,
+                -0.09973532328114196,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23972922515054557,
+              -0.915939424955701,
+              -0.041225120083210776
+            ],
+            "search_bounds": {
+              "xy_change_mm": 6.223437084902118,
+              "z_change_mm": 7.909379931303178,
+              "axis_change_deg": 5.622135881704425
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-297",
+              "base_gap_mm": 1.7275221634319506,
+              "top_above_upper_surface_mm": 25.35202721674115,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -4.4169889377378775,
+                11.51370439203516
+              ],
+              "minimum_batch_spacing_mm": 64.26233307566528,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.236700281500816,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22931473410396255,
+                    -0.9180594139367155,
+                    -0.02926501878928273
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.562972001731396,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22931473410396255,
+                    -0.9180594139367155,
+                    -0.02926501878928273
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 8.32487890049715
+          }
+        ],
+        "passes_other_screens": 0
+      },
+      "selected_id": null,
+      "promising_count": 0,
+      "archived_affected_target": {
+        "label": "C19:T7",
+        "top_m": [
+          0.22965000000000002,
+          -0.9224500000000001,
+          -0.03633
+        ],
+        "axis": [
+          -0.4882939515478077,
+          -0.09965182684649136,
+          0.8669708935644749
+        ],
+        "width_m": 0.036000000000000004,
+        "height_m": 0.016,
+        "presence": "intended_only_identity_unverified"
+      },
+      "archived_affected_check": {
+        "label": "C19:T7",
+        "base_gap_mm": -3.326982635719025,
+        "top_above_upper_surface_mm": 22.083265831768507,
+        "support_rays_within_gap": 2,
+        "support_ray_count": 9,
+        "footprint_gap_range_mm": [
+          -7.937289821841789,
+          6.05259020210662
+        ],
+        "minimum_batch_spacing_mm": 64.31176875191663,
+        "tool_models": {
+          "urdf": {
+            "minimum_sampled_clearance_mm": 14.269373379647732,
+            "near_surface_samples": 0,
+            "waypoint_sample_count": 18,
+            "tool_sample_count": 4438,
+            "margin_mm": 2.0,
+            "screen": "no_sampled_conflict",
+            "worst_position_m": [
+              0.22965000000000002,
+              -0.9224500000000001,
+              -0.03633
+            ],
+            "continuous_collision_verified": false,
+            "inside_outside_verified": false
+          },
+          "checker_defaults": {
+            "minimum_sampled_clearance_mm": 7.829415611922741,
+            "near_surface_samples": 0,
+            "waypoint_sample_count": 18,
+            "tool_sample_count": 4437,
+            "margin_mm": 2.0,
+            "screen": "no_sampled_conflict",
+            "worst_position_m": [
+              0.22965000000000002,
+              -0.9224500000000001,
+              -0.03633
+            ],
+            "continuous_collision_verified": false,
+            "inside_outside_verified": false
+          }
+        },
+        "tcp_model_disagreement": false,
+        "geometric_screen": "reject",
+        "rejection_reasons": [
+          "insufficient_nominal_base_support"
+        ],
+        "field_goal_validity": "not_replayed",
+        "avoidance_map_validity": "not_replayed",
+        "robot_ik": "unverified",
+        "executable": false
+      },
+      "previous_local_proposal": {
+        "id": "adapt-2-12",
+        "target": {
+          "label": "C19:T7",
+          "top_m": [
+            0.2328095393116772,
+            -0.9223529426757948,
+            -0.029869046740921598
+          ],
+          "axis": [
+            -0.6283975736376393,
+            -0.09358574408366337,
+            0.772242318155794
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified",
+          "proposal_basis": "base attached to controlled deformation; dimensions preserved",
+          "surface_fit_z_shift_mm": 7.30535197966431,
+          "surface_fit_status": "median_footprint_seated; field goal not regenerated"
+        },
+        "check": {
+          "label": "C19:T7",
+          "base_gap_mm": -0.2589636789670849,
+          "top_above_upper_surface_mm": 27.43335242500676,
+          "support_rays_within_gap": 8,
+          "support_ray_count": 9,
+          "footprint_gap_range_mm": [
+            -5.524831799215854,
+            2.084935182219659
+          ],
+          "minimum_batch_spacing_mm": 66.5295116693861,
+          "tool_models": {
+            "urdf": {
+              "minimum_sampled_clearance_mm": 15.313626267015934,
+              "near_surface_samples": 0,
+              "waypoint_sample_count": 18,
+              "tool_sample_count": 4438,
+              "margin_mm": 2.0,
+              "screen": "no_sampled_conflict",
+              "worst_position_m": [
+                0.2328095393116772,
+                -0.9223529426757948,
+                -0.029869046740921598
+              ],
+              "continuous_collision_verified": false,
+              "inside_outside_verified": false
+            },
+            "checker_defaults": {
+              "minimum_sampled_clearance_mm": 9.830733761191368,
+              "near_surface_samples": 0,
+              "waypoint_sample_count": 18,
+              "tool_sample_count": 4437,
+              "margin_mm": 2.0,
+              "screen": "no_sampled_conflict",
+              "worst_position_m": [
+                0.2328095393116772,
+                -0.9223529426757948,
+                -0.029869046740921598
+              ],
+              "continuous_collision_verified": false,
+              "inside_outside_verified": false
+            }
+          },
+          "tcp_model_disagreement": false,
+          "geometric_screen": "passes_declared_screens",
+          "rejection_reasons": [],
+          "field_goal_validity": "not_replayed",
+          "avoidance_map_validity": "not_replayed",
+          "robot_ik": "unverified",
+          "executable": false
+        },
+        "goal_status": "local_surface_proposal_not_generated_by_goal_planner",
+        "executable": false
+      },
+      "decision": "no_bounded_fixed_goal_candidate_passed",
+      "executable": false,
+      "robot_commands": []
+    },
+    {
+      "angle_deg": 12,
+      "ordinary_raw_count": 7,
+      "ordinary_current_count": 5,
+      "ordinary_targets": [
+        {
+          "label": "ordinary-1",
+          "top_m": [
+            0.11937637255260752,
+            -0.861064660364327,
+            0.01089246502752124
+          ],
+          "axis": [
+            0.49667904074572866,
+            -0.057531995306114636,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-2",
+          "top_m": [
+            0.1263295885900216,
+            -0.9044809138183784,
+            0.011778581200752945
+          ],
+          "axis": [
+            0.4952451597924307,
+            0.06879121820530362,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-3",
+          "top_m": [
+            0.1682329307756265,
+            -0.937517032243168,
+            -0.02453120679793792
+          ],
+          "axis": [
+            0.48571152457099986,
+            0.11867735630234993,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-4",
+          "top_m": [
+            0.17643331522390335,
+            -0.8320376418642729,
+            -0.010041463057847264
+          ],
+          "axis": [
+            0.4827831645865555,
+            -0.1300784993447831,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        },
+        {
+          "label": "ordinary-5",
+          "top_m": [
+            0.22630308027947332,
+            -0.9232354319266012,
+            -0.03367105995886264
+          ],
+          "axis": [
+            -0.48753827795482796,
+            -0.11093433881734219,
+            0.8660254037844387
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified"
+        }
+      ],
+      "local_search": {
+        "regional_contour_vertices": 106,
+        "unique_generated_targets": 54,
+        "within_local_bounds": 0,
+        "outside_local_bounds": 54,
+        "bounds_failure_counts_nonexclusive": {
+          "xy": 49,
+          "z": 46,
+          "axis": 54
+        }
+      },
+      "candidates": [],
+      "axis_limit_ablation": {
+        "scope": "diagnostic only: keep XY/Z bounds and production 30-degree cone; omit extra 4-degree seed-relative bound",
+        "candidates": [
+          {
+            "id": "goal-contour-120",
+            "target": {
+              "label": "goal-contour-120",
+              "top_m": [
+                0.227186161327434,
+                -0.9208736477974502,
+                -0.030966066701524877
+              ],
+              "axis": [
+                -0.4878445245915366,
+                -0.10957974185978704,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.2379794806432713,
+              -0.9184492500952725,
+              -0.04252576193660997
+            ],
+            "search_bounds": {
+              "xy_change_mm": 4.971426923195891,
+              "z_change_mm": 6.645386297192146,
+              "axis_change_deg": 8.440078491442817
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-120",
+              "base_gap_mm": 1.4426955122142786,
+              "top_above_upper_surface_mm": 157.4930601360267,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -4.506291423781436,
+                12.714109005750887
+              ],
+              "minimum_batch_spacing_mm": 61.57647506318536,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.201341688632965,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.227186161327434,
+                    -0.9208736477974502,
+                    -0.030966066701524877
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.167262353003025,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.227186161327434,
+                    -0.9208736477974502,
+                    -0.030966066701524877
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 6.1095963615779185
+          },
+          {
+            "id": "goal-contour-121",
+            "target": {
+              "label": "goal-contour-121",
+              "top_m": [
+                0.22680957217623363,
+                -0.9217642493602054,
+                -0.031917316034725814
+              ],
+              "axis": [
+                -0.4877223880761263,
+                -0.11012207848256603,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23764082587850036,
+              -0.9193186774540836,
+              -0.04343700011412319
+            ],
+            "search_bounds": {
+              "xy_change_mm": 4.417951462537293,
+              "z_change_mm": 5.694136963991209,
+              "axis_change_deg": 8.450028948409052
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-121",
+              "base_gap_mm": 1.7265289245654014,
+              "top_above_upper_surface_mm": 155.69754081190476,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -3.7185412286514437,
+                12.485517072281453
+              ],
+              "minimum_batch_spacing_mm": 61.087843265833385,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.344580963253975,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22680957217623363,
+                    -0.9217642493602054,
+                    -0.031917316034725814
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.415455162525177,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22680957217623363,
+                    -0.9217642493602054,
+                    -0.031917316034725814
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 5.292453489582414
+          },
+          {
+            "id": "goal-contour-122",
+            "target": {
+              "label": "goal-contour-122",
+              "top_m": [
+                0.22630308027947332,
+                -0.9232354319266012,
+                -0.03367105995886264
+              ],
+              "axis": [
+                -0.48753827795482796,
+                -0.11093433881734219,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23717171117439714,
+              -0.9207623863490603,
+              -0.0451496011571732
+            ],
+            "search_bounds": {
+              "xy_change_mm": 3.9891001785430107,
+              "z_change_mm": 3.940393039854384,
+              "axis_change_deg": 8.465191783691342
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-122",
+              "base_gap_mm": 1.9417797371000245,
+              "top_above_upper_surface_mm": 154.29442121065918,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -3.7291249537337174,
+                138.09434479399212
+              ],
+              "minimum_batch_spacing_mm": 60.47712295396163,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.10009016096592,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22630308027947332,
+                    -0.9232354319266012,
+                    -0.03367105995886264
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.743951261043549,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22630308027947332,
+                    -0.9232354319266012,
+                    -0.03367105995886264
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 4.346117470724686
+          },
+          {
+            "id": "goal-contour-184",
+            "target": {
+              "label": "goal-contour-184",
+              "top_m": [
+                0.22730193622469103,
+                -0.9202217726710186,
+                -0.030121761259757057
+              ],
+              "axis": [
+                -0.4884247857569061,
+                -0.1069636791547499,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23804891458910007,
+              -0.9178682140900954,
+              -0.0417391283470573
+            ],
+            "search_bounds": {
+              "xy_change_mm": 5.302745977253152,
+              "z_change_mm": 7.489691738959966,
+              "axis_change_deg": 8.394045669627832
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-184",
+              "base_gap_mm": 1.703739702532514,
+              "top_above_upper_surface_mm": 158.6770226460471,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -4.451423496686507,
+                13.043076382120697
+              ],
+              "minimum_batch_spacing_mm": 61.784154684268664,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.3658337444067,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22730193622469103,
+                    -0.9202217726710186,
+                    -0.030121761259757057
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.253176860511303,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22730193622469103,
+                    -0.9202217726710186,
+                    -0.030121761259757057
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 7.0014733291209374
+          },
+          {
+            "id": "goal-contour-185",
+            "target": {
+              "label": "goal-contour-185",
+              "top_m": [
+                0.22789919662065444,
+                -0.9183571678953992,
+                -0.028071448146450885
+              ],
+              "axis": [
+                -0.4904070057563626,
+                -0.09747291267361864,
+                0.8660254037844387
+              ],
+              "width_m": 0.036000000000000004,
+              "height_m": 0.016,
+              "presence": "intended_only_identity_unverified",
+              "proposal_basis": "base attached to controlled deformation; dimensions preserved"
+            },
+            "source_m": [
+              0.23846101245525544,
+              -0.9162579096457478,
+              -0.03990534695779965
+            ],
+            "search_bounds": {
+              "xy_change_mm": 6.748255727762044,
+              "z_change_mm": 9.540004852266136,
+              "axis_change_deg": 8.254889730860691
+            },
+            "executable": false,
+            "check": {
+              "label": "goal-contour-185",
+              "base_gap_mm": 1.4308872799118633,
+              "top_above_upper_surface_mm": 26.31384009952508,
+              "support_rays_within_gap": 4,
+              "support_ray_count": 9,
+              "footprint_gap_range_mm": [
+                -4.914885700475311,
+                12.746467037330879
+              ],
+              "minimum_batch_spacing_mm": 62.74870110281583,
+              "tool_models": {
+                "urdf": {
+                  "minimum_sampled_clearance_mm": 17.248274758458138,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4438,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22789919662065444,
+                    -0.9183571678953992,
+                    -0.028071448146450885
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                },
+                "checker_defaults": {
+                  "minimum_sampled_clearance_mm": 9.211087599396706,
+                  "near_surface_samples": 0,
+                  "waypoint_sample_count": 18,
+                  "tool_sample_count": 4437,
+                  "margin_mm": 2.0,
+                  "screen": "no_sampled_conflict",
+                  "worst_position_m": [
+                    0.22789919662065444,
+                    -0.9183571678953992,
+                    -0.028071448146450885
+                  ],
+                  "continuous_collision_verified": false,
+                  "inside_outside_verified": false
+                }
+              },
+              "tcp_model_disagreement": false,
+              "geometric_screen": "reject",
+              "rejection_reasons": [
+                "insufficient_nominal_base_support"
+              ],
+              "field_goal_validity": "generated_from_matched_field_under_inferred_profile",
+              "avoidance_map_validity": "not_replayed",
+              "robot_ik": "unverified",
+              "executable": false
+            },
+            "current_endpoint_spacing_pass": true,
+            "promising": false,
+            "displacement_from_archived_mm": 9.381911629691416
+          }
+        ],
+        "passes_other_screens": 0
+      },
+      "selected_id": null,
+      "promising_count": 0,
+      "archived_affected_target": {
+        "label": "C19:T7",
+        "top_m": [
+          0.22965000000000002,
+          -0.9224500000000001,
+          -0.03633
+        ],
+        "axis": [
+          -0.4882939515478077,
+          -0.09965182684649136,
+          0.8669708935644749
+        ],
+        "width_m": 0.036000000000000004,
+        "height_m": 0.016,
+        "presence": "intended_only_identity_unverified"
+      },
+      "archived_affected_check": {
+        "label": "C19:T7",
+        "base_gap_mm": -5.5875930969540715,
+        "top_above_upper_surface_mm": 21.63380210667848,
+        "support_rays_within_gap": 3,
+        "support_ray_count": 9,
+        "footprint_gap_range_mm": [
+          -10.58267806742437,
+          2.7218972071273577
+        ],
+        "minimum_batch_spacing_mm": 64.31176875191663,
+        "tool_models": {
+          "urdf": {
+            "minimum_sampled_clearance_mm": 12.873627245426178,
+            "near_surface_samples": 0,
+            "waypoint_sample_count": 18,
+            "tool_sample_count": 4438,
+            "margin_mm": 2.0,
+            "screen": "no_sampled_conflict",
+            "worst_position_m": [
+              0.22965000000000002,
+              -0.9224500000000001,
+              -0.03633
+            ],
+            "continuous_collision_verified": false,
+            "inside_outside_verified": false
+          },
+          "checker_defaults": {
+            "minimum_sampled_clearance_mm": 5.616083741188049,
+            "near_surface_samples": 0,
+            "waypoint_sample_count": 18,
+            "tool_sample_count": 4437,
+            "margin_mm": 2.0,
+            "screen": "no_sampled_conflict",
+            "worst_position_m": [
+              0.22965000000000002,
+              -0.9224500000000001,
+              -0.03633
+            ],
+            "continuous_collision_verified": false,
+            "inside_outside_verified": false
+          }
+        },
+        "tcp_model_disagreement": false,
+        "geometric_screen": "reject",
+        "rejection_reasons": [
+          "insufficient_nominal_base_support"
+        ],
+        "field_goal_validity": "not_replayed",
+        "avoidance_map_validity": "not_replayed",
+        "robot_ik": "unverified",
+        "executable": false
+      },
+      "previous_local_proposal": {
+        "id": "adapt-2-12",
+        "target": {
+          "label": "C19:T7",
+          "top_m": [
+            0.23042455689939842,
+            -0.9223027065518717,
+            -0.029664566715906053
+          ],
+          "axis": [
+            -0.6638448315890695,
+            -0.09044598633846852,
+            0.7423810094067206
+          ],
+          "width_m": 0.036000000000000004,
+          "height_m": 0.016,
+          "presence": "intended_only_identity_unverified",
+          "proposal_basis": "base attached to controlled deformation; dimensions preserved",
+          "surface_fit_z_shift_mm": 7.946886282810969,
+          "surface_fit_status": "median_footprint_seated; field goal not regenerated"
+        },
+        "check": {
+          "label": "C19:T7",
+          "base_gap_mm": 0.0,
+          "top_above_upper_surface_mm": 28.855316924204434,
+          "support_rays_within_gap": 7,
+          "support_ray_count": 9,
+          "footprint_gap_range_mm": [
+            -5.627421886182517,
+            2.8391011779444684
+          ],
+          "minimum_batch_spacing_mm": 64.21293541813914,
+          "tool_models": {
+            "urdf": {
+              "minimum_sampled_clearance_mm": 15.210316516458988,
+              "near_surface_samples": 0,
+              "waypoint_sample_count": 18,
+              "tool_sample_count": 4438,
+              "margin_mm": 2.0,
+              "screen": "no_sampled_conflict",
+              "worst_position_m": [
+                0.23042455689939842,
+                -0.9223027065518717,
+                -0.029664566715906053
+              ],
+              "continuous_collision_verified": false,
+              "inside_outside_verified": false
+            },
+            "checker_defaults": {
+              "minimum_sampled_clearance_mm": 9.68138501048088,
+              "near_surface_samples": 0,
+              "waypoint_sample_count": 18,
+              "tool_sample_count": 4437,
+              "margin_mm": 2.0,
+              "screen": "no_sampled_conflict",
+              "worst_position_m": [
+                0.23042455689939842,
+                -0.9223027065518717,
+                -0.029664566715906053
+              ],
+              "continuous_collision_verified": false,
+              "inside_outside_verified": false
+            }
+          },
+          "tcp_model_disagreement": false,
+          "geometric_screen": "passes_declared_screens",
+          "rejection_reasons": [],
+          "field_goal_validity": "not_replayed",
+          "avoidance_map_validity": "not_replayed",
+          "robot_ik": "unverified",
+          "executable": false
+        },
+        "goal_status": "local_surface_proposal_not_generated_by_goal_planner",
+        "executable": false
+      },
+      "decision": "no_bounded_fixed_goal_candidate_passed",
+      "executable": false,
+      "robot_commands": []
+    }
+  ],
+  "history": {
+    "pre_recording_source": "8fa8e6f",
+    "later_secondary_rule_source": "6214cdb",
+    "interpretation": "raw candidate stage matches recording; current endpoint filters are a separate experiment"
+  },
+  "limitations": [
+    "Replay settings are inferred, not logged runtime settings.",
+    "Matching field vertices and scalar colors do not independently verify archived field topology.",
+    "Mesh-to-contour drift remains unresolved; fixed-goal trials are conditional on this implementation.",
+    "36 x 16 mm bead proxy dimensions remain borrowed; 16 mm planner lift is not bead-height calibration.",
+    "The goal is a surface field; its ray/contour construction is not a volumetric tolerance certificate.",
+    "Avoidance state, recorded tool calibration, IK, mechanics and future deposition are not validated.",
+    "Lean, stable trend and intact connections are controlled assumptions, not Agent007 detections.",
+    "Preserve the full frontier sweep before requesting the next normal batch."
+  ],
+  "full_planner_state_complete": false,
+  "source_sha256": {
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_planner_replay/build_replay.py": "225d91d91551f2802c95a134d7dd8277087f8d8e6b70567720283e5bb8af7e29",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_planner_replay/test_replay.py": "ae946aee41bb71ebd4619525841e61691085c6d3e71b9f4c9df12258e970cdca",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_planner_replay/replay.py": "16c71c59d95281d22db4289d1d6e4696be5493981a954d37a8f057f32db9131a",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_planner_replay/viewer.html": "54aa4b98cafe2bed633c71010c266a786b26ae328e27421aa584d0a1d8840a6b",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/extruder_collision.py": "4f925f2c485049d0eff78b49c962d08a95f7fe02d3c6d02c713b05d7bfc671f2",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/extract_phi_contour.py": "cc381ef13ff951711615426dad04a19e97c7b951fe60eb717333024abe4aec2e",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/compute_heat_field.py": "c46ef8a8f18f94cb52f90bf53c377b897e6f7c16d946de6a517bce44dcb046ef",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/generate_print_points.py": "f8313c06cda071413d63c64ac05821949c69adbd4f7d18d6fcf6b70ae1fbc80b",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/bead_profile.py": "a2c3c975e9add8da16ce1f4efc2ccbc5256414511bc93fd2d60a06b5dbe25968",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/loop_simulation.py": "da3284f74a102b826889220f4e6dda2be4b42e5f9becba2e6286440578bbe54c",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/__init__.py": "3d55f856e32049b8748ed818681c54fdc43c39a43d6e7ed384fc706efe6b987c",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/types.py": "546cbe7d5255caea3905b49eb6e301cf0184b16ad37a7ef77adbfd4e3bc01024",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/agent_walk.py": "99ebe258394c938860bb6686c3381cdda31b82c3f307e94f045ee37edaa32909",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/compute_phi_mask.py": "6b77f0597fe60ec9de623eadc49ca0f6b3c671b2df7508b11058b725a5eb1c76",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/viz_dds.py": "737fbf7406cf7ad0c5d8d9f72839b59e119ceb91b58b25880e0673f15a867adb",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/position_field.py": "a94512f8e6825f6d3c6d931a311b15b8bd1b98afdc5eaf31ddd8f20ecf4f18cc",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/target_rules.py": "5f021b5bbc7f0a756ddbd7b07e404e4a5ea8b09480911b629bf3f89393e77a2d",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/geometry.py": "97fe2b48b925cde734524f292459872a2255842b973bca55fdcaed8f24b36323",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/print_targets.py": "fb68f1c2d6b9f53fef676eae569a7afe7424e5e08744f30f590f56c9204861d0",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_py/behav3d_py/scalar_field/lib_scalar/viz.py": "217565a5d85b245a1d419ef07122325120ad923eeeb80104e6a98f37a47d83ef",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/behav3d_sense/behav3d_sense/fields_node.py": "b5d2192a963d9aff1e18366d68500bae8ef3bbd4ec2532522018d3363c1abcd1",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/custom_workcell/ur20_workcell/meshes/ram_extruder_v2_simplified.dae": "6dfc0bd20a865b1657aa779d2d91c875dbe7c719165098c308ed928e1bf6222c",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/src/custom_workcell/ur20_workcell/urdf/workcell_macro.xacro": "e61a0979d6021935c7ced4bdedd8c7581a100b58c56ce6e0c8b8ab73c2f4433e",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/planner_state.py": "8c5d3a562607a271c737d563dac63fdb2a4956214996a4b7f1dd3a01253d2eab",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/build_experiments.py": "3f3f618b26af364726ccef8aaaa36b0d3bb6a43a7e3f7945cf88afb29efbc895",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/test_planner_state.py": "65c3037e3ea1f33af55188d9916af6d35e56746076171c6f4ece622de918a306",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/build_decisions.py": "5f504155bb2638510ee10e1b92dd65f39fc0e5458f92eece4ce91b580837d805",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/test_proposals.py": "e140abe10a9a8101f3a981319e4b428068d60a650514e6d4e445bfad0516fbc3",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/test_viability.py": "e4bd625da1f0de897aa1be5e7bc3ffcdbdb5c1674e42db61bb517338bf3f240d",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/geometry.py": "470c10ddf187acb45df9a154fb6e29785c0abfd318d4e9c36ffa514d4f3e65ee",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/build_inward_lean.py": "77a44b175dc3aae6c72b4c035fe6657078f6c21dbd64c835efe2e0aa39ae835c",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/viability.py": "c275010692cbe5ee677facb4ef45b016adc37956aec83148e2b7e4b54d48d3b5",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/proposals.py": "0f54b1a054fc4672283439be69fed714453aa81d7d664bae140403ad15b045be",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_recovery/test_geometry.py": "f50981f46cfcf7330c715bdf101d8015dcdb7640d6a11aec12ccfa289c864936",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/local_scene.py": "369fb9ad0a8e2e0a95980666b05a50574375ad7d40a17f34c5fd53c6265d6e95",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/tools/offline_inspection/visibility.py": "bcdd912be59adfd3255759a97b04efac2c0e519f7576e62adc322bae8f95d32a",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/mesh/fields/field_state_init1.npz": "ccdae5bcb893d40c4dbe510ab685fada659fb7afed2b59cbc334e6bd97019913",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0001/candidates/field_masked_cycle.ply": "f82781c8c0abe6da4cf02576ce00c5313740ce481c3aa514392b664e9b4bb90d",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/mesh/fields/field_state_init.npz": "3260d9170f8d0dabdd909cd197a1e6cbdc39cc9d40924605447e13b7af69122f",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/mesh/fields/field_state_init2.npz": "24b5ee68b402d5bfa4eff2b6b3ca22f1872410e16a8a52d7056346922b815774",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/mesh/fields/width_field.npz": "e5cc1b9d80fc9ba2c1be07456d088eccedc1dfe5dee210d50b4ca6132bc23591",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0001/scan/manifest.yaml": "e2ac80589f1cfd6e1ae0fa56b025c0d733036acad44222e9fa11126c4390fec4",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0001/candidates/field_phi0_contour_cycle.ply": "50018be7c54261bd364a1989723723fecbfa5af78422c21a8de47b36a714c572",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0001/candidates/field_print_candidates_cycle.ply": "4aeed54201bdb0ac6681de2c355315a0765b1c2c94830ea5bf198e0704734390",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0001/candidates/targets.yaml": "0c709f5e3b1cb06a3891580f9beb2338187d402f8bacabc818f0dc8c19417d7f",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0002/scan/manifest.yaml": "40c38bc684f8d909c90760f8aa21515425799ee93ab54c2b59feeee1b8c36e82",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0002/candidates/field_masked_cycle.ply": "cadd694b9ba47b02cf7d80187961c423578f1cfa498d438e69177ae7580719d7",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0002/candidates/field_phi0_contour_cycle.ply": "bbd077bf898b03110f4c12d3dd413a0a6da7090d03f48796ca4f71e95e33f479",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0002/candidates/field_print_candidates_cycle.ply": "c44fe6bbad3459e2fccb069feeeb95abbb143b3bcfc4f19781bc6f0b4d1c1896",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0002/candidates/targets.yaml": "e571b1792fdf1c8716a231de69f644a6e3e9ba038cf2dc9ef18a7fafec16bc0e",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0003/scan/manifest.yaml": "26efda0a97df1d8cf02b16afd4283f635f9483493967eb17a96ba27021164e77",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0003/candidates/field_masked_cycle.ply": "fdbbb3d16558033f9829c4cb4812f7bb06e2ee0ba6d0ccfeca16e1a7e8e2b01c",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0003/candidates/field_phi0_contour_cycle.ply": "dd06078785b57a46aa03980ca31e572b27729f5871fa90435bc7f2e5ac1766af",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0003/candidates/field_print_candidates_cycle.ply": "a1cccc4d8e78dd163ea507cf2fea599dc34827613bd9005300d7b5c649949531",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0003/candidates/targets.yaml": "4d8749ddc463e4ed55d7e4db489a561e19adfedf75e74a566f665742134f4693",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0004/scan/manifest.yaml": "3c1b0cf2e76c4696f0b9934465aeb362166dc7e932f035ae21ba8baa59bbaed9",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0004/candidates/field_masked_cycle.ply": "52758371d8ba38d51cad96030fbd470aca0c41d5414bbee6e1e27a67e5ac006c",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0004/candidates/field_phi0_contour_cycle.ply": "1cd7841b7f02f747b9c6b052af906b423799e3582344ea8a8d371c0824c3def9",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0004/candidates/field_print_candidates_cycle.ply": "60e2f7a81dd400cbc0286326a15697a9e440ef232a47edb3ffc0c1c6274c6fd1",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0004/candidates/targets.yaml": "22605a5b856fb458aac5b2d5c9093441dc623e8ac9e93b695fa8f929cdcfe1ac",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0005/scan/manifest.yaml": "9ba2a0f34bcd5d3f3c52a805a5319cc605469c403ffc82221062f88c2de8e2e5",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0005/candidates/field_masked_cycle.ply": "407f330830bb563b175257970a477ccc7b1a0d3f2eb715b2cbbe953cdb3bd5d2",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0005/candidates/field_phi0_contour_cycle.ply": "ea2ce0345491c542b97f06f0faa8abac4ee42daa29e5eec65c23af944d5b15e0",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0005/candidates/field_print_candidates_cycle.ply": "737973805ffb3a030d313d6dc78e4fda419959f7e5d00458db8756663caeb601",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0005/candidates/targets.yaml": "1a63bfe72f5225724a4c24c0d793d27756d211e76acfe1dceb4a2816c25aa8ab",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0006/scan/manifest.yaml": "580dc5d4863808bf084e6c7975eaee91b08cbb09d08fd35a056ec19f80eb88be",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0006/candidates/field_masked_cycle.ply": "bc7873328516598d02cd66ae8c4622e3905b04000c3b9d458b6aba5e0564730a",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0006/candidates/field_phi0_contour_cycle.ply": "1a2b275d4968e1ecf4eb48d4fff7a7433ceb9dc307a0a959bfecc48d7428a92f",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0006/candidates/field_print_candidates_cycle.ply": "f0a83abc150fb087666d37fbc0dfd067a106a4ce3189c029cadcd7ea4ebc79c8",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0006/candidates/targets.yaml": "fe06cb7288738e430453565a2490a235835719320a7b9e15f09e9a811bf0bbf0",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0007/scan/manifest.yaml": "a2966cf1bca7d355b926f54da01ac10717331c7d1759a9f8087c9765b154e0de",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0007/candidates/field_masked_cycle.ply": "1243dedc50df104707dbe3770fcde68d89445c5f63127b9890724c41ce123c3f",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0007/candidates/field_phi0_contour_cycle.ply": "b0d9a3b7afe739396b2b8d6fc2a81358c3c2da0d3cdff87226a4c87c6a1548a5",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0007/candidates/field_print_candidates_cycle.ply": "f57d44d758a85497f9283fb167b3bc68835bd784fd2feca18d59c94c072c4502",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0007/candidates/targets.yaml": "dc51fda56fd092b4726ce378eb53053194e2c3a5b5313c52756eacc204cdc0d2",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0008/scan/manifest.yaml": "7ba8d9d0c652e5dba3946aaae6b0504b6d038c0be2980be5d7bfa3b27e513f0c",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0008/candidates/field_masked_cycle.ply": "31934215a7335a5642b5716b9226b22d7f45d58b71efb8554fa3b01c687bb0be",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0008/candidates/field_phi0_contour_cycle.ply": "43e9c1d53347f728ea068524526eeb963cb2b2631cb4421961dcb858cef7a6d7",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0008/candidates/field_print_candidates_cycle.ply": "8fd6bf00c18b4a1f9508af99d975f6cab02d557b841905be614841f1056c27fc",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0008/candidates/targets.yaml": "b40a16e30c94cafc925b8cf5ab929ef58875f4d2a429bf3da8f552b3d384b9d1",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0009/scan/manifest.yaml": "5e4d0ca2fc7002fd85c065760027cf63b4ba8d9303bcf915cb811f10480ad318",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0009/candidates/field_masked_cycle.ply": "f4470aaab3ae1030f4162740eb42c3e1d2f81a28332435480fac340d32232705",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0009/candidates/field_phi0_contour_cycle.ply": "b7717f9aa8d6883fe853a0ace524ef0c4c3a80b0459c0a0233b930749ddefada",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0009/candidates/field_print_candidates_cycle.ply": "e153e6b2b82cb7fad44a60d1ff8ee5ec7055363ade1be83c66a83cc7d7f89ec0",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0009/candidates/targets.yaml": "e15b8e613c5e4edc7f450369c8687529cc01c2cd775b87f3b8ac5b295afb6564",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0010/scan/manifest.yaml": "5a6740234301a71068cbf4e3500fd5fa8b7f5f6f41ea30ac989d93a140d327c2",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0010/candidates/field_masked_cycle.ply": "ef56b387c2dff3af687130dae1b654f929aa34d9080df97e93988df7446f1f2f",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0010/candidates/field_phi0_contour_cycle.ply": "de43f323d993a8c871dec289311f41af922bc99cc03504b609a4ccab8a7ad59d",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0010/candidates/field_print_candidates_cycle.ply": "ff12f7947fa8a4c3e0340aa75ba12adfaf6017f862d1b3f876a74f36ec284c75",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0010/candidates/targets.yaml": "79ad2409fbc700aa3f9dcc429638feaa466083387c3986048e59bf8b51311cd5",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0011/scan/manifest.yaml": "e92a14562917298dc0a86236244cb26a61b65daff9878ac48d1b8b7d2d7923bc",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0011/candidates/field_masked_cycle.ply": "046810264143871f9579a2620a670a170f7dcf50a8f7a6001d8eecb97cc84b15",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0011/candidates/field_phi0_contour_cycle.ply": "e62ef43400706c306615c13964f3c1ec29040b39c824cbe93f6c3b80cb5b0b27",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0011/candidates/field_print_candidates_cycle.ply": "a968b2f916e2eb471f19ae44351b006a963c0eb2d89bd2caee32dc51de4f46e3",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0011/candidates/targets.yaml": "b473b5ff7eb8623cd469abda42d7f5ba4207dfd051d2e0de749896add6ac7224",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0012/scan/manifest.yaml": "1578b49438b20177f85a3e5d1bdac7eea6070492745f498a2e62a3f78e313daf",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0012/candidates/field_masked_cycle.ply": "cc05c70f67d2493ca0f742fdf06456d8a47cf1a734a0552f036a783bcefdb7dc",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0012/candidates/field_phi0_contour_cycle.ply": "c8c3f68c137d168a62b818e57e1476eed50ba5e8ad7ad6a8399023d805c73cbe",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0012/candidates/field_print_candidates_cycle.ply": "b404177d227a5aefa07a5567848509ec37771e6db09a829dc7dbee07e3775d22",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0012/candidates/targets.yaml": "80fcd833c2115f3f7f9f65eced7d8ce84ec07435494344ea0196816a7426fccf",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0013/scan/manifest.yaml": "dcf5594b56b3cb40a9b10b37d1aa57e1a4a9030e08e3ce6f8bf5f971314e73af",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0013/candidates/field_masked_cycle.ply": "87a59152f8a01de33cbb9c730ef611f502ec8b84c28832c9c129c1e39fcb5bb9",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0013/candidates/field_phi0_contour_cycle.ply": "738040477b9c4649a941268119cbe2b5423343b70ec2e5aaacc544d0f69be4f1",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0013/candidates/field_print_candidates_cycle.ply": "f57ef7b3b07a717f8ecfb228a2ed2b4eb275be619a1496a9de4346bbc360705d",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0013/candidates/targets.yaml": "2d69b126162e92c3f67ce09b5efd40b29c2b59450c95b8fbd03374de69fb7875",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0014/scan/manifest.yaml": "f7e60f41e5756b02904e88263b729b41b15548327bffb3b2075427efb1ba6608",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0014/candidates/field_masked_cycle.ply": "be51f34b034b2b134cfccdea4bb0e4945bd39be4330d65860d3c6421310b65a7",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0014/candidates/field_phi0_contour_cycle.ply": "fff6e827439095f1e4c5b733658ea934c10ac93d5a8e9050b63f1ce6ac4e4416",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0014/candidates/field_print_candidates_cycle.ply": "b4531a3cfddc638e52d92487f78e121f122be1748a24a1aabba5fa2c51f16512",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0014/candidates/targets.yaml": "eebed808439f0639c3b9bd29dbd95a9e1378c8260811b4c7ccfb001af941c12c",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0015/scan/manifest.yaml": "0a156b2b41cae5cb10eeba7e435efa70aaa4bd1a6fd0a130b372562510c2e5e5",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0015/candidates/field_masked_cycle.ply": "4bad89584e9186d0bc6221518d6c4cad63ce2d628cf64bd0285eb0b2d197db49",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0015/candidates/field_phi0_contour_cycle.ply": "cabd69fcea7573e7d05bc37a17f14079c774c1092bf7e630b5f6865c6d2bddf5",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0015/candidates/field_print_candidates_cycle.ply": "33ec44038ec858d06b83e692fdea9ac6b1310e48a967202a50e27b4ddeb2ba61",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0015/candidates/targets.yaml": "423d62d8fcc60e418ee5510e1f7d8d3dd900db502a2dae67835c2f1e20ce51a9",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0016/scan/manifest.yaml": "6554ee155e215334639a465895e23c1938078f40a6236c3c931865ae9e584232",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0016/candidates/field_masked_cycle.ply": "9379ebbdef47e11ebd696c8ffd2af81ab91e520f0d6fcab55167c23e924123db",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0016/candidates/field_phi0_contour_cycle.ply": "f1a80647b4827937396f25889996e339f2a17cb85d03492e0943dfb8256d64f4",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0016/candidates/field_print_candidates_cycle.ply": "86f1f1b55b67e9ef8d2f57b586dcd209778a596d54771cef315256053e69035c",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0016/candidates/targets.yaml": "d57d7356fc9f9fe2e21215b369e31853612b9566d5796b54940dd0c2c27b3881",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0017/scan/manifest.yaml": "6139c32a8cd6582ea8aa46ba440eaeb2a2aeb1d3b8bdbbdb45be9ed554612d3f",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0017/candidates/field_masked_cycle.ply": "283dd11c021e219811e51f26135d0a2bb448fbe61c69075d4fb29f5a5ff38be0",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0017/candidates/field_phi0_contour_cycle.ply": "c97d837b84e6b532069f9a373af6d897af87c823f15f1d5974ccc7cca194692e",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0017/candidates/field_print_candidates_cycle.ply": "65c834e209714d10b476f9e317184f75b3e2785b3da7111e4e5bc64bc545e94c",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0017/candidates/targets.yaml": "2897fb99e7b5a1c91e0e53f8f4fa3819d0234dfef412ec37801de14c9480dbf9",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0018/scan/manifest.yaml": "35da5e7eeeb5f5fa0dc361482f04c376becab2bba105460250e7cd9ae853e987",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0018/candidates/field_masked_cycle.ply": "4a588516a09a4a76e26f5b36c05dbf2f9a5f2cf1605114e4f421c3e8791e8892",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0018/candidates/field_phi0_contour_cycle.ply": "46edf601f043a435f50ea02bba16748a68c5dc9246c578995ae737058166f2a5",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0018/candidates/field_print_candidates_cycle.ply": "5ea844c3753a71d3f2cb181742613d67ecd49954012c3b1e1e9663bb03fbbc63",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0018/candidates/targets.yaml": "b595dea8d61800fed59d34e6df127b22e59227365d5ecb2984f6990851b6f38b",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/scan/manifest.yaml": "bf055bec13eec407cfbca63f32ed25fd085c7512674e64ba3ba5e04e6a368541",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/candidates/field_masked_cycle.ply": "6cf66ef3ac28b4e9bcbda68b7d763a5307c684292c5ea7e2e10ec3d40522aca7",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/candidates/field_phi0_contour_cycle.ply": "0c5f351fc68eeda4d351538fc543a7a827e5a84157ed49b0ca09f07543e61001",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/candidates/field_print_candidates_cycle.ply": "d040d772c12de1fd29ff1db82af3ef9a047434b33a9adb831c1833f19014794f",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0019/candidates/targets.yaml": "0488a6bab38455738f87f721466d9c8a0435a91188608019c721a27ad80443e5",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0020/scan/manifest.yaml": "73bc8b9ef7ce6e80866d0f6ecab9dd11ef88b1fffb8aa930363879786d44cec2",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0020/candidates/field_masked_cycle.ply": "de6b2046e7b17915f737eaf6e43de195f909aabc41c422e0bebadbca197e2c51",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0020/candidates/field_phi0_contour_cycle.ply": "a86643059427c702cc6d3f4a4c5c561af4784e82525d3b300467d17d404f48c6",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0020/candidates/field_print_candidates_cycle.ply": "a62553278d405c777218ab8d84b72c7bf4e9de0d9cee769b2744a8bb5c42705e",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0020/candidates/targets.yaml": "0fbf03d3cc7e7922d96edb175f0bdc2711bb3b3562ada1ebe8ea154bc3011a8b",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0021/scan/manifest.yaml": "58d1eff417b4a783715ad03c86a0e9a81c6d17e52076d2422d572c69ffa11d15",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0021/candidates/field_masked_cycle.ply": "54fc0bcc87ebefe767d8df5029d36285ca1838a460dee2e0ce91ab1055427963",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0021/candidates/field_phi0_contour_cycle.ply": "95a0d081eb55b9828ca122dbb1edb9a5b93df02582a9cf9daa98170b62961d57",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0021/candidates/field_print_candidates_cycle.ply": "84f6399a8ba14ea85d75357d24ac49bf1e294d9ab899995334ad29726104eed7",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0021/candidates/targets.yaml": "21e822a41d77f54af7161a9d6efbc1f89c64b30f35c4dd62ca51e1f82b3b324f",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0022/scan/manifest.yaml": "f4df156be3869802c4fa59c0d00910cb123f49b92c4ffd28155458f31770fd17",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0022/candidates/field_masked_cycle.ply": "51778bd7d35aef8079812f65c9a1fb8786a7b7e8a7f8ddf4c79e3f37bfe3d031",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0022/candidates/field_phi0_contour_cycle.ply": "67048805e6173b0555b7598aa3a33856b20131c7540a0bca347107e3f4f3c7f3",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0022/candidates/field_print_candidates_cycle.ply": "c79c40bbfbab75d3f8b036fd28c664f34dc829a615ed4d0c2a0f563d982e0d14",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0022/candidates/targets.yaml": "8312d0e4f0418672e85c8360f209aa30cf60a4c6dd7c04695c8ce094f9157006",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0023/scan/manifest.yaml": "f2ad8caefac4f2a7a2105f0dc7f1bbfad16594d80ab1330f15fce217bc8dc955",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0023/candidates/field_masked_cycle.ply": "ef43c4b984a3468b31d667056dd24ad12d071aa69d5be5e73328659a176a6a7d",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0023/candidates/field_phi0_contour_cycle.ply": "a6bd0ff646e8085762f8e035e2a1a3b61ebca08b5415ed94a0e479b4579818b7",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0023/candidates/field_print_candidates_cycle.ply": "3406a5c9039c904449104b786ad4611296a3161b8ea4dc95daf70d0a219791c9",
+    "/Users/josephnamar/Downloads/260728_133013/field_loop/cycle_0023/candidates/targets.yaml": "f737a475a24a1f92265d2dbeff9c3a340361fe0707407cbaf6c99f8336741307",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/outputs/offline_recovery/recorded_cycle6/manifest.json": "4426158dbb1ce52401bab4c9b5b1971a14920b8f384ca62af616cabafd2e25d9",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/outputs/offline_recovery/recorded_cycle6/recorded_mesh.npz": "9b68e403acdf6183947befefec967150a20efb30b6d4b6ab1ad07c9b4a21e80e",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/outputs/offline_recovery/inward_cycle19/manifest.json": "cd7ac2d28fad220c3204adc7a2d366c90fbad258dde3e4857ae2d596796c52fa",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/outputs/offline_recovery/inward_cycle19/recorded_mesh.npz": "6743a1b5229de927ea1894d92ef0bd5e72537a2a235fbfef30e0ddbaa07f93ef",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/outputs/offline_recovery/inward_cycle19/results.json": "bd4f8468781bc532f24c510ee2fa440f0b67d6f0b586d26c1b70b38565c0f40b",
+    "/Users/josephnamar/Documents/GitHub/behav3d_ws/outputs/offline_recovery/decisions/results.json": "14c26715516bfce7776cccd96d5cd079a18afe36a02ba6a8a1d4be33085fe473"
+  },
+  "runtime": {
+    "python": "3.11.14",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "open3d": "0.19.0",
+    "potpourri3d": "1.4.0"
+  },
+  "executable": false,
+  "robot_commands": []
+}

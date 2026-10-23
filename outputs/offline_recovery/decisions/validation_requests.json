@@ -1,0 +1,205 @@
+[
+  {
+    "schema": "behav3d.recovery_validation_request.v1",
+    "binding": {
+      "artifact_id": "recording-260728_133013",
+      "mesh_revision": "9b68e403acdf6183947befefec967150a20efb30b6d4b6ab1ad07c9b4a21e80e",
+      "goal_revision": "archived-goal-state-unavailable",
+      "frame": "ur20_base_link",
+      "units": "m"
+    },
+    "issue_id": "confirmed-deficit-hypothesis",
+    "issue_sha256": "a04dcf0a44482b99bc316e8cc42f6948cc1faea6ba03b8b29b9b9d26e8ec99e7",
+    "proposal_id": "fill-12",
+    "proposal_sha256": "f5157ec8d434d9dae559ba86422398fa2dc143e666b958e0644037e8effd90d1",
+    "snapshot_sha256": null,
+    "snapshot_status": "incomplete",
+    "strategy": "fill",
+    "targets": [
+      {
+        "label": "fill-12",
+        "top_m": [
+          0.28789583464169316,
+          -0.8634997958542148,
+          -0.09404606308069814
+        ],
+        "axis": [
+          -0.28866083348090577,
+          0.059722931065014986,
+          0.9555668970402398
+        ],
+        "width_m": 0.036000000000000004,
+        "height_m": 0.016,
+        "presence": "intended_only_identity_unverified",
+        "surface_fit_z_shift_mm": -0.0,
+        "surface_fit_status": "median_footprint_seated; field goal not regenerated"
+      }
+    ],
+    "required_gates": [
+      "goal",
+      "avoidance",
+      "support",
+      "spacing",
+      "tool_access",
+      "robot",
+      "process",
+      "future_continuation"
+    ],
+    "instruction": "Run existing rules with the captured settings. Unknown checks remain unknown.",
+    "executable": false,
+    "robot_commands": []
+  },
+  {
+    "schema": "behav3d.recovery_validation_request.v1",
+    "binding": {
+      "artifact_id": "recording-260728_133013",
+      "mesh_revision": "df3aeb4ebf65c9d3cbfea8825fb13fc229d2efe04e3142c472b786f54c11cec6",
+      "goal_revision": "archived-goal-state-unavailable",
+      "frame": "ur20_base_link",
+      "units": "m"
+    },
+    "issue_id": "lean-4-stable",
+    "issue_sha256": "deb0a8be9d428a274911f379e0d2b62a70728a6f4b5133e6e89bfa9126f98e0f",
+    "proposal_id": "adapt-2-12",
+    "proposal_sha256": "ef5423162ca083d0f027f03416822d6571fe03860ab8060975406125e76f7706",
+    "snapshot_sha256": null,
+    "snapshot_status": "incomplete",
+    "strategy": "adapt",
+    "targets": [
+      {
+        "label": "C19:T7",
+        "top_m": [
+          0.23520968474358833,
+          -0.9224021174351061,
+          -0.03016386564943712
+        ],
+        "axis": [
+          -0.5897974628428804,
+          -0.09665916654061808,
+          0.8017455695841256
+        ],
+        "width_m": 0.036000000000000004,
+        "height_m": 0.016,
+        "presence": "intended_only_identity_unverified",
+        "proposal_basis": "base attached to controlled deformation; dimensions preserved",
+        "surface_fit_z_shift_mm": 6.582712665140697,
+        "surface_fit_status": "median_footprint_seated; field goal not regenerated"
+      }
+    ],
+    "required_gates": [
+      "goal",
+      "avoidance",
+      "support",
+      "spacing",
+      "tool_access",
+      "robot",
+      "process",
+      "future_continuation"
+    ],
+    "instruction": "Run existing rules with the captured settings. Unknown checks remain unknown.",
+    "executable": false,
+    "robot_commands": []
+  },
+  {
+    "schema": "behav3d.recovery_validation_request.v1",
+    "binding": {
+      "artifact_id": "recording-260728_133013",
+      "mesh_revision": "8789abff05f8f8d60b6634bfc22e22d3b87abe714417056d1470e60f70198035",
+      "goal_revision": "archived-goal-state-unavailable",
+      "frame": "ur20_base_link",
+      "units": "m"
+    },
+    "issue_id": "lean-8-stable",
+    "issue_sha256": "19a8727fe3c793c42f39e5f67df854d6df28cfa29a5fb42156eb53f9cb5b891b",
+    "proposal_id": "adapt-2-12",
+    "proposal_sha256": "c402e641e3c904adffb2159485875a6ec7cf8d356d11984458c4edbc4eeda487",
+    "snapshot_sha256": null,
+    "snapshot_status": "incomplete",
+    "strategy": "adapt",
+    "targets": [
+      {
+        "label": "C19:T7",
+        "top_m": [
+          0.2328095393116772,
+          -0.9223529426757948,
+          -0.029869046740921598
+        ],
+        "axis": [
+          -0.6283975736376393,
+          -0.09358574408366337,
+          0.772242318155794
+        ],
+        "width_m": 0.036000000000000004,
+        "height_m": 0.016,
+        "presence": "intended_only_identity_unverified",
+        "proposal_basis": "base attached to controlled deformation; dimensions preserved",
+        "surface_fit_z_shift_mm": 7.30535197966431,
+        "surface_fit_status": "median_footprint_seated; field goal not regenerated"
+      }
+    ],
+    "required_gates": [
+      "goal",
+      "avoidance",
+      "support",
+      "spacing",
+      "tool_access",
+      "robot",
+      "process",
+      "future_continuation"
+    ],
+    "instruction": "Run existing rules with the captured settings. Unknown checks remain unknown.",
+    "executable": false,
+    "robot_commands": []
+  },
+  {
+    "schema": "behav3d.recovery_validation_request.v1",
+    "binding": {
+      "artifact_id": "recording-260728_133013",
+      "mesh_revision": "0da6458077fe422a277016170d198927b0b58f16a373b9ca9a6f57089b529b3b",
+      "goal_revision": "archived-goal-state-unavailable",
+      "frame": "ur20_base_link",
+      "units": "m"
+    },
+    "issue_id": "lean-12-stable",
+    "issue_sha256": "0bd338f5ab86b30d71a1e256f8893714727e7a530c8d587a810ad7f81ef09109",
+    "proposal_id": "adapt-2-12",
+    "proposal_sha256": "55d34db87f09beffb97fa49dabd02d10a45f98d7f7d26818c997aac9723a1d7c",
+    "snapshot_sha256": null,
+    "snapshot_status": "incomplete",
+    "strategy": "adapt",
+    "targets": [
+      {
+        "label": "C19:T7",
+        "top_m": [
+          0.23042455689939842,
+          -0.9223027065518717,
+          -0.029664566715906053
+        ],
+        "axis": [
+          -0.6638448315890695,
+          -0.09044598633846852,
+          0.7423810094067206
+        ],
+        "width_m": 0.036000000000000004,
+        "height_m": 0.016,
+        "presence": "intended_only_identity_unverified",
+        "proposal_basis": "base attached to controlled deformation; dimensions preserved",
+        "surface_fit_z_shift_mm": 7.946886282810969,
+        "surface_fit_status": "median_footprint_seated; field goal not regenerated"
+      }
+    ],
+    "required_gates": [
+      "goal",
+      "avoidance",
+      "support",
+      "spacing",
+      "tool_access",
+      "robot",
+      "process",
+      "future_continuation"
+    ],
+    "instruction": "Run existing rules with the captured settings. Unknown checks remain unknown.",
+    "executable": false,
+    "robot_commands": []
+  }
+]

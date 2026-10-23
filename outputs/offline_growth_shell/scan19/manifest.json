@@ -1,0 +1,11 @@
+{
+  "files_sha256": {
+    "results.json": "cfe105d1aa65d240238cc76c35d90dcb9786e3b7784b9a9bf13547ebffdd43c3",
+    "shell_evidence.json": "7362056b94c43f3dea14f40b1d6ef5f647d06eee857c48aa0fa9aa5993a691fb",
+    "proposed_fields.npz": "45e91ce10b198722e4893e5a9b4c27305969b27d4487703f5ce0a25751cd6c1f",
+    "viewer.html": "5b17d53d5c76bf50e6746039cde81bb3bda330c13a01722c830dce7d0aa39482",
+    "candidate_comparison.json": "f0ac8ab428e3a6edf4e988a1973345ecd34f79e375e5e93ba772e0ab803f5c7a"
+  },
+  "source_hashes_unchanged": true,
+  "executable": false
+}

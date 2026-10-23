@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fixed-goal recovery replay</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101923;color:#e2ebf4}body{max-width:1150px;margin:auto;padding:24px}h1{font-size:26px}h2{font-size:19px;margin-top:30px}p{line-height:1.6;color:#afc0d1}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.card{background:#192a39;padding:16px;border-radius:10px}.card b{display:block;font-size:23px;margin-bottom:8px}.card span{font-size:13px;color:#b9c9d9}select,button{background:#24384a;border:1px solid #51677b;color:inherit;padding:8px;border-radius:5px;font:inherit;max-width:100%;min-width:0}label{display:inline-flex;max-width:calc(100% - 14px);gap:8px;align-items:center;margin:5px 14px 5px 0}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:9px;border-bottom:1px solid #334455}summary{cursor:pointer;margin:18px 0}.scroll{overflow:auto}canvas{display:block;background:#162532;width:100%;height:460px;border-radius:9px;touch-action:none}.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:12px 0}.notice{border-left:3px solid #f0bc72;padding:10px 15px;background:#28302f}#candidateInfo{line-height:1.7;overflow-wrap:anywhere}small{color:#a2b4c6}.good{color:#79e0ac}.warn{color:#f2c27a}footer{font-size:13px;margin-top:30px;color:#9fb1c4}@media(max-width:600px){body{padding:14px}.cards{grid-template-columns:1fr}canvas{height:350px}h1{font-size:23px}}
+</style>
+<h1>Fixed-goal recovery replay</h1>
+<p>Recorded run 260728_133013 · offline numerical experiment · ur20_base_link · metres</p>
+<div class="cards" id="cards"></div>
+<p>The saved goal field has been found. Candidate selection can be replayed against it; complete runtime validation remains open.</p>
+<details><summary>Baseline evidence across 23 recorded batches</summary>
+<p>One inferred profile: gradient lift 16 mm, graph spacing 36 mm, batch limit 7, orientation limit 30°. These reproduce the archived outputs but are not recovered runtime logs. The later endpoint-spacing rules are shown separately.</p>
+<div class="scroll"><table><thead><tr><th>Cycle</th><th>Archived / replay</th><th>Ordered error (mm)</th><th>Axis rounding</th><th>Current rules retain</th></tr></thead><tbody id="baseline"></tbody></table></div>
+</details>
+<details><summary>Mesh-to-contour replay and unresolved differences</summary>
+<p>Both stages use the production numerical functions. Small differences in the regenerated contour can change candidate placement. The cause of this drift has not been established.</p>
+<div class="scroll"><table><thead><tr><th>Scan</th><th>Contour set error (mm)</th><th>Mask changes</th><th>Candidate ordered error (mm)</th><th>Candidate set error (mm)</th></tr></thead><tbody id="upstream"></tbody></table></div>
+<p>“Set error” is the maximum nearest-neighbor distance in both directions; it does not assert identical ordering or one-to-one correspondence.</p>
+</details>
+<h2>Can the fixed goal produce a bounded local recovery?</h2>
+<p>Rebuild the frontier on the edited full mesh, enumerate goal-generated alternatives near C19:T7, then check the same support and tool models. Each alternative is a single bead with the other six archived targets reserved. Limits remain 8 mm in XY, 12 mm in Z and 4° about the deformation-following seed.</p>
+<div class="scroll"><table><thead><tr><th>Inward lean</th><th>Bounded alternatives</th><th>Pass screens + 36 mm spacing</th><th>Extra pass if 4° bound removed</th><th>Next step</th></tr></thead><tbody id="trials"></tbody></table></div>
+<p id="controlNote"></p>
+<p class="notice" id="decision"></p>
+<label>Lean <select id="angle"><option value="0">0° control</option><option value="4">4°</option><option value="8" selected>8°</option><option value="12">12°</option></select></label>
+<label>View <select id="view"><option value="front">Front · X/Z</option><option value="top">Top · X/Y</option><option value="side">Side · Y/Z</option></select></label>
+<label>Focus <select id="focus"><option value="local">Affected region</option><option value="whole">Whole artifact</option></select></label>
+<label>Candidate <select id="candidate"></select></label>
+<canvas id="scene" aria-label="Recorded mesh, regenerated contour and candidate alternatives"></canvas>
+<div class="legend"><span style="color:#678399">● Recorded / edited surface</span><span style="color:#e1d6bd">● Goal/mesh frontier</span><span style="color:#66cce4">● Normal planner</span><span style="color:#77e7a9">● Passes screens</span><span style="color:#ff7d7d">● Rejected</span><span style="color:#efbe77">◆ Earlier local proposal</span><span style="color:#fff">□ Archived C19:T7</span></div>
+<div id="candidateInfo"></div>
+<details><summary>Assumptions and remaining checks</summary><ul id="limits"></ul>
+<p>Support: at least 6 of 9 nominal footprint rays within ±3 mm. Tool access: sampled DAE surface and a 50 mm approach under two repository TCP transforms; 2 mm margin. These are experimental geometric screens. They do not predict adhesion, stability, print quality or arm collision.</p>
+<p>The earlier local proposal is shown for comparison. It has not acquired goal validity merely because the field has now been recovered. No toolpath or controller commands are exported.</p></details>
+<footer>Field, inputs, numerical source files, dependency versions and output hashes are recorded in results.json and manifest.json. Display points are downsampled; numerical queries use complete meshes.</footer>
+<script>
+const DATA=/*DATA*/;const R=DATA.results,$=id=>document.getElementById(id),fmt=(x,n=3)=>x==null?'—':x.toFixed(n);
+const error=Math.max(...R.baseline.map(b=>b.saved_contour_replay.ordered_max_mm));
+$('cards').innerHTML=`<div class="card"><b>${R.baseline.filter(b=>b.matches_archived_within_1e_5_mm).length} / 23</b><span>Saved-contour batches reproduced</span></div><div class="card"><b>${R.baseline.reduce((s,b)=>s+b.saved_contour_replay.reference_count,0)} candidates</b><span>Maximum ordered error ${error.toExponential(2)} mm</span></div><div class="card"><b>5,188 vertices</b><span>Exact field-coordinate match across all 23 exports</span></div>`;
+$('baseline').innerHTML=R.baseline.map(b=>`<tr><td>${b.cycle}</td><td>${b.saved_contour_replay.reference_count} / ${b.saved_contour_replay.actual_count}</td><td>${b.saved_contour_replay.ordered_max_mm.toExponential(2)}</td><td>${b.axis_component_max_error<=.0050001?'Within 0.005':'Mismatch'}</td><td>${b.current_rules_count}</td></tr>`).join('');
+$('upstream').innerHTML=R.upstream.map(b=>`<tr><td>${b.cycle}</td><td>${fmt(b.contour_comparison.symmetric_nearest_max_mm)}</td><td>${b.viability_mask_mismatches}</td><td>${fmt(b.candidate_comparison.ordered_max_mm)}</td><td>${fmt(b.candidate_comparison.symmetric_nearest_max_mm)}</td></tr>`).join('');
+const best=t=>t.candidates.find(c=>c.id===t.selected_id);
+$('trials').innerHTML=R.trials.map(t=>`<tr><td>${t.angle_deg}°</td><td>${t.candidates.length}</td><td>${t.promising_count}</td><td>${t.axis_limit_ablation.passes_other_screens}</td><td>${t.angle_deg===0?'Normal planner':best(t)?'Further validation':'Hold local recovery'}</td></tr>`).join('');
+$('controlNote').textContent=`Calibration warning from the control: the archived target gets ${R.trials[0].archived_affected_check.support_rays_within_gap}/9 support rays under the borrowed bead model, below the 6/9 threshold even without lean. Screen rejection therefore does not establish a printing failure. The orientation ablation is diagnostic, not a selected proposal.`;
+$('limits').innerHTML=R.limitations.map(l=>`<li>${l}</li>`).join('');
+function trial(){return R.trials.find(t=>t.angle_deg===Number($('angle').value))}
+const allCandidates=t=>[...t.candidates,...t.axis_limit_ablation.candidates];
+function update(){const t=trial();$('candidate').innerHTML=allCandidates(t).length?allCandidates(t).map(c=>`<option value="${c.id}">${c.id} · ${c.check.support_rays_within_gap}/9 · ${t.candidates.includes(c)?c.promising?'pass':'reject':'axis limit exceeded'}</option>`).join(''):'<option value="">No bounded candidate</option>';if(t.selected_id)$('candidate').value=t.selected_id;
+$('decision').textContent=t.angle_deg===0?'Control: no failure is assumed; ordinary rule-based planning remains the next step.':best(t)?'A bounded fixed-goal proposal passes the declared screens. It still needs avoidance, robot, process and continuation validation.':'No goal-generated alternative passes all declared local bounds and screens. Keep this region on hold; an area-priority or goal-revision strategy would be a separate test.';draw()}
+function draw(){const t=trial(),selected=allCandidates(t).find(c=>c.id===$('candidate').value),canvas=$('scene'),ctx=canvas.getContext('2d'),ratio=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;canvas.width=w*ratio;canvas.height=h*ratio;ctx.scale(ratio,ratio);ctx.clearRect(0,0,w,h);
+const scene=DATA.scenes[String(t.angle_deg)],mode=$('view').value,dim=mode==='front'?[0,2]:mode==='top'?[0,1]:[1,2],local=$('focus').value==='local',center=t.archived_affected_target.top_m,scope=local?scene.points.filter(p=>Math.hypot(p[0]-center[0],p[1]-center[1])<.065&&Math.abs(p[2]-center[2])<.065):scene.points;
+let min=[Infinity,Infinity],max=[-Infinity,-Infinity];for(const p of [...scope,center])dim.forEach((d,i)=>{min[i]=Math.min(min[i],p[d]);max[i]=Math.max(max[i],p[d])});const scale=.83*Math.min(w/Math.max(max[0]-min[0],.03),h/Math.max(max[1]-min[1],.03));const mid=min.map((x,i)=>(x+max[i])/2),project=p=>[w/2+(p[dim[0]]-mid[0])*scale,h/2-(p[dim[1]]-mid[1])*scale];
+function dot(p,color,r=1){const [x,y]=project(p);ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,2*Math.PI);ctx.fill()}
+for(const p of scene.points)dot(p,'#47637a',.8);for(const p of scene.contour)dot(p,'#e1d6bd',1.4);
+function target(r,color,size=4){const top=r.top_m,base=top.map((v,i)=>v-r.height_m*r.axis[i]),[x,y]=project(top),[bx,by]=project(base);ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(x,y);ctx.stroke();dot(top,color,size)}
+for(const r of t.ordinary_targets)target(r,'#66cce4',4);for(const c of allCandidates(t))target(c.target,t.candidates.includes(c)&&c.promising?'#77e7a9':'#ff7d7d',c===selected?7:3);
+if(t.previous_local_proposal){const r=t.previous_local_proposal.target;target(r,'#efbe77',4);const [x,y]=project(r.top_m);ctx.strokeStyle='#efbe77';ctx.beginPath();ctx.moveTo(x,y-8);ctx.lineTo(x+8,y);ctx.lineTo(x,y+8);ctx.lineTo(x-8,y);ctx.closePath();ctx.stroke()}
+const [x,y]=project(center);ctx.strokeStyle='white';ctx.strokeRect(x-6,y-6,12,12);ctx.fillStyle='#b6c6d4';ctx.font='12px system-ui';ctx.fillText(`${mode} view · scale bar 20 mm`,15,h-28);ctx.fillRect(15,h-20,.02*scale,2);
+const original=`Archived target on this scene: ${t.archived_affected_check.support_rays_within_gap}/9 support rays.`;
+if(selected){const c=selected.check,clear=Math.min(...Object.values(c.tool_models).map(m=>m.minimum_sampled_clearance_mm)),diagnostic=!t.candidates.includes(selected);$('candidateInfo').textContent=`${selected.id}: ${c.support_rays_within_gap}/9 support; ${fmt(c.minimum_batch_spacing_mm,1)} mm nearest reserved target; ${fmt(clear,2)} mm minimum sampled tool clearance; ${fmt(selected.displacement_from_archived_mm,2)} mm from archived target. ${diagnostic?`Diagnostic only: ${fmt(selected.search_bounds.axis_change_deg,1)}° exceeds the 4° local axis bound. `:''}${selected.promising?'Passes other declared screens.':`Rejected: ${c.rejection_reasons.join(', ')||'current 36 mm endpoint spacing'}.`} ${original}${t.previous_local_proposal?` Earlier surface-fitted proposal: ${t.previous_local_proposal.check.support_rays_within_gap}/9 support, goal compatibility unresolved.`:''}`}
+else {const ab=t.axis_limit_ablation.candidates;$('candidateInfo').textContent=`No candidate satisfies all local search bounds. ${ab.length} alternatives meet the XY/Z limits but exceed the 4° seed-relative orientation limit; ${t.axis_limit_ablation.passes_other_screens} pass the other screens. ${original}`;}
+}
+$('angle').onchange=update;for(const id of ['view','focus','candidate'])$(id).onchange=draw;window.addEventListener('resize',draw);update();
+</script></html>

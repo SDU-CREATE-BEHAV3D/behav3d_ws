@@ -1,0 +1,114 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Old and new candidates · scan 19</title>
+<style>
+[hidden]{display:none!important}:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#111a23;color:#dfe8f0}body{max-width:1180px;margin:auto;padding:24px}h1{font-size:26px}h2{font-size:19px}p{color:#b8c8d5;line-height:1.6}.note{border-left:3px solid #edbd78;padding:12px 16px;background:#283033}.controls,.legend{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:16px 0}label{display:inline-flex;align-items:center;gap:8px;max-width:100%}select,button{font:inherit;background:#223446;color:inherit;border:1px solid #4a6278;padding:7px;border-radius:5px;min-width:0;max-width:100%}button{cursor:pointer}a{color:#83d8e4}table{width:100%;border-collapse:collapse;font-size:14px}td,th{text-align:left;padding:9px;border-bottom:1px solid #334655}th{vertical-align:bottom}.scroll{overflow:auto}canvas{width:100%;height:490px;background:#162532;border-radius:8px;display:block;touch-action:none}summary{cursor:pointer;margin:18px 0}.legend{font-size:13px}#detail{line-height:1.65;overflow-wrap:anywhere}.metrics{display:flex;flex-wrap:wrap;gap:10px 25px;background:#1b2b38;padding:15px;border-radius:7px}.metrics span{color:#b2c4d3}.metrics b{color:#edf3f9}small{color:#9bb0c4}.selected{background:#233849}.old{color:#f2bf72}.new{color:#72d5df}.baseline{color:#bbadcf}.coordinates{font-variant-numeric:tabular-nums;white-space:nowrap}#candidateTable button{white-space:nowrap;font-size:13px;padding:4px 6px}.reject{color:#f5a5aa}@media(max-width:600px){body{padding:14px}canvas{height:380px}h1{font-size:23px}.controls{align-items:stretch;flex-direction:column}.controls label{display:flex}.controls select{flex:1}table{font-size:13px}}
+</style>
+<h1>New candidates against the original batch</h1>
+<p>Recorded scan 19, with controlled inward lean. Compare the archived candidates, a fresh batch from the unchanged goal, and a fresh batch from the revised growth surface.</p>
+<div class="controls">
+<label>Inward lean <select id="angle"><option value="0">0° · unmodified control</option><option value="4">4°</option><option value="8" selected>8°</option><option value="12">12°</option></select></label>
+<label>Growth surface <select id="strategy"><option value="original">Original goal</option><option value="follow">Keep the fitted offset</option><option value="return20">Return over 20 mm</option><option value="return40" selected>Return over 40 mm</option><option value="return60">Return over 60 mm</option></select></label>
+</div>
+<div class="metrics" id="metrics"></div>
+<p id="batchNote"></p>
+<div class="controls"><label>Compare <select id="scope"><option value="batch">Complete generated batch</option><option value="local">Local alternatives for C19:T7</option></select></label><label>Inspect <select id="candidate"></select></label><a href="candidate_comparison.json" download>Download all candidate comparisons (JSON)</a></div>
+<p id="scopeNote"></p>
+<div class="scroll"><table><thead><tr><th>Selected comparison</th><th class="old" id="oldTitle">Archived</th><th class="baseline" id="baselineTitle">Unchanged goal</th><th class="new" id="newTitle">Revised goal</th></tr></thead><tbody id="pairMetrics"></tbody></table></div>
+<div class="controls"><button id="front">Front</button><button id="top">Top</button><button id="iso">3D</button><button id="pair">Focus pair</button><button id="focus">Focus wall</button><button id="whole">Whole batch</button></div>
+<div class="controls"><label><input id="showOld" type="checkbox" checked>Archived candidates</label><label><input id="showNew" type="checkbox" checked>New candidates</label><label><input id="showBaseline" type="checkbox">Unchanged-goal batch</label><label><input id="showLinks" type="checkbox" checked>Old → new displacement</label><label id="allLabel" hidden><input id="showAll" type="checkbox">All local alternatives</label></div>
+<div class="controls"><label><input id="showScan" type="checkbox" checked>Recorded / edited scan</label><label><input id="showGoal" type="checkbox">Original goal surface</label><label><input id="showProposal" type="checkbox" checked>Revised growth surface</label><label><input id="showPairs" type="checkbox">Shell evidence</label></div>
+<canvas id="scene" aria-label="Old and new candidate positions and tool axes on the same recorded or edited geometry"></canvas>
+<div class="legend"><span class="old">● Archived candidates</span><span class="new">● New candidates</span><span class="baseline">● Unchanged-goal batch</span><span>⋯ Endpoint displacement</span><span style="color:#758ea4">● Scan</span></div>
+<small>Drag to rotate · scroll to zoom · equal world-axis scales. Sticks show the nominal bead height along the tool axis, not robot trajectories. Colour identifies the proposal, not whether it passed.</small>
+<p id="detail"></p>
+<h2 id="candidateHeading">Complete generated batch</h2>
+<div class="scroll"><table id="candidateTable"><thead><tr><th>New candidate</th><th>Archived comparison</th><th>Position shift</th><th>Tool-axis change</th><th>Support old → new / 9</th><th>Sampled tool gap old → new</th></tr></thead><tbody id="candidateRows"></tbody></table></div>
+<p id="unmatched"></p>
+<div class="note"><b>These are concrete offline proposals.</b> All candidates are checked against the same scan and the same experimental bead/tool models. Support remains uncalibrated, and wall stability remains unverified. No candidate is selected for robot execution.</div>
+<details><summary>Growth-surface comparison and shell evidence</summary>
+<p id="evidence"></p><p id="shellMetrics"></p>
+<div class="scroll"><table><thead><tr><th>Growth surface</th><th>Local alternatives</th><th>Pass geometry</th><th>Best support</th><th>Largest face rotation</th><th>Return completed*</th><th>Largest roof offset*</th></tr></thead><tbody id="comparison"></tbody></table></div>
+<small>*Sampled goal columns; return completeness is a geometric diagnostic, not a stability test.</small>
+</details>
+<details><summary>Comparison method and remaining checks</summary>
+<p>Archived C19 targets retain their recorded positions and directions. They are rescored on each edited scan. The unchanged-goal and revised-goal batches use the same current generation and filtering rules. Their comparison isolates the effect of the growth-surface revision. Original archived directions were rounded in the recording.</p>
+<p>Batch rows use a one-to-one spatial association within 36 mm. Unmatched targets remain listed. This is a comparison convention, not bead identity or a permitted motion distance. Local alternatives each replace only C19:T7 with the other six archived endpoints reserved; those alternatives are never a combined batch. Batch spacing is checked against the peers in each respective batch.</p>
+<p>Positions are in ur20_base_link; displayed coordinates are in mm. Exported coordinates are in metres, with full numerical precision and unit tool Z directions. A direction is not a complete robot pose. The 36 × 16 mm bead proxy is borrowed from C18 because C19 dimensions were not recorded.</p>
+<p>The fit uses Agent007 pairs marked eligible in the upper wall. Controlled edits move observed cap proxies and the recorded scan; the detector is not rerun. Each revised field preserves vertex identities, topology, Z coordinates and scalar ordering. The planner recomputes gradients and its mesh/frontier intersections on the new geometry. The numerical collar below the frontier does not move already printed material.</p>
+<ul id="limits"></ul>
+</details>
+<script>
+const DATA=/*DATA*/;const R=DATA.result,$=id=>document.getElementById(id),f=(x,n=2)=>x==null?'—':x.toFixed(n);
+let yaw=0,pitch=0,zoom=1,view='whole',drag=null;
+const trial=()=>R.trials.find(t=>t.angle_deg===Number($('angle').value));
+const current=()=>trial().cases.find(c=>c.key===$('strategy').value);
+const local=()=>$('scope').value==='local';
+const candidates=()=>local()?current().alternatives:current().generated_batch.candidates;
+const selected=()=>candidates().find(c=>c.id===$('candidate').value);
+const baseline=()=>trial().cases.find(c=>c.key==='original').generated_batch.candidates;
+const archived=()=>trial().archived_candidates_on_same_scan;
+const clearance=c=>c?Math.min(...Object.values(c.check.tool_models).map(m=>m.minimum_sampled_clearance_mm)):null;
+const deltaFor=a=>local()?a.versus_archived:current().batch_versus_archived.pairs.find(p=>p.new_id===a.id);
+const oldFor=a=>{const d=a&&deltaFor(a);return d&&archived().find(c=>c.id===d.old_id)};
+const baselineFor=a=>{const d=a&&!local()&&current().batch_versus_unchanged_goal.pairs.find(p=>p.new_id===a.id);return d&&baseline().find(c=>c.id===d.old_id)};
+const coordinate=c=>c?c.target.top_m.map(x=>f(x*1000)).join(', '):'—';
+const support=c=>c?c.check.support_rays_within_gap+'/9':'—';
+const label=c=>c?c.id.replace(/.*-batch-/,'N'):'—';
+$('limits').innerHTML=R.limitations.map(s=>`<li>${s}</li>`).join('');
+function update(){const t=trial(),c=current(),fit=t.fit,b=c.generated_batch,s=b.secondary_rule_stats;
+ $('metrics').innerHTML=`<span>Archived batch <b>${archived().length} candidates</b></span><span>Unchanged-goal batch <b>${baseline().length}</b></span><span>New batch <b>${b.candidates.length}</b></span><span>New batch passes screens <b>${b.passes_experimental_geometry_count}/${b.candidates.length}</b></span>`;
+ $('batchNote').textContent=`The planner proposes ${c.normal_planner_raw_count} targets, then current endpoint-spacing rules remove ${s.endpoint_spacing_removed}; ${s.normal_continuity_replaced} segments change under the direction-continuity rule. The archived batch predates these current filters.`;
+ $('candidate').innerHTML=candidates().length?candidates().map(a=>`<option value="${a.id}">${label(a)} · ${a.check.support_rays_within_gap}/9 support</option>`).join(''):'<option value="">No candidate</option>';
+ if(local()&&c.best_comparison_id)$('candidate').value=c.best_comparison_id;
+ if(!local()){const match=c.batch_versus_archived.pairs.find(p=>p.old_id==='C19:T7');if(match)$('candidate').value=match.new_id;}
+ $('allLabel').hidden=!local();
+ $('scopeNote').textContent=local()?'Each local option replaces C19:T7 alone. Six archived peers stay reserved for spacing. These are alternatives, not a batch.':'Each row compares a generated target with its spatially associated archived target. The middle column below shows the unchanged-goal rerun on the same scan.';
+ $('candidateHeading').textContent=local()?'Local alternatives — choose one at a time':'Complete generated batch';
+ $('comparison').innerHTML=t.cases.map(p=>{const a=p.alternatives[0],d=p.return_diagnostics;return `<tr class="${p.key===c.key?'selected':''}"><td>${p.title}</td><td>${p.alternatives.length}</td><td>${p.promising_count}</td><td>${support(a)}</td><td>${f(p.geometry_quality.maximum_face_rotation_deg,1)}°</td><td>${d?d.complete_columns+'/'+d.column_count:'—'}</td><td>${d?f(d.maximum_residual_at_roof_mm)+' mm':'—'}</td></tr>`}).join('');
+ $('shellMetrics').textContent=`Maximum field change: ${f(c.maximum_goal_change_mm)} mm. Median mapped-frontier gap: ${f(c.anchor_distance_median_mm)} mm (measured before contour regeneration, not bead support).`;
+ $('evidence').textContent=`Shell fit: ${fit.pair_count} paired locations, ${R.evidence.current_scan_pair_count} observed in scan 19; remaining observations are historical. Fit residual: ${f(fit.horizontal_residual_rms_mm)} mm. ${t.angle_deg===0?'Control: no artifact failure is assumed.':'Controlled lean: stable registration and intact geometry are experimental assumptions.'}`;
+ const m=c.batch_versus_archived,n=c.batch_versus_unchanged_goal;
+ $('unmatched').textContent=local()?'Ranking uses geometry-screen result, nominal support, then distance from C19:T7. The first option is for comparison; it is not an approved repair.':`Unmatched archived targets: ${m.unmatched_old_ids.join(', ')||'none'}. Unmatched new targets: ${m.unmatched_new_ids.join(', ')||'none'}. Against the unchanged-goal rerun: ${n.pairs.length} matched, ${n.unmatched_old_ids.length} old and ${n.unmatched_new_ids.length} new unmatched. Spatial association does not establish bead identity.`;
+ draw();
+}
+function describe(){const a=selected(),o=oldFor(a),b=baselineFor(a),d=a&&deltaFor(a),n=a&&!local()&&current().batch_versus_unchanged_goal.pairs.find(p=>p.new_id===a.id);
+ $('oldTitle').textContent=o?'Archived · '+o.id:'Archived · unmatched';
+ $('baselineTitle').textContent=local()?'Unchanged goal · batch only':b?'Unchanged goal · B'+b.id.split('-').pop():'Unchanged goal · unmatched';
+ $('newTitle').textContent=(current().key==='original'?'Generated · ':'Revised goal · ')+label(a);
+ const show=c=>c?(c.rejection_reasons.length?'Rejected: '+c.rejection_reasons.join(', ').replaceAll('_',' '):'Passes declared geometry screens'):'—';
+ const rows=[['Top X, Y, Z (mm)',coordinate(o),coordinate(b),coordinate(a)],['Unit tool Z direction',...[o,b,a].map(c=>c?c.target.axis.map(x=>f(x,4)).join(', '):'—')],['Nominal base support',support(o),support(b),support(a)],['Sampled tool clearance',...[o,b,a].map(c=>c?f(clearance(c))+' mm':'—')],['Nearest peer in its batch',...[o,b,a].map(c=>c?f(c.check.minimum_batch_spacing_mm)+' mm':'—')],['Geometry screen',show(o),show(b),show(a)]];
+ $('pairMetrics').innerHTML=rows.map(r=>`<tr>${r.map((v,i)=>`<${i?'td':'th'}${r[0].startsWith('Top')?' class="coordinates"':''}>${v}</${i?'td':'th'}>`).join('')}</tr>`).join('');
+ $('detail').textContent=a?`${label(a)} versus ${o?o.id:'unmatched archived target'}: ${d?f(d.top_shift_mm)+' mm endpoint shift, ΔXYZ ['+d.top_delta_xyz_mm.map(x=>f(x)).join(', ')+'] mm, '+f(d.axis_change_deg,1)+'° tool-axis change. ':''}${n?'Versus the unchanged-goal rerun: '+f(n.top_shift_mm)+' mm shift and '+f(n.axis_change_deg,1)+'° axis change. ':''}Candidate rises from its source: ${a.upward_growth?'yes':'no'}. ${show(a)}. Structural stability remains unverified.`:'No candidate was generated in this scope.';
+ $('candidateRows').innerHTML=candidates().map(c=>{const old=oldFor(c),delta=deltaFor(c);return `<tr class="${c===a?'selected':''}"><td><button data-id="${c.id}">${label(c)}</button></td><td>${old?old.id:'Unmatched'}</td><td>${delta?f(delta.top_shift_mm)+' mm':'—'}</td><td>${delta?f(delta.axis_change_deg,1)+'°':'—'}</td><td>${old?old.check.support_rays_within_gap:'—'} → ${c.check.support_rays_within_gap}</td><td>${f(clearance(old))} → ${f(clearance(c))} mm</td></tr>`}).join('');
+ for(const button of $('candidateRows').querySelectorAll('button'))button.onclick=()=>{$('candidate').value=button.dataset.id;draw()};
+}
+function draw(){describe();const c=current(),a=selected(),o=oldFor(a),b=baselineFor(a),canvas=$('scene'),ctx=canvas.getContext('2d'),w=canvas.clientWidth,h=canvas.clientHeight,dpr=window.devicePixelRatio||1;canvas.width=w*dpr;canvas.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+ const scene=DATA.scenes[String(trial().angle_deg)],proposal=DATA.proposals[c.id.replace('-','_')];
+ const center=view==='pair'&&a?a.target.top_m.map((v,i)=>(v+(o?o.target.top_m[i]:v))/2-(i===2?.007:0)):view==='wall'?[.245,-.875,-.028]:[.18,-.875,-.015];
+ const turn=p=>{const [x,y,z]=p.map((v,i)=>v-center[i]),cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),rx=cy*x-sy*y,ry=sy*x+cy*y;return [rx,cp*z-sp*ry,sp*z+cp*ry]};
+ const extent=view==='pair'?.075:view==='wall'?.125:.24,scale=Math.min(w,h)*.83/extent*zoom;
+ const project=p=>{const q=turn(p);return [w/2+q[0]*scale,h/2-q[1]*scale,q[2]]};
+ const point=(p,color,r)=>{const [x,y]=project(p);ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()};
+ function line(p,q,color,width=1,dash=[]){const pp=project(p),pq=project(q);ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(pp[0],pp[1]);ctx.lineTo(pq[0],pq[1]);ctx.stroke();ctx.setLineDash([])}
+ function wire(v,color,changedOnly=false){ctx.strokeStyle=color;ctx.lineWidth=.65;ctx.beginPath();for(const face of DATA.field_faces){if(view==='wall'&&face.every(i=>DATA.field_vertices[i][0]<.19))continue;if(changedOnly&&face.every(i=>Math.hypot(v[i][0]-DATA.field_vertices[i][0],v[i][1]-DATA.field_vertices[i][1])<.00001))continue;const p=face.map(i=>project(v[i]));ctx.moveTo(p[0][0],p[0][1]);ctx.lineTo(p[1][0],p[1][1]);ctx.lineTo(p[2][0],p[2][1]);ctx.closePath()}ctx.stroke()}
+ if($('showScan').checked)for(const p of scene.scan_points){if(view==='wall'&&p[0]<.175)continue;point(p,'#58768d',.9)}
+ if($('showGoal').checked)wire(DATA.field_vertices,'#bba17755');
+ if($('showProposal').checked)wire(proposal,'#66c8d554',true);
+ if($('showPairs').checked)for(let i=0;i<scene.paired_expected_m.length;i++){const p=scene.paired_expected_m[i],q=scene.paired_observed_m[i];line(p,q,'#d8b58a');point(p,'#e6c184',3);point(q,'#c49bed',3)}
+ const visibleNew=local()&&!$('showAll').checked?(a?[a]:[]):candidates();
+ if($('showLinks').checked)for(const n of visibleNew){const old=oldFor(n);if(old)line(old.target.top_m,n.target.top_m,'#e9e2cf',n===a?2:1,[3,4])}
+ const textBoxes=[];
+ function drawCandidate(candidate,color,isSelected,name,offset=0){const r=candidate.target,base=r.top_m.map((v,i)=>v-r.height_m*r.axis[i]);line(base,r.top_m,color,isSelected?4:1.5);point(r.top_m,color,isSelected?6:3);const p=project(r.top_m);ctx.font=(isSelected?'bold ':'')+'12px system-ui';ctx.fillStyle=color;const tx=p[0]+9,tw=ctx.measureText(name).width;let ty=p[1]-8+offset;for(let attempt=0;attempt<20&&textBoxes.some(q=>tx<q.x+q.w+4&&tx+tw+4>q.x&&Math.abs(ty-q.y)<15);attempt++)ty+=16;textBoxes.push({x:tx,y:ty,w:tw});ctx.fillText(name,tx,ty)}
+ if($('showOld').checked)for(const candidate of archived())drawCandidate(candidate,'#f2bf72',candidate===o,candidate.id);
+ if($('showBaseline').checked)for(const candidate of baseline())drawCandidate(candidate,'#bbadcf',candidate===b,'B'+candidate.id.split('-').pop(),28);
+ if($('showNew').checked)for(const candidate of visibleNew)drawCandidate(candidate,'#72d5df',candidate===a,local()?'Local '+candidate.id.split('-').pop():label(candidate),14);
+ ctx.fillStyle='#b9ccd9';ctx.font='12px system-ui';ctx.fillText('20 mm',15,h-24);ctx.fillRect(15,h-18,.02*scale,2);
+}
+$('angle').onchange=update;$('strategy').onchange=update;$('scope').onchange=update;$('candidate').onchange=draw;
+for(const id of ['showScan','showGoal','showProposal','showPairs','showOld','showNew','showBaseline','showLinks','showAll'])$(id).onchange=draw;
+$('front').onclick=()=>{yaw=0;pitch=0;draw()};$('top').onclick=()=>{yaw=0;pitch=Math.PI/2;draw()};$('iso').onclick=()=>{yaw=.6;pitch=.35;draw()};$('pair').onclick=()=>{view='pair';zoom=1;draw()};$('focus').onclick=()=>{view='wall';zoom=1;draw()};$('whole').onclick=()=>{view='whole';zoom=1;draw()};
+$('scene').onpointerdown=e=>{drag=[e.clientX,e.clientY];e.currentTarget.setPointerCapture(e.pointerId)};
+$('scene').onpointermove=e=>{if(!drag)return;yaw+=(e.clientX-drag[0])*.008;pitch=Math.max(-1.55,Math.min(1.55,pitch+(e.clientY-drag[1])*.008));drag=[e.clientX,e.clientY];draw()};
+$('scene').onpointerup=$('scene').onpointercancel=()=>{drag=null};$('scene').addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.5,Math.min(6,zoom*Math.exp(-e.deltaY*.001)));draw()},{passive:false});
+window.addEventListener('resize',draw);update();
+</script></html>

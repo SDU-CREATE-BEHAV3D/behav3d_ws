@@ -1,0 +1,9 @@
+{
+  "files_sha256": {
+    "results.json": "914fd5f2b96713983dadae5ab17e2782f1e30aaefdcae100f1e6a3123f5618ce",
+    "baseline_fixture.npz": "39a637031a21aab12ce508385e29aa07c119c327a7f4a69a55d1f414d2eb322b",
+    "viewer.html": "c7d30b9c7a8c615e83b23a8404347b502ad12bedd3ead9dd9c9129f308afe46a"
+  },
+  "source_hashes_unchanged": true,
+  "executable": false
+}

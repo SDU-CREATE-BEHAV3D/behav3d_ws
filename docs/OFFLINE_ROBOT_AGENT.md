@@ -48,8 +48,8 @@ generation is not being moved into an agent decision loop.
 | Assess the inspection need | New Agent007 revision: retain sweep, seek region evidence, or review identity/registration | Region, unresolved question, evidence references and next review action | First offline request filter and three raw-depth replays implemented |
 | Propose inspection views | A qualified geometric inspection objective | Full required sweep plus bounded additions, purpose of each addition, one/two-view cost comparison | Regional offline selector implemented; new-view sensor benefit unvalidated |
 | Triage a possible artifact failure | An inspection discrepancy may affect continued printing | Affected region, supported failure hypothesis, evidence gaps, and recovery-review or reinspection decision | Next recovery milestone; ordinary cap uncertainty alone is insufficient |
-| Propose a recovery strategy | Evidence supports a specific artifact problem | Alternatives for repair, area priority, support, adapted geometry or contact correction, with hold/reinspect when needed | Draft catalogue below; recovery strategies and their planner/control adapters are not implemented |
-| Generate and test recovery candidates | A recovery alternative has sufficient mesh/field evidence | Candidate batches produced or checked through existing rule-based planning, with predicted effects and rejection reasons | Existing planner/simulation foundation; offline adapters pending |
+| Propose a recovery strategy | Evidence supports a specific artifact problem | Alternatives for repair, area priority, support, adapted geometry or contact correction, with hold/reinspect when needed | Deterministic offline deficit/lean policy implemented; support/contact/goal revisions expose prerequisites |
+| Generate and test recovery candidates | A recovery alternative has sufficient mesh/field evidence | Candidate batches produced or checked through existing rule-based planning, with predicted effects and rejection reasons | Bounded surface-fill and adaptation searches implemented; complete planner replay pending |
 | Recommend a recovery batch | Alternatives have been compared | Proposed candidate sequence, reason for selection, expected effect, scan checkpoint and stop condition | Proposal only; physical execution remains a later milestone |
 | Verify recovery and resume | A recovery attempt has readback evidence | Agent007 re-evaluation and a decision to resume ordinary rule-based growth, revise recovery, or hold | Evidence/cycle linking and outcome criteria pending |
 
@@ -111,6 +111,7 @@ before interpreting displacement as a recovery target.
 | --- | --- | --- | --- |
 | Fill missing material | A supported local deficit with accessible deposition geometry | Compare normal continuation with a small repair batch; measure predicted deficit reduction and added material outside the permitted region | Deficit-to-planner adapter; a buried or side deficit may be outside the current upper-frontier planner's expressible actions |
 | Change area priority or batch order | A local problem justifies changing where growth proceeds next | Prioritize a justified region, defer growth in another, and compare short sequences with inspection checkpoints | Explicit regional preference/mask adapter; changed selection must retain spacing and other feasibility constraints |
+| Pause a region for material development | Further loading should be deferred while the material is given time to firm up | Exclude the affected region and candidates that load it; retain a timestamped observation, schedule reinspection, and compare deformation before considering resumption | Material-specific waiting/adhesion window, deposition age and dependency checks; elapsed time or unchanged appearance alone does not establish load capacity |
 | Add supporting material | A support strategy is proposed for a leaning/deformed region | Propose support geometry, intended attachment/base regions and construction order, then generate candidates against that proposal | A separate support goal/field and connection assessment; mechanical benefit cannot be inferred from added volume alone |
 | Adjust remaining geometry | The observed artifact provides a changed starting boundary for continued fabrication | Compare bounded translations, rotations or local reshaping of the unprinted remainder, anchored to observed printed geometry | Versioned goal proposals, protected design features and allowed deviation limits, updated field/width mappings and recomputed feasibility |
 | Correct by robot contact | A displacement might be recoverable through controlled physical adjustment | Propose contact region, desired change and a measurable verification objective; leave forces and trajectories unspecified until modeled/tested | Material/contact characterization, contact tool and force-feedback primitive, bounded trials and post-contact inspection |
@@ -130,6 +131,89 @@ identified from product geometry. Run the rule-based planner against each declar
 goal/priority alternative, including its avoidance constraints; do not bypass the
 original field checks to insert out-of-goal support candidates. Rules may require
 an explicit extension for a new strategy, rather than silently treating it as valid.
+
+### Lean recovery: what changes and why
+
+The current growth-shell experiment redirects **future deposition**. It fits a
+horizontal displacement from expected/observed shell pairs, fades that displacement
+back to zero over a trial return height, then runs the existing frontier planner.
+That planner selects the lowest eligible field values subject to spacing and
+advances along the field's surface growth direction. It does not optimize a
+restoring force, predict drying, or straighten the already printed wall. The
+20/40/60 mm return heights are experimental choices, not mechanically derived
+recovery settings. The nominal footprint screen is not a wall stability test.
+
+Extend the recovery comparison with the following proposed sequence contracts;
+these are requirements, not implemented drying or support simulations:
+
+- **Pause and reassess:** mask the leaning region and structurally dependent
+  deposition, record when it was last printed, and request another observation
+  after a material-specific interval. Continue elsewhere only if independent
+  loading and tool access are established. Check both deformation trend and
+  process suitability for the next deposit before resuming. Continuing movement
+  while paused escalates the issue; it does not trigger an automatic timed resume.
+- **Build a rib or support:** identify a verified supported footing or suitable
+  existing anchor, a connection region on the wall, and a permitted support
+  envelope. Propose a bottom-up construction order whose intermediate stages
+  also have support. Compare access, attachment, added load, future obstruction
+  and a material-dependent prediction of resistance to further leaning. Support
+  geometry remains a separate goal revision. Do not create floating side beads
+  or infer mechanical benefit from proximity to the wall alone.
+- **Resume with a revised continuation:** only after the region meets the
+  relevant process/stability checks, compare the first bounded batch against
+  ordinary continuation and local alternatives. Reinspect before extending it.
+  Physically restoring an already displaced wall remains a separate contact or
+  reconstruction objective.
+
+On scan 19, the next offline comparisons should be continuation alone, pause then
+reassess, support then reassess, and pause plus support followed by continuation.
+Recorded geometry can test masks, anchor access, construction order and candidates.
+Pause duration, strength gain and rib effectiveness require measured material
+inputs; controlled assumptions must be labelled and cannot become observed facts.
+
+#### Material context: ram-extruded clay and occasional heat-gun use
+
+The operator reports clay deposited with a ram extruder, relatively dry compared
+with their usual printed-clay reference, with occasional heat-gun application.
+This is a qualitative process description, not a measured water content, strength
+or validated waiting interval. Do not infer those quantities from the extruder type.
+
+Treat passive waiting and assisted drying as separate recovery alternatives:
+
+- **Passive wait:** defer loading of the affected region, record elapsed time and
+  any available ambient conditions, then reassess deformation and readiness for
+  the next deposit.
+- **Assisted drying:** propose an intervention on a specified region using a
+  characterized heat-gun procedure. Record actual application time, duration,
+  setting, distance, direction/sweep and any measured surface temperature. Unknown
+  values stay unknown; a gun setting is not the clay temperature. No automated
+  heat-gun capability is established by the current repository experiment.
+- **Support plus continuation:** separately compare whether a rib/support is
+  constructible and mechanically useful, including attachment to the clay in
+  its current condition. Waiting or heating does not itself restore lost geometry
+  or establish that the next load can be carried.
+
+Associate each region with deposition age, observed displacement history,
+intervention history and references to any material/process tests. Do not equate
+an unchanged scan or a dry-looking surface with sufficient internal strength.
+After waiting/heating, remeasure the frontier before generating the next targets;
+material loss of water may change its dimensions. Assess subsequent bead attachment
+as well as geometric stability. Resume only against calibrated process criteria,
+not an invented fixed delay or an assumed temperature-to-strength conversion.
+
+The scan-19 replay can test candidate exclusion, intervention bookkeeping,
+reinspection decisions and supported rib geometry. It cannot recover unrecorded
+heating or drying history. Compare labelled hypothetical outcomes (movement stops,
+continues or new deformation appears) without claiming to simulate clay response.
+Calibrating that response needs comparable deposits of the actual clay and ram
+settings, with passive-wait and assisted-drying observations plus controlled
+subsequent-load/attachment tests.
+
+Relevant experimental context, not parameters transferable to this clay:
+[Structural build-up of 3D printed earth by drying](https://researchportal.ip-paris.fr/en/publications/structural-build-up-of-3d-printed-earth-by-drying/)
+relates forced drying and water content to mechanical development for a specified
+kaolin system. [The effect of interlayer drying on the ceramic paste extrusion process](https://eprints.whiterose.ac.uk/id/eprint/221584/)
+reports improved shape accuracy alongside shrinkage that affects later deposition.
 
 ### Development and evaluation for recovery
 
@@ -152,6 +236,58 @@ screens, and one paddle approach is sampled-clear; neither is executable or
 mechanically validated. Contact/push/retreat remain unresolved and the original
 runtime planner, collision helper and URDF are unchanged. See
 `outputs/offline_recovery/inward_cycle19/viewer.html` for the interactive comparison.
+
+The decision layer is now implemented in `offline_agent/recovery.py`, with a
+recorded replay in `tools/offline_recovery/build_decisions.py`. It separates
+uncertain evidence, stable and progressing deformation, and the objective of
+continued growth versus restoring printed geometry. Failed constraints exclude
+proposals before benefit ranking; missing planner/process checks lead to a bound
+validation request rather than an executable batch. The searches test attached
+first fill beads and bounded position/axis adaptations. Outputs preserve every
+rejection reason and an inspection checkpoint with retry/stop conditions.
+
+`tools/offline_recovery/planner_state.py` freezes explicitly supplied field,
+observation, settings, avoidance and tool inputs; validation receipts bind to the
+issue, proposal and snapshot hashes. Capturing a complete snapshot does not pass
+any rule. The historical recording is still incomplete for full planner replay.
+Automatic runtime capture, the full recovery planner adapter and calibrated
+process/mechanical checks remain pending. See
+`outputs/offline_recovery/decisions/viewer.html` and the recovery README for the
+nine replay cases and the normalized contracts. Controlled confirmation/trend
+inputs are explicitly experimental and are not claimed as Agent007 detections.
+
+The follow-up in `tools/offline_planner_replay` located the matching repository
+field state and reproduced 23/23 saved candidate batches (157 ordered positions)
+with an explicitly inferred profile. Full mesh-to-contour replay still has small
+unresolved differences. Bounded fixed-goal candidates on the inward-lean scene do
+not pass the experimental local screens; the unmodified archived target also
+fails the borrowed support model, identifying a calibration limitation rather
+than proving an artifact failure. See its README and
+`outputs/offline_planner_replay/recorded_260728/viewer.html`. No runtime defaults,
+field geometry or execution interfaces were changed.
+
+`tools/offline_growth_shell` now tests an explicit goal-revision strategy: fit
+regional offsets from seven eligible Agent007 shell pairs, construct bounded
+upward growth fields returning over 20/40/60 mm, and regenerate candidates with
+the existing numerical rules. Four controlled lean angles produce 20 comparison
+cases. The 40 mm return completes all sampled goal columns at 8° lean with less
+maximum face rotation than the 20 mm alternative; no tested local leaning-area
+alternative passes the experimental support screen. Only one fitted shell pair is from the current scan.
+Evidence age, registration assumptions, borrowed bead dimensions and unverified
+structural stability remain explicit. See
+`outputs/offline_growth_shell/scan19/viewer.html` and its tool README. This changes
+separate versioned planning proposals, not the original goal, observations or ROS
+runtime. The full-frontier sweep and post-proposal inspection remain required.
+
+The growth-shell viewer also compares complete archived, unchanged-goal and
+revised-goal candidate batches on each identical edited scan. It exports full
+candidate records and checks in `candidate_comparison.json`, with one-to-one
+spatial associations, unmatched targets, signed position changes and tool-axis
+changes. At 8° / 40 mm return, four of five retained candidates are unchanged from
+the unchanged-goal rerun. The affected target moves 1.98 mm but its nominal support
+drops from 4/9 to 2/9; two unaffected targets pass the declared geometry screens.
+Local replacement alternatives remain separate from complete batches. This
+comparison exposes first-bead limitations despite an improved continuation shape.
 
 Continue the offline strategy comparison for a deficit and a leaning case.
 Each proposal should expose its region, objective, changed priority/goal, candidate
@@ -226,7 +362,7 @@ responsibilities for discussion, not newly enabled robot commands.
 | --- | --- | --- |
 | Read recorded state | NPZ field states, captures, YAML and DDS bundles | Review envelope only; file adapters pending |
 | Validate candidate plan | Target YAML contracts and secondary rules | Pending parser adapter; must preserve mm plane origins and explicit frame |
-| Invoke offline planner | lib_scalar raycasting, viability, candidate selection | Unsupported until dependency/import audit and recorded fixture verification |
+| Invoke offline planner | lib_scalar raycasting, viability, candidate selection | Numerical offline replay verified against 23 saved batches; complete runtime validation remains pending |
 | Propose focused scan | Scan patterns and ScanSession | Offline mandatory-sweep-plus-supplement selector; recorded single-region adapter |
 | Simulate focused scan | Geometry/raycasting utilities | Recorded-mesh visibility model; sensor quality and physical accuracy unverified |
 | Propose deposition | Existing dot/segment YAML | Pending data-only proposal; no motion/flow changes |

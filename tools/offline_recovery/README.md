@@ -3,6 +3,16 @@
 Two non-executable strategy comparisons use the same recording and Agent007
 evidence as the inspection experiments. The original files are read only.
 
+The follow-up in `../offline_planner_replay/README.md` has now located a matching
+goal field in the repository and reproduced all 23 saved candidate batches.
+The earlier artifacts below retain their original incomplete-state provenance;
+they are not retroactively promoted to goal-validated recovery proposals.
+
+The decision-layer replay now connects these comparisons to explicit recovery
+choices. Run `build_decisions.py` (instructions below) and open
+`outputs/offline_recovery/decisions/viewer.html` to inspect the recommendation,
+candidate alternatives, rejection reasons and next inspection checkpoint.
+
 - **Missing region:** C5:T7 in scan 6, using its saved DDS reference samples.
   This is recorded, tolerance-sensitive evidence, not a confirmed material loss.
 - **Leaning region:** a controlled smooth shear of the right-hand region of that
@@ -108,9 +118,10 @@ under the prescribed edit, not a physically successful recovery.
 ## Current boundary
 
 This is an archived-batch replay and proposal comparison. It preserves ordinary
-rule-based candidate generation. The recording provides field/contour point files,
-but not the original field faces/scalars, avoidance state and full runtime settings
-needed for faithful planner regeneration. New or adapted candidates have
+rule-based candidate generation. At the time of this experiment only the recording's
+field/contour point files had been identified. A later repository audit recovered
+`mesh/fields/field_state_init1.npz`; see `../offline_planner_replay/README.md`.
+The avoidance state and full runtime settings remain unresolved. These earlier new or adapted candidates have
 `field_goal_validity: not_replayed`, `avoidance_validity: not_replayed`, and
 `executable: false`. Existing archived candidates are not recertified here either.
 
@@ -218,3 +229,156 @@ before an executable correction can be developed.
 Unsigned, sampled mesh distances do not certify continuous collision, inside/outside
 containment or unobserved space. A candidate passing this experiment retains
 `executable: false`, unreplayed field/avoidance validity and unverified robot IK.
+
+## Recovery decision layer (2026-10-09)
+
+`behav3d_orchestrator.offline_agent.recovery` is a standard-library policy module.
+It takes a normalized issue, bounded proposals and a planner-state summary. It
+returns a next action, a selected proposal for validation when appropriate,
+alternative rejection reasons and a mandatory inspection checkpoint. There are
+no ROS imports, command exports, runtime configuration changes or motion calls.
+
+```sh
+/Users/josephnamar/Documents/GitHub/3DP-DDS/.venv/bin/python -B \
+  tools/offline_recovery/build_decisions.py
+python3 -B -m unittest discover -s src/behav3d_orchestrator/test -p 'test_offline*.py' -q
+/Users/josephnamar/Documents/GitHub/3DP-DDS/.venv/bin/python -B \
+  -m unittest discover -s tools/offline_recovery -p 'test_*.py' -q
+```
+
+This replay uses the **committed experiment inputs**, verifies their artifact
+manifests and queries their complete meshes. It does not need the external
+Agent007 directory or raw recording. Its own source and output hashes are saved.
+The old experiment outputs remain unchanged.
+
+### Decision rules
+
+1. Keep normal rule-based generation when no recovery issue is supported.
+2. Inspect unresolved identity, registration, coverage, tolerance-sensitive
+   discrepancies, unconfirmed failure or an unknown lean trend.
+3. Defer the affected region for progressing deformation or compromised
+   connections; extensive failures require reassessment of the construction goal.
+4. For a stable local lean, compare bounded adaptations when the objective is
+   continued growth. Restoring already printed geometry routes to a contact/goal
+   study instead. Two distinct observation revisions are required for a trend;
+   the policy does not estimate a trend from a single lean angle.
+5. For a confirmed local deficit, compare an attached first fill bead. Unknown
+   samples are not missing material. A buried or unreachable deficit can produce
+   no suitable deposition option.
+6. Exclude failed geometric/validator checks and options with no measured
+   objective progress. Rank the remaining proposals by validated feasibility,
+   objective progress, least displacement, then least nominal material. Benefit
+   units must match within a decision; there is no arbitrary weighted score that
+   can compensate for a failed constraint.
+7. Require new readback evidence before another batch. Unchanged/worsened readback
+   or the explicit attempt limit (default two) routes to reassessment. Attempt
+   count and observation history are caller-supplied; this pure policy is not a
+   persistent runtime state machine.
+
+Support, contact and goal revision are reported with their missing prerequisites.
+Priority changes need verified independence and progress toward the declared
+objective; the replay does not infer stability benefits from printing elsewhere.
+Those strategies do not acquire fabricated candidates or validation results.
+
+### Proposal generation and limits
+
+`proposals.py` adds two numerical searches without changing the existing planner:
+
+- **Adaptation:** retain the unchanged candidate for comparison; test 13 XY
+  offsets within 8 mm of the deformation-following seed and five axis choices
+  (unchanged plus ±4° around X/Y). Fit the nominal base height to the observed
+  footprint with a 12 mm Z-adjustment bound. Evaluate all 65 alternatives, including
+  spacing against the reserved archived peers, before ranking. Only the selected
+  single bead is proposed; the peers are not issued or recertified.
+- **Fill:** sample the observed upper surface near the deficit centroid, then fit
+  a nominal bead to that surface. Compare the old centroid probe and archived
+  candidates too. This implements the **first attached bead**, not a simulated
+  multi-bead repair chain; further deposition requires new evidence or an explicit
+  validated deposition model. A candidate that touches only the upper edge of a
+  deficit is not credited with filling the buried portion.
+
+Benefits are reference samples reached for a deficit and additional base rays
+within the experimental gap for adaptation. Neither measures repair volume,
+structural stability, adhesion, print success or future goal compatibility. The
+existing 6/9 support, ±3 mm gap, 32 mm spacing and sampled tool-clearance assumptions
+remain uncalibrated. Future continuation is an explicit unresolved validation gate.
+All target records and geometry checks are bound to the issue's artifact, mesh,
+goal revision, frame and units; stale geometry cannot be silently reused.
+
+### Recorded and controlled policy cases
+
+The replay has nine cases: the real deficit and a confirmation counterfactual;
+0°/4°/8°/12° geometry controls with a declared stable-trend assumption; and the same
+8° geometry with unknown trend, progressing trend, or a restore-existing-shape
+objective. **Confirmation, trend and intact connections in controlled cases are
+test inputs, not Agent007 detections or new sensor measurements.**
+
+Measured results:
+
+| Case | Policy result | Geometric comparison |
+| --- | --- | --- |
+| Recorded C5:T7 discrepancy | Inspect the region | Failure remains unconfirmed and tolerance-sensitive |
+| Same deficit, assume confirmation | Validate an attached fill proposal | 17/398 reference samples reached, 6/9 support rays, minimum sampled tool clearance 11.71 mm |
+| Unmodified control | Use normal planner | Experimental proxy rejections do not trigger a fabricated failure |
+| Stable 8° inward lean assumption | Validate bounded adaptation | 8/9 support rays versus 2/9 unchanged; minimum sampled tool clearance 9.83 mm |
+| Same 8° geometry, unknown trend | Inspect the region | Geometry alone does not establish stability |
+| Same 8° geometry, progressing trend | Defer the affected region | A good footprint does not resolve worsening lean |
+| Same 8° geometry, restore printed shape | Contact/goal study | Additional deposition does not reposition existing material |
+
+The selected 8° adaptation moves its top 7.19 mm relative to the archived target.
+This replay did not use the subsequently recovered goal field, so this displacement
+is **not** certified as an acceptable design deviation. The attached fill alternative reaches far fewer
+reference samples than the 385/398 buried centroid probe; the latter is excluded
+by feasibility rather than preferred for its higher coverage.
+
+### Planner-state and validation interface
+
+`planner_state.py` packages explicitly supplied inputs into a portable snapshot.
+It does not infer missing inputs from contours or fill defaults from today's ROS
+configuration. A complete package contains:
+
+- Field NPZ with `field_vertices_scaled`, `field_faces`, `heat_norm`, `offset_xyz`.
+- Scan NPZ with `vertices_m` and `faces`.
+- Settings JSON with `effective_parameters`, `effective_request`, `field_to_scene`
+  (rigid 4×4 transform in metres), and `source_revision`. All parameter reads from
+  the actual fields node and all `GeneratePrintCandidates` request fields must be
+  present; capture their actual values. Include resolved overrides in the request.
+- Tool geometry and calibration JSON with `revision`, `status` (`verified` or
+  `unverified`), `tool0_to_tcp_xyz_m`, and `tool0_to_tcp_rpy_rad`.
+- Explicit avoidance mesh (`vertices_m`, `faces`) or a versioned, reasoned
+  `explicitly_none` declaration; a width map with `width_norm` for field-width mode.
+
+List the required parameter/request names with:
+
+```sh
+/Users/josephnamar/Documents/GitHub/3DP-DDS/.venv/bin/python -B \
+  tools/offline_recovery/planner_state.py --requirements
+```
+
+A specification has schema `behav3d.planner_snapshot_spec.v1`, `binding` containing
+`artifact_id`, `mesh_revision`, `goal_revision`, `frame`, `units` (`m`), and `files`
+mapping `field_state`, `scan_mesh`, `settings`, `tool_geometry`, `tool_calibration`
+and optional `width_map`/`avoidance_map` to paths. `avoidance` has `mode`, `revision`
+and a `reason` when explicitly absent. Run `planner_state.py --spec spec.json
+--output snapshot_directory`; validate the package later with `--inspect
+snapshot_directory/snapshot.json`. Output destinations must be empty. Sources are
+copied, hash checked, and the planner source revision is bound into the manifest.
+
+`planner_request(issue, proposal, snapshot)` binds the exact issue, targets and
+snapshot hashes. A trusted numerical validator returns schema
+`behav3d.recovery_validation_result.v1`, `request_sha256`, `validator`, and `gates`.
+Each gate contains `status` (`pass`, `fail`, `unknown`) and supporting `evidence`.
+Required gates are `goal`, `avoidance`, `support`, `spacing`, `tool_access`, `robot`,
+`process` and `future_continuation`. Changing the mesh, goal, candidate, issue or
+snapshot invalidates an old receipt. Receipts are trusted-adapter inputs, not
+cryptographic attestations or agent-authored permission slips.
+
+**A complete snapshot is input completeness, not a passed validation.** The saved
+recording lacks a complete avoidance/settings/calibration state, so this earlier replay exports
+incomplete validation requests and leaves those checks unresolved. This change
+implements the packaging and result contract; automatic ROS snapshot capture and
+full planner validation for recovery are still pending. The separate
+`offline_planner_replay` experiment now runs numerical candidate generation against
+the matched field with an explicitly inferred profile. No mocked success is inserted
+into recorded results. A fully passing test receipt produces `review_bounded_batch`
+while retaining `executable: false` and an empty command list.
