@@ -1,0 +1,6 @@
+bool armed
+string operator_id
+---
+bool success
+string state
+string message

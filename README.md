@@ -5,6 +5,10 @@
 This guide provides instructions for setting up the Behav3D ROS 2 workspace on Ubuntu 24.04 with ROS 2 Jazzy.
 For installing Ros and more details read the file [manual_install.md](manual_install.md)
 
+For the Mac development path, use [ROS 2 review validation in Docker](docs/ROS_DOCKER.md).
+It builds the four supervised-review packages and tests real ROS communication
+without starting the robot, camera or extruder. It is not the full workcell simulator.
+
 -----
 
 ## 1\. Prerequisites

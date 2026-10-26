@@ -3,6 +3,15 @@
 ROS 2 sequence nodes that compose motion, scanning, field candidate generation,
 and printing through the shared session classes in `behav3d_orchestrator/src/`.
 
+## Supervised observation review
+
+`supervised_agent_loop` and `observation_bridge` add an opt-in, human-approved
+ROS review path for existing Agent007 evidence. They start no workcell nodes
+and register no physical command handlers. Fresh scan analysis and recovery
+execution are not yet connected. See
+[Supervised observation review](../../docs/SUPERVISED_AGENT_LOOP.md) for the
+interfaces, configuration, offline demonstration and validation boundaries.
+
 ## Field Print Loops
 
 - `print_field_oriented_sequence_v2`: scan, reconstruct, initialize/resume a

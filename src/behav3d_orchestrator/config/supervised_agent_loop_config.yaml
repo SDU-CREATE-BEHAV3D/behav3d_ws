@@ -1,0 +1,26 @@
+# Opt-in recorded-evidence review. Does not include robot bringup or execution.
+behav3d_supervised_agent_loop:
+  ros__parameters:
+    # Explicit existing capture/session directory. Empty refuses startup.
+    session_path: ""
+    approval_timeout_s: 300.0
+    observation_timeout_s: 125.0
+
+behav3d_observation_bridge:
+  ros__parameters:
+    # Explicit directory containing the selected Agent007 evidence bundles.
+    # Empty rejects all goals. No use_latest or frame aliases are inferred.
+    evidence_root: ""
+    # Additional trusted roots for source_sha256 inputs, configured by operator.
+    source_roots: [""]
+    # Saved verification remains the default. fresh_geometry is explicit opt-in
+    # and requires a prepared fresh input manifest, not an evaluation bundle.
+    backend_mode: "recorded"
+    agent007_root: ""
+    dds_root: ""
+    # Separate existing writable directory; never inside input/source roots.
+    analysis_output_root: ""
+    worker_timeout_s: 120.0
+    # worker_python defaults to the bridge interpreter; may be configured to an
+    # isolated Python environment. Recorded uses stdlib; fresh_geometry needs
+    # the local DDS/Agent007 geometry dependencies, never ROS in that worker.

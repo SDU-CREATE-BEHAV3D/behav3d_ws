@@ -1,0 +1,25 @@
+# Optional, explicit recorded-evidence mounts. Variables are repository roots;
+# only outputs are exposed, not Agent007/DDS source, secrets or Mac virtualenvs.
+# Keep original absolute paths: saved source bindings are hashed and verified.
+# Does not dispatch a recorded evaluation or grant approval automatically.
+services:
+  ros-review:
+    volumes:
+      - type: bind
+        source: ${BEHAV3D_AGENT007_ROOT:?Set the absolute Agent007 repository root}/outputs
+        target: ${BEHAV3D_AGENT007_ROOT:?Set the absolute Agent007 repository root}/outputs
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BEHAV3D_DDS_ROOT:?Set the absolute DDS repository root}/outputs
+        target: ${BEHAV3D_DDS_ROOT:?Set the absolute DDS repository root}/outputs
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BEHAV3D_RECORDING_ROOT:?Set the absolute recording directory}
+        target: ${BEHAV3D_RECORDING_ROOT:?Set the absolute recording directory}
+        read_only: true
+        bind:
+          create_host_path: false

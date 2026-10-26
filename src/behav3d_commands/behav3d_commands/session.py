@@ -48,26 +48,31 @@ class Session:
         *,
         controller_action: str = "/scaled_joint_trajectory_controller/follow_joint_trajectory",
         register_default_commands: bool = True,
+        enabled_command_sets: Optional[Iterable[str]] = None,
     ):
         self.node = node
         self._router = CommandRouter(node)
         self._queue = SessionQueue(executor=self._execute_item)
 
-        self.motion = MotionCommands(node, queue=self._queue, controller_action=controller_action)
-        self.camera = CameraCommands(node, queue=self._queue)
-        self.field = FieldCommands(node, queue=self._queue)
-        self.extruder = ExtruderCommands(node, queue=self._queue)
-        self.util = UtilCommands(node, queue=self._queue)
+        allowed = {'motion', 'camera', 'field', 'extruder', 'util'}
+        enabled = allowed if enabled_command_sets is None else set(enabled_command_sets)
+        if not enabled <= allowed:
+            raise ValueError('Unknown command set: ' + ', '.join(sorted(enabled - allowed)))
+        # Empty selection is an explicit evidence-only session: no hardware clients.
+        self.motion = (MotionCommands(node, queue=self._queue, controller_action=controller_action)
+                       if 'motion' in enabled else None)
+        self.camera = CameraCommands(node, queue=self._queue) if 'camera' in enabled else None
+        self.field = FieldCommands(node, queue=self._queue) if 'field' in enabled else None
+        self.extruder = ExtruderCommands(node, queue=self._queue) if 'extruder' in enabled else None
+        self.util = UtilCommands(node, queue=self._queue) if 'util' in enabled else None
 
         if register_default_commands:
             self._register_default_commands()
 
     def _register_default_commands(self) -> None:
-        self.motion.register(self._router)
-        self.camera.register(self._router)
-        self.field.register(self._router)
-        self.extruder.register(self._router)
-        self.util.register(self._router)
+        for commands in (self.motion, self.camera, self.field, self.extruder, self.util):
+            if commands is not None:
+                commands.register(self._router)
 
     def run_group(self, items: Iterable[QueueItem]) -> None:
         items_list = list(items)

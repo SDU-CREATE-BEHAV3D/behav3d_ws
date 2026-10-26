@@ -18,10 +18,13 @@ setup(
         ('share/ament_index/resource_index/packages',
          ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/config', glob('config/*.yaml')),
+        ('share/' + package_name + '/config', glob('config/*.yaml') + glob('config/*.json')),
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
     ],
     entry_points={
         'console_scripts': [
+            'supervised_agent_loop = behav3d_orchestrator.supervised_agent_loop:main',
+            'observation_bridge = behav3d_orchestrator.observation_bridge:main',
             'print_yaml_and_scan_sequence = behav3d_orchestrator.print_yaml_and_scan_sequence:main',
             'scan_sequence = behav3d_orchestrator.scan_sequence:main',
             'print_field_oriented_sequence_v2 = behav3d_orchestrator.print_field_oriented_sequence_v2:main',

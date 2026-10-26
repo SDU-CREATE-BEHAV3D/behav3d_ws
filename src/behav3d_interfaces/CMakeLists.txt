@@ -12,12 +12,15 @@ find_package(trajectory_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 # List all your .action and .srv files here
 set(action_files
+  action/EvaluateObservation.action
   action/PlanAndExecute.action
   action/PrintTime.action
   action/PrintSteps.action
 )
 
 set(srv_files
+  srv/SetSupervisorArmed.srv
+  srv/ApproveSupervisedStep.srv
   srv/PlanWithMoveIt.srv
   srv/ComputeHandEye.srv
   srv/Capture.srv

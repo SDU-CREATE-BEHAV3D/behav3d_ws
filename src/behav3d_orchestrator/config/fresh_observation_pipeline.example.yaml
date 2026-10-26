@@ -1,0 +1,4 @@
+# Frozen metadata for model-free analysis, not a perception execution config.
+dataset:
+  scan_pattern: field_loop/cycle_*/scan
+  extrinsic_frame: T_tool0_ir

@@ -48,14 +48,18 @@ class ControlPauseGate:
         else:
             self._node.get_logger().info("[control_pause] Global resume requested.")
 
-    def wait(self, label: str = "next command") -> bool:
+    def wait(self, label: str = "next command", *, cancel_event=None) -> bool:
         with self._condition:
+            if cancel_event is not None and cancel_event.is_set():
+                return False
             if not self._paused:
                 return True
             self._node.get_logger().warn(f"[control_pause] Paused before {label}.")
             while rclpy.ok() and self._paused:
+                if cancel_event is not None and cancel_event.is_set():
+                    return False
                 self._condition.wait(timeout=0.25)
-            if not rclpy.ok():
+            if not rclpy.ok() or (cancel_event is not None and cancel_event.is_set()):
                 return False
 
         self._node.get_logger().info(f"[control_pause] Resuming with {label}.")

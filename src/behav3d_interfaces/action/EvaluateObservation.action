@@ -1,0 +1,28 @@
+# Explicit immutable observation identity; manifests refer to shared local storage.
+string request_id
+string artifact_id
+string observation_id
+string event_type
+int64 candidate_cycle
+int64 scan_cycle
+string previous_evaluation_id
+string frame_id
+string coordinate_units
+string source_manifest_path
+string source_manifest_sha256
+---
+# A successful evaluation is review-only, never fabrication authorization.
+bool success
+string status
+string message
+string request_id
+string evaluation_id
+string packet_path
+string packet_sha256
+string evidence_manifest_path
+string evidence_manifest_sha256
+bool requires_review
+bool fabrication_authorized
+---
+string stage
+string message

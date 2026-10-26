@@ -1,0 +1,52 @@
+# Optional override for fresh recorded RGB-D analysis; use with the base file.
+# Linux amd64 is explicit because Open3D 0.19 has no official Linux ARM64 wheel.
+# Native Linux deployments do not require this Docker image or these mounts.
+# The base checkout stays read-only and results stay in its named /results volume.
+# This override grants neither approval nor automatic analysis of the recording.
+services:
+  ros-review:
+    image: behav3d-ros-fresh:jazzy-amd64
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/ros-review/Dockerfile.fresh
+      args:
+        REVIEW_IMAGE: ${BEHAV3D_REVIEW_AMD64_IMAGE:-behav3d-ros-review:jazzy-amd64}
+    user: "10001:10001"
+    read_only: true
+    network_mode: none
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - type: bind
+        source: ${BEHAV3D_AGENT007_ROOT:?Set the absolute Agent007 repository root}/src
+        target: ${BEHAV3D_AGENT007_ROOT:?Set the absolute Agent007 repository root}/src
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BEHAV3D_AGENT007_ROOT:?Set the absolute Agent007 repository root}/scripts
+        target: ${BEHAV3D_AGENT007_ROOT:?Set the absolute Agent007 repository root}/scripts
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BEHAV3D_DDS_ROOT:?Set the absolute DDS repository root}/src
+        target: ${BEHAV3D_DDS_ROOT:?Set the absolute DDS repository root}/src
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BEHAV3D_DDS_ROOT:?Set the absolute DDS repository root}/examples
+        target: ${BEHAV3D_DDS_ROOT:?Set the absolute DDS repository root}/examples
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BEHAV3D_RECORDING_ROOT:?Set the absolute recording directory}
+        target: ${BEHAV3D_RECORDING_ROOT:?Set the absolute recording directory}
+        read_only: true
+        bind:
+          create_host_path: false

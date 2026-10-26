@@ -1,0 +1,14 @@
+{
+  "frame_id": "world/base", "yaml_units": "mm", "flip_x": true, "flip_y": true,
+  "bead_width_m": 0.036, "bead_height_m": 0.016, "voxel_size_m": 0.002,
+  "tolerance_mm": 10, "tolerance_steps_mm": [2, 4, 6, 8, 10, 12],
+  "observed_weight_min": 4, "surface_band_m": 0.006, "target_crop_margin_m": 0.03,
+  "table_clearance_m": 0.003, "expected_top_surface_depth_m": 0.010,
+  "preexisting_surface_exclusion_distance_m": 0.004, "target_min_defect_voxels": 250,
+  "semantic_mode": "offline_mock",
+  "tsdf": {
+    "voxel_size": 0.001953125, "block_count": 10000, "depth_max": 0.9,
+    "depth_scale": 1000.0, "depth_bias_m": -0.0051, "center_crop_depth": true,
+    "center_crop_width": 270, "center_crop_height": 290, "extrinsic_frame_key": "T_tool0_ir"
+  }
+}

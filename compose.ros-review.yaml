@@ -1,0 +1,47 @@
+# Only real review ROS transport; never use the full robot bringup here.
+services:
+  ros-review:
+    image: behav3d-ros-review:jazzy
+    platform: ${BEHAV3D_REVIEW_PLATFORM:-linux/arm64}
+    build:
+      context: .
+      dockerfile: docker/ros-review/Dockerfile
+      args:
+        ROS_IMAGE: ${BEHAV3D_REVIEW_ROS_IMAGE:-ros:jazzy-ros-base@sha256:103b6c417973394659af6804d4917cd489b91e5ed22eb7bef263025a3bed2410}
+    init: true
+    user: "10001:10001"
+    read_only: true
+    network_mode: none
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 4g
+    environment:
+      BEHAV3D_REVIEW_CONTAINER: "1"
+      ROS_DOMAIN_ID: "231"
+      ROS_LOCALHOST_ONLY: "1"
+      ROS_AUTOMATIC_DISCOVERY_RANGE: LOCALHOST
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      CYCLONEDDS_URI: file:///etc/behav3d_review/cyclonedds.xml
+      ROS_LOG_DIR: /results/ros-log
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=1g,mode=1777
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace/behav3d_ws
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: ros-review-results
+        target: /results
+    command:
+      - /opt/behav3d_review/validate.sh
+
+volumes:
+  ros-review-results:

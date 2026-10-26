@@ -1,0 +1,8 @@
+string request_id
+string proposal_sha256
+string operator_id
+bool approve
+---
+bool success
+string state
+string message

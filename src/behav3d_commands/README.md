@@ -9,6 +9,11 @@ which owns a `SessionQueue`, a `CommandRouter`, and subsystem command sets
 
 Higher-level orchestration lives in `behav3d_orchestrator`.
 
+`ObservationCommands` is an opt-in review-only addition, not part of the default
+command sets. It wraps `/behav3d/evaluate_observation` using the same queue,
+asynchronous action and `Command.finish_flag` pattern. See
+[supervised review setup](../../docs/SUPERVISED_AGENT_LOOP.md).
+
 ## Core building blocks
 
 ### Session
@@ -26,6 +31,11 @@ The local `Session.pause()`/`resume()` methods only control that instance's
 queue. Orchestrator sessions derive from `ControlAwareSession`, which listens
 to the shared `/behav3d/control_state` topic and waits before starting the next
 internal command.
+
+`Session(..., enabled_command_sets=())` creates the queue/router without
+constructing physical subsystem clients. The default `None` preserves all
+five existing command sets. `ObservationSession` combines the empty selection
+with `register_default_commands=False` and registers only evidence review.
 
 ### SessionQueue
 `SessionQueue` is a FIFO queue with optional parallel groups:

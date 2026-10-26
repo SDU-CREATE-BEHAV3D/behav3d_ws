@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1
+# Optional fresh CPU analysis for Linux amd64. Native Linux remains primary;
+# this image adds no workcell, camera, motion or fabrication executor.
+# Build the matching amd64 review image with Dockerfile before this stage.
+ARG REVIEW_IMAGE=behav3d-ros-review:jazzy-amd64
+FROM ${REVIEW_IMAGE}
+
+USER root
+
+# Open3D 0.19 has no official Linux ARM64 wheel. Fail explicitly instead of
+# silently changing the tested backend or building unreviewed source packages.
+RUN test "$(dpkg --print-architecture)" = amd64 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       python3-venv libegl1 libgl1 libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ROS keeps the base image's system Python and apt scientific dependencies.
+# Only the selected analysis interpreter sees these extra pinned wheels.
+# The CPU wheel exports the same open3d module and needs no GPU devices.
+RUN python3 -m venv --system-site-packages /opt/behav3d_analysis \
+    && /opt/behav3d_analysis/bin/python -m pip install \
+       --no-cache-dir --only-binary=:all: \
+       numpy==1.26.4 \
+       open3d-cpu==0.19.0 \
+       opencv-python-headless==4.10.0.84 \
+       scikit-image==0.23.2 \
+       tyro==1.0.13 \
+       plotly==6.8.0 \
+    && /opt/behav3d_analysis/bin/python -c \
+       'import cv2, numpy, open3d, plotly, scipy, skimage, tyro; from PIL import Image; assert open3d.__version__ == "0.19.0"; assert str(open3d.core.Device("CPU:0")) == "CPU:0"; print("Fresh CPU analysis imports passed")' \
+    && /opt/behav3d_analysis/bin/python -m pip freeze --all \
+       > /opt/behav3d_ws/fresh-python-packages.txt \
+    && dpkg-query -W > /opt/behav3d_ws/fresh-apt-packages.txt
+
+# Refresh the Python-only review package without rebuilding unchanged ROS IDL.
+# This also keeps source verification exact after local worker/test changes.
+WORKDIR /opt/behav3d_ws
+COPY src/behav3d_orchestrator/ /opt/behav3d_ws/src/behav3d_orchestrator/
+RUN source /opt/ros/jazzy/setup.bash \
+    && source /opt/behav3d_ws/install/setup.bash \
+    && colcon build --merge-install --executor sequential \
+       --packages-select behav3d_orchestrator --event-handlers console_direct+ \
+    && chmod -R a+rX /opt/behav3d_ws/install \
+    && find src -type f -print0 | sort -z | xargs -0 sha256sum \
+       > /opt/behav3d_ws/source-sha256.txt
+COPY --chmod=0755 docker/ros-review/validate.sh /opt/behav3d_review/validate.sh
+
+# Do not prepend the venv to PATH or change the review entrypoint: ROS nodes
+# continue using the existing system interpreter. Select the worker explicitly.
+WORKDIR /workspace/behav3d_ws
+USER 10001:10001

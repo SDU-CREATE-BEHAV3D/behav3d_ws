@@ -42,6 +42,7 @@ Primary entry point: `behav3d_commands.Session` in `src/behav3d_commands/behav3d
 
 Key concepts:
 - `Session` owns a `SessionQueue`, a `CommandRouter`, and five command sets: motion, camera, field, extruder, util.
+- Default command sets are unchanged. `enabled_command_sets=()` opts out of constructing them; `ObservationSession` registers only the review command in this mode.
 - Each command returns a `QueueItem` when `enqueue=False` and enqueues by default when `enqueue=True`.
 - `SessionQueue` supports FIFO execution and best-effort parallel groups (`run_group`).
 - `run_sync` blocks the caller until `on_done` fires. It must not be called from the ROS executor thread; use a worker thread or a multi-threaded executor.
@@ -331,6 +332,23 @@ Implementation references:
 ---
 
 **Current Orchestration Session Pattern**
+
+The opt-in `supervised_agent_loop` and `observation_bridge` add typed ROS
+observation review with exact-hash approvals and a durable supervisor journal.
+The default `recorded` backend verifies existing Agent007 deposition-readback
+bundles. Opt-in `fresh_geometry` accepts a frozen
+`agent007.fresh_observation_input.v1` submission and runs existing Agent007/DDS
+CPU reconstruction, voxel comparison and bead-cap/pair/shell analysis. It
+requires explicit server code/output roots, a trusted geometry interpreter,
+an `offline_mock` profile and the corrected Open3D x-fastest DDS block layout.
+It performs no scene perception, LLM calls, candidate planning or physical
+execution. `ObservationSession` follows the same queue/router/action and
+shared pause contract. Both backends return `REVIEW_REQUIRED`, never
+fabrication authorization. Generated analysis markers are not Supervisor
+acceptance receipts. Do not substitute legacy TTY debug input for approval or
+present saved verification as new scan analysis. See
+[Supervised observation review](docs/SUPERVISED_AGENT_LOOP.md) before extending
+this path or using its ROS interfaces.
 
 Active sequence nodes create one or more specialized sessions on the same ROS
 node and run blocking orchestration in a worker thread:
