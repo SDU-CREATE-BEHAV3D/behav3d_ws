@@ -23,6 +23,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
+            'initial_startup = behav3d_orchestrator.initial_startup_node:main',
+            'initial_wall_backend = behav3d_orchestrator.initial_startup_node:backend_main',
             'supervised_agent_loop = behav3d_orchestrator.supervised_agent_loop:main',
             'observation_bridge = behav3d_orchestrator.observation_bridge:main',
             'print_yaml_and_scan_sequence = behav3d_orchestrator.print_yaml_and_scan_sequence:main',

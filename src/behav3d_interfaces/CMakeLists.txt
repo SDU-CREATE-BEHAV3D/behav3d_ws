@@ -12,6 +12,7 @@ find_package(trajectory_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 # List all your .action and .srv files here
 set(action_files
+  action/InitialWall.action
   action/EvaluateObservation.action
   action/PlanAndExecute.action
   action/PrintTime.action

@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+# Optional offline initial-scene / wall-proposal validation. No hardware runtime.
+ARG STARTUP_BASE=behav3d-ros-fresh:jazzy-amd64
+FROM ${STARTUP_BASE}
+USER root
+
+# Production lib_scalar imports potpourri3d, including on the contour path.
+# Keep scientific wheels out of the ROS system interpreter.
+RUN /opt/behav3d_analysis/bin/python -m pip install \
+    --no-cache-dir --only-binary=:all: potpourri3d==1.4.0
+
+WORKDIR /opt/behav3d_ws
+COPY src/behav3d_interfaces/ src/behav3d_interfaces/
+COPY src/behav3d_utils/ src/behav3d_utils/
+COPY src/behav3d_commands/ src/behav3d_commands/
+RUN source /opt/ros/jazzy/setup.bash \
+    && colcon build --merge-install --executor sequential \
+       --packages-select behav3d_interfaces behav3d_utils behav3d_commands \
+       --event-handlers console_direct+ --cmake-args -DBUILD_TESTING=OFF
+COPY src/behav3d_orchestrator/ src/behav3d_orchestrator/
+# Data-only numerical kernels, not the legacy ROS package or physical nodes.
+COPY src/behav3d_py/behav3d_py/scalar_field/lib_scalar/ \
+     src/behav3d_py/behav3d_py/scalar_field/lib_scalar/
+RUN source /opt/ros/jazzy/setup.bash \
+    && source /opt/behav3d_ws/install/setup.bash \
+    && colcon build --merge-install --executor sequential \
+       --packages-select behav3d_orchestrator \
+       --event-handlers console_direct+ --cmake-args -DBUILD_TESTING=OFF \
+    && chmod -R a+rX /opt/behav3d_ws/install /opt/behav3d_ws/src \
+    && find src -type f -print0 | sort -z | xargs -0 sha256sum \
+       > /opt/behav3d_ws/source-sha256.txt \
+    && /opt/behav3d_analysis/bin/python -m pip freeze --all \
+       > /opt/behav3d_ws/startup-python-packages.txt
+
+WORKDIR /workspace/behav3d_ws
+USER 10001:10001

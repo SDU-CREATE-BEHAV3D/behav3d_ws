@@ -9,6 +9,11 @@
 !src/behav3d_commands/**
 !src/behav3d_orchestrator/
 !src/behav3d_orchestrator/**
+!src/behav3d_py/
+!src/behav3d_py/behav3d_py/
+!src/behav3d_py/behav3d_py/scalar_field/
+!src/behav3d_py/behav3d_py/scalar_field/lib_scalar/
+!src/behav3d_py/behav3d_py/scalar_field/lib_scalar/*.py
 !docker/
 !docker/ros-review/
 !docker/ros-review/**

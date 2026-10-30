@@ -7,10 +7,15 @@ and printing through the shared session classes in `behav3d_orchestrator/src/`.
 
 `supervised_agent_loop` and `observation_bridge` add an opt-in, human-approved
 ROS review path for existing Agent007 evidence. They start no workcell nodes
-and register no physical command handlers. Fresh scan analysis and recovery
-execution are not yet connected. See
+and register no physical command handlers. Opt-in fresh geometry analysis is
+available; physical recovery execution is not connected. See
 [Supervised observation review](../../docs/SUPERVISED_AGENT_LOOP.md) for the
 interfaces, configuration, offline demonstration and validation boundaries.
+
+`initial_startup` and `initial_wall_backend` separately connect frozen scene
+maps to proposed wall placement and exact-approved first-candidate previews.
+They use `InitialWallSession`, the shared pause gate and no physical clients.
+See [Initial scene review and first wall candidates](../../docs/INITIAL_STARTUP.md).
 
 ## Field Print Loops
 

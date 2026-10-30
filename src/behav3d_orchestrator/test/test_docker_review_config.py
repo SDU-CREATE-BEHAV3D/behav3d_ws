@@ -98,6 +98,12 @@ class DockerReviewConfigTests(unittest.TestCase):
                  if line.strip() and not line.startswith('#')]
         self.assertEqual(lines[0], '**')
         expected = {'!src/', '!docker/', '!docker/ros-review/', '!docker/ros-review/**'}
+        # The optional startup image uses source-only numerical kernels, not a
+        # fifth ROS package, recordings, scalar demos or legacy robot nodes.
+        expected.update({'!src/behav3d_py/', '!src/behav3d_py/behav3d_py/',
+                         '!src/behav3d_py/behav3d_py/scalar_field/',
+                         '!src/behav3d_py/behav3d_py/scalar_field/lib_scalar/',
+                         '!src/behav3d_py/behav3d_py/scalar_field/lib_scalar/*.py'})
         for package in PACKAGES:
             expected.update({'!src/' + package + '/', '!src/' + package + '/**'})
         self.assertEqual({line for line in lines if line.startswith('!')}, expected)

@@ -1,0 +1,20 @@
+# Optional review-only startup. Never launches workcell, camera or print nodes.
+behav3d_initial_startup:
+  ros__parameters:
+    # Both nodes must share this explicit durable journal path.
+    journal_path: ""
+    operation_timeout_s: 125.0
+
+behav3d_initial_wall_backend:
+  ros__parameters:
+    journal_path: ""
+    # Include export folder, original scene folder, and task-file directory.
+    input_roots: [""]
+    # Existing separate writable root; UUID proposal/batch artifacts only.
+    output_root: ""
+    agent007_root: ""
+    # Trusted checkout containing production scalar_field/lib_scalar kernels.
+    behav3d_root: ""
+    # Explicit scientific interpreter with NumPy/Open3D; no ROS imports required.
+    worker_python: ""
+    worker_timeout_s: 120.0

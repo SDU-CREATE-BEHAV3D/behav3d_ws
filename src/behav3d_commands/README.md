@@ -14,6 +14,10 @@ command sets. It wraps `/behav3d/evaluate_observation` using the same queue,
 asynchronous action and `Command.finish_flag` pattern. See
 [supervised review setup](../../docs/SUPERVISED_AGENT_LOOP.md).
 
+`InitialWallCommands` is also opt-in. It wraps the typed startup backend through
+the same queue/router/asynchronous action pattern, never the physical print
+commands. See [initial wall startup](../../docs/INITIAL_STARTUP.md).
+
 ## Core building blocks
 
 ### Session

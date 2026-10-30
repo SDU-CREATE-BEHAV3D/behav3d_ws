@@ -9,6 +9,10 @@ For the Mac development path, use [ROS 2 review validation in Docker](docs/ROS_D
 It builds the four supervised-review packages and tests real ROS communication
 without starting the robot, camera or extruder. It is not the full workcell simulator.
 
+The opt-in [initial scene and wall startup](docs/INITIAL_STARTUP.md) connects
+frozen Agent007 maps to a placement proposal and an exact-approved first
+rule-based candidate preview. It does not execute scans, motion or printing.
+
 -----
 
 ## 1\. Prerequisites

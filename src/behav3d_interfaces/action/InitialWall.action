@@ -1,0 +1,25 @@
+# Initial-scene placement proposal or exact-approved first-batch PREVIEW only.
+string phase
+string request_id
+string artifact_id
+string frame_id
+string scene_manifest_path
+string scene_manifest_sha256
+string task_path
+string task_sha256
+string proposal_path
+string proposal_sha256
+---
+bool success
+string status
+string message
+string request_id
+string proposal_path
+string proposal_sha256
+string batch_manifest_path
+string batch_manifest_sha256
+bool requires_review
+bool fabrication_authorized
+---
+string stage
+string message

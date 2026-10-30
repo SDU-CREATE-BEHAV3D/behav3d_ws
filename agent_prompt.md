@@ -350,6 +350,13 @@ present saved verification as new scan analysis. See
 [Supervised observation review](docs/SUPERVISED_AGENT_LOOP.md) before extending
 this path or using its ROS interfaces.
 
+The separate `initial_startup` and `initial_wall_backend` expose frozen scene
+placement and exact-approved first-candidate previews through `InitialWall`.
+`InitialWallSession` uses the existing queue/router/action and shared pause
+contract without physical clients. No initial camera scan or scene LLM is
+started by that launch. Source frames are never aliased to robot frames.
+See [Initial scene review and first wall candidates](docs/INITIAL_STARTUP.md).
+
 Active sequence nodes create one or more specialized sessions on the same ROS
 node and run blocking orchestration in a worker thread:
 - `ScanSession`: grid, Fibonacci, half-cylinder, capture, and reconstruction flows.
