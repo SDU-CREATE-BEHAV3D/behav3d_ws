@@ -71,3 +71,8 @@ COLCON_IGNORE
 .vscode
 .open3d_venv
 /Log
+
+# Python-only J1 workbench
+/behav3d/
+/mesh/fields/field_state_init_subdiv1.npz
+

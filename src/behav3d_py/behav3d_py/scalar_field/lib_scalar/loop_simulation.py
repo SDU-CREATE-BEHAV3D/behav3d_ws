@@ -19,6 +19,7 @@ import open3d as o3d
 from .compute_phi_mask import make_scan_scene, query_scan_z_with_vertical_rays
 from .extract_phi_contour import extract_phi_contour_with_offset
 from .generate_print_points import generate_print_points
+from .contour_sampling import resample_contour
 from .position_field import default_xy_search_bounds, make_axis_samples, position_field
 from .types import PoseResult
 
@@ -46,6 +47,7 @@ class CandidateStage:
     source_points: np.ndarray | None = None
     segment_start_points: np.ndarray | None = None
     bead_widths: np.ndarray | None = None
+    sampling_points: np.ndarray | None = None
 
 
 def position_field_with_attempts(
@@ -212,6 +214,7 @@ def generate_step_candidates(
     cone_max_tilt_deg: float = 45.0,
     field_bead_widths: np.ndarray | None = None,
     bead_overlap_mm: float = 0.0,
+    contour_sample_spacing_mm: float = 3.0,
 ) -> CandidateStage:
     """Generate current-step print points.
 
@@ -249,15 +252,22 @@ def generate_step_candidates(
             bead_widths=pool.bead_widths,
         )
 
+    # Keep mesh corners for exact graph distances, but select only arc samples.
+    samples = resample_contour(
+        contour.contour_points, contour.contour_lines,
+        spacing=1e-3 * float(contour_sample_spacing_mm),
+    )
+
     if mode_norm == "z_lift":
         pool = generate_print_points(
-            polyline_points=contour.contour_points,
-            polyline_lines=contour.contour_lines,
+            polyline_points=samples.points,
+            polyline_lines=samples.lines,
+            merge_tol=1e-10,
             field_vertices_world=field_vertices_world,
             field_scalar=heat_norm,
             count=select_count,
             min_spacing=sep_m,
-            point_valid_mask=None,
+            point_valid_mask=samples.sample_mask,
             extra_points=None,
             candidate_mode="z_lift",
             lift_height=1e-3 * float(bead_height_mm),
@@ -268,22 +278,24 @@ def generate_step_candidates(
         return CandidateStage(
             points=pool.points,
             scalar_values=pool.scalar_values,
-            available_vertices=int(pool.available_vertices),
-            z_valid_count=int(pool.available_vertices),
+            available_vertices=int(np.count_nonzero(samples.sample_mask)),
+            z_valid_count=int(np.count_nonzero(samples.sample_mask)),
             source_points=pool.source_points,
             segment_start_points=pool.segment_start_points,
             bead_widths=pool.bead_widths,
+            sampling_points=samples.source_points,
         )
 
     if mode_norm in ("gradient_lift", "gradient_walk"):
         pool = generate_print_points(
-            polyline_points=contour.contour_points,
-            polyline_lines=contour.contour_lines,
+            polyline_points=samples.points,
+            polyline_lines=samples.lines,
+            merge_tol=1e-10,
             field_vertices_world=field_vertices_world,
             field_scalar=heat_norm,
             count=select_count,
             min_spacing=sep_m,
-            point_valid_mask=None,
+            point_valid_mask=samples.sample_mask,
             extra_points=None,
             candidate_mode=mode_norm,
             lift_height=1e-3 * float(bead_height_mm),
@@ -302,11 +314,12 @@ def generate_step_candidates(
         return CandidateStage(
             points=pool.points,
             scalar_values=pool.scalar_values,
-            available_vertices=int(pool.available_vertices),
-            z_valid_count=int(pool.available_vertices),
+            available_vertices=int(np.count_nonzero(samples.sample_mask)),
+            z_valid_count=int(np.count_nonzero(samples.sample_mask)),
             source_points=pool.source_points,
             segment_start_points=pool.segment_start_points,
             bead_widths=pool.bead_widths,
+            sampling_points=samples.source_points,
         )
 
     raise ValueError(

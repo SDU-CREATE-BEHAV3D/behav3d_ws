@@ -69,6 +69,10 @@ def main() -> None:
     parser.add_argument("--offset-distance-mm", type=float, default=12.0)
     parser.add_argument("--offset-geodesic-delta-mm", type=float, default=0.6)
     parser.add_argument("--beads-per-step", type=int, default=7)
+    parser.add_argument(
+        "--contour-sample-spacing-mm", type=float, default=3.0,
+        help="Arc spacing for contour source samples in mm (> 0). Includes open endpoints.",
+    )
     parser.add_argument("--bead-separation-mm", type=float, default=16.0)
     parser.add_argument(
         "--candidate-width-mode",
@@ -161,6 +165,7 @@ def main() -> None:
         offset_distance_mm=args.offset_distance_mm,
         offset_geodesic_delta_mm=args.offset_geodesic_delta_mm,
         beads_per_step=args.beads_per_step,
+        contour_sample_spacing_mm=args.contour_sample_spacing_mm,
         bead_separation_mm=args.bead_separation_mm,
         bead_width_mm=args.bead_width_mm,
         candidate_width_mode=args.candidate_width_mode,

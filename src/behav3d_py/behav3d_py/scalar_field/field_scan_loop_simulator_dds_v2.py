@@ -123,7 +123,7 @@ SCALAR_OVERLAY_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("phi", "Phi Contour", ("phi_contour",)),
     ("offset", "Geodesic Offset", ("offset_contour",)),
     ("targets", "Print Targets", ("selected_points",)),
-    ("sources", "Source Points", ("source_points",)),
+    ("sources", "Source Samples", ("source_samples", "source_points")),
     ("walk", "Walk Segments", ("source_to_candidate", "segment_start_points", "print_segments")),
     ("normals", "Target Normals", ("target_orientations",)),
     ("axes", "Debug Axes", ("axis_x", "axis_y", "axis_z")),
@@ -132,7 +132,7 @@ SCALAR_OVERLAY_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 
 def default_scalar_overlay_visibility() -> dict[str, bool]:
     """Default visibility for scalar overlays in the DDS workbench."""
-    return {key: True for key, _, _ in SCALAR_OVERLAY_GROUPS}
+    return {key: key != "axes" for key, _, _ in SCALAR_OVERLAY_GROUPS}
 
 
 def subdivide_field_mesh_loop(
@@ -617,6 +617,7 @@ def show_step_window(
     target_points: np.ndarray | None,
     target_z_dirs: np.ndarray | None,
     axis_size: float,
+    sampling_points: np.ndarray | None = None,
 ) -> bool:
     """Visualize one loop step in the DDS workbench and wait for N/Q key."""
     import dds.viz
@@ -766,6 +767,16 @@ def show_step_window(
             render_as_spheres=True,
         )
 
+    if sampling_points is not None and sampling_points.shape[0] > 0:
+        add_colored_point_cloud(
+            overlay,
+            sampling_points,
+            name="source_samples",
+            color="#00ffff",
+            point_size=6.0,
+            render_as_spheres=True,
+        )
+
     if (
         source_points is not None
         and source_points.shape == selected_points.shape
@@ -853,7 +864,7 @@ def show_step_window(
     bb_center = 0.5 * (bb_min + bb_max)
     axis_size_val = float(axis_size)
     if axis_size_val == 0.0:
-        axis_size_val = max(1e-4, 0.15 * bb_diag)
+        axis_size_val = max(1e-5, 0.015 * bb_diag)
     if axis_size_val > 0.0:
         axis_origin = bb_center.reshape(1, 3)
         add_vector_arrows(
@@ -943,8 +954,12 @@ def run(
     dds_view_mode: str,
     save_dds_step_bundles: bool,
     target_position_scale: float,
+    contour_sample_spacing_mm: float = 3.0,
 ) -> None:
     from dds import BeadProfile, Simulator
+
+    if not np.isfinite(contour_sample_spacing_mm) or contour_sample_spacing_mm <= 0:
+        raise ValueError("contour_sample_spacing_mm must be finite and > 0.")
 
     initial_locked_offset_xyz: tuple[float, float, float] | None = None
     seed_points_scaled = np.zeros((0, 3), dtype=np.float64)
@@ -1167,6 +1182,7 @@ def run(
             cone_max_tilt_deg=float(cone_max_tilt_deg),
             field_bead_widths=field_bead_widths_m,
             bead_overlap_mm=bead_overlap_mm_value,
+            contour_sample_spacing_mm=contour_sample_spacing_mm,
         )
         if candidate.bead_widths is None:
             if fixed_bead_width_mm is None:
@@ -1186,6 +1202,8 @@ def run(
 
         print(
             f"[step {step_index}] "
+            f"source_samples={candidate.available_vertices} "
+            f"sample_spacing_mm={contour_sample_spacing_mm:.3f} "
             f"viable={pose.viable_count} "
             f"contour_segments={contour.contour_lines.shape[0]} "
             f"offset_segments={contour.offset_lines.shape[0]} "
@@ -1298,6 +1316,7 @@ def run(
                 target_points=target_points,
                 target_z_dirs=target_z_dirs,
                 axis_size=axis_size,
+                sampling_points=candidate.sampling_points,
             )
         else:
             apply_step = wait_next_terminal(step_index=step_index)
@@ -1467,6 +1486,10 @@ def main() -> None:
     parser.add_argument("--offset-distance-mm", type=float, default=12.0)
     parser.add_argument("--offset-geodesic-delta-mm", type=float, default=0.6)
     parser.add_argument("--beads-per-step", type=int, default=7)
+    parser.add_argument(
+        "--contour-sample-spacing-mm", type=float, default=3.0,
+        help="Arc spacing for contour source samples in mm (> 0). Includes open endpoints.",
+    )
     parser.add_argument("--bead-separation-mm", type=float, default=16.0)
     parser.add_argument(
         "--candidate-width-mode",
@@ -1632,6 +1655,7 @@ def main() -> None:
         offset_distance_mm=args.offset_distance_mm,
         offset_geodesic_delta_mm=args.offset_geodesic_delta_mm,
         beads_per_step=args.beads_per_step,
+        contour_sample_spacing_mm=args.contour_sample_spacing_mm,
         bead_separation_mm=args.bead_separation_mm,
         bead_width_mm=args.bead_width_mm,
         candidate_width_mode=args.candidate_width_mode,

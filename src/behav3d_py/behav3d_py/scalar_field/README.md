@@ -265,3 +265,17 @@ per-step `segments.yaml` before creating DDS deposits. The ROS YAML and print
 contracts are documented centrally in `command_format.md` and
 `src/behav3d_orchestrator/README.md`. Width maps and DDS objects remain outside
 the ROS print service contract.
+
+## J1_Build Python workbench
+
+The Python-only launcher and setup instructions are in
+[`python_scripts/j1_build`](../../../../python_scripts/j1_build/README.md).
+
+Contour-based modes sample each connected `phi=0` contour at 3 mm arc intervals
+by default, including open endpoints. Set `--contour-sample-spacing-mm` to change
+this distance. Original mesh crossings are retained for contour graph distances
+but are eligible for selection only when they coincide with a sample. Closed
+loops do not duplicate their seam. The `Source Samples` overlay shows the full
+sample pool as cyan spheres. Debug axes start hidden and use one tenth of their
+previous automatic size.
+
