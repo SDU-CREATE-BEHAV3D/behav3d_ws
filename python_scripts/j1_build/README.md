@@ -22,6 +22,22 @@ extras. DDS is pinned to commit `66161c037d0d29fbb073aaa1027d436cbe2ba5f5`.
 `requirements-windows-lock.txt` records the versions installed for the Windows
 validation; the regular requirements file is the cross-platform starting point.
 
+## Interactive desktop workbench
+
+```powershell
+.\python_scripts\j1_build\run_workbench.cmd
+```
+
+The desktop workbench provides live parameter panels, a non-destructive light-blue
+DDS phantom, edge overlays, material/light controls, cached geometry, and on-demand
+exports. See [the workbench guide](workbench/README.md).
+Startup preferences are in [workbench/config.py](workbench/config.py):
+`Parameters`, `SimulationOptions`, and `DisplayOptions`.
+The current workbench preferences include 38 mm separation, 3.5 mm voxels and
+42 x 20 mm beads. The reference launcher below keeps its original defaults.
+
+On Linux/macOS, run `behav3d/bin/python python_scripts/j1_build/workbench/app.py`.
+
 ## Controls and defaults
 
 - `N`: accept the current targets and advance; `Q`/`Esc`: finish.
