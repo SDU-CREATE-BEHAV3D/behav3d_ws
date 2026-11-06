@@ -75,6 +75,43 @@ orientation and normal continuity. Changes affect future batches only.
 Defaults remain 3 mm source spacing, 42 x 20 mm beads and one extra subdivision
 of the stored goal field.
 
+### Fixed and field-controlled widths
+
+**Width mode** selects `fixed` or `field`. The panel explicitly marks the active
+mode and disables the other mode's inputs:
+
+- **Fixed mode only · mm**: Bead width and Separation. Uses the configured goal,
+  including the extra subdivision in the standard launch.
+- **Width field mode only · mm**: Width field NPZ, Minimum bead width, Maximum
+  bead width and Within-batch overlap. Uses the original goal without the extra
+  subdivision. The standard derived goal records its original file in
+  `source_field_state`; custom unsubdivided goals are used directly.
+
+Load an NPZ containing `width_norm` in `[0, 1]`, with one value per original goal
+vertex in the same order. A map for the subdivided goal is rejected rather than
+silently transferred. The loader checks the vertex count and numeric values;
+vertex ordering remains part of the input contract.
+
+For a trial map, load `mesh/fields/width_field_inverse_heat.npz` from the data
+root. It uses the original goal's `width_norm = 1 - heat_norm`: lower heat
+sources, which have earlier selection priority, produce wider beads. With the
+default field range of 20–40 mm, the first batch is close to 40 mm. This is a
+synthetic test distribution, not a calibrated material-width field.
+
+The existing scalar functions map normalized values to the width range, sample
+at contour sources before lift/walk, and apply pair spacing
+`max(0, (width_i + width_j) / 2 - overlap)` in candidate suppression and endpoint
+pruning. Heat priority, source subdivision spacing, height and orientation rules
+are shared between modes. Width is constant within each individual DDS deposit.
+
+Switching modes updates the goal and preview while retaining accepted DDS
+geometry and the camera. Range/overlap edits reuse phi geometry when possible.
+Preview widths are frozen and used by both phantom generation and acceptance;
+changes never resize historical beads. The initial domain reserves the field's
+maximum width. Each batch saves its applied widths and input hashes, with a
+normalized width-map snapshot under `inputs/`. Field-mode target YAML includes
+the existing nominal `volume_mm3` contract.
+
 Voxel size, physical threshold, surface-extraction step, padding and checkpoint frequency
 apply through **Create new session**. Previous session files are retained.
 Closing does not trigger a heavy mesh export; accepted targets are already

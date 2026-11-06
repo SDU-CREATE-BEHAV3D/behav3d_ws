@@ -26,6 +26,7 @@ from lib_scalar.print_targets import build_candidate_segment_targets, write_line
 from lib_scalar.target_rules import apply_secondary_target_rules
 from .config import Parameters, SimulationOptions
 from .telemetry import event
+from .width_field import WidthField, original_field_path
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,8 @@ class Preview:
     timings: dict
     geometry_cached: bool
     phantom_surface: object = None
+    bead_widths_m: object = None
+    input_metadata: object = None
 
 
 class Session:
@@ -50,6 +53,9 @@ class Session:
         options.validate()
         self.options = options
         self.field_path = Path(field_path or data_root / "mesh/fields/field_state_init_subdiv1.npz")
+        self.fixed_field_path = self.field_path
+        self.original_field_path = original_field_path(self.fixed_field_path)
+        self.width_cache = {}
         self.scan_path = Path(scan_path or data_root / "mesh/ScanMesh.stl")
         self.field = load_field_state_npz(self.field_path)
         self.base = load_triangle_mesh_legacy(self.scan_path)
@@ -73,8 +79,36 @@ class Session:
             "scan_scale": scan_scale, "scan_yaw": scan_yaw, "simulation": asdict(options),
         }, indent=2), encoding="utf-8")
 
+    def _width_inputs(self, parameters):
+        path = self.original_field_path if parameters.width_mode == "field" else self.fixed_field_path
+        field = self.field if path == self.field_path else load_field_state_npz(path)
+        width = None
+        metadata = {"field": str(path), "field_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "width_mode": parameters.width_mode}
+        if parameters.width_mode == "field":
+            source = Path(parameters.width_field_path).expanduser().resolve()
+            stat = source.stat()
+            key = (str(source), stat.st_mtime_ns, stat.st_size, len(field.heat_norm))
+            if key not in self.width_cache:
+                self.width_cache = {key: WidthField(source, len(field.heat_norm))}
+            width_field = self.width_cache[key]
+            width = width_field.mapped(parameters)
+            inputs = self.output / "inputs"
+            inputs.mkdir(exist_ok=True)
+            saved = inputs / f"width-{width_field.sha256}.npz"
+            if not saved.exists():
+                np.savez_compressed(saved, width_norm=width_field.values)
+            metadata.update(width_field=str(source), width_field_sha256=width_field.sha256,
+                            width_snapshot=str(saved.relative_to(self.output)))
+        if path != self.field_path:
+            self.field_path, self.field = path, field
+            self.geometry_cache.clear()
+            self.diagnostic_cache.clear()
+        return width, metadata
+
     def prepare(self, parameters: Parameters, include_phantom=False) -> Preview:
         parameters.validate()
+        field_widths, input_metadata = self._width_inputs(parameters)
         start = perf_counter()
         key = (self.revision, parameters.clearance_mm)
         cached = key in self.geometry_cache
@@ -102,6 +136,7 @@ class Session:
             walk_max_steps=parameters.walk_max_steps, walk_tangent_sign=parameters.tangent_sign,
             walk_start_fraction=parameters.walk_start_fraction, clamp_to_cone=parameters.clamp_to_cone,
             cone_max_tilt_deg=parameters.cone_deg, contour_sample_spacing_mm=parameters.source_spacing_mm,
+            field_bead_widths=field_widths, bead_overlap_mm=parameters.overlap_mm if field_widths is not None else 0,
         )
         targets = build_candidate_segment_targets(
             candidate_points=c.points, segment_start_points=c.segment_start_points,
@@ -114,12 +149,17 @@ class Session:
             targets, candidate_mode=parameters.mode, bead_height_m=parameters.height_mm * 0.001,
             bead_separation_m=parameters.separation_mm * 0.001,
             normal_continuity_rule=parameters.normal_continuity,
+            bead_widths_m=c.bead_widths if field_widths is not None else None,
+            bead_overlap_m=parameters.overlap_mm * 0.001 if field_widths is not None else 0,
         )
         keep = np.asarray(rules["kept_indices"], dtype=int)
+        widths = (np.asarray(c.bead_widths)[keep].copy() if field_widths is not None else
+                  np.full(targets.count, parameters.width_mm * 0.001))
         preview = Preview(uuid.uuid4().hex, self.revision, parameters, pose, contour, c, targets, rules,
                           c.source_points[keep], {"geometry_s": geometry_seconds,
                           "candidates_s": perf_counter() - candidate_start,
-                          "preview_s": perf_counter() - start}, cached)
+                          "preview_s": perf_counter() - start}, cached,
+                          bead_widths_m=widths, input_metadata=input_metadata)
         self.preview = preview
         event(self.output, "candidates", "finished", cycle=self.revision,
               seconds=preview.timings["candidates_s"], targets=targets.count)
@@ -139,11 +179,17 @@ class Session:
 
     def _batch_deposits(self, preview, path):
         p = preview.parameters
-        write_line_targets_yaml(path, preview.targets, position_scale=1000.0)
+        volumes = None
+        if p.width_mode == "field":
+            from lib_scalar.bead_profile import rounded_cylinder_volume_mm3
+            volumes = rounded_cylinder_volume_mm3(preview.bead_widths_m * 1000, p.height_mm)
+        write_line_targets_yaml(path, preview.targets, position_scale=1000.0, volumes_mm3=volumes)
         applied = load_segment_targets_yaml(path, position_scale=1000.0)
+        if applied.count != len(preview.bead_widths_m):
+            raise ValueError("Applied target count does not match frozen preview widths")
         deposits = build_dds_step_deposits(applied,
-            profiles=tuple(BeadProfile(width=p.width_mm * 0.001, height=p.height_mm * 0.001)
-                           for _ in range(applied.count)), mode=p.deposit_mode, line_fraction=p.line_fraction)
+            profiles=tuple(BeadProfile(width=float(width), height=p.height_mm * 0.001)
+                           for width in preview.bead_widths_m), mode=p.deposit_mode, line_fraction=p.line_fraction)
         return applied, deposits
 
     def preview_phantom(self, token):
@@ -200,7 +246,8 @@ class Session:
         return build_dds_domain_from_print_zone(
             preview.pose.field_vertices_world, preview.targets.end_points,
             source="field", scan_mesh=None, voxel_size_m=self.options.voxel_mm * 0.001,
-            padding_m=max(self.options.padding_mm, 12, p.width_mm, p.height_mm) * 0.001)
+            padding_m=max(self.options.padding_mm, 12,
+                          p.width_max_mm if p.width_mode == "field" else p.width_mm, p.height_mm) * 0.001)
 
     def _new_simulator(self, preview, deposits):
         domain = self._initial_domain(preview) if self.simulator is None else self.simulator.domain
@@ -259,6 +306,7 @@ class Session:
         self.revision += 1
         self.last_targets = applied.end_points.copy()
         record = {"cycle": self.revision, "parameters": asdict(p), "targets": applied.count,
+                  "inputs": preview.input_metadata, "bead_widths_mm": (preview.bead_widths_m * 1000).tolist(),
                   "deposits": len(simulation.deposits), "preview": preview.token,
                   "geometry_cached": preview.geometry_cached, "domain_rebuilt": rebuilt,
                   "domain_change": "initialized" if old_domain is None else "expanded" if rebuilt else "unchanged",

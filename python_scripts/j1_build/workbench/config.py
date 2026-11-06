@@ -10,6 +10,11 @@ class Parameters:
     count: int = 7
     separation_mm: float = 38.0
     width_mm: float = 42.0
+    width_mode: str = "fixed"
+    width_field_path: str = ""
+    width_min_mm: float = 20.0
+    width_max_mm: float = 40.0
+    overlap_mm: float = 4.0
     height_mm: float = 20.0
     walk_distance_mm: float = 12.0
     walk_step_mm: float = 1.0
@@ -26,6 +31,13 @@ class Parameters:
     def validate(self):
         if self.mode not in {"z_lift", "gradient_lift", "gradient_walk"}:
             raise ValueError("Unsupported candidate mode")
+        if self.width_mode not in {"fixed", "field"}:
+            raise ValueError("Width mode must be fixed or field")
+        if self.width_mode == "field":
+            if not self.width_field_path.strip():
+                raise ValueError("Select a width-field NPZ file before enabling Field mode")
+            if not 0 < self.width_min_mm <= self.width_max_mm or self.overlap_mm < 0:
+                raise ValueError("Field widths must satisfy 0 < minimum <= maximum; overlap must be >= 0")
         for name, value in asdict(self).items():
             if isinstance(value, (float, int)) and not math.isfinite(value):
                 raise ValueError(f"{name} must be finite")

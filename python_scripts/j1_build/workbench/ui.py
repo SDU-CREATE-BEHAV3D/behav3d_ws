@@ -63,6 +63,7 @@ class Worker(QtCore.QObject):
             self.done.emit({"job": job, "preview": preview, "extra": extra,
                 "cycle": s.revision, "surface": s.surface,
                 "field_vertices": s.field.field_vertices_scaled + np.asarray(s.field.offset_xyz),
+                "field_path": str(s.field_path),
                 "field_faces": s.field.field_faces, "heat": s.field.heat_norm,
                 "scan_vertices": np.asarray(s.base.vertices), "scan_faces": np.asarray(s.base.triangles),
                 "last_targets": s.last_targets, "history": list(s.history), "output": s.output,
@@ -99,6 +100,7 @@ class Workbench(QtWidgets.QMainWindow):
         self.meshes = {}
         self.edge_sources = {}
         self.initialized = False
+        self.scene_field_path = None
         self.controls = {}
         self.layers = {}
         self.parameter_defaults = Parameters()
@@ -219,13 +221,39 @@ class Workbench(QtWidgets.QMainWindow):
         for label, name, val, low, high in [
             ("Source spacing", "source_spacing_mm", 3.0, 0.1, 50),
             ("Candidates", "count", 7, 1, 100),
-            ("Separation", "separation_mm", 16.0, 0, 200),
-            ("Bead width", "width_mm", 42.0, 1, 150),
             ("Bead height", "height_mm", 20.0, 1, 100),
             ("Clearance", "clearance_mm", 0.0, -50, 50)]:
             self._number(form, label, name, val, low, high)
         self._combo(form, "DDS deposit", "deposit_mode", ["line", "dot"], "line")
         self._number(form, "Line fraction", "line_fraction", 0.22, 0, 1)
+        form = self._group(column, "Width control")
+        self._combo(form, "Width mode", "width_mode", ["fixed", "field"], "fixed")
+        self.width_note = QtWidgets.QLabel()
+        self.width_note.setWordWrap(True)
+        form.addRow(self.width_note)
+        fixed_box = QtWidgets.QGroupBox("Fixed mode only · mm")
+        column.addWidget(fixed_box)
+        fixed_form = QtWidgets.QFormLayout(fixed_box)
+        self._number(fixed_form, "Bead width", "width_mm", 42.0, 1, 150)
+        self._number(fixed_form, "Separation", "separation_mm", 38.0, 0, 200)
+        field_box = QtWidgets.QGroupBox("Width field mode only · mm")
+        column.addWidget(field_box)
+        field_form = QtWidgets.QFormLayout(field_box)
+        self.width_field_input = QtWidgets.QLineEdit(self.parameter_defaults.width_field_path)
+        self.width_field_input.setPlaceholderText("NPZ containing width_norm on the original goal")
+        self.width_field_input.setToolTip("One normalized value per original goal vertex, in the same order. No extra goal subdivision.")
+        self.width_field_input.textChanged.connect(self.parameters_changed)
+        self.controls["width_field_path"] = self.width_field_input
+        field_form.addRow("Width field NPZ", self.width_field_input)
+        browse = QtWidgets.QPushButton("Load width field…")
+        browse.clicked.connect(self.choose_width_field)
+        field_form.addRow(browse)
+        self._number(field_form, "Minimum bead width", "width_min_mm", 20.0, 0.1, 150)
+        self._number(field_form, "Maximum bead width", "width_max_mm", 40.0, 0.1, 150)
+        self._number(field_form, "Within-batch overlap", "overlap_mm", 4.0, 0, 150)
+        self.fixed_width_group, self.field_width_group = fixed_box, field_box
+        self.controls["width_mode"].currentTextChanged.connect(self.sync_width_controls)
+        self.sync_width_controls()
         form = self._group(column, "Walk and orientation")
         for label, name, val, low, high in [
             ("Travel (mm)", "walk_distance_mm", 12.0, 0, 100),
@@ -347,6 +375,19 @@ class Workbench(QtWidgets.QMainWindow):
         self.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, bottom)
         bottom.setMaximumHeight(160)
 
+    def choose_width_field(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Load width field", "", "NumPy width field (*.npz)")
+        if path:
+            self.width_field_input.setText(path)
+
+    def sync_width_controls(self, *_):
+        active = self.controls["width_mode"].currentText() == "field"
+        self.fixed_width_group.setEnabled(not active)
+        self.field_width_group.setEnabled(active)
+        self.width_note.setText(
+            "FIELD ACTIVE · Original goal mesh; no extra subdivision. Width range and overlap control the next batch. Height and 3D source spacing remain shared."
+            if active else "FIXED ACTIVE · Fixed width and separation. Uses the configured goal mesh with its existing subdivision.")
+
     def parameters(self):
         values = {}
         for name in asdict(Parameters()):
@@ -355,6 +396,8 @@ class Workbench(QtWidgets.QMainWindow):
                 value = widget.isChecked()
             elif isinstance(widget, QtWidgets.QComboBox):
                 value = widget.currentText()
+            elif isinstance(widget, QtWidgets.QLineEdit):
+                value = widget.text().strip()
             else:
                 value = widget.value()
             values[name] = float(value) if name == "tangent_sign" else value
@@ -467,11 +510,16 @@ class Workbench(QtWidgets.QMainWindow):
         job = result["job"]
         action = job["action"]
         self.latest = result
-        if action == "new":
+        scene_changed = self.scene_field_path != result["field_path"]
+        if action == "new" or scene_changed:
             self.initialized = True
             self._static_scene(result)
+            self.scene_field_path = result["field_path"]
+        if action == "new":
             self.log.appendPlainText(f"Session: {result['output']}")
-        if action in {"new", "accept"}:
+        elif scene_changed:
+            self.log.appendPlainText(f"Goal input changed: {result['field_path']} · accepted deposits retained")
+        if action in {"new", "accept"} or scene_changed:
             self._surface_scene(result)
         self._domain_scene(result)
         if action == "accept":
