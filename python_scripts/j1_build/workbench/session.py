@@ -25,6 +25,7 @@ from lib_scalar.loop_simulation import ContourStage, compute_offset_contour_stag
 from lib_scalar.print_targets import build_candidate_segment_targets, write_line_targets_yaml
 from lib_scalar.target_rules import apply_secondary_target_rules
 from .config import Parameters, SimulationOptions
+from .telemetry import event
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ class Session:
         start = perf_counter()
         key = (self.revision, parameters.clearance_mm)
         cached = key in self.geometry_cache
+        event(self.output, "geometry", "started", cycle=self.revision, cached=cached)
         if not cached:
             scene, ztop = make_scan_scene(self.current_scan)
             pose = evaluate_fixed_pose(scene, ztop, self.field.field_vertices_scaled,
@@ -88,7 +90,10 @@ class Session:
             self.geometry_builds += 1
         pose, contour = self.geometry_cache[key]
         geometry_seconds = perf_counter() - start
+        event(self.output, "geometry", "finished", cycle=self.revision,
+              seconds=geometry_seconds, cached=cached)
         candidate_start = perf_counter()
+        event(self.output, "candidates", "started", cycle=self.revision)
         c = generate_step_candidates(
             contour, self.field.field_faces, pose.field_vertices_world, self.field.heat_norm, pose.phi,
             mode=parameters.mode, beads_per_step=parameters.count,
@@ -116,15 +121,20 @@ class Session:
                           "candidates_s": perf_counter() - candidate_start,
                           "preview_s": perf_counter() - start}, cached)
         self.preview = preview
+        event(self.output, "candidates", "finished", cycle=self.revision,
+              seconds=preview.timings["candidates_s"], targets=targets.count)
         self.phantom_cache = None
         if include_phantom:
             phantom_start = perf_counter()
+            event(self.output, "phantom", "started", cycle=self.revision)
             surface = self.preview_phantom(preview.token)
             from dataclasses import replace
             preview = replace(preview, phantom_surface=surface,
                 timings={**preview.timings, "phantom_s": perf_counter() - phantom_start,
                          "preview_s": perf_counter() - start})
             self.preview = preview
+            event(self.output, "phantom", "finished", cycle=self.revision,
+                  seconds=preview.timings["phantom_s"])
         return preview
 
     def _batch_deposits(self, preview, path):
@@ -177,15 +187,23 @@ class Session:
                 offset_geodesic_delta_mm=0.6, offset_t_coef=2000, scan_mesh=self.current_scan)}
         return self.diagnostic_cache[key]
 
+    def domain_for_display(self):
+        """Return the accepted domain, or initial planned bounds before acceptance."""
+        if self.simulator is not None:
+            return self.simulator.domain
+        if self.preview is not None:
+            return self._initial_domain(self.preview)
+        return None
+
+    def _initial_domain(self, preview):
+        p = preview.parameters
+        return build_dds_domain_from_print_zone(
+            preview.pose.field_vertices_world, preview.targets.end_points,
+            source="field", scan_mesh=None, voxel_size_m=self.options.voxel_mm * 0.001,
+            padding_m=max(self.options.padding_mm, 12, p.width_mm, p.height_mm) * 0.001)
+
     def _new_simulator(self, preview, deposits):
-        if self.simulator is None:
-            p = preview.parameters
-            domain = build_dds_domain_from_print_zone(
-                preview.pose.field_vertices_world, preview.targets.end_points,
-                source="field", scan_mesh=None, voxel_size_m=self.options.voxel_mm * 0.001,
-                padding_m=max(self.options.padding_mm, 12, p.width_mm, p.height_mm) * 0.001)
-        else:
-            domain = self.simulator.domain
+        domain = self._initial_domain(preview) if self.simulator is None else self.simulator.domain
         try:
             validate_deposits_inside_domain(deposits, domain)
         except RuntimeError:
@@ -221,6 +239,7 @@ class Session:
         pending = step_dir / "segments.pending.yaml"
         # Preserve exactly the original YAML quantization and normal handling.
         applied, deposits = self._batch_deposits(preview, pending)
+        old_domain = self.simulator.domain if self.simulator is not None else None
         simulation, rebuilt = self._new_simulator(preview, deposits)
         old_deposits = simulation.deposits
         deposit_start = perf_counter()
@@ -242,6 +261,14 @@ class Session:
         record = {"cycle": self.revision, "parameters": asdict(p), "targets": applied.count,
                   "deposits": len(simulation.deposits), "preview": preview.token,
                   "geometry_cached": preview.geometry_cached, "domain_rebuilt": rebuilt,
+                  "domain_change": "initialized" if old_domain is None else "expanded" if rebuilt else "unchanged",
+                  "domain": {"min_corner": simulation.domain.min_corner,
+                             "max_corner": simulation.domain.max_corner,
+                             "grid_shape": simulation.domain.grid_shape,
+                             "expanded_sides": [f"{axis}{side}" for i, axis in enumerate("XYZ")
+                                 for side, changed in (("-", old_domain is not None and simulation.domain.min_corner[i] < old_domain.min_corner[i]),
+                                                       ("+", old_domain is not None and simulation.domain.max_corner[i] > old_domain.max_corner[i]))
+                                 if changed]},
                   "timings": {**preview.timings, "deposit_s": deposit_seconds,
                               "surface_s": surface_seconds, "accept_s": perf_counter() - start}}
         pending.replace(step_dir / "segments.yaml")
@@ -254,7 +281,11 @@ class Session:
         self.preview = None
         self.phantom_cache = None
         if self.options.checkpoint_every and self.revision % self.options.checkpoint_every == 0:
+            checkpoint_start = perf_counter()
+            event(self.output, "checkpoint", "started", cycle=self.revision)
             self.result.checkpoint(self.output / f"checkpoint-{self.revision:04d}.npz")
+            event(self.output, "checkpoint", "finished", cycle=self.revision,
+                  seconds=perf_counter() - checkpoint_start)
         return record
 
     def export(self):

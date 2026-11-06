@@ -24,6 +24,13 @@ phase = 0
 ticks = 0
 errors = []
 static_actor = None
+saved_camera = None
+
+def camera_state():
+    # Read the raw renderer camera: Plotter.camera lazily resets an unset view.
+    camera = window.plotter.renderer.camera
+    return (camera.position, camera.focal_point, camera.up, camera.parallel_scale,
+            camera.parallel_projection, camera.view_angle)
 
 def heartbeat():
     global ticks
@@ -39,7 +46,7 @@ timer.timeout.connect(heartbeat)
 timer.start(50)
 
 def poll():
-    global phase, static_actor
+    global phase, static_actor, saved_camera
     try:
         if errors:
             raise AssertionError(errors)
@@ -51,12 +58,24 @@ def poll():
             assert window.parameters() == Parameters()
             assert window.options() == SimulationOptions(voxel_mm=3, surface_step=2, checkpoint_every=0)
             assert window.goal_opacity.value() == DisplayOptions().goal_opacity
+            assert window.camera_controls.currentText() == "Rhino"
+            assert abs(window.domain_opacity.value() - 0.2) < 1e-12
+            assert "domain" in window.actors
+            assert not window.actors["domain"].prop.lighting
             assert 0 < window.preview.targets.count <= Parameters().count
             assert "phantom" in window.actors
             assert window.layers["phantom"].isChecked()
             assert not window.preview.phantom_surface.is_empty
             assert not window.layers["axes"].isChecked()
             static_actor = window.actors["goal"]
+            camera = window.plotter.renderer.camera
+            assert camera.is_set, "Paper framing left the camera pending lazy initialization"
+            # Mouse interaction uses VTK directly, without PyVista's property
+            # setters that would otherwise hide the initial camera reset bug.
+            camera.Azimuth(31)
+            camera.Elevation(12)
+            camera.SetParallelScale(camera.GetParallelScale() * 0.73)
+            saved_camera = camera_state()
             window.controls["source_spacing_mm"].setValue(2)
             assert not window.accept_button.isEnabled()
             phase = 1
@@ -64,10 +83,12 @@ def poll():
             assert len(window.preview.candidates.sampling_points) > 202
             assert window.actors["goal"] is static_actor
             assert window.preview.geometry_cached
+            assert camera_state() == saved_camera
             window.accept_button.click()
             phase = 2
         elif phase == 2 and window.latest["cycle"] == 1:
             assert window.latest["history"][0]["parameters"]["source_spacing_mm"] == 2
+            assert camera_state() == saved_camera
             settings_revision = window.settings_revision
             preview_token = window.preview.token
             assert not window.actors["goal"].prop.lighting
@@ -103,6 +124,15 @@ def poll():
             assert window.actors["goal_edges"].GetVisibility()
             window.layers["goal"].setChecked(True)
             window.bead_material.setCurrentText("Graphite")
+            window.layers["domain"].setChecked(True)
+            assert window.actors["domain"].GetVisibility()
+            window.domain_opacity.setValue(0.35)
+            assert abs(window.actors["domain"].prop.opacity - 0.35) < 1e-12
+            window.camera_controls.setCurrentText("VTK")
+            window.camera_controls.setCurrentText("Rhino")
+            window.plotter.camera.Azimuth(-47)
+            window.plotter.camera.Elevation(8)
+            saved_camera = camera_state()
             assert window.settings_revision == settings_revision
             assert window.preview.token == preview_token
             assert not window.busy
@@ -110,6 +140,7 @@ def poll():
             window.run_button.click()
             phase = 3
         elif phase == 3 and window.latest["cycle"] == 3 and not window.running:
+            assert camera_state() == saved_camera, "Camera moved during cycle 2 or 3"
             assert len(window.plotter.renderer.lights) == 3
             assert window.actors["goal"] is static_actor
             assert window.actors["bead_edges"].GetVisibility()

@@ -1,6 +1,7 @@
 """Native Qt panels and the existing PyVista/DDS drawing stack."""
 from dataclasses import asdict
 import traceback
+from time import perf_counter
 
 import numpy as np
 import pyvista as pv
@@ -11,6 +12,8 @@ from lib_scalar.viz_dds import attach_viewer, add_colored_point_cloud, add_line_
 from .config import Parameters, SimulationOptions, DisplayOptions
 from .session import Session
 from .appearance import PHANTOM_COLOR, PHANTOM_OPACITY, SURFACE_MATERIAL, configure_studio_lighting, set_contact_shading
+from .navigation import capture_camera, configure_navigation, restore_camera
+from .telemetry import event
 
 
 class Worker(QtCore.QObject):
@@ -24,11 +27,17 @@ class Worker(QtCore.QObject):
 
     @QtCore.Slot(object)
     def dispatch(self, job):
+        start = perf_counter()
+        output = self.session.output if self.session is not None and job["action"] != "new" else None
         try:
             action = job["action"]
             extra = None
+            if output is not None:
+                event(output, action, "started", cycle=self.session.revision)
             if action == "new":
                 session = Session(**self.paths, options=job["options"])
+                output = session.output
+                event(output, action, "started", cycle=0)
                 preview = session.prepare(job["parameters"], include_phantom=job.get("phantom", True))
                 self.session = session
             elif action == "preview":
@@ -48,6 +57,9 @@ class Worker(QtCore.QObject):
             else:
                 raise ValueError(action)
             s = self.session
+            domain = s.domain_for_display()
+            worker_seconds = perf_counter() - start
+            event(output, action, "finished", cycle=s.revision, seconds=worker_seconds)
             self.done.emit({"job": job, "preview": preview, "extra": extra,
                 "cycle": s.revision, "surface": s.surface,
                 "field_vertices": s.field.field_vertices_scaled + np.asarray(s.field.offset_xyz),
@@ -55,8 +67,13 @@ class Worker(QtCore.QObject):
                 "scan_vertices": np.asarray(s.base.vertices), "scan_faces": np.asarray(s.base.triangles),
                 "last_targets": s.last_targets, "history": list(s.history), "output": s.output,
                 "grid": s.simulator.domain.grid_shape if s.simulator else None,
+                "domain": domain,
+                "domain_planned": s.simulator is None,
+                "worker_s": worker_seconds,
                 "geometry_builds": s.geometry_builds})
         except Exception as exc:
+            if output is not None:
+                event(output, job["action"], "failed", seconds=perf_counter() - start, error=str(exc))
             self.failed.emit({"job": job, "error": str(exc), "traceback": traceback.format_exc()})
 
 
@@ -224,6 +241,7 @@ class Workbench(QtWidgets.QMainWindow):
         for key, label, visible in [
             ("goal", "Goal and scalar field", True), ("goal_edges", "Goal edges", False),
             ("environment", "Initial environment", True), ("deposits", "DDS surface", True),
+            ("domain", "DDS domain", False),
             ("bead_edges", "Bead edges", False), ("contour", "Phi contour", True),
             ("phantom", "DDS phantom", True),
             ("sources", "Source samples", True), ("candidates", "Candidates", True),
@@ -241,6 +259,13 @@ class Workbench(QtWidgets.QMainWindow):
         self.goal_opacity.setValue(self.display_defaults.goal_opacity)
         self.goal_opacity.valueChanged.connect(self.opacity_changed)
         form.addRow("Goal opacity", self.goal_opacity)
+        self.domain_opacity = QtWidgets.QDoubleSpinBox()
+        self.domain_opacity.setRange(0, 1)
+        self.domain_opacity.setSingleStep(0.05)
+        self.domain_opacity.setValue(self.display_defaults.domain_opacity)
+        self.domain_opacity.setToolTip("Unlit domain bounds. Planned before the first batch; active afterwards.")
+        self.domain_opacity.valueChanged.connect(self.domain_opacity_changed)
+        form.addRow("Domain opacity", self.domain_opacity)
         self.goal_lighting = QtWidgets.QCheckBox("Shade goal")
         self.goal_lighting.setChecked(self.display_defaults.goal_lighting)
         self.goal_lighting.setToolTip("Apply scene lighting to the goal. Off preserves unlit scalar colors; SSAO is a global screen-space effect.")
@@ -284,6 +309,13 @@ class Workbench(QtWidgets.QMainWindow):
         self.contact_shading.toggled.connect(self.shading_changed)
         form.addRow(self.contact_shading)
         set_contact_shading(self.plotter, self.display_defaults.contact_shading)
+        self.camera_controls = QtWidgets.QComboBox()
+        self.camera_controls.addItems(["Rhino", "VTK"])
+        self.camera_controls.setCurrentText(self.display_defaults.camera_controls)
+        self.camera_controls.setToolTip("Rhino: right drag rotates; Shift + right pans; Ctrl + right or wheel zooms; Ctrl + Shift + right rotates.")
+        self.camera_controls.currentTextChanged.connect(lambda value: configure_navigation(self.plotter, value))
+        configure_navigation(self.plotter, self.camera_controls.currentText())
+        form.addRow("Camera controls", self.camera_controls)
         self.paper_button = QtWidgets.QPushButton("Paper view / frame goal")
         self.paper_button.clicked.connect(self.paper_view)
         form.addRow(self.paper_button)
@@ -293,6 +325,8 @@ class Workbench(QtWidgets.QMainWindow):
         self._number(form, "Voxel (mm)", "voxel_mm", 2.0, 0.5, 10, structural=True)
         self._number(form, "Physical threshold", "threshold", 0.5, 0.05, 0.95, structural=True)
         self._number(form, "Surface step", "surface_step", 1, 1, 4, structural=True)
+        self._number(form, "Domain padding (mm)", "padding_mm", 60.0, 0, 500, structural=True).setToolTip(
+            "Initial margin in X, Y and Z. The effective margin is at least the bead width and height.")
         self._number(form, "Checkpoint every N", "checkpoint_every", 10, 0, 100, structural=True)
         label = QtWidgets.QLabel("Applied only when creating a new session.\nPrevious session files are retained.")
         label.setWordWrap(True)
@@ -328,7 +362,7 @@ class Workbench(QtWidgets.QMainWindow):
 
     def options(self):
         return SimulationOptions(**{key: self.controls[key].value()
-            for key in ("voxel_mm", "threshold", "surface_step", "checkpoint_every")})
+            for key in ("voxel_mm", "threshold", "surface_step", "padding_mm", "checkpoint_every")})
 
     def parameters_changed(self, *_):
         self.pause()
@@ -404,6 +438,31 @@ class Workbench(QtWidgets.QMainWindow):
 
     @QtCore.Slot(object)
     def completed(self, result):
+        start = perf_counter()
+        event(result["output"], "viewport", "started", cycle=result["cycle"], action=result["job"]["action"])
+        # Read the live camera when the worker finishes, so navigation during a
+        # calculation is retained as well as navigation between batches.
+        camera = capture_camera(self.plotter) if result["job"]["action"] != "new" else None
+        suppressed = self.plotter.suppress_rendering
+        self.plotter.suppress_rendering = True
+        try:
+            self._complete_scene(result)
+        finally:
+            if camera is not None:
+                restore_camera(self.plotter, camera)
+            self.plotter.suppress_rendering = suppressed
+        scene_seconds = perf_counter() - start
+        event(result["output"], "viewport_scene", "finished", cycle=result["cycle"], seconds=scene_seconds)
+        render_start = perf_counter()
+        event(result["output"], "viewport_render", "started", cycle=result["cycle"])
+        self.plotter.render()
+        render_seconds = perf_counter() - render_start
+        event(result["output"], "viewport_render", "finished", cycle=result["cycle"], seconds=render_seconds)
+        event(result["output"], "viewport", "finished", cycle=result["cycle"],
+              action=result["job"]["action"], scene_s=scene_seconds,
+              render_s=render_seconds, ui_s=perf_counter() - start)
+
+    def _complete_scene(self, result):
         self.busy = False
         job = result["job"]
         action = job["action"]
@@ -414,13 +473,16 @@ class Workbench(QtWidgets.QMainWindow):
             self.log.appendPlainText(f"Session: {result['output']}")
         if action in {"new", "accept"}:
             self._surface_scene(result)
+        self._domain_scene(result)
         if action == "accept":
             self.preview = None
             self.preview_revision = -1
             self._clear_preview()
             self.remaining = max(0, self.remaining - 1)
             self.log.appendPlainText(f"Cycle {result['cycle']} · {result['extra']['targets']} deposits · "
-                f"update {result['extra']['timings']['accept_s']:.2f} s")
+                f"update {result['worker_s']:.2f} s · domain {result['extra']['domain_change']}")
+            if result["extra"]["domain_change"] == "expanded":
+                self.log.appendPlainText("Domain expanded: " + ", ".join(result["extra"]["domain"]["expanded_sides"]))
             if not self.remaining:
                 self.running = False
         elif action == "export":
@@ -508,6 +570,32 @@ class Workbench(QtWidgets.QMainWindow):
             self.layer_changed("deposits", self.layers["deposits"].isChecked())
             self.layer_changed("bead_edges", self.layers["bead_edges"].isChecked())
         self._cloud("last", "last", result["last_targets"], "#73a8ce", 9)
+
+    def _domain_scene(self, result):
+        domain = result["domain"]
+        if domain is None:
+            return
+        state = "Planned initial domain" if result["domain_planned"] else "Active DDS domain"
+        low = ", ".join(f"{v * 1000:.1f}" for v in domain.min_corner)
+        high = ", ".join(f"{v * 1000:.1f}" for v in domain.max_corner)
+        self.layers["domain"].setToolTip(f"{state}\nGrid: {domain.grid_shape}\nMin XYZ (mm): {low}\nMax XYZ (mm): {high}")
+        bounds = tuple(value for pair in zip(domain.min_corner, domain.max_corner) for value in pair)
+        if self.meshes.get("domain_bounds") == bounds:
+            return
+        self.meshes["domain_bounds"] = bounds
+        actor = self.plotter.add_mesh(pv.Box(bounds=bounds), name="domain",
+            color="#8abacb", opacity=self.domain_opacity.value(), lighting=False,
+            show_edges=True, edge_color="#558ca3", pickable=False,
+            reset_camera=False, render=False)
+        actor.SetUseBounds(False)
+        actor.SetVisibility(self.layers["domain"].isChecked())
+        self.actors["domain"] = actor
+
+    def domain_opacity_changed(self, value):
+        actor = self.actors.get("domain")
+        if actor is not None:
+            actor.GetProperty().SetOpacity(value)
+            self.plotter.render()
 
     def _cloud(self, name, layer, points, color, size):
         if points is None or not len(points):
@@ -640,6 +728,10 @@ class Workbench(QtWidgets.QMainWindow):
             self.plotter.reset_camera(bounds=bounds.ravel())
         else:
             self.plotter.reset_camera()
+        # view_isometric() deliberately clears this flag in PyVista. VTK mouse
+        # gestures do not set it, so the next Plotter.camera read would reset
+        # the user's view before it could be captured for a scene update.
+        self.plotter.renderer.camera.is_set = True
         self.plotter.render()
 
     def closeEvent(self, event):

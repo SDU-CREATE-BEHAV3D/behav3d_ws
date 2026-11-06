@@ -55,7 +55,8 @@ class SessionTests(unittest.TestCase):
         assert all(hashlib.sha256(p.read_bytes()).hexdigest() == checksum for p, checksum in cls.hashes.items())
 
     def session(self, **changes):
-        return Session(ROOT, self.output, replace(SimulationOptions(voxel_mm=3, surface_step=2, checkpoint_every=0), **changes))
+        return Session(ROOT, self.output, replace(SimulationOptions(voxel_mm=3, threshold=0.5,
+            surface_step=2, padding_mm=24, checkpoint_every=0, max_voxels=30_000_000), **changes))
 
     def test_parity_with_original_targets_volume_and_surface(self):
         s = self.session()
@@ -148,11 +149,18 @@ class SessionTests(unittest.TestCase):
 
     def test_domain_expansion_preserves_the_existing_voxel_lattice(self):
         s = self.session()
-        s.accept(s.prepare(BASE).token)
+        s.prepare(BASE)
+        planned = s.domain_for_display()
+        first = s.accept(s.preview.token)
+        self.assertEqual(first["domain_change"], "initialized")
+        self.assertEqual(planned, s.domain_for_display())
         old_domain = s.simulator.domain
         old_field = s.result.implicit_field.copy()
         info = s.accept(s.prepare(replace(BASE, width_mm=150)).token)
         self.assertTrue(info["domain_rebuilt"])
+        self.assertEqual(info["domain_change"], "expanded")
+        self.assertTrue(info["domain"]["expanded_sides"])
+        self.assertEqual(tuple(info["domain"]["grid_shape"]), s.simulator.domain.grid_shape)
         new_domain = s.simulator.domain
         shift = (np.array(old_domain.min_corner) - new_domain.min_corner) / new_domain.voxel_size
         np.testing.assert_allclose(shift, np.round(shift), atol=1e-10)
@@ -179,6 +187,8 @@ class SessionTests(unittest.TestCase):
         np.testing.assert_array_equal(restored.implicit_field, s.result.implicit_field)
         self.assertEqual(len(restored.deposits), 7)
         self.assertEqual(json.loads((folder / "history.json").read_text())[0]["cycle"], 1)
+        events = [json.loads(line) for line in (s.output / "performance.jsonl").read_text().splitlines()]
+        self.assertTrue(any(e["operation"] == "checkpoint" and e["state"] == "finished" for e in events))
 
 
 if __name__ == "__main__":

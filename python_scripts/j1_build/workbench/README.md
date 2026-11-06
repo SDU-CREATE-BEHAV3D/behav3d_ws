@@ -21,9 +21,9 @@ Edit `workbench/config.py` and restart the workbench:
 
 - `Parameters`: bead width/height, source spacing, candidate count, separation,
   walk, orientation, clearance and deposition fraction.
-- `SimulationOptions`: voxel size, threshold, surface step and checkpoints.
-- `DisplayOptions`: material, face/edge/phantom opacity, layer visibility, run
-  count and SSAO settings. SSAO radius and bias are expressed in millimeters.
+- `SimulationOptions`: voxel size, threshold, surface step, domain padding and checkpoints.
+- `DisplayOptions`: material, face/edge/phantom/domain opacity, camera controls,
+  layer visibility, run count and SSAO settings. SSAO radius and bias are expressed in millimeters.
 
 For example, set `contact_shading = False` to start without SSAO, or reduce
 `ssao_radius_mm` to make its contact effect more local. Live panel edits affect
@@ -55,6 +55,19 @@ and material coefficients adjust lighting rather than gamma correction.
   viewport screenshot without closing the session.
 - Camera and layer settings persist between batches. **Paper view / frame goal**
   enables orthographic projection and frames the goal.
+- **Camera controls** defaults to **Rhino**: right drag rotates, Shift + right
+  drag pans, Ctrl + right drag zooms, and the wheel zooms. Ctrl + Shift + right
+  drag also rotates. These bindings work in the orthographic 3D paper view too.
+  Rotation orbits around world Z, keeps the horizon upright and stops short of
+  the poles. This matches Rhino's Z-axis orbit convention using VTK's terrain
+  interaction style; it does not reproduce Rhino's complete camera engine.
+  **VTK** restores the original gestures. Switching controls preserves the view.
+- Scene updates preserve the live camera position, target, up vector, projection,
+  field of view and zoom, including camera changes made while a worker is busy.
+  Automatic framing happens only when creating a session. The Paper view button
+  remains available for an explicit reset.
+  Paper framing explicitly marks the camera as configured, and snapshots read
+  the renderer camera directly to avoid PyVista's lazy default-view reset.
 
 Next-batch controls include mode, count, source spacing, target separation,
 bead width and height, clearance, deposition fraction, walk parameters,
@@ -62,13 +75,19 @@ orientation and normal continuity. Changes affect future batches only.
 Defaults remain 3 mm source spacing, 42 x 20 mm beads and one extra subdivision
 of the stored goal field.
 
-Voxel size, physical threshold, surface-extraction step and checkpoint frequency
+Voxel size, physical threshold, surface-extraction step, padding and checkpoint frequency
 apply through **Create new session**. Previous session files are retained.
 Closing does not trigger a heavy mesh export; accepted targets are already
 stored. Use Export to obtain the final meshes.
 
 ## Surface appearance and edges
 
+- **DDS domain** displays a translucent box with unlit faces and edges;
+  **Domain opacity** defaults to 0.20. The layer starts hidden. Before the first
+  accepted batch it shows the initial planned domain; afterwards it shows the
+  current DDS domain, updating only when its bounds change. It is excluded from
+  camera framing and does not change voxel allocation. Lighting is disabled on
+  this actor; Contact shading remains a global screen-space effect.
 - **DDS phantom** previews the proposed batch in translucent light blue.
   It starts enabled; **Phantom opacity** controls transparency (default 0.80).
 - The phantom is a separate DDS simulation of the proposed deposits only,
@@ -111,10 +130,21 @@ display normals; the geometry used for phi is unchanged.
 - Build the combined scan without an additional preceding deepcopy. Retain
   static scan actors across previews.
 - Save YAML, parameters and timings per batch; export full meshes on demand.
-  Checkpoints default to every ten cycles; 0 disables them.
+  Checkpoint frequency comes from `SimulationOptions.checkpoint_every`; 0 disables them.
 - Expand the goal-based domain only when a future deposit exceeds it, preserving
   the voxel lattice and replaying historical deposits. A thirty-million-voxel
   limit prevents accidental oversized allocations.
+
+The initial domain surrounds the goal and initial targets. Its margin is
+`max(padding_mm, 12, bead_width_mm, bead_height_mm)` on both sides of all three
+axes, with bounds rounded by DDS to whole voxels. Expansion occurs only when
+the support bounds of an incoming deposit extend beyond any current domain
+face. The expanded box includes one extra voxel around those deposits and
+retains the existing voxel lattice. Reaching the top or end of the goal alone
+does not trigger expansion. Initial creation is distinct from expansion in the
+activity log and the saved `domain_change` field (`initialized`, `expanded`,
+`unchanged`). Each accepted record includes domain bounds, shape and the faces
+that expanded (for example `Z+`).
 
 Storage remains dense. Sparse blocks and a distance band around the goal are a
 later optimization, using this version as the reference.
@@ -130,6 +160,7 @@ Each session creates `workbench/outputs/session-.../`:
 ```text
 session.json                     # input paths, hashes and resolution
 history.jsonl                    # one entry per accepted batch
+performance.jsonl                # operation starts/ends, including unaccepted previews and viewport updates
 step_0001/segments.yaml           # original target contract
 step_0001/parameters.json         # exact parameters and timings
 checkpoint-0010.npz              # optional DDS checkpoint
@@ -139,6 +170,15 @@ export-000N/                     # created only by Export
 Checkpoints contain DDS geometry and deposits, readable with
 `SimulationResult.load`. Reopening a full session from the GUI is not yet
 implemented; targets and parameters are stored for future replay.
+
+`performance.jsonl` records geometry, candidates, phantom generation, worker
+operations, checkpoint compression and scene/render updates. An operation that
+has started without a matching completion helps locate a stall before another
+batch is accepted. `history.jsonl` still contains only accepted batches.
+`accept_s` measures the numerical update before output writes. Checkpoint events
+measure compression/output separately. Worker timings cover the complete action,
+including all output writes, while viewport timings cover the main-thread scene update
+and render request. These are wall-clock measurements, not GPU profiler timings.
 
 ## Validation
 

@@ -47,8 +47,8 @@ class SimulationOptions:
     voxel_mm: float = 3.5
     threshold: float = 0.5
     surface_step: int = 1
-    padding_mm: float = 24.0
-    checkpoint_every: int = 10
+    padding_mm: float = 60.0
+    checkpoint_every: int = 1
     max_voxels: int = 30_000_000
 
     def validate(self):
@@ -66,6 +66,8 @@ class DisplayOptions:
     run_cycles: int = 10
     goal_opacity: float = 0.25
     goal_lighting: bool = False
+    domain_opacity: float = 0.2
+    camera_controls: str = "Rhino"
     light_intensity: float = 1.2
     key_light_intensity: float = 0.85
     fill_light_intensity: float = 0.36
@@ -88,4 +90,5 @@ class DisplayOptions:
         "deposits": True, "bead_edges": True, "contour": True,
         "phantom": True, "sources": True, "candidates": True,
         "paths": True, "last": True, "offset": False, "axes": False,
+        "domain": False,
     })
