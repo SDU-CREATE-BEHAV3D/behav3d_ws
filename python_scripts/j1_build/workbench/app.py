@@ -24,13 +24,22 @@ def paths():
 
 def main():
     data, output = paths()
+    from workbench.config import InputOptions
+    inputs = InputOptions()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--field-state", type=Path)
-    parser.add_argument("--scan-mesh", type=Path)
-    parser.add_argument("--scan-scale", type=float, default=0.001)
-    parser.add_argument("--scan-yaw", type=float, default=180.0)
+    parser.add_argument("--scan-mesh", type=Path, help="Override InputOptions.scan_mesh in config.py")
+    parser.add_argument("--scan-scale", type=float, default=inputs.scan_scale,
+                        help="Override InputOptions.scan_scale in config.py")
+    parser.add_argument("--scan-yaw", type=float, default=inputs.scan_yaw,
+                        help="Override InputOptions.scan_yaw in config.py (degrees around Z)")
     parser.add_argument("--off-screen", action="store_true")
     args = parser.parse_args()
+    scan_path = args.scan_mesh
+    if scan_path is None:
+        scan_path = Path(inputs.scan_mesh).expanduser()
+        if not scan_path.is_absolute():
+            scan_path = data / scan_path
     if not args.field_state and not (data / "mesh/fields/field_state_init_subdiv1.npz").exists():
         sys.path.insert(0, str(data / "python_scripts/j1_build"))
         from prepare_field import prepare_field
@@ -40,7 +49,7 @@ def main():
     from workbench.ui import Workbench
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv[:1])
     window = Workbench(dict(data_root=data, output_root=output, field_path=args.field_state,
-        scan_path=args.scan_mesh, scan_scale=args.scan_scale, scan_yaw=args.scan_yaw), off_screen=args.off_screen)
+        scan_path=scan_path, scan_scale=args.scan_scale, scan_yaw=args.scan_yaw), off_screen=args.off_screen)
     window.show()
     return app.exec()
 

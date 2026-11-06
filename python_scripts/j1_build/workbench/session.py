@@ -5,6 +5,7 @@ from pathlib import Path
 import hashlib
 import json
 import tempfile
+import shutil
 from time import perf_counter
 import uuid
 
@@ -27,6 +28,7 @@ from lib_scalar.target_rules import apply_secondary_target_rules
 from .config import Parameters, SimulationOptions
 from .telemetry import event
 from .width_field import WidthField, original_field_path
+from .target_history import TargetHistory
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,7 @@ class Session:
         self.geometry_builds = 0
         self.output = output_root / (datetime.now().strftime("session-%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6])
         self.output.mkdir(parents=True)
+        self.target_history = TargetHistory(self.output)
         (self.output / "session.json").write_text(json.dumps({
             "field": str(self.field_path), "field_sha256": hashlib.sha256(self.field_path.read_bytes()).hexdigest(),
             "scan": str(self.scan_path), "scan_sha256": hashlib.sha256(self.scan_path.read_bytes()).hexdigest(),
@@ -320,6 +323,7 @@ class Session:
                   "timings": {**preview.timings, "deposit_s": deposit_seconds,
                               "surface_s": surface_seconds, "accept_s": perf_counter() - start}}
         pending.replace(step_dir / "segments.yaml")
+        self.target_history.add_batch(step_dir / "segments.yaml", applied, self.revision)
         (step_dir / "parameters.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
         with (self.output / "history.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record) + "\n")
@@ -346,4 +350,5 @@ class Session:
             if not self.surface.is_empty:
                 write_mesh(directory / "dds_surface.ply", self.surface)
         (directory / "history.json").write_text(json.dumps(self.history, indent=2), encoding="utf-8")
+        shutil.copyfile(self.target_history.path, directory / self.target_history.path.name)
         return directory

@@ -61,6 +61,9 @@ def poll():
             assert window.camera_controls.currentText() == "Rhino"
             assert abs(window.domain_opacity.value() - 0.2) < 1e-12
             assert "domain" in window.actors
+            assert window.target_axis_length.value() == 14
+            assert all(f"target_preview_{axis}" in window.actors for axis in "xyz")
+            assert len(window.latest["target_history_points"]) == 0
             assert not window.actors["domain"].prop.lighting
             assert 0 < window.preview.targets.count <= Parameters().count
             assert "phantom" in window.actors
@@ -78,6 +81,7 @@ def poll():
             saved_camera = camera_state()
             window.controls["source_spacing_mm"].setValue(2)
             assert not window.accept_button.isEnabled()
+            assert not any(f"target_preview_{axis}" in window.actors for axis in "xyz")
             phase = 1
         elif phase == 1:
             assert len(window.preview.candidates.sampling_points) > 202
@@ -88,9 +92,19 @@ def poll():
             phase = 2
         elif phase == 2 and window.latest["cycle"] == 1:
             assert window.latest["history"][0]["parameters"]["source_spacing_mm"] == 2
+            assert len(window.latest["target_history_points"]) == 2 * window.latest["history"][0]["targets"]
+            assert all(window.actors[f"target_history_{axis}"].GetVisibility() for axis in "xyz")
             assert camera_state() == saved_camera
             settings_revision = window.settings_revision
             preview_token = window.preview.token
+            window.layers["target_history"].setChecked(False)
+            assert not window.actors["target_history_x"].GetVisibility()
+            window.target_axis_length.setValue(10)
+            window.layers["target_history"].setChecked(True)
+            assert window.frame_sources["target_history"][2] == 10
+            assert window.actors["target_history_x"].GetVisibility()
+            window.target_axis_length.setValue(14)
+            assert not window.actors["target_history_z"].prop.lighting
             assert not window.actors["goal"].prop.lighting
             window.light_intensity.setValue(1.5)
             from workbench.config import DisplayOptions
@@ -140,6 +154,7 @@ def poll():
             window.run_button.click()
             phase = 3
         elif phase == 3 and window.latest["cycle"] == 3 and not window.running:
+            assert len(window.latest["target_history_points"]) == 2 * sum(row["targets"] for row in window.latest["history"])
             assert camera_state() == saved_camera, "Camera moved during cycle 2 or 3"
             assert len(window.plotter.renderer.lights) == 3
             assert window.actors["goal"] is static_actor
@@ -156,6 +171,7 @@ def poll():
             # Native rendering and viewport export are tested separately via CUA.
             window.grab().save(str(out / "window.png"))
             assert (window.latest["extra"] / "simulation.npz").is_file()
+            assert (window.latest["extra"] / "targets_history.yaml").read_bytes() == (window.latest["output"] / "targets_history.yaml").read_bytes()
             assert len(window.latest["history"]) == 3
             print(f"PASS: live sampling, stale-preview guard, accept/run/pause/export, independent edge layers and opacities, display-only material changes; {ticks} UI heartbeats", flush=True)
             print(f"OUTPUT: {window.latest['output']}", flush=True)

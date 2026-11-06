@@ -19,6 +19,12 @@ The existing `run_simulation.cmd` launcher retains the reference loop.
 
 Edit `workbench/config.py` and restart the workbench:
 
+- `InputOptions`: `scan_mesh`, `scan_scale` and `scan_yaw` (degrees around Z).
+  Use an absolute scan path or a path relative to the data/repository root,
+  such as `mesh/ScanMesh.stl`. On Windows, absolute path strings can use forward
+  slashes or a raw string, for example `r"C:\scans\new_scan.stl"`.
+  The launch arguments `--scan-mesh`, `--scan-scale` and `--scan-yaw` override
+  these startup preferences. Restart to load a different scan.
 - `Parameters`: bead width/height, source spacing, candidate count, separation,
   walk, orientation, clearance and deposition fraction.
 - `SimulationOptions`: voxel size, threshold, surface step, domain padding and checkpoints.
@@ -52,7 +58,7 @@ and material coefficients adjust lighting rather than gamma correction.
 - **Pause**, or Space over the scene, prevents the next cycle from starting.
   An operation already in progress finishes normally.
 - **Export** saves the combined scan, DDS surface, NPZ checkpoint, history and
-  viewport screenshot without closing the session.
+  cumulative target YAML and viewport screenshot without closing the session.
 - Camera and layer settings persist between batches. **Paper view / frame goal**
   enables orthographic projection and frames the goal.
 - **Camera controls** defaults to **Rhino**: right drag rotates, Shift + right
@@ -119,6 +125,30 @@ stored. Use Export to obtain the final meshes.
 
 ## Surface appearance and edges
 
+- **Accepted targets · XYZ** displays the accepted target frames
+  together. **Preview targets · XYZ** displays the proposed batch separately;
+  changing parameters or accepting a batch removes the old preview frames.
+  **Target endpoints · XYZ (DDS)** starts enabled and **Target starts · XYZ**
+  starts disabled. These independent switches select endpoints, starts or both
+  for all three target layers, including loaded YAML. The YAML itself always
+  retains both planes. **Target line thickness** defaults to 1.4 times the
+  original arrow thickness and can be adjusted live.
+  X is red, Y green and Z blue, with arrowheads and no text labels. Each axis
+  is 14 mm long by default; **Target axis length (mm)** changes the display
+  length live. Defaults are in `DisplayOptions.target_axis_length_mm` and
+  `DisplayOptions.layers`. These settings do not change target positions or DDS.
+- The YAML contract specifies only origin O and deposition axis Z. Historical
+  glyphs use the parsed accepted YAML; X is the projection of world X onto the
+  plane normal to Z (world Y near the singularity), and Y completes a
+  right-handed frame. This displays a stable basis, not an additional recorded
+  tool roll. Preview glyphs use the proposed target planes before YAML rounding.
+- Target glyphs are batched into three actors per layer and accepted geometry
+  is reused between previews, avoiding one separate actor per target.
+- **Load target YAML…** reads a previous `targets_history.yaml` or per-batch
+  `segments.yaml` on the worker and displays its frames in **Loaded target
+  YAML · XYZ**. The loaded file name and frame count appear beneath the button.
+  Loading is display-only: it does not replay deposits, append accepted history,
+  or modify the current scan, candidates or camera. Positions are read in mm.
 - **DDS domain** displays a translucent box with unlit faces and edges;
   **Domain opacity** defaults to 0.20. The layer starts hidden. Before the first
   accepted batch it shows the initial planned domain; afterwards it shows the
@@ -197,12 +227,21 @@ Each session creates `workbench/outputs/session-.../`:
 ```text
 session.json                     # input paths, hashes and resolution
 history.jsonl                    # one entry per accepted batch
+targets_history.yaml             # cumulative accepted segment targets, in cycle order
 performance.jsonl                # operation starts/ends, including unaccepted previews and viewport updates
 step_0001/segments.yaml           # original target contract
 step_0001/parameters.json         # exact parameters and timings
 checkpoint-0010.npz              # optional DDS checkpoint
 export-000N/                     # created only by Export
 ```
+
+`targets_history.yaml` updates automatically after every accepted batch. It uses
+the same `segments:` / `index` / `start.plane` / `end.plane` schema as per-step
+YAML, with globally consecutive indices starting at zero. Positions remain in
+millimeters and the exact rounded plane strings and optional `volume_mm3` fields
+are retained. Cycle boundaries are YAML comments. Discarded previews do not enter
+this history. Updates replace the accumulated document atomically, and Export
+includes a snapshot of it. Original per-step YAML files are retained unchanged.
 
 Checkpoints contain DDS geometry and deposits, readable with
 `SimulationResult.load`. Reopening a full session from the GUI is not yet

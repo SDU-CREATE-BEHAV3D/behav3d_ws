@@ -4,6 +4,14 @@ import math
 
 
 @dataclass(frozen=True)
+class InputOptions:
+    """Startup inputs. Relative scan paths are resolved from the data root."""
+    scan_mesh: str = "mesh/ScanMesh.stl"
+    scan_scale: float = 0.001
+    scan_yaw: float = 180.0
+
+
+@dataclass(frozen=True)
 class Parameters:
     mode: str = "gradient_lift"
     source_spacing_mm: float = 3.0
@@ -80,13 +88,17 @@ class DisplayOptions:
     goal_lighting: bool = False
     domain_opacity: float = 0.2
     camera_controls: str = "Rhino"
+    target_axis_length_mm: float = 14.0
+    target_axis_thickness: float = 1.4
+    target_show_starts: bool = False
+    target_show_endpoints: bool = True
     light_intensity: float = 1.2
     key_light_intensity: float = 0.85
     fill_light_intensity: float = 0.36
     rim_light_intensity: float = 0.18
     surface_ambient: float = 0.2
     surface_diffuse: float = 0.7
-    surface_specular: float = 0.12
+    surface_specular: float = 0.06
     surface_specular_power: float = 28.0
     phantom_color: str = "#9ec9e5"
     phantom_opacity: float = 0.80
@@ -103,4 +115,6 @@ class DisplayOptions:
         "phantom": True, "sources": True, "candidates": True,
         "paths": True, "last": True, "offset": False, "axes": False,
         "domain": False,
+        "target_history": True, "target_preview": True,
+        "target_imported": True,
     })

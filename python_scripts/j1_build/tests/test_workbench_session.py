@@ -187,8 +187,31 @@ class SessionTests(unittest.TestCase):
         np.testing.assert_array_equal(restored.implicit_field, s.result.implicit_field)
         self.assertEqual(len(restored.deposits), 7)
         self.assertEqual(json.loads((folder / "history.json").read_text())[0]["cycle"], 1)
+        self.assertEqual((folder / "targets_history.yaml").read_bytes(), (s.output / "targets_history.yaml").read_bytes())
         events = [json.loads(line) for line in (s.output / "performance.jsonl").read_text().splitlines()]
         self.assertTrue(any(e["operation"] == "checkpoint" and e["state"] == "finished" for e in events))
+
+    def test_target_history_only_accumulates_successfully_accepted_batches(self):
+        import yaml
+        s = self.session()
+        path = s.output / "targets_history.yaml"
+        first = s.prepare(BASE)
+        current = s.prepare(replace(BASE, count=2))
+        self.assertEqual(yaml.safe_load(path.read_text())["segments"], [])
+        with self.assertRaises(ValueError):
+            s.accept(first.token)
+        self.assertEqual(s.target_history.count, 0)
+        total = 0
+        for preview in (current, None):
+            if preview is None:
+                preview = s.prepare(replace(BASE, count=3))
+            record = s.accept(preview.token)
+            total += record["targets"]
+            self.assertEqual(s.target_history.count, total)
+            self.assertEqual(len(s.target_history.points), 2 * total)
+            self.assertEqual(len(yaml.safe_load(path.read_text())["segments"]), total)
+        applied = __import__("field_scan_loop_simulator_dds_v2").load_segment_targets_yaml(path, position_scale=1000)
+        np.testing.assert_array_equal(applied.end_points[-len(s.last_targets):], s.last_targets)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,8 @@ from .session import Session
 from .appearance import PHANTOM_COLOR, PHANTOM_OPACITY, SURFACE_MATERIAL, configure_studio_lighting, set_contact_shading
 from .navigation import capture_camera, configure_navigation, restore_camera
 from .telemetry import event
+from .target_frames import AXIS_COLORS, frame_glyphs, select_target_frames
+from .target_history import load_frame_yaml
 
 
 class Worker(QtCore.QObject):
@@ -54,6 +56,10 @@ class Worker(QtCore.QObject):
             elif action == "phantom":
                 extra = self.session.preview_phantom(job["token"])
                 preview = self.session.preview
+            elif action == "load_target_yaml":
+                points, z_dirs = load_frame_yaml(job["target_yaml_path"])
+                extra = {"path": job["target_yaml_path"], "points": points, "z_dirs": z_dirs}
+                preview = self.session.preview
             else:
                 raise ValueError(action)
             s = self.session
@@ -67,6 +73,8 @@ class Worker(QtCore.QObject):
                 "field_faces": s.field.field_faces, "heat": s.field.heat_norm,
                 "scan_vertices": np.asarray(s.base.vertices), "scan_faces": np.asarray(s.base.triangles),
                 "last_targets": s.last_targets, "history": list(s.history), "output": s.output,
+                "target_history_points": s.target_history.points,
+                "target_history_z_dirs": s.target_history.z_dirs,
                 "grid": s.simulator.domain.grid_shape if s.simulator else None,
                 "domain": domain,
                 "domain_planned": s.simulator is None,
@@ -99,6 +107,8 @@ class Workbench(QtWidgets.QMainWindow):
         self.actors = {}
         self.meshes = {}
         self.edge_sources = {}
+        self.frame_sources = {}
+        self.loaded_targets = None
         self.initialized = False
         self.scene_field_path = None
         self.controls = {}
@@ -274,6 +284,9 @@ class Workbench(QtWidgets.QMainWindow):
             ("phantom", "DDS phantom", True),
             ("sources", "Source samples", True), ("candidates", "Candidates", True),
             ("paths", "Paths", False), ("last", "Last batch · targets", True),
+            ("target_history", "Accepted targets · XYZ", True),
+            ("target_preview", "Preview targets · XYZ", True),
+            ("target_imported", "Loaded target YAML · XYZ", True),
             ("offset", "Magenta offset (diagnostic)", False), ("axes", "Axes", False)]:
             widget = QtWidgets.QCheckBox(label)
             visible = self.display_defaults.layers.get(key, visible)
@@ -281,6 +294,37 @@ class Workbench(QtWidgets.QMainWindow):
             widget.toggled.connect(lambda checked, k=key: self.layer_changed(k, checked))
             self.layers[key] = widget
             form.addRow(widget)
+        for key in ("target_history", "target_preview", "target_imported"):
+            self.layers[key].setToolTip("Selected start/endpoint frames. X red, Y green, Z blue. Z follows the target; X/Y complete a stable display frame because YAML stores O and Z only.")
+        self.target_starts = QtWidgets.QCheckBox("Target starts · XYZ")
+        self.target_starts.setChecked(self.display_defaults.target_show_starts)
+        self.target_endpoints = QtWidgets.QCheckBox("Target endpoints · XYZ (DDS)")
+        self.target_endpoints.setChecked(self.display_defaults.target_show_endpoints)
+        for widget in (self.target_starts, self.target_endpoints):
+            widget.setToolTip("Select which planes to display in all three target layers. Display only; YAML retains both start and end.")
+            widget.toggled.connect(self.target_axis_length_changed)
+            form.addRow(widget)
+        self.target_axis_thickness = QtWidgets.QDoubleSpinBox()
+        self.target_axis_thickness.setRange(0.5, 4)
+        self.target_axis_thickness.setSingleStep(0.1)
+        self.target_axis_thickness.setSuffix(" ×")
+        self.target_axis_thickness.setValue(self.display_defaults.target_axis_thickness)
+        self.target_axis_thickness.valueChanged.connect(self.target_axis_length_changed)
+        form.addRow("Target line thickness", self.target_axis_thickness)
+        self.target_axis_length = QtWidgets.QDoubleSpinBox()
+        self.target_axis_length.setRange(1, 100)
+        self.target_axis_length.setSingleStep(1)
+        self.target_axis_length.setValue(self.display_defaults.target_axis_length_mm)
+        self.target_axis_length.setToolTip("Physical length of each XYZ arrow. Display only; no target labels.")
+        self.target_axis_length.valueChanged.connect(self.target_axis_length_changed)
+        form.addRow("Target axis length (mm)", self.target_axis_length)
+        self.load_target_button = QtWidgets.QPushButton("Load target YAML…")
+        self.load_target_button.clicked.connect(self.choose_target_yaml)
+        self.load_target_button.setToolTip("View a previous targets_history.yaml or segments.yaml. Does not replay deposits or change the current session.")
+        form.addRow(self.load_target_button)
+        self.loaded_target_label = QtWidgets.QLabel("No target YAML loaded")
+        self.loaded_target_label.setWordWrap(True)
+        form.addRow(self.loaded_target_label)
         self.goal_opacity = QtWidgets.QDoubleSpinBox()
         self.goal_opacity.setRange(0, 1)
         self.goal_opacity.setSingleStep(0.1)
@@ -412,6 +456,8 @@ class Workbench(QtWidgets.QMainWindow):
         self.settings_revision += 1
         self.preview_revision = -1
         self._draw_phantom(None)
+        if hasattr(self, "target_axis_length"):
+            self._target_frames("target_preview", np.empty((0, 3)), np.empty((0, 3)))
         self.accept_button.setEnabled(False)
         if hasattr(self, "timer"):
             self.timer.start()
@@ -421,17 +467,27 @@ class Workbench(QtWidgets.QMainWindow):
             self.timer.stop()
             self.submit("preview")
 
-    def submit(self, action):
+    def choose_target_yaml(self):
+        if self.busy or not self.initialized:
+            return
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Load target YAML", "", "Target YAML (*.yaml *.yml)")
+        if path:
+            self.pause()
+            self.submit("load_target_yaml", target_yaml_path=path)
+
+    def submit(self, action, **details):
         if self.busy:
             return
         if action in {"new", "export"}:
             self.pause()
         try:
             parameters = self.parameters()
-            parameters.validate()
+            if action != "load_target_yaml":
+                parameters.validate()
             job = {"action": action, "parameters": parameters, "options": self.options(),
                    "phantom": self.layers["phantom"].isChecked(),
                    "settings_revision": self.settings_revision}
+            job.update(details)
             if action in {"accept", "phantom"}:
                 if self.preview is None or self.preview_revision != self.settings_revision:
                     return
@@ -442,7 +498,8 @@ class Workbench(QtWidgets.QMainWindow):
             self.set_buttons()
             self.status.setText({"new": "Loading session…", "preview": "Computing preview…",
                 "accept": "Adding batch and updating surface…", "export": "Exporting…",
-                "offset": "Computing diagnostic…", "phantom": "Computing DDS phantom…"}[action])
+                "offset": "Computing diagnostic…", "phantom": "Computing DDS phantom…",
+                "load_target_yaml": "Loading target YAML for display…"}[action])
             self.requested.emit(job)
         except Exception as exc:
             self.log.appendPlainText(str(exc))
@@ -478,6 +535,7 @@ class Workbench(QtWidgets.QMainWindow):
         self.pause_button.setEnabled(self.running or self.busy)
         self.new_button.setEnabled(not self.busy)
         self.export_button.setEnabled(not self.busy and self.initialized)
+        self.load_target_button.setEnabled(not self.busy and self.initialized)
 
     @QtCore.Slot(object)
     def completed(self, result):
@@ -510,6 +568,11 @@ class Workbench(QtWidgets.QMainWindow):
         job = result["job"]
         action = job["action"]
         self.latest = result
+        if action == "load_target_yaml":
+            self.loaded_targets = result["extra"]
+            self.loaded_target_label.setText(f"{len(self.loaded_targets['points'])} target frames · " + str(self.loaded_targets["path"]).replace("\\", "/").rsplit("/", 1)[-1])
+            self.loaded_target_label.setToolTip(str(self.loaded_targets["path"]))
+            self.layers["target_imported"].setChecked(True)
         scene_changed = self.scene_field_path != result["field_path"]
         if action == "new" or scene_changed:
             self.initialized = True
@@ -521,6 +584,9 @@ class Workbench(QtWidgets.QMainWindow):
             self.log.appendPlainText(f"Goal input changed: {result['field_path']} · accepted deposits retained")
         if action in {"new", "accept"} or scene_changed:
             self._surface_scene(result)
+        self._target_frames("target_history", result["target_history_points"], result["target_history_z_dirs"])
+        if self.loaded_targets is not None:
+            self._target_frames("target_imported", self.loaded_targets["points"], self.loaded_targets["z_dirs"])
         self._domain_scene(result)
         if action == "accept":
             self.preview = None
@@ -589,6 +655,7 @@ class Workbench(QtWidgets.QMainWindow):
         self.actors.clear()
         self.meshes.clear()
         self.edge_sources.clear()
+        self.frame_sources.clear()
         goal = polydata(result["field_vertices"], result["field_faces"])
         goal["priority"] = result["heat"]
         self.meshes["goal"] = goal
@@ -668,7 +735,8 @@ class Workbench(QtWidgets.QMainWindow):
         self._lines("contour", "contour", c.contour_points, c.contour_lines, "#00b9cb")
         self._cloud("sources", "sources", preview.candidates.sampling_points, "#00c5d4", 6)
         self._cloud("candidates", "candidates", preview.targets.end_points, "#2686ce", 11)
-        points, _ = preview.targets.flattened_points_and_z_dirs()
+        points, z_dirs = preview.targets.flattened_points_and_z_dirs()
+        self._target_frames("target_preview", points, z_dirs)
         self._lines("paths", "paths", points, np.arange(len(points)).reshape(-1, 2), "#e8a029")
         self._lines("offset", "offset", np.empty((0, 3)), np.empty((0, 2), int), "#e34bd3")
         if self.layers["offset"].isChecked():
@@ -676,12 +744,26 @@ class Workbench(QtWidgets.QMainWindow):
 
     def _clear_preview(self):
         self._draw_phantom(None)
+        self._target_frames("target_preview", np.empty((0, 3)), np.empty((0, 3)))
         for name in ("sources", "candidates"):
             self._cloud(name, name, np.empty((0, 3)), "#ffffff", 1)
         for name in ("contour", "paths", "offset"):
             self._lines(name, name, np.empty((0, 3)), np.empty((0, 2), int), "#ffffff")
 
     def layer_changed(self, key, checked):
+        if key in {"target_history", "target_preview", "target_imported"}:
+            if checked:
+                if key == "target_history" and self.latest is not None:
+                    self._target_frames(key, self.latest["target_history_points"], self.latest["target_history_z_dirs"])
+                elif key == "target_preview" and self.preview is not None and self.preview_revision == self.settings_revision:
+                    points, z_dirs = self.preview.targets.flattened_points_and_z_dirs()
+                    self._target_frames(key, points, z_dirs)
+                elif key == "target_imported" and self.loaded_targets is not None:
+                    self._target_frames(key, self.loaded_targets["points"], self.loaded_targets["z_dirs"])
+            for axis in "xyz":
+                actor = self.actors.get(f"{key}_{axis}")
+                if actor is not None:
+                    actor.SetVisibility(checked)
         if key in {"goal_edges", "bead_edges"} and checked:
             self._ensure_edges(key)
         if key == "axes":
@@ -697,6 +779,43 @@ class Workbench(QtWidgets.QMainWindow):
             self.submit("offset")
         if key == "phantom" and checked and self.preview and not self.busy and self.actors.get("phantom") is None:
             self.submit("phantom")
+        self.plotter.render()
+
+    def _target_frames(self, key, points, z_dirs):
+        length = self.target_axis_length.value()
+        style = (self.target_starts.isChecked(), self.target_endpoints.isChecked(), self.target_axis_thickness.value())
+        source = self.frame_sources.get(key)
+        if source is not None and source[0] is points and source[1] is z_dirs and source[2] == length and source[3:] == style:
+            return
+        if len(points) and not self.layers[key].isChecked():
+            # Retain the prior hidden actors, rebuilding lazily on re-enable.
+            return
+        for axis in "xyz":
+            name = f"{key}_{axis}"
+            self.plotter.remove_actor(name, render=False)
+            self.actors.pop(name, None)
+        self.frame_sources[key] = (points, z_dirs, length, *style)
+        selected_points, selected_dirs = select_target_frames(points, z_dirs, style[0], style[1])
+        if not len(selected_points):
+            return
+        meshes = frame_glyphs(selected_points, selected_dirs, length, thickness=style[2])
+        for axis, color, mesh in zip("xyz", AXIS_COLORS, meshes):
+            name = f"{key}_{axis}"
+            actor = self.plotter.add_mesh(mesh, name=name, color=color, lighting=False,
+                pickable=False, reset_camera=False, render=False, show_scalar_bar=False)
+            actor.mapper.scalar_visibility = False
+            actor.SetUseBounds(False)
+            actor.SetVisibility(self.layers[key].isChecked())
+            self.actors[name] = actor
+
+    def target_axis_length_changed(self, _value):
+        if self.latest is not None:
+            self._target_frames("target_history", self.latest["target_history_points"], self.latest["target_history_z_dirs"])
+        if self.preview is not None and self.preview_revision == self.settings_revision:
+            points, z_dirs = self.preview.targets.flattened_points_and_z_dirs()
+            self._target_frames("target_preview", points, z_dirs)
+        if self.loaded_targets is not None:
+            self._target_frames("target_imported", self.loaded_targets["points"], self.loaded_targets["z_dirs"])
         self.plotter.render()
 
     def _draw_phantom(self, surface):
