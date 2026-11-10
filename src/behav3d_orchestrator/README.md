@@ -36,6 +36,11 @@ The node publishes the scaled region as an orange triangle marker with opacity
 0.2 on `/behav3d/fault_region`. Add a Marker display for this topic in RViz.
 Target colors retain the existing display behavior.
 
+`src/fault_session.py` provides the shared `FaultSession`: it owns region
+loading, inside/outside queries, material reduction and the RViz marker. Each
+fault node configures this session and attaches it to its existing
+`PrintSession`. It does not own a separate command queue or execute motion.
+
 ```bash
 ros2 run behav3d_orchestrator print_yaml_fault_and_scan_sequence
 ```
@@ -49,10 +54,16 @@ ros2 run behav3d_orchestrator print_yaml_fault_and_scan_sequence --ros-args -p c
 
 ## Bead Execution Report
 
-The YAML-print nodes and field-loop nodes write `print_manifest.yaml` in
+The existing `PrintSession` writes `print_manifest.yaml` for YAML-print and field-loop nodes in
 their capture-session root. This is independent of optional joint-current
 logging. Existing target-generation, current/event and contour-offset outputs
 retain their formats.
+
+Manifest updates, command-result tracking and capture-session path resolution
+live in `src/print_session.py`; there is no separate bead logger or session-path
+module. `JointCurrentLogger` continues to handle its existing current samples
+and print-event stream. The capture manifest in `behav3d_sense` remains specific
+to camera captures.
 
 Each cycle contains `attempted_beads` and `successful_beads`. Entries record
 the original target index, endpoint pose, segment start when applicable,

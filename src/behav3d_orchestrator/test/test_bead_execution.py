@@ -15,7 +15,7 @@ from geometry_msgs.msg import PoseStamped
 from behav3d_orchestrator.src.control_session import ControlAwareSession
 from behav3d_orchestrator.src.print_session import PrintSession
 from behav3d_orchestrator.src.yaml_session import TargetSegment
-from behav3d_orchestrator.src.extrusion_fault_region import ExtrusionFaultRegion
+from behav3d_orchestrator.src.fault_session import FaultSession
 from behav3d_orchestrator.print_yaml_fault_and_scan_sequence import PrintYamlFaultAndScanSequenceNode
 from behav3d_orchestrator.print_yaml_and_scan_sequence import PrintYamlAndScanSequenceNode
 
@@ -42,7 +42,7 @@ class FakePrintSession(PrintSession):
         self.motion = self.extruder = self.util = Commands()
         self.node = SimpleNamespace(get_logger=lambda: SimpleNamespace(info=lambda *a: None, warn=lambda *a: None, error=lambda *a: None))
         self.joint_current_logger = SimpleNamespace(mark_event=lambda *a, **k: None)
-        self.extrusion_fault_region = None
+        self.fault_session = None
         self._active_bead = None
         self.commands = []
         self.failure = None
@@ -93,7 +93,7 @@ class BeadExecutionTests(unittest.TestCase):
         mesh = o3d.geometry.TriangleMesh.create_box(1000, 1000, 1000)
         mesh.compute_vertex_normals()
         o3d.io.write_triangle_mesh(str(path), mesh)
-        return ExtrusionFaultRegion(path, reduction_pct=pct)
+        return FaultSession().load_region(path, reduction_pct=pct)
 
     def dots(self, **kwargs):
         return self.session.run_print_dots_targets(targets=[pose()], dot_steps=100,
@@ -115,16 +115,16 @@ class BeadExecutionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             region.set_reduction(101)
         with self.assertRaises(FileNotFoundError):
-            ExtrusionFaultRegion(self.root / "absent.stl")
+            FaultSession().load_region(self.root / "absent.stl")
         mesh = o3d.geometry.TriangleMesh()
         mesh.vertices = o3d.utility.Vector3dVector([[0, 0, 0], [1, 0, 0], [0, 1, 0]])
         mesh.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
         o3d.io.write_triangle_mesh(str(self.root / "open.ply"), mesh)
         with self.assertRaises(ValueError):
-            ExtrusionFaultRegion(self.root / "open.ply")
+            FaultSession().load_region(self.root / "open.ply")
 
     def test_dot_reduction_changes_only_material_and_preserves_nominal_duration(self):
-        self.session.extrusion_fault_region = self.region()
+        self.session.fault_session = self.region()
         self.dots(target_indices=[91])
         row = self.report()["successful_beads"][0]
         self.assertEqual(row["index"], 91)
@@ -138,7 +138,7 @@ class BeadExecutionTests(unittest.TestCase):
         self.segments()
         nominal_speed = self.session.plans[-1]["target_print_speed_mm_s"]
         self.session.configure_bead_logging(self.root, "field_loop/cycle_0002")
-        self.session.extrusion_fault_region = self.region()
+        self.session.fault_session = self.region()
         result = self.segments()
         self.assertAlmostEqual(self.session.plans[-1]["target_print_speed_mm_s"], nominal_speed)
         self.assertEqual(result["extrusion_requests"][0]["commanded_steps_per_second"], 40)
@@ -215,7 +215,7 @@ class BeadExecutionTests(unittest.TestCase):
         self.assertEqual(self.report()["attempted_beads"][0]["status"], "motion_unknown")
 
     def test_full_reduction_never_sends_zero_step_or_retract_commands(self):
-        self.session.extrusion_fault_region = self.region(100)
+        self.session.fault_session = self.region(100)
         self.segments()
         self.assertFalse(any(i.kind == "print_steps" for i in self.session.commands))
         self.assertEqual(self.report()["attempted_beads"][0]["volume_mm3"], 0)
@@ -232,7 +232,7 @@ class BeadExecutionTests(unittest.TestCase):
         report = self.report()
         self.assertEqual([row["index"] for row in report["attempted_beads"]], [42, 42])
         self.assertEqual(len(report["successful_beads"]), 2)
-        self.assertEqual(self.session.bead_logger.next_cycle_number("field_loop"), 2)
+        self.assertEqual(self.session.next_print_cycle_number(self.root, "field_loop"), 2)
 
     def test_fault_node_preserves_segment_yaml_indices_volumes_and_original_file(self):
         path = self.root / "targets.yaml"
@@ -284,7 +284,7 @@ class BeadExecutionTests(unittest.TestCase):
                 config.write_text(yaml.safe_dump({"print_yaml_fault_and_scan_sequence": {"ros__parameters": cfg}}))
                 node = object.__new__(PrintYamlFaultAndScanSequenceNode)
                 node.print_session = self.session
-                node._region_key = node._region_publisher = None
+                node.fault_session = None
                 node._loaded_segments = []
                 node._default_config_path = lambda: str(config)
                 node.get_logger = self.session.node.get_logger
@@ -294,7 +294,7 @@ class BeadExecutionTests(unittest.TestCase):
                 node.create_publisher = lambda *a, **k: SimpleNamespace(publish=markers.append)
                 scans = []
                 node._run_scan_cycle = lambda **kwargs: scans.append(kwargs)
-                with patch("behav3d_orchestrator.print_yaml_and_scan_sequence.active_session_path", return_value=self.root), patch.object(rclpy, "ok", return_value=True), patch.object(rclpy, "shutdown", create=True):
+                with patch("behav3d_orchestrator.print_yaml_and_scan_sequence.PrintSession.active_session_path", return_value=self.root), patch.object(rclpy, "ok", return_value=True), patch.object(rclpy, "shutdown", create=True):
                     node._run()
                 self.assertEqual(source.read_bytes(), original)
                 self.assertEqual(len(scans), 1)

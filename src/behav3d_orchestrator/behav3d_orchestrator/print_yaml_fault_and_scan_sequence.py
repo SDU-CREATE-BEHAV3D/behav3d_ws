@@ -2,7 +2,7 @@
 import rclpy
 
 from .print_yaml_and_scan_sequence import PrintYamlAndScanSequenceNode
-from .src.fault_region_controller import FaultRegionController
+from .src.fault_session import FaultSession
 from .src.yaml_session import DotTarget
 
 
@@ -10,7 +10,7 @@ class PrintYamlFaultAndScanSequenceNode(PrintYamlAndScanSequenceNode):
     config_filename = "print_yaml_fault_and_scan_sequence_config.yaml"
 
     def __init__(self):
-        self._fault_region_controller = None
+        self.fault_session = FaultSession(self)
         self._loaded_segments = []
         super().__init__("print_yaml_fault_and_scan_sequence")
 
@@ -20,11 +20,11 @@ class PrintYamlFaultAndScanSequenceNode(PrintYamlAndScanSequenceNode):
 
     def _refresh_execution_config(self, cfg):
         super()._refresh_execution_config(cfg)
-        if getattr(self, "_fault_region_controller", None) is None:
-            self._fault_region_controller = FaultRegionController(self)
-        self._fault_region_controller.configure(
-            cfg, config_path=self._default_config_path(), frame_id=self._execution_frame,
-            print_session=self.print_session)
+        if getattr(self, "fault_session", None) is None:
+            self.fault_session = FaultSession(self)
+        self.fault_session.configure(
+            cfg, config_path=self._default_config_path(), frame_id=self._execution_frame)
+        self.print_session.fault_session = self.fault_session
 
     def _load_print_targets(self, *, yaml_path, frame_id):
         self._loaded_segments = self.print_session.parse_yaml_segments(yaml_path=yaml_path, frame_id=frame_id)

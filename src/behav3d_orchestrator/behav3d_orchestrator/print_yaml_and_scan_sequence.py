@@ -22,8 +22,6 @@ from .src.extrusion_calibration import (
 )
 from .src.print_session import PrintSession
 from .src.scan_session import ScanSession
-from .src.bead_execution_logger import BeadExecutionLogger
-from .src.session_output import active_session_path, session_child
 
 try:
     import yaml
@@ -256,20 +254,20 @@ class PrintYamlAndScanSequenceNode(Node):
             rclpy.shutdown()
 
     def _configure_run(self, cfg):
-        self._execution_session = active_session_path()
+        self._execution_session = self.print_session.active_session_path()
         self._execution_frame = self._cfg_str(cfg, "frame_id")
-        scan_root = session_child(self._cfg_str(cfg, "scan_root_folder"), self._execution_session)
+        scan_root = self.print_session.session_child(self._cfg_str(cfg, "scan_root_folder"), self._execution_session)
         try:
             self._execution_scope = scan_root.relative_to(self._execution_session).as_posix()
         except ValueError:
             self._execution_scope = self.get_name()
-        self._first_cycle_number = BeadExecutionLogger(self._execution_session).next_cycle_number(self._execution_scope)
+        self._first_cycle_number = self.print_session.next_print_cycle_number(self._execution_session, self._execution_scope)
         existing = [int(path.name[6:]) for path in scan_root.glob("cycle_*")
                     if path.is_dir() and path.name[6:].isdigit()]
         self._first_cycle_number = max(self._first_cycle_number, max(existing, default=0) + 1)
 
     def _refresh_execution_config(self, cfg):
-        cfg["scan_root_folder"] = str(session_child(self._cfg_str(cfg, "scan_root_folder"), self._execution_session))
+        cfg["scan_root_folder"] = str(self.print_session.session_child(self._cfg_str(cfg, "scan_root_folder"), self._execution_session))
 
     def _load_print_targets(self, *, yaml_path, frame_id):
         targets = self.print_session.parse_yaml_dot_targets(yaml_path=yaml_path, frame_id=frame_id)

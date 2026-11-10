@@ -2,21 +2,22 @@
 import rclpy
 
 from .geometry_representation_scan_print_loop import GeometryRepresentationScanPrintLoopNode
-from .src.fault_region_controller import FaultRegionController
+from .src.fault_session import FaultSession
 
 
 class GeometryRepresentationFaultScanPrintLoopNode(GeometryRepresentationScanPrintLoopNode):
     config_filename = "geometry_representation_fault_scan_print_loop_config.yaml"
 
     def __init__(self):
-        self._fault_region_controller = None
+        self.fault_session = FaultSession(self)
         super().__init__("geometry_representation_fault_scan_print_loop")
 
     def _configure_print_execution(self, rt, config_path):
-        if self._fault_region_controller is None:
-            self._fault_region_controller = FaultRegionController(self)
-        self._fault_region_controller.configure(
-            rt.config, config_path=config_path, frame_id=rt.frame_id, print_session=self.print_session)
+        if self.fault_session is None:
+            self.fault_session = FaultSession(self)
+        self.fault_session.configure(
+            rt.config, config_path=config_path, frame_id=rt.frame_id)
+        self.print_session.fault_session = self.fault_session
 
 
 def main(args=None):

@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from contextlib import contextmanager
+from copy import deepcopy
 import math
+import os
+from pathlib import Path
 import threading
 import time
 from typing import Optional, Sequence
 
+import yaml
 from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory
 
@@ -16,33 +21,103 @@ from .extrusion_calibration import (
     volume_mm3_to_steps,
 )
 from .joint_current_logger import JointCurrentLogger
-from .bead_execution_logger import BeadExecutionLogger, track_bead
 from .yaml_session import TargetSegment, YamlSession
 
 
 class PrintSession(YamlSession):
-    """
-    Shared print execution helpers for parsed YAML targets.
-    """
+    """Execute parsed print targets and own their per-cycle print manifest."""
 
     def __init__(self, node, **kwargs):
         super().__init__(node, **kwargs)
         self.joint_current_logger = JointCurrentLogger(node)
-        self.bead_logger = None
+        self._print_manifest_path = None
+        self._print_manifest_lock = threading.RLock()
         self.bead_cycle = "unassigned"
         self._active_bead = None
-        self.extrusion_fault_region = None
+        self.fault_session = None
 
     def configure_bead_logging(self, session_root, cycle):
-        self.bead_logger = BeadExecutionLogger(session_root)
+        """Attach the session print manifest independently of current logging."""
+        self._print_manifest_path = Path(session_root).expanduser().resolve() / "print_manifest.yaml"
+        self._print_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        if not hasattr(self, "_print_manifest_lock"):
+            self._print_manifest_lock = threading.RLock()
         self.bead_cycle = str(cycle)
 
+    def _update_bead_record(self, attempt_id, record):
+        if getattr(self, "_print_manifest_path", None) is None:
+            return None
+        with self._print_manifest_lock:
+            data = yaml.safe_load(self._print_manifest_path.read_text(encoding="utf-8")) if self._print_manifest_path.exists() else {
+                "schema_version": 1,
+                "volume_basis": "Completed PrintSteps responses divided by steps_per_mm3; not a physical flow measurement. Unknown responses remain null.",
+                "cycles": {},
+            }
+            bucket = data["cycles"].setdefault(str(self.bead_cycle), {"attempted_beads": [], "successful_beads": []})
+            attempts = bucket["attempted_beads"]
+            if attempt_id is None:
+                attempt_id = len(attempts)
+                attempts.append(deepcopy(record))
+            else:
+                attempts[attempt_id] = deepcopy(record)
+            bucket["successful_beads"] = [deepcopy(row) for row in attempts if row["status"] == "success"]
+            pending = self._print_manifest_path.with_suffix(".yaml.pending")
+            pending.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+            pending.replace(self._print_manifest_path)
+            return attempt_id
+
+    @staticmethod
+    def next_print_cycle_number(session_root, prefix):
+        path = Path(session_root).expanduser().resolve() / "print_manifest.yaml"
+        if not path.exists():
+            return 1
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        numbers = [int(key.rsplit("cycle_", 1)[1]) for key in data["cycles"]
+                   if key.startswith(prefix + "/cycle_") and key.rsplit("cycle_", 1)[1].isdigit()]
+        return max(numbers, default=0) + 1
+
+    @staticmethod
+    def active_session_path():
+        root = Path(os.environ.get("BEHAV3D_CAPTURES_ROOT") or Path.home() / "behav3d_ws/captures").expanduser()
+        root.mkdir(parents=True, exist_ok=True)
+        active = os.environ.get("BEHAV3D_ACTIVE_SESSION", "").strip()
+        if active:
+            path = Path(active).expanduser().resolve()
+            if not path.is_dir():
+                raise FileNotFoundError(f"Active capture session does not exist: {path}")
+            return path
+        dirs = [p for p in root.iterdir() if p.is_dir()]
+        timestamp_dirs = [p for p in dirs if len(p.name) == 13 and p.name[6] == "_"
+                          and p.name[:6].isdigit() and p.name[7:].isdigit()]
+        return max(timestamp_dirs or dirs, key=lambda p: p.name).resolve() if dirs else root.resolve()
+
+    @staticmethod
+    def session_child(value, session_root):
+        text = str(value).strip()
+        if text == "@session":
+            return Path(session_root)
+        if text.startswith("@session/"):
+            return Path(session_root) / text[len("@session/"):]
+        return Path(text).expanduser().resolve()
+
     def material_steps(self, nominal_steps, target):
-        region = getattr(self, "extrusion_fault_region", None)
+        region = getattr(self, "fault_session", None)
         return int(nominal_steps) if region is None else region.material_steps(nominal_steps, target)
 
+    @contextmanager
     def track_bead(self, **details):
-        return track_bead(self, **details)
+        """Record an attempt before execution and resolve it from command replies."""
+        attempt = _BeadAttempt(self, **details)
+        self._active_bead = attempt
+        try:
+            yield attempt
+        except BaseException as exc:
+            attempt.finish(exc)
+            raise
+        else:
+            attempt.finish()
+        finally:
+            self._active_bead = None
 
     def run_sync(self, item, *, timeout_s=None):
         attempt = getattr(self, "_active_bead", None)
@@ -1307,4 +1382,70 @@ class PrintSession(YamlSession):
         lo = min(float(low), float(high))
         hi = max(float(low), float(high))
         return max(lo, min(hi, float(value)))
+
+
+
+def _pose_record(target):
+    pose = target.pose
+    return dict(frame_id=target.header.frame_id,
+                position_m=[float(getattr(pose.position, a)) for a in "xyz"],
+                orientation_xyzw=[float(getattr(pose.orientation, a)) for a in "xyzw"])
+
+
+class _BeadAttempt:
+    def __init__(self, session, *, index, target, nominal_steps, material_steps,
+                 retract_steps, steps_per_mm3, start=None):
+        calibration = float(steps_per_mm3)
+        if not math.isfinite(calibration) or calibration <= 0:
+            raise ValueError("steps_per_mm3 must be finite and positive")
+        self.session, self.attempt_id = session, None
+        self.calibration, self.retract_steps = calibration, retract_steps
+        self.started = False
+        self.forward_result = self.retract_result = None
+        self.motion_ok = True
+        self.record = dict(index=int(index), target=_pose_record(target),
+                           nominal_volume_mm3=int(nominal_steps) / calibration,
+                           requested_volume_mm3=int(material_steps) / calibration,
+                           commanded_forward_steps=int(material_steps) + int(retract_steps),
+                           volume_mm3=0.0, extruded=False, status="attempted")
+        if start is not None:
+            self.record["start"] = _pose_record(start)
+        self.persist()
+
+    def persist(self):
+        self.attempt_id = self.session._update_bead_record(self.attempt_id, self.record)
+
+    def forward_started(self):
+        self.started = True
+        self.record.update(volume_mm3=None, extruded=None, status="unknown")
+        self.persist()
+
+    def observe(self, result, *, reverse=False, motion=False):
+        if motion:
+            self.motion_ok = bool(result.get("ok", False))
+        elif reverse:
+            self.retract_result = result
+        else:
+            self.forward_result = result
+        if not result.get("ok", False):
+            self.record["error"] = str(result.get("error") or result.get("stage") or "command failed")
+
+    def finish(self, error=None):
+        if error is not None:
+            self.record["error"] = str(error)
+        forward = self.forward_result or {}
+        reverse = self.retract_result or {}
+        accepted = forward.get("metrics", {}).get("accepted_steps")
+        retracted = reverse.get("metrics", {}).get("accepted_steps") if self.retract_steps else 0
+        if not self.started:
+            self.record.update(volume_mm3=0.0, extruded=False, status="not_extruded")
+        elif (forward.get("ok", False) and accepted is not None
+              and (not self.retract_steps or reverse.get("ok", False) and retracted is not None)):
+            net = max(0, int(accepted) - int(retracted))
+            outcome = "motion_unknown" if self.motion_ok is None else "success" if self.motion_ok else "motion_failed"
+            self.record.update(volume_mm3=net / self.calibration, extruded=net > 0,
+                               status=outcome if net else "not_extruded")
+        else:
+            self.record.update(volume_mm3=None, extruded=None, status="unknown")
+        self.persist()
 

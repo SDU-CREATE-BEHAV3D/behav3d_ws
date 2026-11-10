@@ -51,7 +51,7 @@ class GeometryFaultLoopTests(unittest.TestCase):
         write_config()
         cls = GeometryRepresentationFaultScanPrintLoopNode if fault else GeometryRepresentationScanPrintLoopNode
         node = object.__new__(cls)
-        node._fault_region_controller = None
+        node.fault_session = None
         node.print_session = FakePrintSession(output)
         node._default_runtime_config_path = lambda: str(config_path)
         node._latest_capture_session_path = lambda: output
@@ -161,7 +161,7 @@ class GeometryFaultLoopTests(unittest.TestCase):
         for cycle in self.manifest(baseline).values():
             self.assertEqual([r["volume_mm3"] for r in cycle["successful_beads"]], [50, 50])
         self.assertFalse(baseline.markers)
-        self.assertIsNone(baseline.node.print_session.extrusion_fault_region)
+        self.assertIsNone(baseline.node.print_session.fault_session)
         for left, right in zip(baseline.generations, faulty.generations):
             for key in left.keys() - {"session_path", "output_dir", "field_state_path", "scan_mesh_paths"}:
                 self.assertEqual(left[key], right[key], key)
