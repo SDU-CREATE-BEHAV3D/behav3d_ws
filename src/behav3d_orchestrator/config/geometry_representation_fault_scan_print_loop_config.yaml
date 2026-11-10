@@ -1,0 +1,220 @@
+geometry_representation_fault_scan_print_loop:
+  ros__parameters:
+    # Global flow
+    home_before_scan: true
+    home_after: false
+    timeout_s: 0.0
+    debug_mode: false
+    prompt_before_print: true
+    prompt_before_scan: false
+    enable_scan: true
+    # Read-only phi-contour/target offset estimation between consecutive cycles.
+    # It never changes candidates, robot motion, or extrusion commands.
+    contour_offset_estimation: true
+
+    # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
+    scan_type: grid_sweep
+    # Common scan execution. Motion remains fixed to LIN.
+    scan_vel_scale: 0.18
+    scan_accel_scale: 0.18
+    scan_settle_s: 0.8
+
+    
+    # Half-cylinder scan parameters. Active when scan_type=half_cylinder
+    # or scan_type=half_cylinder_side_caps.
+    half_use_line_axis: true
+    half_axis_start_x: 0.00
+    half_axis_start_y: 0.65
+    half_axis_start_z: 0.05
+    half_axis_end_x: 0.00
+    half_axis_end_y: 1.15
+    half_axis_end_z: 0.05
+    half_radius: 0.55
+    half_angle_min_deg: -55.0
+    half_angle_max_deg: 55.0
+    half_n_angle: 5
+    half_n_axis: 4
+    half_arc_center_dx: 0.0
+    half_arc_center_dy: 0.0
+    half_arc_center_dz: 1.0
+    # Constrain optical Z toward the line and choose X/Y automatically from
+    # the current camera orientation, avoiding an explicit wrist-roll target.
+    half_orientation_mode: look_at_current_roll
+    half_roll_deg: 0.0
+    half_row_major: false
+    # Legacy center/height fallback required by the shared scan interface.
+    # These values are ignored while half_use_line_axis is true.
+    half_center_x: 0.00
+    half_center_y: 0.90
+    half_center_z: 0.30
+    half_height: 0.20
+    half_n_height: 2
+
+    # Side-cap parameters. Active when scan_type=half_cylinder_side_caps.
+    # endcap_radius <= 0 means reuse half_radius.
+    endcap_radius: 0.0
+    endcap_angle_min_deg: -35.0
+    endcap_angle_max_deg: 35.0
+    endcap_n_angle: 2
+    endcap_polar_min_deg: 20.0
+    endcap_polar_max_deg: 40.0
+    endcap_n_polar: 2
+    endcap_include_start: true
+    endcap_include_end: true
+    endcap_row_major: false
+
+    # Cycle grid sweep. X/Y and base center are fixed from config.
+    # After a print cycle, scan height is adaptive:
+    #   abs_scan_z = highest_generated_target_z + grid_z_off
+    #   applied z_off = abs_scan_z - grid_center_z
+    # Before any printed target exists, it falls back to grid_center_z + grid_z_off.
+    grid_width: 0.26
+    grid_height: 0.26
+    grid_center_x: -0.42
+    grid_center_y: 0.98
+    grid_center_z:  0.25
+    grid_z_off: 0.5
+    grid_nx: 3
+    grid_ny: 3
+    grid_row_major: false
+    grid_use_tf_orientation: false
+    field_center_sign_x: -1.0
+    field_center_sign_y: -1.0
+    field_center_offset_x: 0.0
+    field_center_offset_y: 0.0
+
+    # Reconstruction + world mesh
+    run_reconstruction: true
+    reconstruct_device: CPU:0
+    reconstruct_request_timeout_s: 10.0
+    wait_reconstruction_outputs: true
+    color_to_depth_wait_timeout_s: 60.0
+    tsdf_wait_timeout_s: 180.0
+    mesh_prefer: mesh
+    mesh_update_wait_timeout_s: 45.0
+    mesh_update_request_timeout_s: 55.0
+    tsdf_center_crop_enable: true
+    tsdf_center_crop_width: 350
+    tsdf_center_crop_height: 350
+    tsdf_center_crop_apply_to_depth: true
+    tsdf_aabb_crop_enable: false
+    tsdf_aabb_crop_min: [-0.25, -1.10, -1.00]
+    tsdf_aabb_crop_max: [0.30, -0.65, 0.50]
+    tsdf_param_update_timeout_s: 8.0
+
+    # Here run field made in grasshopper:
+    resume_field_state_path: /home/lab/behav3d_ws/Prints/group3/output/field_state_init(10).npz
+    resume_scan_mesh_path: ""
+    scan_before_generate_first_cycle: true
+
+    # Candidate generation
+    candidate_session_path: "@session"
+    candidate_output_dir: "@session/field_loop/cycle_0001"
+    candidate_request_timeout_s: 120.0
+    candidate_mode:  gradient_lift
+    candidate_beads_per_step: 6
+
+    # Width mode selection:
+    #   fixed: candidate_bead_separation_mm controls center-to-center spacing.
+    #          candidate_bead_width_mm records the nominal fixed bead width.
+    #          targets omit volume_mm3 and printing uses the selected mode's
+    #          dot_steps or segment_steps fallback.
+    #   field: candidate_width_field_path must be an NPZ containing width_norm
+    #          in [0, 1], with the same vertex count/order as the scalar field.
+    #          Width maps linearly from min to max; spacing is computed from
+    #          neighboring widths and candidate_bead_overlap_mm. Generated
+    #          targets contain volume_mm3 and printing converts it to steps.
+    candidate_width_mode: field
+
+    # Common to both width modes.
+    candidate_bead_height_mm: 17.0
+
+    # Fixed mode parameters.
+    candidate_bead_separation_mm: 25.0
+    # this doesnt add nothing
+    candidate_bead_width_mm: 38.0
+
+    # Field mode parameters. These are ignored in fixed mode.
+    candidate_width_field_path: "/home/lab/behav3d_ws/Prints/group3/output/width_field(3).npz"
+    candidate_bead_width_min_mm: 20.0
+    candidate_bead_width_max_mm: 29.0
+    candidate_bead_overlap_mm: 4.0
+    # Scales analytic volume_mm3 before writing target YAML. Values below
+    # 1.0 reduce extrusion; values above 1.0 increase it. Ignored in fixed mode
+    # where target YAML has no per-candidate volume.
+    candidate_volume_factor: 0.90
+    # For gradient_lift segment output, move start toward end by this distance.
+    # Ignored for dots and gradient_walk.
+    candidate_segment_start_offset_mm: 10.0
+
+    # Optional extruder-vs-scan collision filter. A rejected candidate removes
+    # this geodesic neighborhood from the contour polyline, then selection
+    # continues until candidate_beads_per_step is filled or the contour ends.
+    use_collision: true
+    collision_exclusion_radius_mm: 2.0
+    collision_threshold_mm: 2.0
+    collision_samples_per_segment: 2
+    # Ignore the nozzle-tip neighborhood so intended TCP contact is allowed.
+    collision_tcp_exclusion_radius_mm: 2.0
+    collision_extruder_mesh_path: /home/lab/behav3d_ws/src/custom_workcell/ur20_workcell/meshes/ram_extruder_v2_simplified.dae
+
+    # Print selection. Use "dots" for z_lift/simple point deposition,
+    # "segments" for oriented segment printing, or "auto" for legacy mode-based
+    # output. This selection is independent from gradient_lift/gradient_walk.
+    print_mode: segments
+    log_joint_currents: false
+
+    # Dot print mode. Active when print_mode=dots, or print_mode=auto with targets YAML.
+    dot_eef_link: extruder_tcp
+    # Net material steps for a fixed-width bead. Do not add retract here:
+    # PrintSession sends dot_steps + post_dot_retract_steps, then retracts.
+    # A target volume_mm3 overrides the fixed-step fallback for its print mode.
+    dot_steps: 7500
+    # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
+    # Do not tune extrusion with this value; use candidate_volume_factor.
+    extrusion_steps_per_mm3: 0.8148733086
+    dot_speed: 2600
+    dot_approach_z_offset_m: 0.30
+    dot_z_offset_m: 0.08
+    dot_pre_vel_scale: 0.2
+    dot_print_vel_scale: 0.2
+    dot_accel_scale: 0.2
+    dot_dwell_s: 0.5
+    # Compensation is automatic when both retract values are positive.
+    post_dot_retract_steps: 4000
+    post_dot_retract_speed: 6000
+
+    # Oriented target generation. Used by candidate generation when enabled.
+    oriented_targets_enable: true
+    oriented_tangent_sign: 1.0
+    oriented_clamp_to_cone: true
+    oriented_cone_max_tilt_deg: 15.0
+    oriented_base_to_world_yaw_deg: 180.0
+
+    # Segment print mode. Active when print_mode=segments,
+    # or print_mode=auto with segments YAML.
+    # Net material steps used when a segment has no volume_mm3.
+    segment_steps: 6000
+    # Extruder pulse rate. PrintSession derives TCP speed from segment length
+    # and forward steps so the gated extrusion delivers the requested amount.
+    segment_steps_per_second: 2900
+    segment_approach_z_offset_m: 0.35
+    segment_travel_z_offset_m: 0.08
+    segment_approach_vel_scale: 0.15
+    segment_travel_vel_scale: 0.25
+    segment_print_vel_scale: 0.01
+    segment_accel_scale: 0.15
+    # Segment print mode. Active when print_mode=segments,
+    post_segment_wait_s: 0.2
+    # Compensation is automatic when both retract values are positive.
+    post_segment_retract_steps: 4000
+    post_segment_retract_speed: 6000
+    max_cycles: 0
+
+
+    # Execution-only underextrusion. The endpoint selects the complete bead.
+    # Closed mesh in the final target frame (world), after target output yaw.
+    # Relative paths use this config folder. Millimeter meshes use scale 0.001.
+    fault_region_mesh_path: ""
+    fault_region_mesh_scale: 0.001
+    extrusion_reduction_pct: 40.0

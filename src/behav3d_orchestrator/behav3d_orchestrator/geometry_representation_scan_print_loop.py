@@ -57,8 +57,11 @@ class GeometryRepresentationScanPrintLoopNode(Node):
     - nested `segments:` YAML prints as line paths.
     """
 
-    def __init__(self):
-        super().__init__("geometry_representation_scan_print_loop")
+    config_filename = CONFIG_FILENAME
+
+    def __init__(self, node_name="geometry_representation_scan_print_loop"):
+        super().__init__(node_name)
+        self.declare_parameter("config_path", str(Path(SRC_CONFIG_PATH).with_name(self.config_filename)))
 
         # Field logic stays in FieldLoopSession; scan execution uses ScanSession.
         self.session = FieldLoopSession(self)
@@ -129,6 +132,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         pending_contour_offset_record: Optional[Path] = None
 
         try:
+            self._configure_print_execution(rt, runtime_config_path)
             if rt.home_before_scan:
                 self.session.run_sync(
                     self.session.motion.home(enqueue=False),
@@ -364,6 +368,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 preview_targets: List[PoseStamped] = []
                 preview_volumes_mm3: List[Optional[float]] = []
                 preview_segments = []
+                preview_target_indices = None
                 if targets_yaml_path:
                     preview_segments = self.print_session.parse_yaml_segments(
                         yaml_path=targets_yaml_path,
@@ -380,6 +385,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                             yaml_path=targets_yaml_path,
                             frame_id=rt.frame_id,
                         )
+                        preview_target_indices = [target.index for target in dot_targets]
                         preview_targets = [target.pose for target in dot_targets]
                         preview_volumes_mm3 = [
                             target.volume_mm3 for target in dot_targets
@@ -542,6 +548,8 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                 if use_segments and not preview_segments:
                     raise RuntimeError("print_mode=segments but generated YAML has no segments.")
 
+                self._configure_print_execution(rt, runtime_config_path)
+                self.print_session.configure_bead_logging(run_session_path, f"field_loop/{cycle_tag}")
                 if use_segments:
                     log.info(
                         f"[geometry_representation_scan_print_loop] Printing {len(preview_segments)} segments "
@@ -576,6 +584,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                     print_res = self.print_session.run_print_dots_targets(
                         targets=preview_targets,
                         volumes_mm3=preview_volumes_mm3,
+                        target_indices=preview_target_indices,
                         dot_steps=rt.dot_steps,
                         steps_per_mm3=rt.extrusion_steps_per_mm3,
                         dot_speed=rt.dot_speed,
@@ -1632,9 +1641,11 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         )
         return new_cfg
 
-    @staticmethod
-    def _default_runtime_config_path() -> str:
-        return SRC_CONFIG_PATH
+    def _configure_print_execution(self, rt, config_path):
+        """Optional execution-only extension, independent of candidate rules."""
+
+    def _default_runtime_config_path(self) -> str:
+        return str(self.get_parameter("config_path").value)
 
     @staticmethod
     def _captures_root() -> Path:
@@ -1826,3 +1837,4 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+

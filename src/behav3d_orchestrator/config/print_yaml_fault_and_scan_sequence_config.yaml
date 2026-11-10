@@ -1,0 +1,159 @@
+print_yaml_fault_and_scan_sequence:
+  ros__parameters:
+    # Flow:
+    #   1) home
+    #   2) print all YAML targets, grouped by points_per_cycle
+    #   3) scan once after the final target
+    #   4) reconstruct/update world mesh
+    yaml_path: /home/lab/behav3d_ws/yaml/A03/Test.yaml
+    frame_id: world
+    points_per_cycle: 1
+    home_before: true
+    home_after: true
+    timeout_s: 0.0
+    debug_mode: false
+    # When true, require ENTER before moving to each print target.
+    prompt_before_print: true
+    prompt_before_scan: false
+
+    # Dot print parameters. The N/E values are net bead material steps; do not
+    # add retract manually. The forward command includes retract automatically,
+    # then the configured retract is executed after deposition.
+    print_eef_link: extruder_tcp
+    dot_steps_n: 100
+    dot_steps_e: 18800
+    # Used only when a YAML target provides volume_mm3; it overrides N/E steps.
+    # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
+    # Do not use this conversion constant to tune extrusion. Adjust the source
+    # volume_mm3 instead.
+    extrusion_steps_per_mm3: 0.8148733086
+    dot_speed: 2800
+    # Compensation is automatic when both retract values are positive.
+    post_dot_retract_steps: 200
+    post_dot_retract_speed: 10000
+    approach_z_offset_m: 0.1
+    dot_z_offset_m: 0.04
+    pre_dot_vel_scale: 0.30
+    dot_vel_scale: 0.2
+    print_accel_scale: 0.2
+    dwell_s: 0.3
+    print_publish_markers: true
+    print_axis_length: 0.05
+    print_axis_radius: 0.003
+    print_clear_markers_before: true
+
+    # Scan execution. These match the current scan_sequence.py / ScanSession path.
+    enable_scan: true
+    # Select one: grid_sweep, half_cylinder, half_cylinder_side_caps.
+    scan_type: grid_sweep
+    scan_root_folder: "@session/print_yaml_fault_scan"
+    scan_motion: LIN
+    scan_do_home: false
+    scan_eef_link: femto_color_optical_calib
+    scan_vel_scale: 0.12
+    scan_accel_scale: 0.12
+    scan_timeout_s: 0.0
+    scan_settle_s: 0.5
+    scan_debug: false
+    scan_prompt: ""
+    scan_rgb: true
+    scan_depth: true
+    scan_ir: true
+    scan_pose: true
+    scan_publish_markers: true
+    scan_axis_length: 0.05
+    scan_axis_radius: 0.003
+    scan_clear_markers_before: true
+    scan_clear_markers_after: true
+    scan_follow_printed_z: false
+
+    # Grid sweep parameters from scan_sequence_test.yaml.
+    grid_width: 1.50
+    grid_height: 0.55
+    grid_center_x: 0.01
+    grid_center_y: 0.85
+    grid_center_z: -0.05
+    grid_z_off: 0.60
+    grid_nx: 13
+    grid_ny: 5
+    grid_row_major: false
+    grid_use_tf_orientation: true
+
+    # Half-cylinder line-axis parameters from scan_sequence_test.yaml.
+    # Active when scan_type=half_cylinder or half_cylinder_side_caps.
+    half_use_line_axis: true
+    half_axis_start_x: 0.06
+    half_axis_start_y: 0.85
+    half_axis_start_z: 0.05
+    half_axis_end_x: -0.03
+    half_axis_end_y: 0.85
+    half_axis_end_z: 0.05
+    half_radius: 0.45
+    half_angle_min_deg: -40.0
+    half_angle_max_deg: 40.0
+    half_n_angle: 3
+    half_n_axis: 1
+    half_arc_center_dx: 0.0
+    half_arc_center_dy: 0.0
+    half_arc_center_dz: 1.0
+    half_orientation_mode: look_at
+    half_roll_deg: 0.0
+    half_row_major: false
+
+    # Side-cap parameters. Active when scan_type=half_cylinder_side_caps.
+    # endcap_radius <= 0 means reuse half_radius.
+    endcap_radius: 0.0
+    endcap_angle_min_deg: -35.0
+    endcap_angle_max_deg: 35.0
+    endcap_n_angle: 2
+    endcap_polar_min_deg: 20.0
+    endcap_polar_max_deg: 40.0
+    endcap_n_polar: 2
+    endcap_include_start: true
+    endcap_include_end: true
+    endcap_row_major: false
+
+    # Legacy center-based half-cylinder parameters. Ignored when
+    # half_use_line_axis=true, but kept so the sequence exposes all knobs.
+    half_center_x: -0.17
+    half_center_y: 0.85
+    half_center_z: 0.90
+    half_height: 0.0
+    half_n_height: 3
+
+    # Reconstruction and RViz world-mesh visualization.
+    run_reconstruction: true
+    reconstruct_device: CPU:0
+    reconstruct_request_timeout_s: 10.0
+    wait_reconstruction_outputs: true
+    color_to_depth_wait_timeout_s: 60.0
+    tsdf_wait_timeout_s: 180.0
+    update_world_mesh: true
+    tsdf_center_crop_enable: true
+    tsdf_center_crop_width: 300
+    tsdf_center_crop_height: 290
+    tsdf_center_crop_apply_to_depth: false
+    tsdf_aabb_crop_enable: false
+    tsdf_aabb_crop_min: [-0.25, -1.10, -1.00]
+    tsdf_aabb_crop_max: [0.30, -0.65, 0.50]
+    tsdf_param_update_timeout_s: 8.0
+
+    # Closed region in the target frame. Relative paths use this config folder.
+    # Coordinates in mm by default; use scale 1.0 for meter-authored meshes.
+    fault_region_mesh_path: ""
+    fault_region_mesh_scale: 0.001
+    extrusion_reduction_pct: 40.0
+
+    # Execute the saved start/end segment without modifying the source YAML.
+    segment_steps: 6000
+    segment_steps_per_second: 2900
+    segment_approach_z_offset_m: 0.35
+    segment_travel_z_offset_m: 0.08
+    segment_approach_vel_scale: 0.15
+    segment_travel_vel_scale: 0.25
+    segment_print_vel_scale: 0.01
+    segment_accel_scale: 0.15
+    post_segment_wait_s: 0.2
+    post_segment_retract_steps: 4000
+    post_segment_retract_speed: 6000
+

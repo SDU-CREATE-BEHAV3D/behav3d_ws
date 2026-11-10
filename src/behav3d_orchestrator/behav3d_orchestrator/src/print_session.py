@@ -16,6 +16,7 @@ from .extrusion_calibration import (
     volume_mm3_to_steps,
 )
 from .joint_current_logger import JointCurrentLogger
+from .bead_execution_logger import BeadExecutionLogger, track_bead
 from .yaml_session import TargetSegment, YamlSession
 
 
@@ -27,6 +28,38 @@ class PrintSession(YamlSession):
     def __init__(self, node, **kwargs):
         super().__init__(node, **kwargs)
         self.joint_current_logger = JointCurrentLogger(node)
+        self.bead_logger = None
+        self.bead_cycle = "unassigned"
+        self._active_bead = None
+        self.extrusion_fault_region = None
+
+    def configure_bead_logging(self, session_root, cycle):
+        self.bead_logger = BeadExecutionLogger(session_root)
+        self.bead_cycle = str(cycle)
+
+    def material_steps(self, nominal_steps, target):
+        region = getattr(self, "extrusion_fault_region", None)
+        return int(nominal_steps) if region is None else region.material_steps(nominal_steps, target)
+
+    def track_bead(self, **details):
+        return track_bead(self, **details)
+
+    def run_sync(self, item, *, timeout_s=None):
+        attempt = getattr(self, "_active_bead", None)
+        is_steps = item.kind == "print_steps"
+        reverse = bool(item.payload.get("reverse", False)) if is_steps else False
+        if attempt is not None and is_steps and not reverse:
+            attempt.forward_started()
+        if is_steps and int(item.payload["steps"]) == 0:
+            result = {"ok": True, "metrics": {"accepted_steps": 0}}
+        else:
+            result = super().run_sync(item, timeout_s=timeout_s)
+        if attempt is not None:
+            if is_steps:
+                attempt.observe(result, reverse=reverse)
+            elif not result.get("ok", False):
+                attempt.record["error"] = f"{item.kind}: {result.get('error', 'command failed')}"
+        return result
 
     def run_print_dots_targets(
         self,
@@ -52,6 +85,9 @@ class PrintSession(YamlSession):
         clear_markers_before: bool = True,
         joint_current_log_dir: Optional[str] = None,
         joint_current_log_label: str = "print_dots",
+        target_indices=None,
+        dot_steps_per_target=None,
+        before_target=None,
     ) -> dict:
         log = self.node.get_logger()
         target_list = list(targets)
@@ -69,15 +105,22 @@ class PrintSession(YamlSession):
                     f"{len(volume_list)} vs {len(target_list)}"
                 )
 
+        if dot_steps_per_target is not None and len(dot_steps_per_target) != len(target_list):
+            raise ValueError("dot_steps_per_target length must match targets")
         bead_steps = [
-            int(dot_steps)
+            int(dot_steps_per_target[i] if dot_steps_per_target is not None else dot_steps)
             if volume is None
             else volume_mm3_to_steps(
                 float(volume),
                 steps_per_mm3=float(steps_per_mm3),
             )
-            for volume in volume_list
+            for i, volume in enumerate(volume_list)
         ]
+        nominal_steps = bead_steps.copy()
+        bead_steps = [self.material_steps(steps, target) for steps, target in zip(bead_steps, target_list)]
+        if target_indices is not None and len(target_indices) != len(target_list):
+            raise ValueError("target_indices length must match targets")
+        stopped = False
         retract_enabled = (
             int(post_dot_retract_steps) > 0
             and int(post_dot_retract_speed) > 0
@@ -87,7 +130,7 @@ class PrintSession(YamlSession):
                 steps,
                 retract_steps=int(post_dot_retract_steps),
                 retract_enabled=retract_enabled,
-            )
+            ) if steps > 0 else 0
             for steps in bead_steps
         ]
         variable_volume_count = sum(volume is not None for volume in volume_list)
@@ -123,158 +166,171 @@ class PrintSession(YamlSession):
             if str(eef_link).strip():
                 self.run_sync(self.motion.setEef(str(eef_link).strip(), enqueue=False), timeout_s=timeout_s)
 
-            first_approach = self._with_z_offset(target_list[0], float(approach_z_offset_m))
-            res = self.run_sync(
-                self.motion.goto(
-                    pose=first_approach,
-                    motion="LIN",
-                    vel_scale=float(pre_dot_vel_scale),
-                    exec=True,
-                    enqueue=False,
-                ),
-                timeout_s=timeout_s,
-            )
-            if not res.get("ok", False):
-                log.warn(
-                    "[print_session:dots] Failed initial approach; continuing target-by-target. "
-                    f"error='{res.get('error', 'unknown')}'"
-                )
-
+            if before_target is not None and not before_target(0):
+                return {"ok": True, "printed": 0, "skipped": 0, "stopped_by_user": True}
             printed = 0
             skipped = 0
             failed_targets: list[dict] = []
             printed_targets: list[PoseStamped] = []
             for i, target in enumerate(target_list):
-                above = self._with_z_offset(target, float(dot_z_offset_m))
-                above_vel = float(pre_dot_vel_scale) if i == 0 else float(dot_vel_scale)
-                res = self.run_sync(
-                    self.motion.goto(
-                        pose=above,
-                        motion="LIN",
-                        vel_scale=above_vel,
-                        exec=True,
-                        enqueue=False,
-                    ),
-                    timeout_s=timeout_s,
-                )
-                if not res.get("ok", False):
-                    skipped += 1
-                    err = str(res.get("error", "unknown"))
-                    failed_targets.append({"index": int(i), "stage": f"goto_above_{i}", "error": err})
-                    log.warn(f"[print_session:dots] Skip target {i}: goto_above failed. error='{err}'")
-                    continue
-
-                res = self.run_sync(
-                    self.motion.goto(
-                        pose=target,
-                        motion="LIN",
-                        vel_scale=float(dot_vel_scale),
-                        exec=True,
-                        enqueue=False,
-                    ),
-                    timeout_s=timeout_s,
-                )
-                if not res.get("ok", False):
-                    skipped += 1
-                    err = str(res.get("error", "unknown"))
-                    failed_targets.append({"index": int(i), "stage": f"goto_target_{i}", "error": err})
-                    log.warn(f"[print_session:dots] Skip target {i}: goto_target failed. error='{err}'")
-                    continue
-
-                self.joint_current_logger.mark_event(
-                    "extruder_on_request",
-                    extruder_on=True,
-                    item_kind="dot",
-                    item_index=i,
-                )
-                try:
-                    res = self.run_sync(
-                        self.extruder.print_steps(
-                            steps=forward_steps[i],
-                            speed=int(dot_speed),
-                            enqueue=False,
-                        ),
-                        timeout_s=timeout_s,
-                    )
-                finally:
-                    self.joint_current_logger.mark_event(
-                        "extruder_off",
-                        extruder_on=False,
-                        item_kind="dot",
-                        item_index=i,
-                    )
-                if not res.get("ok", False):
-                    skipped += 1
-                    err = str(res.get("error", "unknown"))
-                    failed_targets.append({"index": int(i), "stage": f"extrude_{i}", "error": err})
-                    log.warn(f"[print_session:dots] Skip target {i}: extrude failed. error='{err}'")
-                    try:
-                        self.run_sync(
+                if i > 0 and before_target is not None and not before_target(i):
+                    stopped = True
+                    break
+                with self.track_bead(index=target_indices[i] if target_indices is not None else i,
+                                     target=target, nominal_steps=nominal_steps[i], material_steps=bead_steps[i],
+                                     retract_steps=int(post_dot_retract_steps) if retract_enabled and bead_steps[i] else 0,
+                                     steps_per_mm3=steps_per_mm3):
+                    if i == 0:
+                        first_approach = self._with_z_offset(target_list[0], float(approach_z_offset_m))
+                        res = self.run_sync(
                             self.motion.goto(
-                                pose=above,
+                                pose=first_approach,
                                 motion="LIN",
-                                vel_scale=float(dot_vel_scale),
+                                vel_scale=float(pre_dot_vel_scale),
                                 exec=True,
                                 enqueue=False,
                             ),
                             timeout_s=timeout_s,
                         )
-                    except Exception:
-                        pass
-                    continue
+                        if not res.get("ok", False):
+                            log.warn(
+                                "[print_session:dots] Failed initial approach; continuing target-by-target. "
+                                f"error='{res.get('error', 'unknown')}'"
+                            )
 
-                if retract_enabled:
-                    self.joint_current_logger.mark_event(
-                        "retract_start",
-                        extruder_on=False,
-                        item_kind="dot_retract",
-                        item_index=i,
-                    )
+                    above = self._with_z_offset(target, float(dot_z_offset_m))
+                    above_vel = float(pre_dot_vel_scale) if i == 0 else float(dot_vel_scale)
                     res = self.run_sync(
-                        self.extruder.print_steps(
-                            steps=int(post_dot_retract_steps),
-                            speed=int(post_dot_retract_speed),
-                            reverse=True,
+                        self.motion.goto(
+                            pose=above,
+                            motion="LIN",
+                            vel_scale=above_vel,
+                            exec=True,
                             enqueue=False,
                         ),
                         timeout_s=timeout_s,
                     )
+                    if not res.get("ok", False):
+                        skipped += 1
+                        err = str(res.get("error", "unknown"))
+                        failed_targets.append({"index": int(i), "stage": f"goto_above_{i}", "error": err})
+                        log.warn(f"[print_session:dots] Skip target {i}: goto_above failed. error='{err}'")
+                        continue
+
+                    res = self.run_sync(
+                        self.motion.goto(
+                            pose=target,
+                            motion="LIN",
+                            vel_scale=float(dot_vel_scale),
+                            exec=True,
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                    if not res.get("ok", False):
+                        skipped += 1
+                        err = str(res.get("error", "unknown"))
+                        failed_targets.append({"index": int(i), "stage": f"goto_target_{i}", "error": err})
+                        log.warn(f"[print_session:dots] Skip target {i}: goto_target failed. error='{err}'")
+                        continue
+
                     self.joint_current_logger.mark_event(
-                        "retract_stop",
-                        extruder_on=False,
+                        "extruder_on_request" if forward_steps[i] else "extrusion_suppressed",
+                        extruder_on=bool(forward_steps[i]),
                         item_kind="dot",
                         item_index=i,
                     )
+                    try:
+                        res = self.run_sync(
+                            self.extruder.print_steps(
+                                steps=forward_steps[i],
+                                speed=max(1, int(round(int(dot_speed) * forward_steps[i] /
+                                                      (nominal_steps[i] + (int(post_dot_retract_steps) if retract_enabled else 0))))),
+                                enqueue=False,
+                            ),
+                            timeout_s=timeout_s,
+                        )
+                    finally:
+                        self.joint_current_logger.mark_event(
+                            "extruder_off",
+                            extruder_on=False,
+                            item_kind="dot",
+                            item_index=i,
+                        )
+                    if not res.get("ok", False):
+                        skipped += 1
+                        err = str(res.get("error", "unknown"))
+                        failed_targets.append({"index": int(i), "stage": f"extrude_{i}", "error": err})
+                        log.warn(f"[print_session:dots] Skip target {i}: extrude failed. error='{err}'")
+                        try:
+                            self.run_sync(
+                                self.motion.goto(
+                                    pose=above,
+                                    motion="LIN",
+                                    vel_scale=float(dot_vel_scale),
+                                    exec=True,
+                                    enqueue=False,
+                                ),
+                                timeout_s=timeout_s,
+                            )
+                        except Exception:
+                            pass
+                        continue
+
+                    if retract_enabled and bead_steps[i] > 0:
+                        self.joint_current_logger.mark_event(
+                            "retract_start",
+                            extruder_on=False,
+                            item_kind="dot_retract",
+                            item_index=i,
+                        )
+                        res = self.run_sync(
+                            self.extruder.print_steps(
+                                steps=int(post_dot_retract_steps),
+                                speed=int(post_dot_retract_speed),
+                                reverse=True,
+                                enqueue=False,
+                            ),
+                            timeout_s=timeout_s,
+                        )
+                        self.joint_current_logger.mark_event(
+                            "retract_stop",
+                            extruder_on=False,
+                            item_kind="dot",
+                            item_index=i,
+                        )
+                        if not res.get("ok", False):
+                            err = str(res.get("error", "unknown"))
+                            failed_targets.append({"index": int(i), "stage": f"retract_{i}", "error": err})
+                            log.warn(f"[print_session:dots] Target {i} printed but retract failed. error='{err}'")
+
+                    if float(dwell_s) > 0.0:
+                        res = self.run_sync(self.util.wait(float(dwell_s), enqueue=False), timeout_s=timeout_s)
+                        if not res.get("ok", False):
+                            log.warn(
+                                f"[print_session:dots] Dwell wait failed at target {i}; continuing. "
+                                f"error='{res.get('error', 'unknown')}'"
+                            )
+
+                    res = self.run_sync(
+                        self.motion.goto(
+                            pose=above,
+                            motion="LIN",
+                            vel_scale=float(dot_vel_scale),
+                            exec=True,
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
                     if not res.get("ok", False):
                         err = str(res.get("error", "unknown"))
-                        failed_targets.append({"index": int(i), "stage": f"retract_{i}", "error": err})
-                        log.warn(f"[print_session:dots] Target {i} printed but retract failed. error='{err}'")
+                        failed_targets.append({"index": int(i), "stage": f"lift_{i}", "error": err})
+                        log.warn(f"[print_session:dots] Target {i} printed but lift failed. error='{err}'")
 
-                if float(dwell_s) > 0.0:
-                    res = self.run_sync(self.util.wait(float(dwell_s), enqueue=False), timeout_s=timeout_s)
-                    if not res.get("ok", False):
-                        log.warn(
-                            f"[print_session:dots] Dwell wait failed at target {i}; continuing. "
-                            f"error='{res.get('error', 'unknown')}'"
-                        )
-
-                res = self.run_sync(
-                    self.motion.goto(
-                        pose=above,
-                        motion="LIN",
-                        vel_scale=float(dot_vel_scale),
-                        exec=True,
-                        enqueue=False,
-                    ),
-                    timeout_s=timeout_s,
-                )
-                if not res.get("ok", False):
-                    err = str(res.get("error", "unknown"))
-                    failed_targets.append({"index": int(i), "stage": f"lift_{i}", "error": err})
-                    log.warn(f"[print_session:dots] Target {i} printed but lift failed. error='{err}'")
-
-                printed += 1
-                printed_targets.append(target)
+                    printed += int(bead_steps[i] > 0)
+                    skipped += int(bead_steps[i] == 0)
+                    if bead_steps[i] > 0:
+                        printed_targets.append(target)
 
             return {
                 "ok": True,
@@ -284,6 +340,7 @@ class PrintSession(YamlSession):
                 "skipped": skipped,
                 "failed_targets": failed_targets,
                 "printed_targets": printed_targets,
+                "stopped_by_user": stopped,
                 "requested_steps": bead_steps,
                 "commanded_forward_steps": forward_steps,
                 "retract_compensation_steps": (
@@ -472,6 +529,7 @@ class PrintSession(YamlSession):
         clear_markers_before: bool = True,
         joint_current_log_dir: Optional[str] = None,
         joint_current_log_label: str = "print_segments",
+        before_target=None,
     ) -> dict:
         log = self.node.get_logger()
         segment_list = list(segments)
@@ -493,20 +551,24 @@ class PrintSession(YamlSession):
                     steps_per_mm3=float(steps_per_mm3),
                 )
             )
+            nominal_steps = material_steps
+            material_steps = self.material_steps(material_steps, seg.end)
+            nominal_forward_steps = compensated_forward_steps(nominal_steps, retract_steps=retract_steps)
             forward_steps = compensated_forward_steps(
                 material_steps,
                 retract_steps=retract_steps,
                 retract_enabled=retract_enabled,
-            )
+            ) if material_steps > 0 else 0
             segment_length_mm = 1e3 * self._euclidean_distance(seg.start, seg.end)
             target_duration_s, target_speed_mm_s = segment_motion_from_steps(
                 segment_length_mm,
-                forward_steps=forward_steps,
+                forward_steps=nominal_forward_steps,
                 steps_per_second=int(steps_per_second),
             )
             extrusion_requests.append(
                 {
                     "volume_mm3": seg.volume_mm3,
+                    "nominal_material_steps": nominal_steps,
                     "material_steps": material_steps,
                     "retract_steps": retract_steps,
                     "forward_steps": forward_steps,
@@ -553,6 +615,7 @@ class PrintSession(YamlSession):
                 timeout_s=timeout_s,
             )
 
+        stopped = False
         printed = 0
         failed_segments: list[dict] = []
         printed_targets: list[PoseStamped] = []
@@ -574,374 +637,395 @@ class PrintSession(YamlSession):
             if str(eef_link).strip():
                 self.run_sync(self.motion.setEef(str(eef_link).strip(), enqueue=False), timeout_s=timeout_s)
 
-            first_start = segment_list[0].start
-            first_approach = self._with_z_offset(first_start, float(approach_z_offset_m))
-            res = self.run_sync(
-                self.motion.goto(
-                    pose=first_approach,
-                    motion="LIN",
-                    vel_scale=float(approach_vel_scale),
-                    exec=True,
-                    enqueue=False,
-                ),
-                timeout_s=timeout_s,
-            )
-            if not res.get("ok", False):
-                return {"ok": False, "stage": "approach_first_segment", "error": res.get("error", "unknown")}
-
+            if before_target is not None and not before_target(0):
+                return {"ok": True, "printed": 0, "skipped": 0, "stopped_by_user": True}
             for pos, seg in enumerate(segment_list):
-                extrusion_request = extrusion_requests[pos]
-                retract_res: Optional[dict] = None
-                start_travel = self._with_z_offset(seg.start, float(travel_z_offset_m))
-                end_travel = self._with_z_offset(seg.end, float(travel_z_offset_m))
-
-                res = self.run_sync(
-                    self.motion.goto(
-                        pose=start_travel,
-                        motion="LIN",
-                        vel_scale=float(travel_vel_scale),
-                        exec=True,
-                        enqueue=False,
-                    ),
-                    timeout_s=timeout_s,
-                )
-                if not res.get("ok", False):
-                    failed_segments.append(
-                        {
-                            "index": int(seg.index),
-                            "position": int(pos),
-                            "stage": "goto_start_travel",
-                            "error": str(res.get("error", "unknown")),
-                        }
-                    )
-                    log.warn(
-                        f"[print_session:segments] Segment {seg.index} failed moving above start. "
-                        f"error='{res.get('error', 'unknown')}'"
-                    )
-                    continue
-
-                res = self.run_sync(
-                    self.motion.goto(
-                        pose=seg.start,
-                        motion="LIN",
-                        vel_scale=float(travel_vel_scale),
-                        exec=True,
-                        enqueue=False,
-                    ),
-                    timeout_s=timeout_s,
-                )
-                if not res.get("ok", False):
-                    failed_segments.append(
-                        {
-                            "index": int(seg.index),
-                            "position": int(pos),
-                            "stage": "goto_segment_start",
-                            "error": str(res.get("error", "unknown")),
-                        }
-                    )
-                    log.warn(
-                        f"[print_session:segments] Segment {seg.index} failed descending to start. "
-                        f"error='{res.get('error', 'unknown')}'"
-                    )
-                    continue
-
-                plan_res = self._plan_print_segment(
-                    segment=seg,
-                    seed_vel_scale=float(print_vel_scale),
-                    seed_accel_scale=float(accel_scale),
-                    target_print_speed_mm_s=float(
-                        extrusion_request["target_speed_mm_s"]
-                    ),
-                    timeout_s=timeout_s,
-                )
-                if not plan_res.get("ok", False):
-                    res = {
-                        "ok": False,
-                        "stage": str(plan_res.get("stage", "plan_segment")),
-                        "error": plan_res.get("error", "unknown"),
-                    }
-                else:
-                    metrics = plan_res.get("metrics", {})
-                    planned_duration_s = float(
-                        metrics.get(
-                            "planned_duration_s",
-                            extrusion_request["target_duration_s"],
+                if pos > 0 and before_target is not None and not before_target(pos):
+                    stopped = True
+                    break
+                with self.track_bead(index=seg.index, target=seg.end, start=seg.start,
+                                     nominal_steps=extrusion_requests[pos]["nominal_material_steps"],
+                                     material_steps=extrusion_requests[pos]["material_steps"],
+                                     retract_steps=retract_steps if extrusion_requests[pos]["material_steps"] else 0,
+                                     steps_per_mm3=steps_per_mm3) as attempt:
+                    if pos == 0:
+                        first_start = segment_list[0].start
+                        first_approach = self._with_z_offset(first_start, float(approach_z_offset_m))
+                        res = self.run_sync(
+                            self.motion.goto(
+                                pose=first_approach,
+                                motion="LIN",
+                                vel_scale=float(approach_vel_scale),
+                                exec=True,
+                                enqueue=False,
+                            ),
+                            timeout_s=timeout_s,
                         )
-                    )
-                    if not math.isfinite(planned_duration_s) or planned_duration_s <= 0.0:
-                        raise RuntimeError(
-                            "Planned segment duration must be finite and positive, "
-                            f"got {planned_duration_s}"
-                        )
-                    synchronized_steps_per_second = max(
-                        1,
-                        int(
-                            math.floor(
-                                int(extrusion_request["forward_steps"])
-                                / planned_duration_s
-                                + 0.5
-                            )
+                        if not res.get("ok", False):
+                            return {"ok": False, "stage": "approach_first_segment", "error": res.get("error", "unknown")}
+
+                    extrusion_request = extrusion_requests[pos]
+                    retract_res: Optional[dict] = None
+                    start_travel = self._with_z_offset(seg.start, float(travel_z_offset_m))
+                    end_travel = self._with_z_offset(seg.end, float(travel_z_offset_m))
+
+                    res = self.run_sync(
+                        self.motion.goto(
+                            pose=start_travel,
+                            motion="LIN",
+                            vel_scale=float(travel_vel_scale),
+                            exec=True,
+                            enqueue=False,
                         ),
+                        timeout_s=timeout_s,
                     )
-                    extrusion_request.update(
-                        {
-                            "planned_duration_s": planned_duration_s,
-                            "commanded_steps_per_second": synchronized_steps_per_second,
-                        }
-                    )
-                    log.info(
-                        "[print_session:segments] Tuned segment "
-                        f"{seg.index}: material_steps={int(extrusion_request['material_steps'])} "
-                        f"forward_steps={int(extrusion_request['forward_steps'])} "
-                        f"nominal_steps_per_second={int(steps_per_second)} "
-                        f"commanded_steps_per_second={synchronized_steps_per_second} "
-                        f"target_speed={float(extrusion_request['target_speed_mm_s']):.3f}mm/s "
-                        f"distance={float(metrics.get('distance_m', 0.0)):.6f}m "
-                        f"target_duration={float(metrics.get('target_duration_s', 0.0)):.3f}s "
-                        f"planned_duration={float(metrics.get('planned_duration_s', 0.0)):.3f}s "
-                        f"error={float(metrics.get('duration_error_s', 0.0)):+.3f}s "
-                        f"v={float(metrics.get('vel_scale', print_vel_scale)):.5f} "
-                        f"a={float(metrics.get('accel_scale', accel_scale)):.5f} "
-                        f"attempts={int(metrics.get('attempts', 1))}"
-                    )
-                    if not self.wait_if_paused(f"print segment {seg.index}"):
-                        raise RuntimeError("ROS shutdown while waiting for global resume.")
-                    with self.defer_pause():
-                        parallel_done = threading.Event()
-                        parallel_lock = threading.Lock()
-                        parallel_results: dict[str, dict] = {}
-
-                        def _parallel_done(name: str):
-                            def _store(result: dict) -> None:
-                                with parallel_lock:
-                                    parallel_results[name] = result
-                                    if len(parallel_results) == 2:
-                                        parallel_done.set()
-
-                            return _store
-
-                        self.joint_current_logger.mark_event(
-                            "extruder_on_request",
-                            extruder_on=True,
-                            item_kind="segment",
-                            item_index=int(seg.index),
-                        )
-                        extruder_on = True
-                        print_steps_item = self.extruder.print_steps(
-                            steps=int(extrusion_request["forward_steps"]),
-                            speed=synchronized_steps_per_second,
-                            reverse=False,
-                            on_done=_parallel_done("extrusion"),
-                            enqueue=False,
-                        )
-                        motion_item = self.motion.exec(
-                            on_done=_parallel_done("motion"),
-                            enqueue=False,
-                        )
-                        self.run_group([print_steps_item, motion_item])
-                        parallel_timeout_s = _step_timeout(
-                            planned_duration_s + 5.0
-                        )
-                        if not parallel_done.wait(parallel_timeout_s):
-                            res = {
-                                "ok": False,
-                                "stage": "parallel_segment_timeout",
-                                "error": (
-                                    "Timed out waiting for parallel PrintSteps and "
-                                    "motion execution."
-                                ),
+                    if not res.get("ok", False):
+                        failed_segments.append(
+                            {
+                                "index": int(seg.index),
+                                "position": int(pos),
+                                "stage": "goto_start_travel",
+                                "error": str(res.get("error", "unknown")),
                             }
-                        else:
-                            step_res = parallel_results["extrusion"]
-                            motion_res = parallel_results["motion"]
-                            extruder_on = False
+                        )
+                        log.warn(
+                            f"[print_session:segments] Segment {seg.index} failed moving above start. "
+                            f"error='{res.get('error', 'unknown')}'"
+                        )
+                        continue
+
+                    res = self.run_sync(
+                        self.motion.goto(
+                            pose=seg.start,
+                            motion="LIN",
+                            vel_scale=float(travel_vel_scale),
+                            exec=True,
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                    if not res.get("ok", False):
+                        failed_segments.append(
+                            {
+                                "index": int(seg.index),
+                                "position": int(pos),
+                                "stage": "goto_segment_start",
+                                "error": str(res.get("error", "unknown")),
+                            }
+                        )
+                        log.warn(
+                            f"[print_session:segments] Segment {seg.index} failed descending to start. "
+                            f"error='{res.get('error', 'unknown')}'"
+                        )
+                        continue
+
+                    plan_res = self._plan_print_segment(
+                        segment=seg,
+                        seed_vel_scale=float(print_vel_scale),
+                        seed_accel_scale=float(accel_scale),
+                        target_print_speed_mm_s=float(
+                            extrusion_request["target_speed_mm_s"]
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                    if not plan_res.get("ok", False):
+                        res = {
+                            "ok": False,
+                            "stage": str(plan_res.get("stage", "plan_segment")),
+                            "error": plan_res.get("error", "unknown"),
+                        }
+                    else:
+                        metrics = plan_res.get("metrics", {})
+                        planned_duration_s = float(
+                            metrics.get(
+                                "planned_duration_s",
+                                extrusion_request["target_duration_s"],
+                            )
+                        )
+                        if not math.isfinite(planned_duration_s) or planned_duration_s <= 0.0:
+                            raise RuntimeError(
+                                "Planned segment duration must be finite and positive, "
+                                f"got {planned_duration_s}"
+                            )
+                        synchronized_steps_per_second = max(
+                            1,
+                            int(
+                                math.floor(
+                                    int(extrusion_request["forward_steps"])
+                                    / planned_duration_s
+                                    + 0.5
+                                )
+                            ),
+                        )
+                        extrusion_request.update(
+                            {
+                                "planned_duration_s": planned_duration_s,
+                                "commanded_steps_per_second": synchronized_steps_per_second,
+                            }
+                        )
+                        log.info(
+                            "[print_session:segments] Tuned segment "
+                            f"{seg.index}: material_steps={int(extrusion_request['material_steps'])} "
+                            f"forward_steps={int(extrusion_request['forward_steps'])} "
+                            f"nominal_steps_per_second={int(steps_per_second)} "
+                            f"commanded_steps_per_second={synchronized_steps_per_second} "
+                            f"target_speed={float(extrusion_request['target_speed_mm_s']):.3f}mm/s "
+                            f"distance={float(metrics.get('distance_m', 0.0)):.6f}m "
+                            f"target_duration={float(metrics.get('target_duration_s', 0.0)):.3f}s "
+                            f"planned_duration={float(metrics.get('planned_duration_s', 0.0)):.3f}s "
+                            f"error={float(metrics.get('duration_error_s', 0.0)):+.3f}s "
+                            f"v={float(metrics.get('vel_scale', print_vel_scale)):.5f} "
+                            f"a={float(metrics.get('accel_scale', accel_scale)):.5f} "
+                            f"attempts={int(metrics.get('attempts', 1))}"
+                        )
+                        if not self.wait_if_paused(f"print segment {seg.index}"):
+                            raise RuntimeError("ROS shutdown while waiting for global resume.")
+                        with self.defer_pause():
+                            parallel_done = threading.Event()
+                            parallel_lock = threading.Lock()
+                            parallel_results: dict[str, dict] = {}
+
+                            def _parallel_done(name: str, bead=attempt):
+                                def _store(result: dict, lock=parallel_lock, results=parallel_results, done=parallel_done) -> None:
+                                    with lock:
+                                        bead.observe(result, motion=(name == "motion"))
+                                        results[name] = result
+                                        if len(results) == 2:
+                                            done.set()
+
+                                return _store
+
                             self.joint_current_logger.mark_event(
-                                "extruder_off",
+                                "extruder_on_request" if extrusion_request["forward_steps"] else "extrusion_suppressed",
+                                extruder_on=bool(extrusion_request["forward_steps"]),
+                                item_kind="segment",
+                                item_index=int(seg.index),
+                            )
+                            extruder_on = bool(extrusion_request["forward_steps"])
+                            print_steps_item = self.extruder.print_steps(
+                                steps=int(extrusion_request["forward_steps"]),
+                                speed=synchronized_steps_per_second,
+                                reverse=False,
+                                on_done=_parallel_done("extrusion"),
+                                enqueue=False,
+                            )
+                            motion_item = self.motion.exec(
+                                on_done=_parallel_done("motion"),
+                                enqueue=False,
+                            )
+                            attempt.forward_started()
+                            attempt.motion_ok = None
+                            if extrusion_request["forward_steps"] > 0:
+                                self.run_group([print_steps_item, motion_item])
+                            else:
+                                _parallel_done("extrusion")({"ok": True, "metrics": {"accepted_steps": 0}})
+                                self.run_group([motion_item])
+                            parallel_timeout_s = _step_timeout(
+                                planned_duration_s + 5.0
+                            )
+                            if not parallel_done.wait(parallel_timeout_s):
+                                res = {
+                                    "ok": False,
+                                    "stage": "parallel_segment_timeout",
+                                    "error": (
+                                        "Timed out waiting for parallel PrintSteps and "
+                                        "motion execution."
+                                    ),
+                                }
+                            else:
+                                step_res = parallel_results["extrusion"]
+                                motion_res = parallel_results["motion"]
+                                extruder_on = False
+                                self.joint_current_logger.mark_event(
+                                    "extruder_off",
+                                    extruder_on=False,
+                                    item_kind="segment",
+                                    item_index=int(seg.index),
+                                )
+                                if step_res.get("ok", False):
+                                    extrusion_request["accepted_forward_steps"] = int(
+                                        step_res.get("metrics", {}).get(
+                                            "accepted_steps",
+                                            extrusion_request["forward_steps"],
+                                        )
+                                    )
+                                if not step_res.get("ok", False):
+                                    res = {
+                                        "ok": False,
+                                        "stage": "print_segment_steps",
+                                        "error": step_res.get("error", "unknown"),
+                                    }
+                                elif not motion_res.get("ok", False):
+                                    res = {
+                                        "ok": False,
+                                        "stage": "exec_segment",
+                                        "error": motion_res.get("error", "unknown"),
+                                    }
+                                else:
+                                    res = {"ok": True}
+
+                        if res.get("ok", False) and float(post_segment_wait_s) > 0.0:
+                            wait_res = self.run_sync(
+                                self.util.wait(float(post_segment_wait_s), enqueue=False),
+                                timeout_s=_step_timeout(float(post_segment_wait_s) + 2.0),
+                            )
+                            if not wait_res.get("ok", False):
+                                res = {
+                                    "ok": False,
+                                    "stage": "post_segment_wait",
+                                    "error": wait_res.get("error", "unknown"),
+                                }
+
+                        if (
+                            res.get("ok", False)
+                            and int(extrusion_request["material_steps"]) > 0
+                            and int(post_segment_retract_steps) > 0
+                            and int(post_segment_retract_speed) > 0
+                        ):
+                            self.joint_current_logger.mark_event(
+                                "retract_start",
+                                extruder_on=False,
+                                item_kind="segment_retract",
+                                item_index=int(seg.index),
+                            )
+                            retract_res = self.run_sync(
+                                self.extruder.print_steps(
+                                    steps=int(post_segment_retract_steps),
+                                    speed=int(post_segment_retract_speed),
+                                    reverse=True,
+                                    enqueue=False,
+                                ),
+                                timeout_s=_step_timeout(
+                                    int(post_segment_retract_steps)
+                                    / int(post_segment_retract_speed)
+                                    + 3.0
+                                ),
+                            )
+                            self.joint_current_logger.mark_event(
+                                "retract_stop",
                                 extruder_on=False,
                                 item_kind="segment",
                                 item_index=int(seg.index),
                             )
-                            if step_res.get("ok", False):
-                                extrusion_request["accepted_forward_steps"] = int(
-                                    step_res.get("metrics", {}).get(
+                            if not retract_res.get("ok", False):
+                                res = {
+                                    "ok": False,
+                                    "stage": "post_segment_retract",
+                                    "error": retract_res.get("error", "unknown"),
+                                }
+
+                        accepted_forward_steps = extrusion_request.get(
+                            "accepted_forward_steps"
+                        )
+                        if accepted_forward_steps is not None:
+                            if not retract_enabled:
+                                accepted_retract_steps = 0
+                                accepted_net_steps: Optional[int] = int(
+                                    accepted_forward_steps
+                                )
+                                retract_status = "disabled"
+                            elif retract_res is not None and retract_res.get("ok", False):
+                                accepted_retract_steps = int(
+                                    retract_res.get("metrics", {}).get(
                                         "accepted_steps",
-                                        extrusion_request["forward_steps"],
+                                        retract_steps,
                                     )
                                 )
-                            if not step_res.get("ok", False):
-                                res = {
-                                    "ok": False,
-                                    "stage": "print_segment_steps",
-                                    "error": step_res.get("error", "unknown"),
-                                }
-                            elif not motion_res.get("ok", False):
-                                res = {
-                                    "ok": False,
-                                    "stage": "exec_segment",
-                                    "error": motion_res.get("error", "unknown"),
-                                }
-                            else:
-                                res = {"ok": True}
-
-                    if res.get("ok", False) and float(post_segment_wait_s) > 0.0:
-                        wait_res = self.run_sync(
-                            self.util.wait(float(post_segment_wait_s), enqueue=False),
-                            timeout_s=_step_timeout(float(post_segment_wait_s) + 2.0),
-                        )
-                        if not wait_res.get("ok", False):
-                            res = {
-                                "ok": False,
-                                "stage": "post_segment_wait",
-                                "error": wait_res.get("error", "unknown"),
-                            }
-
-                    if (
-                        res.get("ok", False)
-                        and int(post_segment_retract_steps) > 0
-                        and int(post_segment_retract_speed) > 0
-                    ):
-                        self.joint_current_logger.mark_event(
-                            "retract_start",
-                            extruder_on=False,
-                            item_kind="segment_retract",
-                            item_index=int(seg.index),
-                        )
-                        retract_res = self.run_sync(
-                            self.extruder.print_steps(
-                                steps=int(post_segment_retract_steps),
-                                speed=int(post_segment_retract_speed),
-                                reverse=True,
-                                enqueue=False,
-                            ),
-                            timeout_s=_step_timeout(
-                                int(post_segment_retract_steps)
-                                / int(post_segment_retract_speed)
-                                + 3.0
-                            ),
-                        )
-                        self.joint_current_logger.mark_event(
-                            "retract_stop",
-                            extruder_on=False,
-                            item_kind="segment",
-                            item_index=int(seg.index),
-                        )
-                        if not retract_res.get("ok", False):
-                            res = {
-                                "ok": False,
-                                "stage": "post_segment_retract",
-                                "error": retract_res.get("error", "unknown"),
-                            }
-
-                    accepted_forward_steps = extrusion_request.get(
-                        "accepted_forward_steps"
-                    )
-                    if accepted_forward_steps is not None:
-                        if not retract_enabled:
-                            accepted_retract_steps = 0
-                            accepted_net_steps: Optional[int] = int(
-                                accepted_forward_steps
-                            )
-                            retract_status = "disabled"
-                        elif retract_res is not None and retract_res.get("ok", False):
-                            accepted_retract_steps = int(
-                                retract_res.get("metrics", {}).get(
-                                    "accepted_steps",
-                                    retract_steps,
+                                accepted_net_steps = max(
+                                    0,
+                                    int(accepted_forward_steps)
+                                    - accepted_retract_steps,
                                 )
-                            )
-                            accepted_net_steps = max(
-                                0,
-                                int(accepted_forward_steps)
-                                - accepted_retract_steps,
-                            )
-                            retract_status = "accepted"
-                        else:
-                            accepted_retract_steps = 0
-                            accepted_net_steps = None
-                            retract_status = "failed_or_not_run"
+                                retract_status = "accepted"
+                            else:
+                                accepted_retract_steps = 0
+                                accepted_net_steps = None
+                                retract_status = "failed_or_not_run"
 
-                        extrusion_request.update(
+                            extrusion_request.update(
+                                {
+                                    "accepted_retract_steps": accepted_retract_steps,
+                                    "accepted_net_steps": accepted_net_steps,
+                                }
+                            )
+                            net_detail = (
+                                str(accepted_net_steps)
+                                if accepted_net_steps is not None
+                                else "unknown"
+                            )
+                            log.info(
+                                "[print_session:segments] Segment step result "
+                                f"{seg.index}: requested_material_steps="
+                                f"{int(extrusion_request['material_steps'])} "
+                                f"requested_forward_steps="
+                                f"{int(extrusion_request['forward_steps'])} "
+                                f"commanded_rate_steps_s="
+                                f"{int(extrusion_request['commanded_steps_per_second'])} "
+                                f"accepted_forward_steps={int(accepted_forward_steps)} "
+                                f"accepted_retract_steps={accepted_retract_steps} "
+                                f"retract_status={retract_status} "
+                                f"accepted_net_steps={net_detail}"
+                            )
+
+                    if not res.get("ok", False):
+                        if extruder_on:
+                            try:
+                                self.run_sync(self.extruder.setExtruder(False, enqueue=False), timeout_s=timeout_s)
+                            except TimeoutError:
+                                log.warn("[print_session:segments] Failed to force extruder OFF after segment error.")
+                            extruder_on = False
+                            self.joint_current_logger.mark_event(
+                                "extruder_off_cleanup",
+                                extruder_on=False,
+                                item_kind="segment",
+                                item_index=int(seg.index),
+                            )
+                        failed_segments.append(
                             {
-                                "accepted_retract_steps": accepted_retract_steps,
-                                "accepted_net_steps": accepted_net_steps,
+                                "index": int(seg.index),
+                                "position": int(pos),
+                                "stage": str(res.get("stage", "unknown")),
+                                "error": str(res.get("error", "unknown")),
                             }
                         )
-                        net_detail = (
-                            str(accepted_net_steps)
-                            if accepted_net_steps is not None
-                            else "unknown"
+                        log.warn(
+                            f"[print_session:segments] Segment {seg.index} failed at stage={res.get('stage')}. "
+                            f"error='{res.get('error', 'unknown')}'"
                         )
-                        log.info(
-                            "[print_session:segments] Segment step result "
-                            f"{seg.index}: requested_material_steps="
-                            f"{int(extrusion_request['material_steps'])} "
-                            f"requested_forward_steps="
-                            f"{int(extrusion_request['forward_steps'])} "
-                            f"commanded_rate_steps_s="
-                            f"{int(extrusion_request['commanded_steps_per_second'])} "
-                            f"accepted_forward_steps={int(accepted_forward_steps)} "
-                            f"accepted_retract_steps={accepted_retract_steps} "
-                            f"retract_status={retract_status} "
-                            f"accepted_net_steps={net_detail}"
+                        continue
+
+                    lift_res = self.run_sync(
+                        self.motion.goto(
+                            pose=end_travel,
+                            motion="LIN",
+                            vel_scale=float(travel_vel_scale),
+                            exec=True,
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                    if not lift_res.get("ok", False):
+                        failed_segments.append(
+                            {
+                                "index": int(seg.index),
+                                "position": int(pos),
+                                "stage": "lift_segment_end",
+                                "error": str(lift_res.get("error", "unknown")),
+                            }
+                        )
+                        log.warn(
+                            f"[print_session:segments] Segment {seg.index} printed but lift failed. "
+                            f"error='{lift_res.get('error', 'unknown')}'"
                         )
 
-                if not res.get("ok", False):
-                    if extruder_on:
-                        try:
-                            self.run_sync(self.extruder.setExtruder(False, enqueue=False), timeout_s=timeout_s)
-                        except TimeoutError:
-                            log.warn("[print_session:segments] Failed to force extruder OFF after segment error.")
-                        extruder_on = False
-                        self.joint_current_logger.mark_event(
-                            "extruder_off_cleanup",
-                            extruder_on=False,
-                            item_kind="segment",
-                            item_index=int(seg.index),
-                        )
-                    failed_segments.append(
-                        {
-                            "index": int(seg.index),
-                            "position": int(pos),
-                            "stage": str(res.get("stage", "unknown")),
-                            "error": str(res.get("error", "unknown")),
-                        }
-                    )
-                    log.warn(
-                        f"[print_session:segments] Segment {seg.index} failed at stage={res.get('stage')}. "
-                        f"error='{res.get('error', 'unknown')}'"
-                    )
-                    continue
-
-                lift_res = self.run_sync(
-                    self.motion.goto(
-                        pose=end_travel,
-                        motion="LIN",
-                        vel_scale=float(travel_vel_scale),
-                        exec=True,
-                        enqueue=False,
-                    ),
-                    timeout_s=timeout_s,
-                )
-                if not lift_res.get("ok", False):
-                    failed_segments.append(
-                        {
-                            "index": int(seg.index),
-                            "position": int(pos),
-                            "stage": "lift_segment_end",
-                            "error": str(lift_res.get("error", "unknown")),
-                        }
-                    )
-                    log.warn(
-                        f"[print_session:segments] Segment {seg.index} printed but lift failed. "
-                        f"error='{lift_res.get('error', 'unknown')}'"
-                    )
-
-                printed += 1
-                printed_targets.extend([seg.start, seg.end])
+                    printed += int(extrusion_request["material_steps"] > 0)
+                    if extrusion_request["material_steps"] > 0:
+                        printed_targets.extend([seg.start, seg.end])
 
             return {
-                "ok": printed > 0,
-                "stage": "done" if printed > 0 else "all_segments_failed",
+                "ok": printed > 0 or stopped or not failed_segments,
+                "stage": "done" if printed > 0 or not failed_segments else "all_segments_failed",
+                "stopped_by_user": stopped,
                 "segments": len(segment_list),
                 "targets": 2 * len(segment_list),
                 "printed": printed,
@@ -1223,3 +1307,4 @@ class PrintSession(YamlSession):
         lo = min(float(low), float(high))
         hi = max(float(low), float(high))
         return max(lo, min(hi, float(value)))
+

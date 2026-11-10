@@ -22,6 +22,8 @@ from .src.extrusion_calibration import (
 )
 from .src.print_session import PrintSession
 from .src.scan_session import ScanSession
+from .src.bead_execution_logger import BeadExecutionLogger
+from .src.session_output import active_session_path, session_child
 
 try:
     import yaml
@@ -38,8 +40,11 @@ class PrintYamlAndScanSequenceNode(Node):
     and reconstruction after all targets are complete.
     """
 
-    def __init__(self):
-        super().__init__("print_yaml_and_scan_sequence")
+    config_filename = CONFIG_FILENAME
+
+    def __init__(self, node_name="print_yaml_and_scan_sequence"):
+        super().__init__(node_name)
+        self.declare_parameter("config_path", str(Path(SRC_CONFIG_PATH).with_name(self.config_filename)))
 
         self.print_session = PrintSession(self)
         self.scan_session = ScanSession(self)
@@ -72,7 +77,8 @@ class PrintYamlAndScanSequenceNode(Node):
             return
 
         try:
-            dot_targets = self.print_session.parse_yaml_dot_targets(
+            self._configure_run(cfg)
+            dot_targets = self._load_print_targets(
                 yaml_path=yaml_path,
                 frame_id=frame_id,
             )
@@ -103,7 +109,7 @@ class PrintYamlAndScanSequenceNode(Node):
 
             total_printed = 0
             total_skipped = 0
-            cycle_count = 0
+            cycle_count = self._first_cycle_number - 1
             next_target_idx = 0
             stopped_by_user = False
             all_printed_targets: list[PoseStamped] = []
@@ -148,6 +154,9 @@ class PrintYamlAndScanSequenceNode(Node):
                 chunk = targets[start_idx:end_idx]
                 chunk_volumes_mm3 = target_volumes_mm3[start_idx:end_idx]
                 chunk_plane_types = plane_types[start_idx:end_idx]
+                self._refresh_execution_config(cfg)
+                self.print_session.configure_bead_logging(
+                    self._execution_session, f"{self._execution_scope}/{cycle_tag}")
 
                 log.info(
                     f"[print_yaml_and_scan] ===== {cycle_tag} print ===== "
@@ -245,6 +254,27 @@ class PrintYamlAndScanSequenceNode(Node):
             log.error(f"[print_yaml_and_scan] Sequence failed: {exc}")
         finally:
             rclpy.shutdown()
+
+    def _configure_run(self, cfg):
+        self._execution_session = active_session_path()
+        self._execution_frame = self._cfg_str(cfg, "frame_id")
+        scan_root = session_child(self._cfg_str(cfg, "scan_root_folder"), self._execution_session)
+        try:
+            self._execution_scope = scan_root.relative_to(self._execution_session).as_posix()
+        except ValueError:
+            self._execution_scope = self.get_name()
+        self._first_cycle_number = BeadExecutionLogger(self._execution_session).next_cycle_number(self._execution_scope)
+        existing = [int(path.name[6:]) for path in scan_root.glob("cycle_*")
+                    if path.is_dir() and path.name[6:].isdigit()]
+        self._first_cycle_number = max(self._first_cycle_number, max(existing, default=0) + 1)
+
+    def _refresh_execution_config(self, cfg):
+        cfg["scan_root_folder"] = str(session_child(self._cfg_str(cfg, "scan_root_folder"), self._execution_session))
+
+    def _load_print_targets(self, *, yaml_path, frame_id):
+        targets = self.print_session.parse_yaml_dot_targets(yaml_path=yaml_path, frame_id=frame_id)
+        self._loaded_target_indices = [target.index for target in targets]
+        return targets
 
     def _print_chunk(
         self,
@@ -395,103 +425,108 @@ class PrintYamlAndScanSequenceNode(Node):
                 retract_steps=retract_steps,
                 retract_enabled=retract_enabled,
             )
-            above = self._with_z_offset(target, dot_z_offset_m)
-            above_vel = pre_dot_vel_scale if i == 0 else dot_vel_scale
+            with self.print_session.track_bead(
+                    index=self._loaded_target_indices[target_start_index + i], target=target,
+                    nominal_steps=bead_steps, material_steps=bead_steps,
+                    retract_steps=retract_steps if retract_enabled else 0,
+                    steps_per_mm3=extrusion_steps_per_mm3):
+                above = self._with_z_offset(target, dot_z_offset_m)
+                above_vel = pre_dot_vel_scale if i == 0 else dot_vel_scale
 
-            res = self.print_session.run_sync(
-                self.print_session.motion.goto(
-                    pose=above,
-                    eef=print_eef,
-                    motion="LIN",
-                    vel_scale=above_vel,
-                    accel_scale=accel_scale,
-                    exec=True,
-                    enqueue=False,
-                ),
-                timeout_s=timeout_s,
-            )
-            if not res.get("ok", False):
-                skipped += 1
-                err = str(res.get("error", "unknown"))
-                failed_targets.append({"index": i, "stage": "goto_above", "error": err})
-                log.warn(f"[print_yaml_and_scan] Skip print target {i}: goto_above failed. error='{err}'")
-                continue
-
-            res = self.print_session.run_sync(
-                self.print_session.motion.goto(
-                    pose=target,
-                    eef=print_eef,
-                    motion="LIN",
-                    vel_scale=dot_vel_scale,
-                    accel_scale=accel_scale,
-                    exec=True,
-                    enqueue=False,
-                ),
-                timeout_s=timeout_s,
-            )
-            if not res.get("ok", False):
-                skipped += 1
-                err = str(res.get("error", "unknown"))
-                failed_targets.append({"index": i, "stage": "goto_target", "error": err})
-                log.warn(f"[print_yaml_and_scan] Skip print target {i}: goto_target failed. error='{err}'")
-                continue
-
-            res = self.print_session.run_sync(
-                self.print_session.extruder.print_steps(
-                    steps=forward_steps,
-                    speed=dot_speed,
-                    reverse=False,
-                    enqueue=False,
-                ),
-                timeout_s=timeout_s,
-            )
-            if not res.get("ok", False):
-                skipped += 1
-                err = str(res.get("error", "unknown"))
-                failed_targets.append({"index": i, "stage": "extrude", "error": err})
-                log.warn(f"[print_yaml_and_scan] Skip print target {i}: extrude failed. error='{err}'")
-                continue
-
-            if retract_enabled:
                 res = self.print_session.run_sync(
-                    self.print_session.extruder.print_steps(
-                        steps=retract_steps,
-                        speed=retract_speed,
-                        reverse=True,
+                    self.print_session.motion.goto(
+                        pose=above,
+                        eef=print_eef,
+                        motion="LIN",
+                        vel_scale=above_vel,
+                        accel_scale=accel_scale,
+                        exec=True,
                         enqueue=False,
                     ),
                     timeout_s=timeout_s,
                 )
                 if not res.get("ok", False):
+                    skipped += 1
                     err = str(res.get("error", "unknown"))
-                    failed_targets.append({"index": i, "stage": "retract", "error": err})
-                    log.warn(f"[print_yaml_and_scan] Target {i} printed but retract failed. error='{err}'")
+                    failed_targets.append({"index": i, "stage": "goto_above", "error": err})
+                    log.warn(f"[print_yaml_and_scan] Skip print target {i}: goto_above failed. error='{err}'")
+                    continue
 
-            if dwell_s > 0.0:
-                self.print_session.run_sync(
-                    self.print_session.util.wait(dwell_s, enqueue=False),
+                res = self.print_session.run_sync(
+                    self.print_session.motion.goto(
+                        pose=target,
+                        eef=print_eef,
+                        motion="LIN",
+                        vel_scale=dot_vel_scale,
+                        accel_scale=accel_scale,
+                        exec=True,
+                        enqueue=False,
+                    ),
                     timeout_s=timeout_s,
                 )
+                if not res.get("ok", False):
+                    skipped += 1
+                    err = str(res.get("error", "unknown"))
+                    failed_targets.append({"index": i, "stage": "goto_target", "error": err})
+                    log.warn(f"[print_yaml_and_scan] Skip print target {i}: goto_target failed. error='{err}'")
+                    continue
 
-            lift_res = self.print_session.run_sync(
-                self.print_session.motion.goto(
-                    pose=above,
-                    eef=print_eef,
-                    motion="LIN",
-                    vel_scale=dot_vel_scale,
-                    accel_scale=accel_scale,
-                    exec=True,
-                    enqueue=False,
-                ),
-                timeout_s=timeout_s,
-            )
-            if not lift_res.get("ok", False):
-                err = str(lift_res.get("error", "unknown"))
-                failed_targets.append({"index": i, "stage": "lift", "error": err})
-                log.warn(f"[print_yaml_and_scan] Target {i} printed but lift failed. error='{err}'")
+                res = self.print_session.run_sync(
+                    self.print_session.extruder.print_steps(
+                        steps=forward_steps,
+                        speed=dot_speed,
+                        reverse=False,
+                        enqueue=False,
+                    ),
+                    timeout_s=timeout_s,
+                )
+                if not res.get("ok", False):
+                    skipped += 1
+                    err = str(res.get("error", "unknown"))
+                    failed_targets.append({"index": i, "stage": "extrude", "error": err})
+                    log.warn(f"[print_yaml_and_scan] Skip print target {i}: extrude failed. error='{err}'")
+                    continue
 
-            printed += 1
-            printed_targets.append(target)
+                if retract_enabled:
+                    res = self.print_session.run_sync(
+                        self.print_session.extruder.print_steps(
+                            steps=retract_steps,
+                            speed=retract_speed,
+                            reverse=True,
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                    if not res.get("ok", False):
+                        err = str(res.get("error", "unknown"))
+                        failed_targets.append({"index": i, "stage": "retract", "error": err})
+                        log.warn(f"[print_yaml_and_scan] Target {i} printed but retract failed. error='{err}'")
+
+                if dwell_s > 0.0:
+                    self.print_session.run_sync(
+                        self.print_session.util.wait(dwell_s, enqueue=False),
+                        timeout_s=timeout_s,
+                    )
+
+                lift_res = self.print_session.run_sync(
+                    self.print_session.motion.goto(
+                        pose=above,
+                        eef=print_eef,
+                        motion="LIN",
+                        vel_scale=dot_vel_scale,
+                        accel_scale=accel_scale,
+                        exec=True,
+                        enqueue=False,
+                    ),
+                    timeout_s=timeout_s,
+                )
+                if not lift_res.get("ok", False):
+                    err = str(lift_res.get("error", "unknown"))
+                    failed_targets.append({"index": i, "stage": "lift", "error": err})
+                    log.warn(f"[print_yaml_and_scan] Target {i} printed but lift failed. error='{err}'")
+
+                printed += 1
+                printed_targets.append(target)
 
         return {
             "ok": True,
@@ -1037,7 +1072,7 @@ class PrintYamlAndScanSequenceNode(Node):
         return f"E={e_count}, N={n_count}"
 
     def _default_config_path(self) -> str:
-        return SRC_CONFIG_PATH
+        return str(self.get_parameter("config_path").value)
 
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         if yaml is None:
@@ -1191,3 +1226,4 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+

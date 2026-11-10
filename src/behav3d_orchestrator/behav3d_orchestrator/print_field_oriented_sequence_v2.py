@@ -627,6 +627,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 preview_targets: List[PoseStamped] = []
                 preview_volumes_mm3: List[Optional[float]] = []
                 preview_segments = []
+                preview_target_indices = None
                 if targets_yaml_path:
                     preview_segments = self.print_session.parse_yaml_segments(
                         yaml_path=targets_yaml_path,
@@ -643,6 +644,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                             yaml_path=targets_yaml_path,
                             frame_id=rt.frame_id,
                         )
+                        preview_target_indices = [target.index for target in dot_targets]
                         preview_targets = [target.pose for target in dot_targets]
                         preview_volumes_mm3 = [
                             target.volume_mm3 for target in dot_targets
@@ -755,6 +757,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                 if use_segments and not preview_segments:
                     raise RuntimeError("print_mode=segments but generated YAML has no segments.")
 
+                self.print_session.configure_bead_logging(run_session_path, f"field_loop/{cycle_tag}")
                 if use_segments:
                     log.info(
                         f"[print_field_oriented] Printing {len(preview_segments)} segments "
@@ -789,6 +792,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                     print_res = self.print_session.run_print_dots_targets(
                         targets=preview_targets,
                         volumes_mm3=preview_volumes_mm3,
+                        target_indices=preview_target_indices,
                         dot_steps=rt.dot_steps,
                         steps_per_mm3=rt.extrusion_steps_per_mm3,
                         dot_speed=rt.dot_speed,
@@ -1988,3 +1992,4 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+

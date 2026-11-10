@@ -3,6 +3,81 @@
 ROS 2 sequence nodes that compose motion, scanning, field candidate generation,
 and printing through the shared session classes in `behav3d_orchestrator/src/`.
 
+## YAML Fault Print and Scan
+
+`print_yaml_fault_and_scan_sequence` reuses the YAML-print sequence, scan and
+reconstruction flow. It prints all input beads in `points_per_cycle` groups,
+then performs one optional final scan. Flat `targets:` print stationary dots;
+nested `segments:` print the saved start-to-end motion. Segment starts are not
+flattened into additional dots, and segment volumes remain attached to their
+beads. It never rewrites the input target YAML.
+
+Configure `config/print_yaml_fault_and_scan_sequence_config.yaml`:
+
+- `yaml_path`: original target/segment YAML.
+- `fault_region_mesh_path`: a closed, watertight STL or other Open3D triangle
+  mesh. Relative paths are resolved from the config directory.
+- `fault_region_mesh_scale`: `0.001` for mesh coordinates authored in mm,
+  or `1.0` for meters. Scaled vertices must already be in `frame_id`, the
+  same coordinate frame as the target origins. No implicit yaw is applied.
+- `extrusion_reduction_pct`: material reduction from 0 to 100 percent.
+  For example, 40 requests 60 percent of nominal net material inside the region.
+
+The endpoint selects the whole bead, including for segments. Points on the
+region boundary (within 0.001 mm) count as inside. The region is always active;
+there is no cycle schedule. Requested net steps are reduced before retract
+compensation is added. Nominal segment motion duration and speed are retained;
+only forward extrusion steps and the corresponding step rate change. For dots,
+the nominal extrusion duration is retained to the nearest supported integer
+step rate. A 100 percent reduction sends no forward or retract command for that
+bead. A valid region mesh is required, including for a zero-reduction baseline.
+
+The node publishes the scaled region as an orange triangle marker with opacity
+0.2 on `/behav3d/fault_region`. Add a Marker display for this topic in RViz.
+Target colors retain the existing display behavior.
+
+```bash
+ros2 run behav3d_orchestrator print_yaml_fault_and_scan_sequence
+```
+
+The default config is read from the source workspace config folder, matching the
+existing YAML sequence. A different file can be selected explicitly:
+
+```bash
+ros2 run behav3d_orchestrator print_yaml_fault_and_scan_sequence --ros-args -p config_path:=/absolute/path/to/experiment.yaml
+```
+
+## Bead Execution Report
+
+The YAML-print nodes and field-loop nodes write `print_manifest.yaml` in
+their capture-session root. This is independent of optional joint-current
+logging. Existing target-generation, current/event and contour-offset outputs
+retain their formats.
+
+Each cycle contains `attempted_beads` and `successful_beads`. Entries record
+the original target index, endpoint pose, segment start when applicable,
+nominal/requested material volumes, commanded forward steps, outcome and
+`volume_mm3`. An attempt is persisted before approach/planning; a pending
+unknown-volume record is persisted before requesting extrusion. Updates replace
+the report atomically, retaining earlier cycles and repeat attempts.
+
+`volume_mm3` is the completed forward-step response minus the completed retract
+response, divided by `steps_per_mm3`. It is a calibrated command-based estimate,
+not measured material flow. Successful beads require a positive confirmed net
+amount, confirmed retract when enabled and confirmed segment motion. A failed
+lift after completed deposition does not erase that completed bead.
+
+- Planning/approach failures before extrusion: `extruded: false`, volume zero.
+- Confirmed completed deposition: `extruded: true`, estimated volume in mm3.
+- Missing/failed extrusion or retract responses: `extruded: null`, volume null.
+- Failed/unconfirmed segment motion: retained in attempted beads, excluded from
+  successful beads even if a forward-step volume is known.
+
+An operator stop before a target does not create an attempt. YAML-sequence
+restarts use the next report cycle number rather than replacing earlier cycles.
+The active capture session is resolved once for a run; config reloads do not
+move its execution report or final scan into a different active session.
+
 ## Field Print Loops
 
 - `print_field_oriented_sequence_v2`: scan, reconstruct, initialize/resume a
@@ -17,6 +92,46 @@ Their runtime settings are installed from:
 
 Both synchronize candidate-width parameters with `/behav3d_fields` before
 calling `/behav3d/generate_print_candidates`.
+
+## Geometry Representation Fault Loop
+
+`geometry_representation_fault_scan_print_loop` inherits the complete
+`geometry_representation_scan_print_loop` workflow, including its configured
+initial scan, candidate generation, printing, scan/reconstruction for the next
+cycle, runtime config reloads and operator rescan option. It adds only the same
+execution fault used by `print_yaml_fault_and_scan_sequence`; region loading
+and RViz display are shared by both nodes.
+
+Edit `config/geometry_representation_fault_scan_print_loop_config.yaml`. Its
+scan, field, candidate and printing settings start from the original loop
+configuration. The additional settings are `fault_region_mesh_path`,
+`fault_region_mesh_scale` and `extrusion_reduction_pct`, with the same semantics
+as the YAML fault workflow above. Set the mesh path before running. Relative
+mesh paths use the config folder; the default scale is 0.001 for mm-authored
+meshes and the initial reduction is 40 percent.
+
+The region vertices must be in the final execution frame (`world`), matching
+the generated target YAML after `oriented_base_to_world_yaw_deg` is applied.
+The region does not inherit that yaw automatically from the source field.
+Endpoints inside the region select the whole bead for reduced extrusion.
+Generated targets, width rules and source volumes remain unchanged.
+
+The region is validated before initial motion and refreshed before each print
+batch using the latest runtime config. Changing the percentage takes effect
+on the next batch. Geometry is reused until the configured mesh path or scale
+changes; restarting also reloads the mesh. RViz receives the same orange marker
+at opacity 0.2 on `/behav3d/fault_region`; target colors remain unchanged.
+
+```bash
+ros2 run behav3d_orchestrator geometry_representation_fault_scan_print_loop
+```
+
+Use `--ros-args -p config_path:=/absolute/path/to/experiment.yaml` to select a
+different config. Per-cycle config snapshots remain under
+`field_loop/cycle_XXXX/config/`. Attempted and successful beads and their
+command-confirmed volume estimates remain in `print_manifest.yaml` at the
+capture-session root. The existing loop's original config and default print
+behavior are retained.
 
 ## Candidate Width Modes
 
@@ -127,3 +242,4 @@ Focused contracts are covered under `test/`:
 - `test_contour_target_offset_estimator.py`
 - `test_contour_offset_logger.py`
 - `test_yaml_volume_contract.py`
+
