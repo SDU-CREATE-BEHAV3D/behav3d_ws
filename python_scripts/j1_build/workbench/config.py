@@ -9,6 +9,8 @@ class InputOptions:
     scan_mesh: str = "mesh/ScanMesh.stl"
     scan_scale: float = 0.001
     scan_yaw: float = 180.0
+    field_state: str = ""
+    original_field_state: str = ""
 
 
 @dataclass(frozen=True)

@@ -72,7 +72,7 @@ class TargetHistoryTests(unittest.TestCase):
         np.testing.assert_allclose(axes[:, 2], z / np.linalg.norm(z, axis=1)[:, None])
         np.testing.assert_allclose(np.cross(axes[:, 0], axes[:, 1]), axes[:, 2], atol=1e-12)
         np.testing.assert_allclose(np.linalg.det(axes), 1, atol=1e-12)
-        # Unit arrows must measure 14 mm in world units along each axis.
+        # Unit tubes must measure 14 mm in world units along each axis.
         meshes = frame_glyphs(np.zeros((1, 3)), np.array([[0, 0, 1]]), 14)
         for axis, mesh in enumerate(meshes):
             self.assertAlmostEqual(float(np.ptp(mesh.points[:, axis])), 0.014, places=8)

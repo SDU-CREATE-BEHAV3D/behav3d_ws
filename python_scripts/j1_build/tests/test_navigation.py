@@ -11,6 +11,26 @@ from workbench.navigation import capture_camera, configure_navigation, restore_c
 
 
 class NavigationTests(unittest.TestCase):
+    def test_orbit_can_leave_an_exact_top_view_without_a_degenerate_basis(self):
+        plotter = pv.Plotter(off_screen=True, window_size=(500, 400))
+        try:
+            plotter.add_mesh(pv.Cube())
+            plotter.enable_parallel_projection()
+            plotter.view_xy()
+            plotter.show(auto_close=False, interactive=False)
+            configure_navigation(plotter, "Rhino")
+            iren = plotter.iren.interactor
+            iren.SetEventInformation(250, 200, 0, 0)
+            iren.InvokeEvent("RightButtonPressEvent")
+            iren.SetEventInformation(290, 225, 0, 0)
+            iren.InvokeEvent("MouseMoveEvent")
+            iren.InvokeEvent("RightButtonReleaseEvent")
+            c = plotter.renderer.camera
+            self.assertTrue(np.isfinite(c.position).all())
+            self.assertGreater(np.linalg.norm(np.cross(c.direction, c.up)), 0.015)
+        finally:
+            plotter.close()
+
     def test_snapshot_does_not_trigger_pyvista_lazy_camera_reset(self):
         plotter = pv.Plotter(off_screen=True)
         try:

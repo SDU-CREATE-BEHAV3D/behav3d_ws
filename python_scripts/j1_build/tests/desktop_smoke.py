@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import sys
+import uuid
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 app_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(app_root))
@@ -15,7 +16,8 @@ from PySide6 import QtCore, QtWidgets
 from workbench.ui import Workbench
 
 app = QtWidgets.QApplication([])
-window = Workbench(dict(data_root=root, output_root=app_root / "workbench/outputs"), off_screen=True)
+window = Workbench(dict(data_root=root, output_root=app_root / "workbench/outputs"), off_screen=True,
+                   preferences_path=app_root / "workbench/.cache" / f"test-defaults-{uuid.uuid4().hex}.json")
 window.controls["voxel_mm"].setValue(3)
 window.controls["surface_step"].setValue(2)
 window.controls["checkpoint_every"].setValue(0)

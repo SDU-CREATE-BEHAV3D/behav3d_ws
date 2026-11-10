@@ -46,12 +46,12 @@ def frame_glyphs(points, z_dirs, length_mm, thickness=1.4):
         raise ValueError("Target axis thickness must be positive")
     if not len(points):
         return [pv.PolyData() for _ in range(3)]
-    arrow = pv.Arrow(tip_length=0.22, tip_radius=0.065 * thickness, shaft_radius=0.014 * thickness,
-                     tip_resolution=8, shaft_resolution=6)
+    tube = pv.Cylinder(center=(0.5, 0, 0), direction=(1, 0, 0), height=1,
+                       radius=0.014 * thickness, resolution=6, capping=True)
     meshes = []
     for axis in range(3):
         seeds = pv.PolyData(points)
         seeds["direction"] = axes[:, axis, :]
         meshes.append(seeds.glyph(orient="direction", scale=False,
-                                 factor=length_mm * 0.001, geom=arrow))
+                                 factor=length_mm * 0.001, geom=tube))
     return meshes

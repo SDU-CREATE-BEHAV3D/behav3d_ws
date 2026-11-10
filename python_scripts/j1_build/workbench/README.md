@@ -17,7 +17,13 @@ The existing `run_simulation.cmd` launcher retains the reference loop.
 
 ### Editing startup defaults
 
-Edit `workbench/config.py` and restart the workbench:
+**Save defaults** stores the current batch parameters, new-session settings,
+display controls, camera and active input paths in `workbench/user_defaults.json`.
+The next launch reads that small local file. It does not save deposits or write
+Python code; saved preferences are ignored by Git. Remove this JSON file to
+return to `config.py`. Explicit launch arguments still override input defaults.
+
+You can also edit `workbench/config.py` and restart the workbench:
 
 - `InputOptions`: `scan_mesh`, `scan_scale` and `scan_yaw` (degrees around Z).
   Use an absolute scan path or a path relative to the data/repository root,
@@ -33,7 +39,7 @@ Edit `workbench/config.py` and restart the workbench:
 
 For example, set `contact_shading = False` to start without SSAO, or reduce
 `ssao_radius_mm` to make its contact effect more local. Live panel edits affect
-the current session but are not saved back to these startup defaults.
+the current session; press Save defaults to retain them for the next launch.
 
 `DisplayOptions` also contains `light_intensity` (overall multiplier), individual
 `key_light_intensity`, `fill_light_intensity`, `rim_light_intensity`, and the bead
@@ -59,8 +65,18 @@ and material coefficients adjust lighting rather than gamma correction.
   An operation already in progress finishes normally.
 - **Export** saves the combined scan, DDS surface, NPZ checkpoint, history and
   cumulative target YAML and viewport screenshot without closing the session.
+- **Save captures** saves `paper.png`, `front.png` and `top.png` in a new
+  `captures/cycle_XXXX_<timestamp>_<unique>/` folder inside the current session
+  output. Captures use the current viewport size, visible layers and appearance,
+  including the batch preview when enabled. The original camera is restored
+  afterward. Repeated captures never overwrite earlier sets and do not export
+  simulation checkpoints or meshes.
 - Camera and layer settings persist between batches. **Paper view / frame goal**
   enables orthographic projection and frames the goal.
+- **Front** looks toward +Y with Z up (the XZ elevation). **Top** looks down Z
+  with Y up (the XY plan). Both are orthographic and frame the goal. Rotating
+  from an exact top view first moves slightly off the pole to preserve a valid
+  world-Z orbit basis.
 - **Camera controls** defaults to **Rhino**: right drag rotates, Shift + right
   drag pans, Ctrl + right drag zooms, and the wheel zooms. Ctrl + Shift + right
   drag also rotates. These bindings work in the orthographic 3D paper view too.
@@ -123,6 +139,30 @@ apply through **Create new session**. Previous session files are retained.
 Closing does not trigger a heavy mesh export; accepted targets are already
 stored. Use Export to obtain the final meshes.
 
+### Save and continue a simulation
+
+**Save state…** writes one portable `.b3dstate` archive on demand, without
+depositing the pending preview. **Open state…** restores the accepted cycle,
+DDS field and deposits, per-batch parameters and YAML history, current batch
+parameters, input alignment, display options and camera. It regenerates the
+surface and preview, then allows Accept batch or Run to continue. Opening creates
+a new output session and retains all original session files. It never starts
+automatic execution by itself. A failed open leaves the current session active.
+
+The archive stores one compressed DDS checkpoint plus scan/goal/width inputs
+deduplicated by content hash, and small history/settings files. It contains no
+surface PLY, screenshots, coverage grid, cached contours or phantom meshes.
+Large input files are streamed rather than converted to JSON or read into
+additional complete buffers. The existing mutable DDS cache is restored from
+the checkpoint, so opening does not replay the full deposition history. Normal
+DDS immutable snapshots still require their existing field copy in RAM; the
+save feature does not retain additional historical voxel snapshots in memory.
+The old scan and restored scan can coexist briefly while an open is validated.
+
+The Save state snapshot is distinct from Export and from bare DDS checkpoint
+NPZ files: Open state expects a `.b3dstate` file containing the full workbench
+context. Manually loaded target-YAML overlays can be loaded again separately.
+
 ## Surface appearance and edges
 
 - **Accepted targets · XYZ** displays the accepted target frames
@@ -132,8 +172,8 @@ stored. Use Export to obtain the final meshes.
   starts disabled. These independent switches select endpoints, starts or both
   for all three target layers, including loaded YAML. The YAML itself always
   retains both planes. **Target line thickness** defaults to 1.4 times the
-  original arrow thickness and can be adjusted live.
-  X is red, Y green and Z blue, with arrowheads and no text labels. Each axis
+  base tube thickness and can be adjusted live.
+  X is red, Y green and Z blue, drawn as tubes without arrowheads or text labels. Each axis
   is 14 mm long by default; **Target axis length (mm)** changes the display
   length live. Defaults are in `DisplayOptions.target_axis_length_mm` and
   `DisplayOptions.layers`. These settings do not change target positions or DDS.
@@ -244,8 +284,8 @@ this history. Updates replace the accumulated document atomically, and Export
 includes a snapshot of it. Original per-step YAML files are retained unchanged.
 
 Checkpoints contain DDS geometry and deposits, readable with
-`SimulationResult.load`. Reopening a full session from the GUI is not yet
-implemented; targets and parameters are stored for future replay.
+`SimulationResult.load`. Use Save state / Open state for full GUI continuation;
+the bare checkpoints do not contain the complete workbench context.
 
 `performance.jsonl` records geometry, candidates, phantom generation, worker
 operations, checkpoint compression and scene/render updates. An operation that
@@ -263,6 +303,7 @@ From the project directory:
 ```powershell
 .\behav3d\Scripts\python.exe -m unittest discover -s python_scripts/j1_build/tests -v
 .\behav3d\Scripts\python.exe python_scripts/j1_build/tests/desktop_smoke.py
+.\behav3d\Scripts\python.exe python_scripts/j1_build/tests/saved_state_desktop_smoke.py
 ```
 
 Session tests compare three cycles against the reference: identical target YAML,

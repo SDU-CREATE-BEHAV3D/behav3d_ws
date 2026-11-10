@@ -1,5 +1,8 @@
 """Native Qt panels and the existing PyVista/DDS drawing stack."""
-from dataclasses import asdict
+from dataclasses import asdict, replace
+from datetime import datetime
+from pathlib import Path
+import tempfile
 import traceback
 from time import perf_counter
 
@@ -11,11 +14,14 @@ from pyvistaqt import QtInteractor
 from lib_scalar.viz_dds import attach_viewer, add_colored_point_cloud, add_line_segments
 from .config import Parameters, SimulationOptions, DisplayOptions
 from .session import Session
-from .appearance import PHANTOM_COLOR, PHANTOM_OPACITY, SURFACE_MATERIAL, configure_studio_lighting, set_contact_shading
+from .appearance import configure_studio_lighting, set_contact_shading, surface_material
 from .navigation import capture_camera, configure_navigation, restore_camera
 from .telemetry import event
 from .target_frames import AXIS_COLORS, frame_glyphs, select_target_frames
 from .target_history import load_frame_yaml
+from .preferences import (DEFAULTS_PATH, load_defaults, options_from_dict, save_defaults,
+                          camera_settings, apply_camera_settings)
+from .state import save_state, load_state
 
 
 class Worker(QtCore.QObject):
@@ -60,6 +66,17 @@ class Worker(QtCore.QObject):
                 points, z_dirs = load_frame_yaml(job["target_yaml_path"])
                 extra = {"path": job["target_yaml_path"], "points": points, "z_dirs": z_dirs}
                 preview = self.session.preview
+            elif action == "save_state":
+                extra = save_state(self.session, job["state_path"], job["parameters"], job["view"])
+                preview = self.session.preview
+            elif action == "open_state":
+                session, parameters, view = load_state(job["state_path"], self.paths)
+                preview = session.prepare(parameters, include_phantom=view["display"]["layers"].get("phantom", True))
+                self.session = session
+                self.paths.update(field_path=session.fixed_field_path, original_path=session.original_field_path,
+                                  scan_path=session.scan_path, scan_scale=session.scan_scale, scan_yaw=session.scan_yaw)
+                output = session.output
+                extra = dict(parameters=asdict(parameters), simulation=asdict(session.options), view=view)
             else:
                 raise ValueError(action)
             s = self.session
@@ -78,6 +95,9 @@ class Worker(QtCore.QObject):
                 "grid": s.simulator.domain.grid_shape if s.simulator else None,
                 "domain": domain,
                 "domain_planned": s.simulator is None,
+                "session_inputs": dict(scan_mesh=str(s.scan_path.resolve()), scan_scale=s.scan_scale,
+                    scan_yaw=s.scan_yaw, field_state=str(s.fixed_field_path.resolve()),
+                    original_field_state=str(s.original_field_path.resolve())),
                 "worker_s": worker_seconds,
                 "geometry_builds": s.geometry_builds})
         except Exception as exc:
@@ -93,7 +113,7 @@ def polydata(vertices, faces):
 class Workbench(QtWidgets.QMainWindow):
     requested = QtCore.Signal(object)
 
-    def __init__(self, paths, off_screen=False):
+    def __init__(self, paths, off_screen=False, preferences_path=DEFAULTS_PATH):
         super().__init__()
         self.setLocale(QtCore.QLocale("en_US"))
         self.setWindowTitle("BEHAV3D · J1 Workbench")
@@ -113,9 +133,17 @@ class Workbench(QtWidgets.QMainWindow):
         self.scene_field_path = None
         self.controls = {}
         self.layers = {}
-        self.parameter_defaults = Parameters()
-        self.simulation_defaults = SimulationOptions()
-        self.display_defaults = DisplayOptions()
+        self.preferences_path = Path(preferences_path)
+        self.preferences_error = None
+        try:
+            saved = load_defaults(self.preferences_path)
+        except (ValueError, OSError, TypeError) as exc:
+            saved = {}
+            self.preferences_error = str(exc)
+        self.parameter_defaults = options_from_dict(Parameters, saved.get("parameters", {}))
+        self.simulation_defaults = options_from_dict(SimulationOptions, saved.get("simulation", {}))
+        self.display_defaults = options_from_dict(DisplayOptions, saved.get("display", {}))
+        self.startup_camera = saved.get("camera")
         self.setStyleSheet("""
             QMainWindow, QWidget { background: #f5f6f8; color: #26323e; font-size: 12px; }
             QGroupBox { background: white; border: 1px solid #dce1e7; border-radius: 6px; margin-top: 12px; padding-top: 14px; font-weight: 600; }
@@ -143,6 +171,14 @@ class Workbench(QtWidgets.QMainWindow):
         self.pause_button = self.button("Pause", self.pause, bar)
         self.export_button = self.button("Export", lambda: self.submit("export"), bar)
         layout.addLayout(bar)
+        storage = QtWidgets.QHBoxLayout()
+        self.save_defaults_button = self.button("Save defaults", self.save_current_defaults, storage)
+        self.save_state_button = self.button("Save state…", self.choose_save_state, storage)
+        self.open_state_button = self.button("Open state…", self.choose_open_state, storage)
+        self.captures_button = self.button("Save captures", self.save_captures, storage)
+        self.captures_button.setToolTip("Save Paper, Front and Top PNGs in the session captures folder, keeping current layers and appearance.")
+        storage.addStretch()
+        layout.addLayout(storage)
         self.status = QtWidgets.QLabel("Loading session…")
         self.status.setStyleSheet("padding: 7px; background: #e8edf3; border-radius: 4px;")
         layout.addWidget(self.status)
@@ -153,6 +189,8 @@ class Workbench(QtWidgets.QMainWindow):
         layout.addWidget(self.plotter.interactor, stretch=1)
         self.setCentralWidget(container)
         self._panels()
+        if self.preferences_error:
+            self.log.appendPlainText("Saved defaults ignored; using config.py: " + self.preferences_error)
         self.timer = QtCore.QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(350)
@@ -278,9 +316,9 @@ class Workbench(QtWidgets.QMainWindow):
         form = self._group(column, "Layers · display only")
         for key, label, visible in [
             ("goal", "Goal and scalar field", True), ("goal_edges", "Goal edges", False),
-            ("environment", "Initial environment", True), ("deposits", "DDS surface", True),
-            ("domain", "DDS domain", False),
-            ("bead_edges", "Bead edges", False), ("contour", "Phi contour", True),
+            ("environment", "Initial environment", True),
+            ("deposits", "Bead surface", True), ("bead_edges", "Bead edges", False),
+            ("domain", "DDS domain", False), ("contour", "Phi contour", True),
             ("phantom", "DDS phantom", True),
             ("sources", "Source samples", True), ("candidates", "Candidates", True),
             ("paths", "Paths", False), ("last", "Last batch · targets", True),
@@ -315,7 +353,7 @@ class Workbench(QtWidgets.QMainWindow):
         self.target_axis_length.setRange(1, 100)
         self.target_axis_length.setSingleStep(1)
         self.target_axis_length.setValue(self.display_defaults.target_axis_length_mm)
-        self.target_axis_length.setToolTip("Physical length of each XYZ arrow. Display only; no target labels.")
+        self.target_axis_length.setToolTip("Physical length of each XYZ tube. Display only; no arrowheads or target labels.")
         self.target_axis_length.valueChanged.connect(self.target_axis_length_changed)
         form.addRow("Target axis length (mm)", self.target_axis_length)
         self.load_target_button = QtWidgets.QPushButton("Load target YAML…")
@@ -353,7 +391,7 @@ class Workbench(QtWidgets.QMainWindow):
         self.phantom_opacity = QtWidgets.QDoubleSpinBox()
         self.phantom_opacity.setRange(0, 1)
         self.phantom_opacity.setSingleStep(0.05)
-        self.phantom_opacity.setValue(PHANTOM_OPACITY)
+        self.phantom_opacity.setValue(self.display_defaults.phantom_opacity)
         self.phantom_opacity.valueChanged.connect(self.phantom_opacity_changed)
         self.phantom_opacity.setToolTip("Proposed batch only. Does not modify accepted material.")
         form.addRow("Phantom opacity", self.phantom_opacity)
@@ -380,7 +418,7 @@ class Workbench(QtWidgets.QMainWindow):
         self.contact_shading.setToolTip("Soft contact shading and crevice darkening. Display only; disable for lighter GPU rendering.")
         self.contact_shading.toggled.connect(self.shading_changed)
         form.addRow(self.contact_shading)
-        set_contact_shading(self.plotter, self.display_defaults.contact_shading)
+        set_contact_shading(self.plotter, self.display_defaults.contact_shading, self.display_defaults)
         self.camera_controls = QtWidgets.QComboBox()
         self.camera_controls.addItems(["Rhino", "VTK"])
         self.camera_controls.setCurrentText(self.display_defaults.camera_controls)
@@ -391,6 +429,10 @@ class Workbench(QtWidgets.QMainWindow):
         self.paper_button = QtWidgets.QPushButton("Paper view / frame goal")
         self.paper_button.clicked.connect(self.paper_view)
         form.addRow(self.paper_button)
+        views = QtWidgets.QHBoxLayout()
+        self.front_button = self.button("Front", lambda: self.standard_view((0, -1, 0), (0, 0, 1)), views)
+        self.top_button = self.button("Top", lambda: self.standard_view((0, 0, 1), (0, 1, 0)), views)
+        form.addRow(views)
         self._structural_group = QtWidgets.QGroupBox("New session")
         form = QtWidgets.QFormLayout(self._structural_group)
         column.addWidget(self._structural_group)
@@ -448,8 +490,81 @@ class Workbench(QtWidgets.QMainWindow):
         return Parameters(**values)
 
     def options(self):
-        return SimulationOptions(**{key: self.controls[key].value()
+        return replace(self.simulation_defaults, **{key: self.controls[key].value()
             for key in ("voxel_mm", "threshold", "surface_step", "padding_mm", "checkpoint_every")})
+
+    def display_settings(self):
+        return replace(self.display_defaults, run_cycles=self.run_count.value(),
+            goal_opacity=self.goal_opacity.value(), goal_lighting=self.goal_lighting.isChecked(),
+            domain_opacity=self.domain_opacity.value(), light_intensity=self.light_intensity.value(),
+            phantom_opacity=self.phantom_opacity.value(), bead_material=self.bead_material.currentText(),
+            goal_edge_opacity=self.edge_opacity["goal_edges"].value(), bead_edge_opacity=self.edge_opacity["bead_edges"].value(),
+            contact_shading=self.contact_shading.isChecked(), camera_controls=self.camera_controls.currentText(),
+            target_axis_length_mm=self.target_axis_length.value(), target_axis_thickness=self.target_axis_thickness.value(),
+            target_show_starts=self.target_starts.isChecked(), target_show_endpoints=self.target_endpoints.isChecked(),
+            layers={key: widget.isChecked() for key, widget in self.layers.items()})
+
+    def save_current_defaults(self):
+        if self.busy or not self.initialized:
+            return
+        try:
+            save_defaults(self.preferences_path, self.latest["session_inputs"], self.parameters(), self.options(),
+                          self.display_settings(), camera_settings(self.plotter))
+            self.log.appendPlainText(f"Startup defaults saved: {self.preferences_path}")
+            self.status.setText("Defaults saved for the next launch")
+        except Exception as exc:
+            self.log.appendPlainText("Could not save defaults: " + str(exc))
+
+    def choose_save_state(self):
+        if self.busy or not self.initialized:
+            return
+        self.pause()
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save simulation state", "simulation.b3dstate", "BEHAV3D state (*.b3dstate)")
+        if path:
+            if not path.lower().endswith(".b3dstate"):
+                path += ".b3dstate"
+            self.submit("save_state", state_path=path, view={"display": asdict(self.display_settings()),
+                        "camera": camera_settings(self.plotter)})
+
+    def choose_open_state(self):
+        if self.busy:
+            return
+        self.pause()
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open simulation state", "", "BEHAV3D state (*.b3dstate)")
+        if path:
+            self.submit("open_state", state_path=path)
+
+    def apply_state_controls(self, extra):
+        self.display_defaults = options_from_dict(DisplayOptions, extra["view"]["display"])
+        self.simulation_defaults = options_from_dict(SimulationOptions, extra["simulation"])
+        values = {**extra["parameters"], **extra["simulation"]}
+        display = self.display_defaults
+        pairs = [(self.controls[key], value) for key, value in values.items() if key in self.controls]
+        pairs += [(self.layers[key], value) for key, value in display.layers.items() if key in self.layers]
+        pairs += [(getattr(self, key), getattr(display, key)) for key in (
+            "goal_opacity", "goal_lighting", "domain_opacity", "light_intensity", "phantom_opacity",
+            "bead_material", "contact_shading", "camera_controls")]
+        pairs += [(self.edge_opacity["goal_edges"], display.goal_edge_opacity),
+                  (self.edge_opacity["bead_edges"], display.bead_edge_opacity), (self.run_count, display.run_cycles),
+                  (self.target_axis_length, display.target_axis_length_mm), (self.target_axis_thickness, display.target_axis_thickness),
+                  (self.target_starts, display.target_show_starts), (self.target_endpoints, display.target_show_endpoints)]
+        blockers = [QtCore.QSignalBlocker(widget) for widget, _ in pairs]
+        try:
+            for widget, value in pairs:
+                if isinstance(widget, QtWidgets.QCheckBox):
+                    widget.setChecked(value)
+                elif isinstance(widget, QtWidgets.QComboBox):
+                    widget.setCurrentText(format(value, "g") if isinstance(value, float) else str(value))
+                elif isinstance(widget, QtWidgets.QLineEdit):
+                    widget.setText(str(value))
+                else:
+                    widget.setValue(value)
+        finally:
+            del blockers
+        self.sync_width_controls()
+        configure_navigation(self.plotter, self.camera_controls.currentText())
+        self.loaded_targets = None
+        self.loaded_target_label.setText("No target YAML loaded")
 
     def parameters_changed(self, *_):
         self.pause()
@@ -478,11 +593,13 @@ class Workbench(QtWidgets.QMainWindow):
     def submit(self, action, **details):
         if self.busy:
             return
-        if action in {"new", "export"}:
+        if action in {"new", "export", "save_state", "open_state"}:
             self.pause()
+        if action == "open_state":
+            self.timer.stop()
         try:
             parameters = self.parameters()
-            if action != "load_target_yaml":
+            if action not in {"load_target_yaml", "open_state"}:
                 parameters.validate()
             job = {"action": action, "parameters": parameters, "options": self.options(),
                    "phantom": self.layers["phantom"].isChecked(),
@@ -499,7 +616,8 @@ class Workbench(QtWidgets.QMainWindow):
             self.status.setText({"new": "Loading session…", "preview": "Computing preview…",
                 "accept": "Adding batch and updating surface…", "export": "Exporting…",
                 "offset": "Computing diagnostic…", "phantom": "Computing DDS phantom…",
-                "load_target_yaml": "Loading target YAML for display…"}[action])
+                "load_target_yaml": "Loading target YAML for display…", "save_state": "Saving compressed simulation state…",
+                "open_state": "Opening simulation state and rebuilding its surface…"}[action])
             self.requested.emit(job)
         except Exception as exc:
             self.log.appendPlainText(str(exc))
@@ -536,6 +654,10 @@ class Workbench(QtWidgets.QMainWindow):
         self.new_button.setEnabled(not self.busy)
         self.export_button.setEnabled(not self.busy and self.initialized)
         self.load_target_button.setEnabled(not self.busy and self.initialized)
+        self.save_defaults_button.setEnabled(not self.busy and self.initialized)
+        self.save_state_button.setEnabled(not self.busy and self.initialized)
+        self.open_state_button.setEnabled(not self.busy)
+        self.captures_button.setEnabled(not self.busy and self.initialized)
 
     @QtCore.Slot(object)
     def completed(self, result):
@@ -543,7 +665,7 @@ class Workbench(QtWidgets.QMainWindow):
         event(result["output"], "viewport", "started", cycle=result["cycle"], action=result["job"]["action"])
         # Read the live camera when the worker finishes, so navigation during a
         # calculation is retained as well as navigation between batches.
-        camera = capture_camera(self.plotter) if result["job"]["action"] != "new" else None
+        camera = capture_camera(self.plotter) if result["job"]["action"] not in {"new", "open_state"} else None
         suppressed = self.plotter.suppress_rendering
         self.plotter.suppress_rendering = True
         try:
@@ -568,21 +690,27 @@ class Workbench(QtWidgets.QMainWindow):
         job = result["job"]
         action = job["action"]
         self.latest = result
+        if action == "open_state":
+            self.apply_state_controls(result["extra"])
+            self.settings_revision += 1
+            job["settings_revision"] = self.settings_revision
+            self.preview = None
+            self.preview_revision = -1
         if action == "load_target_yaml":
             self.loaded_targets = result["extra"]
             self.loaded_target_label.setText(f"{len(self.loaded_targets['points'])} target frames · " + str(self.loaded_targets["path"]).replace("\\", "/").rsplit("/", 1)[-1])
             self.loaded_target_label.setToolTip(str(self.loaded_targets["path"]))
             self.layers["target_imported"].setChecked(True)
         scene_changed = self.scene_field_path != result["field_path"]
-        if action == "new" or scene_changed:
+        if action in {"new", "open_state"} or scene_changed:
             self.initialized = True
             self._static_scene(result)
             self.scene_field_path = result["field_path"]
-        if action == "new":
+        if action in {"new", "open_state"}:
             self.log.appendPlainText(f"Session: {result['output']}")
         elif scene_changed:
             self.log.appendPlainText(f"Goal input changed: {result['field_path']} · accepted deposits retained")
-        if action in {"new", "accept"} or scene_changed:
+        if action in {"new", "accept", "open_state"} or scene_changed:
             self._surface_scene(result)
         self._target_frames("target_history", result["target_history_points"], result["target_history_z_dirs"])
         if self.loaded_targets is not None:
@@ -606,13 +734,17 @@ class Workbench(QtWidgets.QMainWindow):
             except Exception as exc:
                 self.log.appendPlainText(f"Screenshot: {exc}")
             self.log.appendPlainText(f"Exported: {result['extra']}")
+        elif action == "save_state":
+            self.log.appendPlainText(f"Simulation state saved: {result['extra']}")
+        if action == "open_state":
+            self.log.appendPlainText(f"State restored at cycle {result['cycle']} · ready to continue")
         elif action == "offset" and job["settings_revision"] == self.settings_revision:
             c = result["extra"]
             self._lines("offset", "offset", c.offset_points, c.offset_lines, "#e34bd3")
         elif action == "phantom" and job["settings_revision"] == self.settings_revision:
             if self.preview is not None and self.preview.token == job["token"]:
                 self._draw_phantom(result["extra"])
-        if result["preview"] is not None and action in {"new", "preview"}:
+        if result["preview"] is not None and action in {"new", "preview", "open_state"}:
             if job["settings_revision"] == self.settings_revision:
                 self.preview = result["preview"]
                 self.preview_revision = self.settings_revision
@@ -632,7 +764,16 @@ class Workbench(QtWidgets.QMainWindow):
         self.set_buttons()
         self.plotter.render()
         if action == "new":
-            self.paper_view()
+            if self.startup_camera:
+                try:
+                    apply_camera_settings(self.plotter, self.startup_camera)
+                except (ValueError, KeyError, TypeError):
+                    self.paper_view()
+                self.startup_camera = None
+            else:
+                self.paper_view()
+        elif action == "open_state":
+            apply_camera_settings(self.plotter, result["extra"]["view"]["camera"])
         if action == "accept" or self.preview_revision != self.settings_revision:
             QtCore.QTimer.singleShot(0, self.regenerate)
         elif self.running and action in {"new", "preview", "offset", "phantom"}:
@@ -649,8 +790,8 @@ class Workbench(QtWidgets.QMainWindow):
     def _static_scene(self, result):
         self.plotter.clear()
         # PyVista clear() removes lights as well as actors. Reinstall them here.
-        configure_studio_lighting(self.plotter, self.light_intensity.value())
-        set_contact_shading(self.plotter, self.contact_shading.isChecked())
+        configure_studio_lighting(self.plotter, self.light_intensity.value(), self.display_defaults)
+        set_contact_shading(self.plotter, self.contact_shading.isChecked(), self.display_defaults)
         self.overlay = attach_viewer(self.plotter)
         self.actors.clear()
         self.meshes.clear()
@@ -680,7 +821,7 @@ class Workbench(QtWidgets.QMainWindow):
             self.meshes["deposits"] = polydata(surface.vertices, surface.faces)
             self.actors["deposits"] = self.plotter.add_mesh(self.meshes["deposits"],
                 color=self.material_colors[self.bead_material.currentText()], smooth_shading=True,
-                **SURFACE_MATERIAL,
+                **surface_material(self.display_defaults),
                 name="deposits", reset_camera=False)
             self.layer_changed("deposits", self.layers["deposits"].isChecked())
             self.layer_changed("bead_edges", self.layers["bead_edges"].isChecked())
@@ -823,8 +964,8 @@ class Workbench(QtWidgets.QMainWindow):
         self.actors.pop("phantom", None)
         if surface is not None and not surface.is_empty:
             actor = self.plotter.add_mesh(polydata(surface.vertices, surface.faces),
-                name="phantom", color=PHANTOM_COLOR, opacity=self.phantom_opacity.value(),
-                smooth_shading=True, **SURFACE_MATERIAL,
+                name="phantom", color=self.display_defaults.phantom_color, opacity=self.phantom_opacity.value(),
+                smooth_shading=True, **surface_material(self.display_defaults),
                 pickable=False, reset_camera=False, render=False)
             actor.SetVisibility(self.layers["phantom"].isChecked())
             self.actors["phantom"] = actor
@@ -866,11 +1007,11 @@ class Workbench(QtWidgets.QMainWindow):
             self.plotter.render()
 
     def shading_changed(self, enabled):
-        set_contact_shading(self.plotter, enabled)
+        set_contact_shading(self.plotter, enabled, self.display_defaults)
         self.plotter.render()
 
     def light_intensity_changed(self, value):
-        configure_studio_lighting(self.plotter, value)
+        configure_studio_lighting(self.plotter, value, self.display_defaults)
         self.plotter.render()
 
     def goal_lighting_changed(self, enabled):
@@ -883,6 +1024,31 @@ class Workbench(QtWidgets.QMainWindow):
         actor = self.actors.get("goal")
         if actor is not None:
             actor.GetProperty().SetOpacity(value)
+            self.plotter.render()
+
+    def save_captures(self):
+        if self.busy or not self.initialized:
+            return
+        camera = capture_camera(self.plotter)
+        destination = None
+        try:
+            root = Path(self.latest["output"]) / "captures"
+            root.mkdir(exist_ok=True)
+            prefix = f"cycle_{self.latest['cycle']:04d}_{datetime.now():%Y%m%d-%H%M%S}_"
+            destination = Path(tempfile.mkdtemp(prefix=prefix, dir=root))
+            views = (("paper", self.paper_view),
+                     ("front", lambda: self.standard_view((0, -1, 0), (0, 0, 1))),
+                     ("top", lambda: self.standard_view((0, 0, 1), (0, 1, 0))))
+            for name, apply_view in views:
+                apply_view()
+                self.plotter.render_window.MakeCurrent()
+                self.plotter.screenshot(str(destination / f"{name}.png"), return_img=False)
+            self.log.appendPlainText(f"Saved Paper, Front and Top captures: {destination}")
+            return destination
+        except Exception as exc:
+            self.log.appendPlainText(f"Capture failed: {exc}" + (f" · folder: {destination}" if destination else ""))
+        finally:
+            restore_camera(self.plotter, camera)
             self.plotter.render()
 
     def paper_view(self):
@@ -898,6 +1064,15 @@ class Workbench(QtWidgets.QMainWindow):
         # view_isometric() deliberately clears this flag in PyVista. VTK mouse
         # gestures do not set it, so the next Plotter.camera read would reset
         # the user's view before it could be captured for a scene update.
+        self.plotter.renderer.camera.is_set = True
+        self.plotter.render()
+
+    def standard_view(self, direction, up):
+        self.plotter.enable_parallel_projection()
+        self.plotter.view_vector(direction, viewup=up, render=False)
+        if "goal" in self.actors:
+            bounds = np.asarray(self.actors["goal"].GetBounds()).reshape(3, 2)
+            self.plotter.reset_camera(bounds=(bounds + (-0.04, 0.04)).ravel(), render=False)
         self.plotter.renderer.camera.is_set = True
         self.plotter.render()
 

@@ -20,7 +20,7 @@ with np.load(root / "mesh/fields/field_state_init.npz", allow_pickle=False) as d
 width_map = out / "width.npz"
 np.savez_compressed(width_map, width_norm=np.linspace(0, 1, count))
 app = QtWidgets.QApplication([])
-w = Workbench(dict(data_root=root, output_root=out), off_screen=True)
+w = Workbench(dict(data_root=root, output_root=out), off_screen=True, preferences_path=out / "defaults.json")
 w.controls["checkpoint_every"].setValue(0)
 w.show()
 phase = 0

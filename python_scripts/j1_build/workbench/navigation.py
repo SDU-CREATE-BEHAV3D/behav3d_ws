@@ -40,6 +40,10 @@ def configure_navigation(plotter, convention):
         elif shift and not control:
             style.OnMiddleButtonDown()
         else:
+            # A top view points exactly down Z. Tilt off the pole before
+            # selecting world Z as the up vector, avoiding a degenerate basis.
+            if abs(camera.GetDirectionOfProjection()[2]) > 0.99985:
+                camera.Elevation(1.0)
             camera.SetViewUp(0, 0, 1)
             style.OnLeftButtonDown()
 

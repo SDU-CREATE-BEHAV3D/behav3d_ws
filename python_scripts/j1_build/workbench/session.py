@@ -2,7 +2,6 @@
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-import hashlib
 import json
 import tempfile
 import shutil
@@ -29,6 +28,7 @@ from .config import Parameters, SimulationOptions
 from .telemetry import event
 from .width_field import WidthField, original_field_path
 from .target_history import TargetHistory
+from .state import file_hash
 
 
 @dataclass(frozen=True)
@@ -51,14 +51,15 @@ class Preview:
 
 class Session:
     def __init__(self, data_root: Path, output_root: Path, options=SimulationOptions(),
-                 field_path=None, scan_path=None, scan_scale=0.001, scan_yaw=180.0):
+                 field_path=None, scan_path=None, scan_scale=0.001, scan_yaw=180.0, original_path=None):
         options.validate()
         self.options = options
         self.field_path = Path(field_path or data_root / "mesh/fields/field_state_init_subdiv1.npz")
         self.fixed_field_path = self.field_path
-        self.original_field_path = original_field_path(self.fixed_field_path)
+        self.original_field_path = Path(original_path) if original_path else original_field_path(self.fixed_field_path)
         self.width_cache = {}
         self.scan_path = Path(scan_path or data_root / "mesh/ScanMesh.stl")
+        self.scan_scale, self.scan_yaw = scan_scale, scan_yaw
         self.field = load_field_state_npz(self.field_path)
         self.base = load_triangle_mesh_legacy(self.scan_path)
         self.base.scale(scan_scale, center=(0, 0, 0))
@@ -77,8 +78,8 @@ class Session:
         self.output.mkdir(parents=True)
         self.target_history = TargetHistory(self.output)
         (self.output / "session.json").write_text(json.dumps({
-            "field": str(self.field_path), "field_sha256": hashlib.sha256(self.field_path.read_bytes()).hexdigest(),
-            "scan": str(self.scan_path), "scan_sha256": hashlib.sha256(self.scan_path.read_bytes()).hexdigest(),
+            "field": str(self.field_path), "field_sha256": file_hash(self.field_path),
+            "scan": str(self.scan_path), "scan_sha256": file_hash(self.scan_path),
             "scan_scale": scan_scale, "scan_yaw": scan_yaw, "simulation": asdict(options),
         }, indent=2), encoding="utf-8")
 
@@ -86,7 +87,7 @@ class Session:
         path = self.original_field_path if parameters.width_mode == "field" else self.fixed_field_path
         field = self.field if path == self.field_path else load_field_state_npz(path)
         width = None
-        metadata = {"field": str(path), "field_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        metadata = {"field": str(path), "field_sha256": file_hash(path),
                     "width_mode": parameters.width_mode}
         if parameters.width_mode == "field":
             source = Path(parameters.width_field_path).expanduser().resolve()

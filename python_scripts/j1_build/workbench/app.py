@@ -25,7 +25,13 @@ def paths():
 def main():
     data, output = paths()
     from workbench.config import InputOptions
-    inputs = InputOptions()
+    from workbench.preferences import load_defaults, options_from_dict
+    try:
+        saved = load_defaults()
+    except (ValueError, OSError, TypeError) as exc:
+        print(f"Saved defaults could not be loaded; using config.py: {exc}")
+        saved = {}
+    inputs = options_from_dict(InputOptions, saved.get("inputs", {}))
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--field-state", type=Path)
     parser.add_argument("--scan-mesh", type=Path, help="Override InputOptions.scan_mesh in config.py")
@@ -35,6 +41,13 @@ def main():
                         help="Override InputOptions.scan_yaw in config.py (degrees around Z)")
     parser.add_argument("--off-screen", action="store_true")
     args = parser.parse_args()
+    original_path = Path(inputs.original_field_state).expanduser() if inputs.original_field_state and args.field_state is None else None
+    if original_path is not None and not original_path.is_absolute():
+        original_path = data / original_path
+    if args.field_state is None and inputs.field_state:
+        args.field_state = Path(inputs.field_state).expanduser()
+        if not args.field_state.is_absolute():
+            args.field_state = data / args.field_state
     scan_path = args.scan_mesh
     if scan_path is None:
         scan_path = Path(inputs.scan_mesh).expanduser()
@@ -49,7 +62,8 @@ def main():
     from workbench.ui import Workbench
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv[:1])
     window = Workbench(dict(data_root=data, output_root=output, field_path=args.field_state,
-        scan_path=scan_path, scan_scale=args.scan_scale, scan_yaw=args.scan_yaw), off_screen=args.off_screen)
+        scan_path=scan_path, scan_scale=args.scan_scale, scan_yaw=args.scan_yaw,
+        original_path=original_path), off_screen=args.off_screen)
     window.show()
     return app.exec()
 

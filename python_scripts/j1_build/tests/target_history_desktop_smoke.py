@@ -23,7 +23,7 @@ z_dirs = np.array([[0, 0, 1], [0.2, 0, 0.98]])
 write_line_targets_yaml(source, OrientedLineTargets(points, points + 0.005, z_dirs, z_dirs), position_scale=1000)
 source_bytes = source.read_bytes()
 app = QtWidgets.QApplication([])
-w = Workbench(dict(data_root=root, output_root=out), off_screen=True)
+w = Workbench(dict(data_root=root, output_root=out), off_screen=True, preferences_path=out / "defaults.json")
 w.controls["checkpoint_every"].setValue(0)
 w.show()
 phase = 0
