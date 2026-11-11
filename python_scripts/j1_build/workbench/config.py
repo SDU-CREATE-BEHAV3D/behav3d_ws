@@ -6,11 +6,11 @@ import math
 @dataclass(frozen=True)
 class InputOptions:
     """Startup inputs. Relative scan paths are resolved from the data root."""
-    scan_mesh: str = "mesh/ScanMesh.stl"
+    scan_mesh: str = "mesh/ScanMesh_simple_centered.stl"
     scan_scale: float = 0.001
-    scan_yaw: float = 180.0
-    field_state: str = ""
-    original_field_state: str = ""
+    scan_yaw: float = 0.0
+    field_state: str = "mesh/fields/field_state_centered_subdiv1.npz"
+    original_field_state: str = "mesh/fields/field_state_centered.npz"
 
 
 @dataclass(frozen=True)

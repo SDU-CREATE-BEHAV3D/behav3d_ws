@@ -1,0 +1,64 @@
+{
+  "method": "Preserved intrinsic heat under a verified rigid transform; recomputed phi against the centered scan",
+  "source_files": {
+    "field_state_init.npz": "3260d9170f8d0dabdd909cd197a1e6cbdc39cc9d40924605447e13b7af69122f",
+    "goal_field_original_mm_centered.obj": "bae999ea080697d6ec316b94dbbe4885e66d55439ae8460a907da3c8ff06961d",
+    "ScanMesh_simple_centered.stl": "c9248ac121a0ed60b9a1e5fe22f75f427d2bb945a2b9f37c11048a958325d907",
+    "fault_region.stl": "1996f4c39966d65fa5bce0af08f130811c07fb57f25ccda2774fbfe7c30e0fe1"
+  },
+  "output_files": {
+    "field_state_centered.npz": "06c32c304426c9f0f3b42be96a4109a512bd9cf6a1dbf5193193799a3b0b005d",
+    "field_state_centered_subdiv1.npz": "9a9a0430fc7fa9904dae3102f39e1e7eac15fad461456b62f392828ee41c3b55",
+    "width_field_inverse_heat_centered.npz": "199dd4c570bc2d9388915d6dba44b5230a4e4f10f84a7504c29ec4df310c7ca2"
+  },
+  "max_vertex_alignment_error_mm": 7.62939453125e-06,
+  "transform_from_source_mm": [
+    [
+      -1.0,
+      0.0,
+      0.0,
+      172.28768348693848
+    ],
+    [
+      0.0,
+      -1.0,
+      0.0,
+      49.88360595703125
+    ],
+    [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "original_vertices": 2424,
+  "original_faces": 4590,
+  "subdivided_vertices": 9436,
+  "subdivided_faces": 18360,
+  "heat_range": [
+    0.0,
+    1.0
+  ],
+  "phi_contour_segments": 262,
+  "fault_region_watertight": true,
+  "fault_region_affects_heat": false,
+  "validation": {
+    "first_batch_targets": 5,
+    "next_batch_targets": 5,
+    "accepted_cycle": 1
+  },
+  "frame_settings": {
+    "scan_scale": 0.001,
+    "scan_yaw_deg": 0.0,
+    "target_output_yaw_deg": 0.0,
+    "field_center_sign_x": 1.0,
+    "field_center_sign_y": 1.0
+  }
+}

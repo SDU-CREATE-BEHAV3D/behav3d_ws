@@ -25,6 +25,12 @@ return to `config.py`. Explicit launch arguments still override input defaults.
 
 You can also edit `workbench/config.py` and restart the workbench:
 
+The local built-in inputs now select `mesh/ScanMesh_simple_centered.stl` and
+`mesh/fields/field_state_centered_subdiv1.npz`, with scan scale 0.001 and yaw 0.
+The original field is `mesh/fields/field_state_centered.npz`. The reference-loop
+launcher reads the same saved input preferences. Paper, Front and Top frame
+the active goal; Paper looks from +X/-Y and above, with world Z kept upright.
+
 - `InputOptions`: `scan_mesh`, `scan_scale` and `scan_yaw` (degrees around Z).
   Use an absolute scan path or a path relative to the data/repository root,
   such as `mesh/ScanMesh.stl`. On Windows, absolute path strings can use forward

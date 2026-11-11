@@ -63,22 +63,26 @@ support Windows environments with restricted default cache directories.
 
 ## Field input
 
-The launcher uses the tracked `mesh/fields/field_state_init.npz` and
-`mesh/ScanMesh.stl` example data. It scales the scan by 0.001 and rotates it
-180 degrees around world Z so its XY region overlaps the stored field.
-This alignment is specific to these inputs, not a robot calibration.
+Both launchers use `workbench/user_defaults.json` input preferences when present,
+falling back to `InputOptions` in `workbench/config.py`. Built-in defaults load
+the tracked `mesh/ScanMesh_simple_centered.stl` at scale 0.001 and yaw 0 degrees,
+with `mesh/fields/field_state_centered_subdiv1.npz` as the goal.
 
-On first launch, `prepare_field.py` creates
-`mesh/fields/field_state_init_subdiv1.npz` with one extra level of the existing
-Loop subdivision: 2,424 to 9,436 vertices and 4,590 to 18,360 triangles.
-Loop subdivision can slightly smooth the goal geometry. The stored field
-offset is preserved and `heat_norm` is transferred by surface barycentric
-interpolation. The simulation evaluates phi again against the current scan.
-The original input is unchanged; the generated copy is ignored by Git.
+The centered base field is `mesh/fields/field_state_centered.npz` (2,424 vertices,
+4,590 triangles). The extra Loop-subdivision state has 9,436 vertices and 18,360
+triangles and follows that base file for field-width mode. The original heat
+distribution is preserved under the verified rigid coordinate transform; phi
+has been recalculated against the centered scan. The corresponding inverse
+width map is `mesh/fields/width_field_inverse_heat_centered.npz`.
 
-The mesh-loading loop's `--field-subdivide-iter` option does not apply to
-NPZ inputs, so this preparation happens before launching the state-based loop.
-An explicit `--field-state PATH` override skips preparation and uses that input.
+`mesh/goal_field_original_mm_centered.obj` and `mesh/fault_region.stl` share the
+same coordinates, in millimeters. Preparation metadata and input hashes are in
+`mesh/fields/centered_field_preparation.json`. Earlier example inputs remain
+available for explicit command-line overrides.
+
+Paper, Front and Top frame the active goal. The Paper preset looks from +X/-Y
+and above, with world Z upright. Saved local camera preferences override the
+startup preset until removed or saved again.
 
 ## Validation
 

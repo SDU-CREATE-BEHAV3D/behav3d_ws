@@ -5,24 +5,34 @@ import os
 import subprocess
 import sys
 
-workbench = Path(__file__).resolve().parent
-root = workbench.parents[1]
+script_dir = Path(__file__).resolve().parent
+root = script_dir.parents[1]
+from workbench.config import InputOptions
+from workbench.preferences import load_defaults, options_from_dict
+
+try:
+    inputs = options_from_dict(InputOptions, load_defaults().get("inputs", {}))
+except (ValueError, OSError, TypeError) as exc:
+    print(f"Saved defaults could not be loaded; using config.py: {exc}")
+    inputs = InputOptions()
+field_path = Path(inputs.field_state or InputOptions().field_state).expanduser()
+scan_path = Path(inputs.scan_mesh).expanduser()
+if not field_path.is_absolute():
+    field_path = root / field_path
+if not scan_path.is_absolute():
+    scan_path = root / scan_path
 for variable, folder in [("MPLCONFIGDIR", "matplotlib"), ("TEMP", "tmp"), ("TMP", "tmp")]:
-    cache = workbench / ".cache" / folder
+    cache = script_dir / ".cache" / folder
     cache.mkdir(parents=True, exist_ok=True)
     os.environ[variable] = str(cache)
-output = workbench / "outputs" / datetime.now().strftime("simulation-%Y%m%d-%H%M%S")
-if not any(arg == "--field-state" or arg.startswith("--field-state=") for arg in sys.argv[1:]):
-    from prepare_field import prepare_field
-    prepare_field(root)
-
+output = script_dir / "outputs" / datetime.now().strftime("simulation-%Y%m%d-%H%M%S")
 command = [
     sys.executable, "-u",
-    str(root / "src" / "behav3d_py" / "behav3d_py" / "scalar_field" / "field_state_scan_loop_simulator_dds_v2.py"),
-    "--field-state", str(root / "mesh" / "fields" / "field_state_init_subdiv1.npz"),
-    "--scan-mesh", str(root / "mesh" / "ScanMesh.stl"),
-    "--scan-scale", "0.001",
-    "--scan-yaw-deg", "180",
+    str(root / "src/behav3d_py/behav3d_py/scalar_field/field_state_scan_loop_simulator_dds_v2.py"),
+    "--field-state", str(field_path),
+    "--scan-mesh", str(scan_path),
+    "--scan-scale", str(inputs.scan_scale),
+    "--scan-yaw-deg", str(inputs.scan_yaw),
     "--output-dir", str(output),
     "--candidate-mode", "gradient_lift",
     "--contour-sample-spacing-mm", "3",

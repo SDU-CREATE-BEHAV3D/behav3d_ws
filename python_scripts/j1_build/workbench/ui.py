@@ -1052,20 +1052,7 @@ class Workbench(QtWidgets.QMainWindow):
             self.plotter.render()
 
     def paper_view(self):
-        self.plotter.enable_parallel_projection()
-        self.plotter.view_isometric()
-        if "goal" in self.actors:
-            bounds = np.array(self.actors["goal"].GetBounds()).reshape(3, 2)
-            bounds[:, 0] -= 0.04
-            bounds[:, 1] += 0.04
-            self.plotter.reset_camera(bounds=bounds.ravel())
-        else:
-            self.plotter.reset_camera()
-        # view_isometric() deliberately clears this flag in PyVista. VTK mouse
-        # gestures do not set it, so the next Plotter.camera read would reset
-        # the user's view before it could be captured for a scene update.
-        self.plotter.renderer.camera.is_set = True
-        self.plotter.render()
+        self.standard_view((1, -1, 0.8), (0, 0, 1))
 
     def standard_view(self, direction, up):
         self.plotter.enable_parallel_projection()
