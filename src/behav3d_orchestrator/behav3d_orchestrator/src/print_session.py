@@ -163,6 +163,7 @@ class PrintSession(YamlSession):
         target_indices=None,
         dot_steps_per_target=None,
         before_target=None,
+        initial_approach: bool = True,
     ) -> dict:
         log = self.node.get_logger()
         target_list = list(targets)
@@ -255,7 +256,7 @@ class PrintSession(YamlSession):
                                      target=target, nominal_steps=nominal_steps[i], material_steps=bead_steps[i],
                                      retract_steps=int(post_dot_retract_steps) if retract_enabled and bead_steps[i] else 0,
                                      steps_per_mm3=steps_per_mm3):
-                    if i == 0:
+                    if i == 0 and initial_approach:
                         first_approach = self._with_z_offset(target_list[0], float(approach_z_offset_m))
                         res = self.run_sync(
                             self.motion.goto(
@@ -274,7 +275,7 @@ class PrintSession(YamlSession):
                             )
 
                     above = self._with_z_offset(target, float(dot_z_offset_m))
-                    above_vel = float(pre_dot_vel_scale) if i == 0 else float(dot_vel_scale)
+                    above_vel = float(pre_dot_vel_scale) if i == 0 and initial_approach else float(dot_vel_scale)
                     res = self.run_sync(
                         self.motion.goto(
                             pose=above,
@@ -605,6 +606,7 @@ class PrintSession(YamlSession):
         joint_current_log_dir: Optional[str] = None,
         joint_current_log_label: str = "print_segments",
         before_target=None,
+        initial_approach: bool = True,
     ) -> dict:
         log = self.node.get_logger()
         segment_list = list(segments)
@@ -723,7 +725,7 @@ class PrintSession(YamlSession):
                                      material_steps=extrusion_requests[pos]["material_steps"],
                                      retract_steps=retract_steps if extrusion_requests[pos]["material_steps"] else 0,
                                      steps_per_mm3=steps_per_mm3) as attempt:
-                    if pos == 0:
+                    if pos == 0 and initial_approach:
                         first_start = segment_list[0].start
                         first_approach = self._with_z_offset(first_start, float(approach_z_offset_m))
                         res = self.run_sync(

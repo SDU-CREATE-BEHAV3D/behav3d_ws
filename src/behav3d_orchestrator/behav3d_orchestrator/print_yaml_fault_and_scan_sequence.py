@@ -27,12 +27,13 @@ class PrintYamlFaultAndScanSequenceNode(PrintYamlAndScanSequenceNode):
         self.print_session.fault_session = self.fault_session
 
     def _print_chunk(self, targets, *, volumes_mm3, plane_types, cfg, timeout_s,
-                     target_start_index, total_target_count):
+                     target_start_index, total_target_count, initial_approach=True):
         if self._resolve_print_mode(cfg) == "segments":
             return self._print_segment_chunk(
                 cfg=cfg, timeout_s=timeout_s,
                 target_start_index=target_start_index, target_count=len(targets),
                 total_target_count=total_target_count,
+                initial_approach=initial_approach,
             )
 
         def before_target(local_index):
@@ -44,7 +45,7 @@ class PrintYamlFaultAndScanSequenceNode(PrintYamlAndScanSequenceNode):
 
         common = dict(steps_per_mm3=self._cfg_float(cfg, "extrusion_steps_per_mm3"),
                       eef_link=self._cfg_str(cfg, "print_eef_link"), timeout_s=timeout_s,
-                      before_target=before_target)
+                      before_target=before_target, initial_approach=initial_approach)
         defaults = [self._cfg_int(cfg, "dot_steps_e" if t == "E" else "dot_steps_n") for t in plane_types]
         return self.print_session.run_print_dots_targets(
             targets=targets, volumes_mm3=volumes_mm3, dot_steps_per_target=defaults,

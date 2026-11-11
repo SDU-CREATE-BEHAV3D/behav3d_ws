@@ -6,8 +6,11 @@ and printing through the shared session classes in `behav3d_orchestrator/src/`.
 ## YAML Fault Print and Scan
 
 `print_yaml_fault_and_scan_sequence` reuses the YAML-print sequence, scan and
-reconstruction flow. It prints all input beads in `points_per_cycle` groups,
-then performs one optional final scan. `print_mode: dots` deposits once at each
+reconstruction flow. Both YAML sequence nodes print `points_per_cycle` beads,
+then scan and optionally reconstruct before the next group when `enable_scan`
+is true. The last, possibly smaller group also gets a scan; there is no extra
+final scan. `enable_scan: false` skips all scans. A failed scan/reconstruction
+stops the sequence. `print_mode: dots` deposits once at each
 segment end or flat target; `segments` prints the saved start-to-end motion;
 `auto` selects segments for segment YAML and dots otherwise. Omitted mode keeps
 the fault sequence's previous `auto` behavior. Segment starts are not flattened
@@ -90,7 +93,17 @@ lift after completed deposition does not erase that completed bead.
 An operator stop before a target does not create an attempt. YAML-sequence
 restarts use the next report cycle number rather than replacing earlier cycles.
 The active capture session is resolved once for a run; config reloads do not
-move its execution report or final scan into a different active session.
+move its execution report or cycle scans into a different active session.
+
+Both YAML sequence nodes reload config before selecting each print group,
+immediately before printing (after the debug gate), before each bead and after
+its print confirmation, before the scan prompt, and after scan confirmation.
+Steps, speeds, retract and fault settings can change between beads. Each bead
+keeps its settings through extrusion, retract and lift. Scan edits made during
+printing apply to the scan following that group; `points_per_cycle` changes
+apply when selecting the next group. A reload that
+fails to parse or has an invalid group size, timeout, or mode keeps the previous
+config. Target YAML contents, `yaml_path`, and `frame_id` require a restart.
 
 ## Field Print Loops
 

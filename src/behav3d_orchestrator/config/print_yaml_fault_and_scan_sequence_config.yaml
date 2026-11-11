@@ -2,16 +2,18 @@ print_yaml_fault_and_scan_sequence:
   ros__parameters:
     # Flow:
     #   1) home
-    #   2) print all YAML targets, grouped by points_per_cycle
-    #   3) scan once after the final target
-    #   4) reconstruct/update world mesh
+    #   2) print points_per_cycle targets (last group may be smaller)
+    #   3) scan and reconstruct/update world mesh when enable_scan=true
+    #   4) repeat 2-3 until all YAML targets are processed
     # dots: one stationary deposit at each segment end (or each flat target).
     # segments: extrude along each start-to-end path; requires segment YAML.
     # auto: segments for segment YAML, otherwise dots.
     print_mode: dots
     yaml_path: /home/lab/behav3d_ws/yaml/E01/rule_based_targets.yaml
     frame_id: world
-    points_per_cycle: 1
+    # Reload before each bead/scan and after their ENTER confirmations.
+    # Group size edits apply to the next group; target file/frame need a restart.
+    points_per_cycle: 5  # Targets to print between scans.
     home_before: true
     home_after: true
     timeout_s: 0.0

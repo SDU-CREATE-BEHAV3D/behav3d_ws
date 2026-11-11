@@ -35,8 +35,8 @@ SRC_CONFIG_PATH = f"/home/lab/behav3d_ws/src/behav3d_orchestrator/config/{CONFIG
 
 class PrintYamlAndScanSequenceNode(Node):
     """
-    Print ordered YAML targets in fixed-size chunks, then run one optional scan
-    and reconstruction after all targets are complete.
+    Print ordered YAML targets in fixed-size chunks, with an optional scan
+    and reconstruction after each chunk.
     """
 
     config_filename = CONFIG_FILENAME
@@ -116,35 +116,19 @@ class PrintYamlAndScanSequenceNode(Node):
             stopped_by_user = False
             all_printed_targets: list[PoseStamped] = []
 
-            while rclpy.ok() and next_target_idx < len(targets):
-                try:
-                    new_cfg = self._load_config(config_path)
-                    new_timeout_s = self._cfg_optional_timeout(new_cfg, "timeout_s")
-                    new_scan_timeout_s = self._cfg_optional_timeout(new_cfg, "scan_timeout_s")
-                    if new_scan_timeout_s is None:
-                        new_scan_timeout_s = new_timeout_s
-                    new_points_per_cycle = self._cfg_int(new_cfg, "points_per_cycle")
-                    if new_points_per_cycle <= 0:
-                        raise ValueError("Config key 'points_per_cycle' must be > 0.")
-                    cfg = new_cfg
-                    timeout_s = new_timeout_s
-                    scan_timeout_s = new_scan_timeout_s
-                    points_per_cycle = new_points_per_cycle
-                except Exception as exc:
-                    log.warn(
-                        "[print_yaml_and_scan] Runtime config reload failed; keeping previous config. "
-                        f"path='{config_path}' error='{exc}'"
-                    )
+            def refresh_config(reason):
+                nonlocal cfg, timeout_s, scan_timeout_s, points_per_cycle
+                cfg = self._reload_runtime_config_or_keep(
+                    cfg, config_path=config_path, reason=reason)
+                timeout_s = self._cfg_optional_timeout(cfg, "timeout_s")
+                scan_timeout_s = self._cfg_optional_timeout(cfg, "scan_timeout_s")
+                if scan_timeout_s is None:
+                    scan_timeout_s = timeout_s
+                points_per_cycle = self._cfg_int(cfg, "points_per_cycle")
+                return cfg
 
-                cfg_yaml_path = self._cfg_str(cfg, "yaml_path")
-                cfg_frame_id = self._cfg_str(cfg, "frame_id")
-                if cfg_yaml_path != yaml_path or cfg_frame_id != frame_id:
-                    log.warn(
-                        "[print_yaml_and_scan] Runtime yaml_path/frame_id changes are ignored "
-                        "after targets are loaded. Restart the node to use them. "
-                        f"loaded_yaml='{yaml_path}', loaded_frame='{frame_id}', "
-                        f"current_yaml='{cfg_yaml_path}', current_frame='{cfg_frame_id}'"
-                    )
+            while rclpy.ok() and next_target_idx < len(targets):
+                refresh_config("before print group")
 
                 if not rclpy.ok():
                     break
@@ -156,7 +140,6 @@ class PrintYamlAndScanSequenceNode(Node):
                 chunk = targets[start_idx:end_idx]
                 chunk_volumes_mm3 = target_volumes_mm3[start_idx:end_idx]
                 chunk_plane_types = plane_types[start_idx:end_idx]
-                self._refresh_execution_config(cfg)
                 self.print_session.configure_bead_logging(
                     self._execution_session, f"{self._execution_scope}/{cycle_tag}")
 
@@ -177,7 +160,9 @@ class PrintYamlAndScanSequenceNode(Node):
                         stopped_by_user = True
                         break
 
-                print_res = self._print_chunk(
+                refresh_config(f"before printing {cycle_tag}")
+                self._refresh_execution_config(cfg)
+                print_res = self._print_group(
                     chunk,
                     volumes_mm3=chunk_volumes_mm3,
                     plane_types=chunk_plane_types,
@@ -185,6 +170,7 @@ class PrintYamlAndScanSequenceNode(Node):
                     timeout_s=timeout_s,
                     target_start_index=start_idx,
                     total_target_count=len(targets),
+                    refresh_config=refresh_config,
                 )
                 if not print_res.get("ok", False):
                     log.error(
@@ -212,31 +198,42 @@ class PrintYamlAndScanSequenceNode(Node):
 
                 next_target_idx = end_idx
 
-            if stopped_by_user:
-                log.warn("[print_yaml_and_scan] Sequence stopped by user.")
+                if not rclpy.ok():
+                    break
 
-            sequence_complete = next_target_idx >= len(targets) and not stopped_by_user
-            if sequence_complete and self._cfg_bool(cfg, "enable_scan"):
-                final_cycle_tag = f"cycle_{cycle_count:04d}"
-                if self._cfg_bool(cfg, "prompt_before_scan"):
-                    if self._operator_requested_stop(
-                        f"[print_yaml_and_scan:{final_cycle_tag}] Press ENTER for final scan "
-                        "(type 'q' + ENTER to stop)."
-                    ):
-                        stopped_by_user = True
-
-                if not stopped_by_user:
+                refresh_config(f"before scan prompt after {cycle_tag}")
+                self._refresh_execution_config(cfg)
+                if self._cfg_bool(cfg, "enable_scan"):
+                    if self._cfg_bool(cfg, "prompt_before_scan"):
+                        if self._operator_requested_stop(
+                            f"[print_yaml_and_scan:{cycle_tag}] Press ENTER to scan after this print cycle "
+                            "(type 'q' + ENTER to stop)."
+                        ):
+                            stopped_by_user = True
+                            break
+                        refresh_config(f"after scan confirmation for {cycle_tag}")
+                        self._refresh_execution_config(cfg)
+                        if not self._cfg_bool(cfg, "enable_scan"):
+                            log.info(f"[print_yaml_and_scan] {cycle_tag} scan disabled during confirmation.")
+                            continue
                     log.info(
-                        "[print_yaml_and_scan] All YAML targets processed; starting the single final scan."
+                        f"[print_yaml_and_scan] {cycle_tag} targets processed; starting cycle scan."
                     )
-                    self._run_scan_cycle(
-                        cycle_tag=final_cycle_tag,
+                    if not self._run_scan_cycle(
+                        cycle_tag=cycle_tag,
                         cfg=cfg,
                         timeout_s=scan_timeout_s,
                         printed_targets=all_printed_targets,
-                    )
-            elif sequence_complete:
-                log.info("[print_yaml_and_scan] Final scan skipped because enable_scan=false.")
+                    ):
+                        log.error(
+                            f"[print_yaml_and_scan] Stopping sequence: scan/reconstruction failed in {cycle_tag}."
+                        )
+                        break
+                else:
+                    log.info(f"[print_yaml_and_scan] {cycle_tag} scan skipped because enable_scan=false.")
+
+            if stopped_by_user:
+                log.warn("[print_yaml_and_scan] Sequence stopped by user.")
 
             log.info(
                 "[print_yaml_and_scan] Sequence finished: "
@@ -273,6 +270,29 @@ class PrintYamlAndScanSequenceNode(Node):
     def _refresh_execution_config(self, cfg):
         cfg["scan_root_folder"] = str(self.print_session.session_child(self._cfg_str(cfg, "scan_root_folder"), self._execution_session))
 
+    def _reload_runtime_config_or_keep(self, cfg, *, config_path, reason):
+        try:
+            new_cfg = self._load_config(config_path)
+            if self._cfg_int(new_cfg, "points_per_cycle") <= 0:
+                raise ValueError("Config key 'points_per_cycle' must be > 0.")
+            self._cfg_optional_timeout(new_cfg, "timeout_s")
+            self._cfg_optional_timeout(new_cfg, "scan_timeout_s")
+            self._resolve_print_mode(new_cfg)
+            for key in ("yaml_path", "frame_id"):
+                if self._cfg_str(new_cfg, key) != self._cfg_str(cfg, key):
+                    self.get_logger().warn(
+                        f"[print_yaml_and_scan] Runtime {key} change ignored; restart to reload targets."
+                    )
+                    new_cfg[key] = cfg[key]
+        except Exception as exc:
+            self.get_logger().warn(
+                f"[print_yaml_and_scan] Runtime config reload failed ({reason}); keeping previous config. "
+                f"path='{config_path}' error='{exc}'"
+            )
+            return cfg
+        self.get_logger().info(f"[print_yaml_and_scan] Runtime config reloaded ({reason}): {config_path}")
+        return new_cfg
+
     def _load_print_targets(self, *, yaml_path, frame_id):
         # Keep one target per segment for chunking and dot deposition at its
         # end; retain both endpoints for segment execution.
@@ -295,7 +315,50 @@ class PrintYamlAndScanSequenceNode(Node):
             raise ValueError("print_mode=segments but the loaded YAML has no segments.")
         return mode
 
-    def _print_segment_chunk(self, *, cfg, timeout_s, target_start_index, target_count, total_target_count):
+    def _print_group(self, targets, *, volumes_mm3, plane_types, cfg, timeout_s,
+                     target_start_index, total_target_count, refresh_config):
+        if len(volumes_mm3) != len(targets) or len(plane_types) != len(targets):
+            raise ValueError("Target volumes and plane types must match the print group length")
+        result = dict(ok=True, stage="done", targets=len(targets), printed=0,
+                      skipped=0, failed_targets=[], failed_segments=[],
+                      printed_targets=[], stopped_by_user=False)
+        for i, target in enumerate(targets):
+            if not rclpy.ok():
+                result["stopped_by_user"] = True
+                break
+            target_index = target_start_index + i
+            cfg = refresh_config(f"before bead {target_index + 1}")
+            if self._cfg_bool(cfg, "prompt_before_print"):
+                if self._operator_requested_stop(self._target_print_prompt(
+                    target_index=target_index, total_target_count=total_target_count, first=i == 0,
+                )):
+                    result["stopped_by_user"] = True
+                    break
+                cfg = refresh_config(f"after print confirmation for bead {target_index + 1}")
+            self._refresh_execution_config(cfg)
+            # Latch this bead's full settings through extrusion, retract and lift.
+            bead_cfg = dict(cfg, prompt_before_print=False)
+            bead_result = self._print_chunk(
+                [target], volumes_mm3=[volumes_mm3[i]], plane_types=[plane_types[i]],
+                cfg=bead_cfg, timeout_s=self._cfg_optional_timeout(cfg, "timeout_s"),
+                target_start_index=target_index, total_target_count=total_target_count,
+                initial_approach=i == 0,
+            )
+            for key in ("printed", "skipped"):
+                result[key] += int(bead_result.get(key, 0))
+            for key in ("printed_targets", "failed_targets", "failed_segments"):
+                result[key].extend(bead_result.get(key, []))
+            if not bead_result.get("ok", False):
+                result.update(ok=False, stage=bead_result.get("stage", "print_bead"),
+                              error=bead_result.get("error", "unknown"))
+                break
+            if bead_result.get("stopped_by_user", False):
+                result["stopped_by_user"] = True
+                break
+        return result
+
+    def _print_segment_chunk(self, *, cfg, timeout_s, target_start_index, target_count,
+                             total_target_count, initial_approach=True):
         def before_target(local_index):
             if not self._cfg_bool(cfg, "prompt_before_print"):
                 return True
@@ -325,6 +388,7 @@ class PrintYamlAndScanSequenceNode(Node):
             eef_link=self._cfg_str(cfg, "print_eef_link"),
             timeout_s=timeout_s,
             before_target=before_target,
+            initial_approach=initial_approach,
         )
 
     def _print_chunk(
@@ -337,6 +401,7 @@ class PrintYamlAndScanSequenceNode(Node):
         timeout_s: Optional[float],
         target_start_index: int,
         total_target_count: int,
+        initial_approach: bool = True,
     ) -> dict:
         log = self.get_logger()
         target_list = list(targets)
@@ -351,6 +416,7 @@ class PrintYamlAndScanSequenceNode(Node):
                 cfg=cfg, timeout_s=timeout_s,
                 target_start_index=target_start_index, target_count=len(target_list),
                 total_target_count=total_target_count,
+                initial_approach=initial_approach,
             )
 
         print_eef = self._cfg_str(cfg, "print_eef_link")
@@ -425,24 +491,25 @@ class PrintYamlAndScanSequenceNode(Node):
                 "stopped_by_user": True,
             }
 
-        first_approach = self._with_z_offset(target_list[0], approach_z_offset_m)
-        res = self.print_session.run_sync(
-            self.print_session.motion.goto(
-                pose=first_approach,
-                eef=print_eef,
-                motion="LIN",
-                vel_scale=pre_dot_vel_scale,
-                accel_scale=accel_scale,
-                exec=True,
-                enqueue=False,
-            ),
-            timeout_s=timeout_s,
-        )
-        if not res.get("ok", False):
-            log.warn(
-                "[print_yaml_and_scan] Initial print approach failed; continuing target-by-target. "
-                f"error='{res.get('error', 'unknown')}'"
+        if initial_approach:
+            first_approach = self._with_z_offset(target_list[0], approach_z_offset_m)
+            res = self.print_session.run_sync(
+                self.print_session.motion.goto(
+                    pose=first_approach,
+                    eef=print_eef,
+                    motion="LIN",
+                    vel_scale=pre_dot_vel_scale,
+                    accel_scale=accel_scale,
+                    exec=True,
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
             )
+            if not res.get("ok", False):
+                log.warn(
+                    "[print_yaml_and_scan] Initial print approach failed; continuing target-by-target. "
+                    f"error='{res.get('error', 'unknown')}'"
+                )
 
         printed = 0
         skipped = 0
@@ -489,7 +556,7 @@ class PrintYamlAndScanSequenceNode(Node):
                     retract_steps=retract_steps if retract_enabled else 0,
                     steps_per_mm3=extrusion_steps_per_mm3):
                 above = self._with_z_offset(target, dot_z_offset_m)
-                above_vel = pre_dot_vel_scale if i == 0 else dot_vel_scale
+                above_vel = pre_dot_vel_scale if i == 0 and initial_approach else dot_vel_scale
 
                 res = self.print_session.run_sync(
                     self.print_session.motion.goto(
