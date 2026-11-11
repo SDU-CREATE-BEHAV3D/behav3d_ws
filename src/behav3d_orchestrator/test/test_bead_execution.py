@@ -236,7 +236,7 @@ class BeadExecutionTests(unittest.TestCase):
 
     def test_fault_node_preserves_segment_yaml_indices_volumes_and_original_file(self):
         path = self.root / "targets.yaml"
-        path.write_text('segments:\n  - index: 12\n    volume_mm3: 50\n    start:\n      plane: "O(500,500,480) Z(0,0,1)"\n    end:\n      plane: "O(500,500,500) Z(0,0,1)"\n')
+        path.write_text('segments:\n  - index: 12\n    volume_mm3: 50\n    plane_type: E\n    start:\n      plane: "O(500,500,480) Z(0,0,1)"\n    end:\n      plane: "O(500,500,500) Z(0,0,1)"\n')
         original = path.read_bytes()
         node = object.__new__(PrintYamlFaultAndScanSequenceNode)
         node.print_session = self.session
@@ -245,8 +245,84 @@ class BeadExecutionTests(unittest.TestCase):
         self.assertEqual(targets[0].index, 12)
         self.assertEqual(targets[0].volume_mm3, 50)
         self.assertEqual(targets[0].pose.pose.position.z, 0.5)
-        self.assertEqual(node._load_yaml_plane_types(str(path), target_count=1), ["N"])
+        self.assertEqual(node._load_yaml_plane_types(str(path), target_count=1), ["E"])
         self.assertEqual(path.read_bytes(), original)
+
+    def test_yaml_dot_sequence_prints_only_segment_ends_in_index_order(self):
+        path = self.root / "segments.yaml"
+        path.write_text(yaml.safe_dump(dict(segments=[
+            dict(index=12, volume_mm3=27000, plane_type="E",
+                 start=dict(plane="O(500,500,480) Z(0,0,1)"),
+                 end=dict(plane="O(500,500,500) Z(0,0,1)")),
+            dict(index=3, start=dict(plane="O(100,500,480) Z(0,0,1)"),
+                 end=dict(plane="O(100,500,500) Z(0,0,1)")),
+        ])))
+        original = path.read_bytes()
+        node = object.__new__(PrintYamlAndScanSequenceNode)
+        node.print_session = self.session
+        targets = node._load_print_targets(yaml_path=str(path), frame_id="world")
+        self.assertEqual(node._loaded_target_indices, [3, 12])
+        self.assertEqual([t.volume_mm3 for t in targets], [None, 27000])
+        self.assertEqual([t.pose.pose.position.x for t in targets], [0.1, 0.5])
+        self.assertEqual([t.pose.pose.position.z for t in targets], [0.5, 0.5])
+        self.assertEqual(node._load_yaml_plane_types(str(path), target_count=2), ["N", "E"])
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_offline_print_modes_execute_same_segment_yaml_without_rewriting(self):
+        path = self.root / "segments.yaml"
+        rows = []
+        for index, volume in [(20, 25), (3, 50), (12, None)]:
+            row = dict(index=index, start=dict(plane="O(500,500,480) Z(0,0,1)"),
+                       end=dict(plane="O(500,500,500) Z(0,0,1)"))
+            if volume is not None:
+                row["volume_mm3"] = volume
+            rows.append(row)
+        path.write_text(yaml.safe_dump(dict(segments=rows)))
+        original = path.read_bytes()
+        cfg = yaml.safe_load((Path(__file__).resolve().parents[1] / "config/print_yaml_and_scan_sequence_config.yaml").read_text())["print_yaml_and_scan_sequence"]["ros__parameters"]
+        cfg.update(prompt_before_print=False, dot_steps_n=100, segment_steps=100,
+                   extrusion_steps_per_mm3=2, post_dot_retract_steps=20,
+                   post_segment_retract_steps=20, dwell_s=0, post_segment_wait_s=0)
+        node = object.__new__(PrintYamlAndScanSequenceNode)
+        node.print_session = self.session
+        node.get_logger = self.session.node.get_logger
+        targets = node._load_print_targets(yaml_path=str(path), frame_id="world")
+        for mode in ["dots", "segments", "auto"]:
+            with self.subTest(mode=mode):
+                cfg["print_mode"] = mode
+                self.session.commands.clear()
+                self.session.plans.clear()
+                self.session.configure_bead_logging(self.root, f"mode_{mode}/cycle_0001")
+                # Two chunks ensure segment slicing follows the loaded order.
+                for start, end in [(0, 2), (2, 3)]:
+                    result = node._print_chunk(
+                        [t.pose for t in targets[start:end]],
+                        volumes_mm3=[t.volume_mm3 for t in targets[start:end]],
+                        plane_types=["N"] * (end - start), cfg=cfg, timeout_s=5,
+                        target_start_index=start, total_target_count=len(targets))
+                    self.assertTrue(result["ok"])
+                    self.assertEqual(result["printed"], end - start)
+                beads = self.report()["successful_beads"]
+                self.assertEqual([b["index"] for b in beads], [3, 12, 20])
+                self.assertEqual([b["volume_mm3"] for b in beads], [50, 50, 25])
+                commands = [c.payload["steps"] for c in self.session.commands if c.kind == "print_steps"]
+                self.assertEqual(commands, [120, 20, 120, 20, 70, 20])
+                self.assertEqual([p["segment"].index for p in self.session.plans],
+                                 [] if mode == "dots" else [3, 12, 20])
+                self.assertEqual(path.read_bytes(), original)
+
+    def test_offline_print_mode_rejects_invalid_mode_and_segments_without_paths(self):
+        for cls in [PrintYamlAndScanSequenceNode, PrintYamlFaultAndScanSequenceNode]:
+            node = object.__new__(cls)
+            node._loaded_segments = []
+            for mode in ["segment", "segments"]:
+                with self.subTest(node=cls.__name__, mode=mode), self.assertRaises(ValueError):
+                    node._resolve_print_mode(dict(print_mode=mode))
+            self.assertEqual(node._resolve_print_mode(dict(print_mode="auto")), "dots")
+            self.assertEqual(node._resolve_print_mode({}), "dots")
+            node._loaded_segments = [TargetSegment(1, pose(z=0.48), pose())]
+            self.assertEqual(node._resolve_print_mode({}),
+                             "segments" if cls is PrintYamlFaultAndScanSequenceNode else "dots")
 
     def test_legacy_yaml_node_also_logs_actual_extrusion(self):
         cfg = yaml.safe_load((Path(__file__).resolve().parents[1] / "config/print_yaml_and_scan_sequence_config.yaml").read_text())["print_yaml_and_scan_sequence"]["ros__parameters"]
@@ -261,15 +337,18 @@ class BeadExecutionTests(unittest.TestCase):
         self.assertEqual(row["index"], 73)
         self.assertAlmostEqual(row["volume_mm3"], round(50 * cfg["extrusion_steps_per_mm3"]) / cfg["extrusion_steps_per_mm3"])
 
-    def test_fault_sequence_runs_both_schemas_then_scans_once_and_publishes_region(self):
-        for segments in [False, True]:
-            with self.subTest(segments=segments):
+    def test_fault_sequence_print_modes_reduce_material_then_scan_once_and_publish_region(self):
+        for segments, mode in [(False, "dots"), (False, "auto"),
+                               (True, "dots"), (True, "segments"), (True, "auto")]:
+            with self.subTest(segments=segments, mode=mode):
                 self.region()
+                self.session.plans.clear()
                 cfg = yaml.safe_load((Path(__file__).resolve().parents[1] / "config/print_yaml_fault_and_scan_sequence_config.yaml").read_text())["print_yaml_fault_and_scan_sequence"]["ros__parameters"]
+                prefix = f"fault_{'segment' if segments else 'dot'}_{mode}"
                 cfg.update(fault_region_mesh_path=str(self.root / "region.stl"), prompt_before_print=False,
                            points_per_cycle=2, extrusion_steps_per_mm3=2, segment_steps_per_second=60,
                            dot_steps_n=100, post_dot_retract_steps=20, post_segment_retract_steps=20,
-                           run_reconstruction=False, scan_root_folder="@session/fault_segment" if segments else "@session/fault_dot")
+                           run_reconstruction=False, scan_root_folder=f"@session/{prefix}", print_mode=mode)
                 source = self.root / "targets.yaml"
                 rows = []
                 for index, x in [(20, 500), (30, 2000), (40, 500)]:
@@ -303,8 +382,9 @@ class BeadExecutionTests(unittest.TestCase):
                 self.assertEqual(markers[0].header.frame_id, "world")
                 self.assertLessEqual(max(p.x for p in markers[0].points), 1)
                 data = yaml.safe_load((self.root / "print_manifest.yaml").read_text())["cycles"]
-                prefix = "fault_segment" if segments else "fault_dot"
                 success = [row for key, cycle in data.items() if key.startswith(prefix)
                            for row in cycle["successful_beads"]]
                 self.assertEqual([row["index"] for row in success], [20, 30, 40])
                 self.assertEqual([row["volume_mm3"] for row in success], [30, 50, 30])
+                self.assertEqual([p["segment"].index for p in self.session.plans],
+                                 [20, 30, 40] if segments and mode != "dots" else [])

@@ -22,6 +22,7 @@ from .src.extrusion_calibration import (
 )
 from .src.print_session import PrintSession
 from .src.scan_session import ScanSession
+from .src.yaml_session import DotTarget
 
 try:
     import yaml
@@ -39,6 +40,7 @@ class PrintYamlAndScanSequenceNode(Node):
     """
 
     config_filename = CONFIG_FILENAME
+    default_print_mode = "dots"
 
     def __init__(self, node_name="print_yaml_and_scan_sequence"):
         super().__init__(node_name)
@@ -82,6 +84,7 @@ class PrintYamlAndScanSequenceNode(Node):
             )
             targets = [target.pose for target in dot_targets]
             target_volumes_mm3 = [target.volume_mm3 for target in dot_targets]
+            print_mode = self._resolve_print_mode(cfg)
             if not targets:
                 raise ValueError(f"No valid targets found in YAML: {yaml_path}")
             plane_types = self._load_yaml_plane_types(yaml_path, target_count=len(targets))
@@ -90,6 +93,7 @@ class PrintYamlAndScanSequenceNode(Node):
                 "[print_yaml_and_scan] Starting sequence: "
                 f"config='{config_path}', yaml='{yaml_path}', frame='{frame_id}', "
                 f"targets={len(targets)}, points_per_cycle={points_per_cycle}, "
+                f"print_mode={print_mode}, "
                 f"scan_enabled={self._cfg_bool(cfg, 'enable_scan')}, "
                 f"run_reconstruction={self._cfg_bool(cfg, 'run_reconstruction')}, "
                 f"plane_types={self._format_plane_type_counts(plane_types)}"
@@ -270,9 +274,58 @@ class PrintYamlAndScanSequenceNode(Node):
         cfg["scan_root_folder"] = str(self.print_session.session_child(self._cfg_str(cfg, "scan_root_folder"), self._execution_session))
 
     def _load_print_targets(self, *, yaml_path, frame_id):
-        targets = self.print_session.parse_yaml_dot_targets(yaml_path=yaml_path, frame_id=frame_id)
+        # Keep one target per segment for chunking and dot deposition at its
+        # end; retain both endpoints for segment execution.
+        self._loaded_segments = self.print_session.parse_yaml_segments(yaml_path=yaml_path, frame_id=frame_id)
+        if self._loaded_segments:
+            targets = [DotTarget(index=s.index, pose=s.end, volume_mm3=s.volume_mm3) for s in self._loaded_segments]
+        else:
+            targets = self.print_session.parse_yaml_dot_targets(yaml_path=yaml_path, frame_id=frame_id)
         self._loaded_target_indices = [target.index for target in targets]
         return targets
+
+    def _resolve_print_mode(self, cfg):
+        mode = str(cfg.get("print_mode", self.default_print_mode)).strip().lower()
+        if mode not in ("auto", "segments", "dots"):
+            raise ValueError("print_mode must be one of: auto, segments, dots")
+        has_segments = bool(getattr(self, "_loaded_segments", []))
+        if mode == "auto":
+            mode = "segments" if has_segments else "dots"
+        if mode == "segments" and not has_segments:
+            raise ValueError("print_mode=segments but the loaded YAML has no segments.")
+        return mode
+
+    def _print_segment_chunk(self, *, cfg, timeout_s, target_start_index, target_count, total_target_count):
+        def before_target(local_index):
+            if not self._cfg_bool(cfg, "prompt_before_print"):
+                return True
+            return not self._operator_requested_stop(self._target_print_prompt(
+                target_index=target_start_index + local_index,
+                total_target_count=total_target_count,
+                first=local_index == 0,
+            ))
+
+        self.get_logger().info(
+            f"[print_yaml_and_scan] Printing {target_count} segments (print_mode=segments)."
+        )
+        return self.print_session.run_print_segments(
+            segments=self._loaded_segments[target_start_index:target_start_index + target_count],
+            segment_steps=self._cfg_int(cfg, "segment_steps"),
+            steps_per_mm3=self._cfg_float(cfg, "extrusion_steps_per_mm3"),
+            steps_per_second=self._cfg_int(cfg, "segment_steps_per_second"),
+            approach_z_offset_m=self._cfg_float(cfg, "segment_approach_z_offset_m"),
+            travel_z_offset_m=self._cfg_float(cfg, "segment_travel_z_offset_m"),
+            approach_vel_scale=self._cfg_float(cfg, "segment_approach_vel_scale"),
+            travel_vel_scale=self._cfg_float(cfg, "segment_travel_vel_scale"),
+            print_vel_scale=self._cfg_float(cfg, "segment_print_vel_scale"),
+            accel_scale=self._cfg_float(cfg, "segment_accel_scale"),
+            post_segment_wait_s=self._cfg_float(cfg, "post_segment_wait_s"),
+            post_segment_retract_steps=self._cfg_int(cfg, "post_segment_retract_steps"),
+            post_segment_retract_speed=self._cfg_int(cfg, "post_segment_retract_speed"),
+            eef_link=self._cfg_str(cfg, "print_eef_link"),
+            timeout_s=timeout_s,
+            before_target=before_target,
+        )
 
     def _print_chunk(
         self,
@@ -292,6 +345,13 @@ class PrintYamlAndScanSequenceNode(Node):
         volume_list = list(volumes_mm3)
         if len(volume_list) != len(target_list):
             raise ValueError("volumes_mm3 length must match targets")
+
+        if self._resolve_print_mode(cfg) == "segments":
+            return self._print_segment_chunk(
+                cfg=cfg, timeout_s=timeout_s,
+                target_start_index=target_start_index, target_count=len(target_list),
+                total_target_count=total_target_count,
+            )
 
         print_eef = self._cfg_str(cfg, "print_eef_link")
         dot_steps_n = self._cfg_int(cfg, "dot_steps_n")
@@ -1036,7 +1096,16 @@ class PrintYamlAndScanSequenceNode(Node):
 
         path = self.print_session._resolve_yaml_path(yaml_path)
         data = self.print_session._load_yaml_data(path)
-        items = self.print_session._extract_target_items(data)
+        if isinstance(data, dict) and isinstance(data.get("segments"), list):
+            # Match the segment parser's ordering and one-dot-per-end mapping.
+            items = []
+            for pos, item in enumerate(data["segments"]):
+                row = dict(item)
+                if row.get("index") is None:
+                    row["index"] = pos
+                items.append(row)
+        else:
+            items = self.print_session._extract_target_items(data)
 
         ordered: list[tuple[int, int, str]] = []
         for pos, item in enumerate(items):

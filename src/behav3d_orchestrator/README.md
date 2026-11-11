@@ -7,14 +7,17 @@ and printing through the shared session classes in `behav3d_orchestrator/src/`.
 
 `print_yaml_fault_and_scan_sequence` reuses the YAML-print sequence, scan and
 reconstruction flow. It prints all input beads in `points_per_cycle` groups,
-then performs one optional final scan. Flat `targets:` print stationary dots;
-nested `segments:` print the saved start-to-end motion. Segment starts are not
-flattened into additional dots, and segment volumes remain attached to their
-beads. It never rewrites the input target YAML.
+then performs one optional final scan. `print_mode: dots` deposits once at each
+segment end or flat target; `segments` prints the saved start-to-end motion;
+`auto` selects segments for segment YAML and dots otherwise. Omitted mode keeps
+the fault sequence's previous `auto` behavior. Segment starts are not flattened
+into additional dots, and segment volumes remain attached to their beads. It
+never rewrites the input target YAML.
 
 Configure `config/print_yaml_fault_and_scan_sequence_config.yaml`:
 
 - `yaml_path`: original target/segment YAML.
+- `print_mode`: `dots`, `segments`, or `auto`, matching the geometry loop.
 - `fault_region_mesh_path`: a closed, watertight STL or other Open3D triangle
   mesh. Relative paths are resolved from the config directory.
 - `fault_region_mesh_scale`: `0.001` for mesh coordinates authored in mm,
@@ -202,6 +205,16 @@ consistency, and the opposite-sign suggested correction. A final cycle without
 a following scan and contour remains pending.
 
 ## Dot Extrusion Contract
+
+`print_yaml_and_scan_sequence` selects execution with `print_mode`, keeping the
+input YAML unchanged. `dots` deposits once at each segment's `end` pose (or each
+flat target); `segments` prints along each start-to-end path and requires segment
+YAML; `auto` selects segments for segment YAML and dots otherwise. Omitted mode
+defaults to `dots` for existing offline configs. The mode is read each cycle.
+Segment indices and optional `volume_mm3` are preserved in both modes. In dots
+mode, the segment's `plane_type` selects the N/E fallback steps and defaults to N.
+Segment mode uses `segment_steps`, `segment_steps_per_second`, and the
+`segment_*` motion and retract parameters, as in the geometry loop config.
 
 `dot_steps` always means net bead material. Do not add retract steps in a
 configuration file.

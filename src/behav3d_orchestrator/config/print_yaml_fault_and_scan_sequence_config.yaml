@@ -5,7 +5,11 @@ print_yaml_fault_and_scan_sequence:
     #   2) print all YAML targets, grouped by points_per_cycle
     #   3) scan once after the final target
     #   4) reconstruct/update world mesh
-    yaml_path: /home/lab/behav3d_ws/yaml/A03/Test.yaml
+    # dots: one stationary deposit at each segment end (or each flat target).
+    # segments: extrude along each start-to-end path; requires segment YAML.
+    # auto: segments for segment YAML, otherwise dots.
+    print_mode: dots
+    yaml_path: /home/lab/behav3d_ws/yaml/E01/rule_based_targets.yaml
     frame_id: world
     points_per_cycle: 1
     home_before: true
@@ -19,9 +23,11 @@ print_yaml_fault_and_scan_sequence:
     # Dot print parameters. The N/E values are net bead material steps; do not
     # add retract manually. The forward command includes retract automatically,
     # then the configured retract is executed after deposition.
+    # E01 pilot: 20 mm target height is encoded by the YAML geometry.
+    # 27 mL = 27000 mm3; round(27000 * 0.8148733086) = 22002 net steps.
     print_eef_link: extruder_tcp
-    dot_steps_n: 100
-    dot_steps_e: 18800
+    dot_steps_n: 22002
+    dot_steps_e: 22002
     # Used only when a YAML target provides volume_mm3; it overrides N/E steps.
     # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
     # Do not use this conversion constant to tune extrusion. Adjust the source
@@ -29,13 +35,13 @@ print_yaml_fault_and_scan_sequence:
     extrusion_steps_per_mm3: 0.8148733086
     dot_speed: 2800
     # Compensation is automatic when both retract values are positive.
-    post_dot_retract_steps: 200
-    post_dot_retract_speed: 10000
+    post_dot_retract_steps: 4000
+    post_dot_retract_speed: 7000
     approach_z_offset_m: 0.1
     dot_z_offset_m: 0.04
     pre_dot_vel_scale: 0.30
-    dot_vel_scale: 0.2
-    print_accel_scale: 0.2
+    dot_vel_scale: 0.1
+    print_accel_scale: 0.1
     dwell_s: 0.3
     print_publish_markers: true
     print_axis_length: 0.05
@@ -144,16 +150,17 @@ print_yaml_fault_and_scan_sequence:
     fault_region_mesh_scale: 0.001
     extrusion_reduction_pct: 40.0
 
-    # Execute the saved start/end segment without modifying the source YAML.
-    segment_steps: 6000
-    segment_steps_per_second: 2900
-    segment_approach_z_offset_m: 0.35
-    segment_travel_z_offset_m: 0.08
-    segment_approach_vel_scale: 0.15
-    segment_travel_vel_scale: 0.25
+    # Active for print_mode=segments, or auto with segment YAML.
+    # Net material per segment; volume_mm3 in the YAML overrides this fallback.
+    segment_steps: 22002
+    segment_steps_per_second: 2800
+    segment_approach_z_offset_m: 0.1
+    segment_travel_z_offset_m: 0.04
+    segment_approach_vel_scale: 0.30
+    segment_travel_vel_scale: 0.1
     segment_print_vel_scale: 0.01
-    segment_accel_scale: 0.15
-    post_segment_wait_s: 0.2
+    segment_accel_scale: 0.1
+    post_segment_wait_s: 0.3
     post_segment_retract_steps: 4000
-    post_segment_retract_speed: 6000
+    post_segment_retract_speed: 7000
 
