@@ -49,10 +49,23 @@ class PrintSession(YamlSession):
             return None
         with self._print_manifest_lock:
             data = yaml.safe_load(self._print_manifest_path.read_text(encoding="utf-8")) if self._print_manifest_path.exists() else {
-                "schema_version": 1,
-                "volume_basis": "Completed PrintSteps responses divided by steps_per_mm3; not a physical flow measurement. Unknown responses remain null.",
+                "schema_version": 2,
                 "cycles": {},
             }
+            data.update(
+                schema_version=2,
+                volume_basis="Net PrintSteps response counts after subtracting retract, divided by extrusion_steps_per_mm3; not a physical flow measurement. Unknown net amounts remain null.",
+                step_accounting={
+                    "nominal_net_steps": "Net bead steps before fault reduction; excludes retract compensation.",
+                    "requested_net_steps": "Net bead steps after fault reduction; excludes retract compensation.",
+                    "commanded_forward_steps": "Requested advance = requested_net_steps + commanded_retract_steps. Includes compensation; not evidence the command executed.",
+                    "commanded_retract_steps": "Requested reverse compensation; zero when retract is disabled or extrusion is suppressed.",
+                    "accepted_steps": "Counts from successful PrintSteps replies; zero if not sent, null if the reply is missing or failed.",
+                    "accepted_net_steps": "max(0, accepted_forward_steps - accepted_retract_steps); null when the required replies are unknown.",
+                    "net_volume_mm3": "accepted_net_steps / extrusion_steps_per_mm3. volume_mm3 is a compatibility alias for this net estimate.",
+                    "legacy_records": "Only record_schema_version: 2 entries contain the full accounting. Earlier records are preserved without inferred retract values.",
+                },
+            )
             bucket = data["cycles"].setdefault(str(self.bead_cycle), {"attempted_beads": [], "successful_beads": []})
             attempts = bucket["attempted_beads"]
             if attempt_id is None:
@@ -123,8 +136,11 @@ class PrintSession(YamlSession):
         attempt = getattr(self, "_active_bead", None)
         is_steps = item.kind == "print_steps"
         reverse = bool(item.payload.get("reverse", False)) if is_steps else False
-        if attempt is not None and is_steps and not reverse:
-            attempt.forward_started()
+        if attempt is not None and is_steps:
+            if reverse:
+                attempt.retract_started()
+            else:
+                attempt.forward_started()
         if is_steps and int(item.payload["steps"]) == 0:
             result = {"ok": True, "metrics": {"accepted_steps": 0}}
         else:
@@ -1405,11 +1421,16 @@ class _BeadAttempt:
         self.started = False
         self.forward_result = self.retract_result = None
         self.motion_ok = True
-        self.record = dict(index=int(index), target=_pose_record(target),
+        self.record = dict(record_schema_version=2, index=int(index), target=_pose_record(target),
+                           extrusion_steps_per_mm3=calibration,
+                           nominal_net_steps=int(nominal_steps),
+                           requested_net_steps=int(material_steps),
                            nominal_volume_mm3=int(nominal_steps) / calibration,
                            requested_volume_mm3=int(material_steps) / calibration,
                            commanded_forward_steps=int(material_steps) + int(retract_steps),
-                           volume_mm3=0.0, extruded=False, status="attempted")
+                           commanded_retract_steps=int(retract_steps),
+                           accepted_forward_steps=0, accepted_retract_steps=0, accepted_net_steps=0,
+                           net_volume_mm3=0.0, volume_mm3=0.0, extruded=False, status="attempted")
         if start is not None:
             self.record["start"] = _pose_record(start)
         self.persist()
@@ -1419,7 +1440,13 @@ class _BeadAttempt:
 
     def forward_started(self):
         self.started = True
-        self.record.update(volume_mm3=None, extruded=None, status="unknown")
+        self.record.update(accepted_forward_steps=None, accepted_net_steps=None,
+                           net_volume_mm3=None, volume_mm3=None, extruded=None, status="unknown")
+        self.persist()
+
+    def retract_started(self):
+        self.record.update(accepted_retract_steps=None, accepted_net_steps=None,
+                           net_volume_mm3=None, volume_mm3=None)
         self.persist()
 
     def observe(self, result, *, reverse=False, motion=False):
@@ -1429,6 +1456,10 @@ class _BeadAttempt:
             self.retract_result = result
         else:
             self.forward_result = result
+        if not motion:
+            steps = result.get("metrics", {}).get("accepted_steps") if result.get("ok", False) else None
+            self.record["accepted_retract_steps" if reverse else "accepted_forward_steps"] = (
+                int(steps) if steps is not None else None)
         if not result.get("ok", False):
             self.record["error"] = str(result.get("error") or result.get("stage") or "command failed")
 
@@ -1440,14 +1471,17 @@ class _BeadAttempt:
         accepted = forward.get("metrics", {}).get("accepted_steps")
         retracted = reverse.get("metrics", {}).get("accepted_steps") if self.retract_steps else 0
         if not self.started:
-            self.record.update(volume_mm3=0.0, extruded=False, status="not_extruded")
+            self.record.update(accepted_net_steps=0, net_volume_mm3=0.0,
+                               volume_mm3=0.0, extruded=False, status="not_extruded")
         elif (forward.get("ok", False) and accepted is not None
               and (not self.retract_steps or reverse.get("ok", False) and retracted is not None)):
             net = max(0, int(accepted) - int(retracted))
             outcome = "motion_unknown" if self.motion_ok is None else "success" if self.motion_ok else "motion_failed"
-            self.record.update(volume_mm3=net / self.calibration, extruded=net > 0,
+            self.record.update(accepted_net_steps=net, net_volume_mm3=net / self.calibration,
+                               volume_mm3=net / self.calibration, extruded=net > 0,
                                status=outcome if net else "not_extruded")
         else:
-            self.record.update(volume_mm3=None, extruded=None, status="unknown")
+            self.record.update(accepted_net_steps=None, net_volume_mm3=None,
+                               volume_mm3=None, extruded=None, status="unknown")
         self.persist()
 

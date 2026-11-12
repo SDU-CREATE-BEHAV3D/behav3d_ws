@@ -123,6 +123,71 @@ class BeadExecutionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             FaultSession().load_region(self.root / "open.ply")
 
+    def test_manifest_separates_net_forward_and_retract_for_dots_and_segments(self):
+        for mode in ["dots", "segments"]:
+            for reduction in [0, 40]:
+                with self.subTest(mode=mode, reduction=reduction):
+                    self.session.fault_session = self.region(reduction) if reduction else None
+                    self.session.configure_bead_logging(self.root, f"accounting/{mode}_{reduction}")
+                    getattr(self, mode)()
+                    row = self.report()["successful_beads"][0]
+                    net = 100 - reduction
+                    self.assertEqual(row["record_schema_version"], 2)
+                    self.assertEqual(row["extrusion_steps_per_mm3"], 2)
+                    self.assertEqual(row["nominal_net_steps"], 100)
+                    self.assertEqual(row["requested_net_steps"], net)
+                    self.assertEqual(row["commanded_forward_steps"], net + 20)
+                    self.assertEqual(row["commanded_retract_steps"], 20)
+                    self.assertEqual(row["accepted_forward_steps"], net + 20)
+                    self.assertEqual(row["accepted_retract_steps"], 20)
+                    self.assertEqual(row["accepted_net_steps"], net)
+                    self.assertEqual(row["net_volume_mm3"], net / 2)
+                    self.assertEqual(row["volume_mm3"], row["net_volume_mm3"])
+
+    def test_manifest_uses_response_counts_and_handles_disabled_retract(self):
+        self.session.failure = lambda item: dict(ok=True, metrics=dict(accepted_steps=110)) if (
+            item.kind == "print_steps" and not item.payload.get("reverse")) else None
+        self.dots()
+        row = self.report()["successful_beads"][0]
+        self.assertEqual(row["requested_net_steps"], 100)
+        self.assertEqual(row["commanded_forward_steps"], 120)
+        self.assertEqual(row["accepted_forward_steps"], 110)
+        self.assertEqual(row["accepted_net_steps"], 90)
+        self.assertEqual(row["net_volume_mm3"], 45)
+        self.session.failure = None
+        self.session.configure_bead_logging(self.root, "no_retract")
+        self.session.run_print_dots_targets(targets=[pose()], dot_steps=100,
+            steps_per_mm3=2, post_dot_retract_steps=20, post_dot_retract_speed=0, dwell_s=0)
+        row = self.report()["successful_beads"][0]
+        self.assertEqual(row["commanded_forward_steps"], 100)
+        self.assertEqual(row["commanded_retract_steps"], 0)
+        self.assertEqual(row["accepted_retract_steps"], 0)
+        self.assertEqual(row["accepted_net_steps"], 100)
+
+    def test_manifest_schema_upgrade_preserves_legacy_bead_records(self):
+        self.dots()
+        manifest = self.root / "print_manifest.yaml"
+        data = yaml.safe_load(manifest.read_text())
+        data["schema_version"] = 1
+        data.pop("step_accounting")
+        added = {"record_schema_version", "extrusion_steps_per_mm3", "nominal_net_steps",
+                 "requested_net_steps", "commanded_retract_steps", "accepted_forward_steps",
+                 "accepted_retract_steps", "accepted_net_steps", "net_volume_mm3"}
+        bucket = data["cycles"][self.session.bead_cycle]
+        for rows in bucket.values():
+            for row in rows:
+                for key in added:
+                    row.pop(key)
+        legacy = yaml.safe_load(yaml.safe_dump(bucket))
+        manifest.write_text(yaml.safe_dump(data))
+        self.session.configure_bead_logging(self.root, "new_cycle")
+        self.dots()
+        updated = yaml.safe_load(manifest.read_text())
+        self.assertEqual(updated["schema_version"], 2)
+        self.assertIn("net_volume_mm3", updated["step_accounting"])
+        self.assertEqual(updated["cycles"]["field_loop/cycle_0001"], legacy)
+        self.assertEqual(updated["cycles"]["new_cycle"]["successful_beads"][0]["record_schema_version"], 2)
+
     def test_dot_reduction_changes_only_material_and_preserves_nominal_duration(self):
         self.session.fault_session = self.region()
         self.dots(target_indices=[91])
@@ -154,6 +219,10 @@ class BeadExecutionTests(unittest.TestCase):
         row = self.report()["attempted_beads"][0]
         self.assertEqual(row["volume_mm3"], 0)
         self.assertFalse(row["extruded"])
+        self.assertEqual(row["accepted_forward_steps"], 0)
+        self.assertEqual(row["accepted_retract_steps"], 0)
+        self.assertEqual(row["accepted_net_steps"], 0)
+        self.assertEqual(row["net_volume_mm3"], 0)
         self.assertFalse(self.report()["successful_beads"])
         self.assertFalse(any(i.kind == "print_steps" for i in self.session.commands))
 
@@ -175,7 +244,28 @@ class BeadExecutionTests(unittest.TestCase):
         row = self.report()["attempted_beads"][0]
         self.assertIsNone(row["extruded"])
         self.assertIsNone(row["volume_mm3"])
+        self.assertIsNone(row["accepted_forward_steps"])
+        self.assertIsNone(row["accepted_net_steps"])
+        self.assertIsNone(row["net_volume_mm3"])
         self.assertFalse(self.report()["successful_beads"])
+
+    def test_retract_timeout_retains_forward_count_and_keeps_net_unknown(self):
+        def failure(item):
+            if item.kind == "print_steps" and item.payload.get("reverse"):
+                row = self.report()["attempted_beads"][-1]
+                self.assertEqual(row["accepted_forward_steps"], 120)
+                self.assertIsNone(row["accepted_retract_steps"])
+                self.assertIsNone(row["accepted_net_steps"])
+                self.assertIsNone(row["net_volume_mm3"])
+                raise TimeoutError("retract reply lost")
+        self.session.failure = failure
+        with self.assertRaises(TimeoutError):
+            self.dots()
+        row = self.report()["attempted_beads"][0]
+        self.assertEqual(row["accepted_forward_steps"], 120)
+        self.assertIsNone(row["accepted_retract_steps"])
+        self.assertIsNone(row["accepted_net_steps"])
+        self.assertIsNone(row["net_volume_mm3"])
 
     def test_missing_acknowledged_steps_or_failed_retract_are_not_success(self):
         for mode in ["missing", "retract"]:
@@ -185,6 +275,12 @@ class BeadExecutionTests(unittest.TestCase):
                     dict(ok=False, error="retract failed")) if i.kind == "print_steps" and (mode == "missing" or i.payload.get("reverse")) else None
                 self.dots()
                 self.assertIsNone(self.report()["attempted_beads"][0]["volume_mm3"])
+                row = self.report()["attempted_beads"][0]
+                self.assertIsNone(row["accepted_retract_steps"])
+                self.assertIsNone(row["accepted_net_steps"])
+                self.assertIsNone(row["net_volume_mm3"])
+                if mode == "retract":
+                    self.assertEqual(row["accepted_forward_steps"], 120)
                 self.assertFalse(self.report()["successful_beads"])
 
     def test_motion_failure_is_not_success_even_when_extrusion_completes(self):
@@ -219,6 +315,11 @@ class BeadExecutionTests(unittest.TestCase):
         self.segments()
         self.assertFalse(any(i.kind == "print_steps" for i in self.session.commands))
         self.assertEqual(self.report()["attempted_beads"][0]["volume_mm3"], 0)
+        row = self.report()["attempted_beads"][0]
+        self.assertEqual(row["requested_net_steps"], 0)
+        self.assertEqual(row["commanded_forward_steps"], 0)
+        self.assertEqual(row["commanded_retract_steps"], 0)
+        self.assertEqual(row["accepted_net_steps"], 0)
         self.assertFalse(self.report()["successful_beads"])
 
     def test_operator_stop_does_not_create_attempted_beads(self):

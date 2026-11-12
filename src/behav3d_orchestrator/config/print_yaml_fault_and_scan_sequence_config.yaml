@@ -9,27 +9,27 @@ print_yaml_fault_and_scan_sequence:
     # segments: extrude along each start-to-end path; requires segment YAML.
     # auto: segments for segment YAML, otherwise dots.
     print_mode: dots
-    yaml_path: /home/lab/behav3d_ws/yaml/E01/rule_based_targets.yaml
+    yaml_path: /home/lab/behav3d_ws/yaml/E01/targets_rule_based.yaml
     frame_id: world
     # Reload before each bead/scan and after their ENTER confirmations.
     # Group size edits apply to the next group; target file/frame need a restart.
-    points_per_cycle: 5  # Targets to print between scans.
+    points_per_cycle: 7  # Targets to print between scans.
     home_before: true
     home_after: true
     timeout_s: 0.0
     debug_mode: false
     # When true, require ENTER before moving to each print target.
-    prompt_before_print: true
+    prompt_before_print: false
     prompt_before_scan: false
 
     # Dot print parameters. The N/E values are net bead material steps; do not
     # add retract manually. The forward command includes retract automatically,
     # then the configured retract is executed after deposition.
-    # E01 pilot: 20 mm target height is encoded by the YAML geometry.
-    # 27 mL = 27000 mm3; round(27000 * 0.8148733086) = 22002 net steps.
+    # E02 campaign: nominal bead height 20 mm, spacing 35 mm; geometry comes from YAML.
+    # 19002 net steps / 0.8148733086 / 1000 = 23.319 mL before fault reduction.
     print_eef_link: extruder_tcp
-    dot_steps_n: 22002
-    dot_steps_e: 22002
+    dot_steps_n: 19002
+    dot_steps_e: 19002
     # Used only when a YAML target provides volume_mm3; it overrides N/E steps.
     # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
     # Do not use this conversion constant to tune extrusion. Adjust the source
@@ -38,7 +38,7 @@ print_yaml_fault_and_scan_sequence:
     dot_speed: 2800
     # Compensation is automatic when both retract values are positive.
     post_dot_retract_steps: 4000
-    post_dot_retract_speed: 7000
+    post_dot_retract_speed: 6000
     approach_z_offset_m: 0.1
     dot_z_offset_m: 0.04
     pre_dot_vel_scale: 0.30
@@ -76,14 +76,14 @@ print_yaml_fault_and_scan_sequence:
     scan_follow_printed_z: false
 
     # Grid sweep parameters from scan_sequence_test.yaml.
-    grid_width: 1.50
-    grid_height: 0.55
-    grid_center_x: 0.01
-    grid_center_y: 0.85
+    grid_width: 0.40
+    grid_height: 0.40
+    grid_center_x: 0.00
+    grid_center_y: 0.83
     grid_center_z: -0.05
-    grid_z_off: 0.60
-    grid_nx: 13
-    grid_ny: 5
+    grid_z_off: 0.50
+    grid_nx: 4
+    grid_ny: 4
     grid_row_major: false
     grid_use_tf_orientation: true
 
@@ -148,7 +148,7 @@ print_yaml_fault_and_scan_sequence:
 
     # Closed region in the target frame. Relative paths use this config folder.
     # Coordinates in mm by default; use scale 1.0 for meter-authored meshes.
-    fault_region_mesh_path: ""
+    fault_region_mesh_path: /home/lab/behav3d_ws/mesh/fault_region.stl
     fault_region_mesh_scale: 0.001
     extrusion_reduction_pct: 40.0
 

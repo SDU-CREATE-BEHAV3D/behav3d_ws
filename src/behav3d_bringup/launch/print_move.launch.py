@@ -173,7 +173,7 @@ def generate_launch_description():
         # Starts Pilz Industrial Motion Planner MoveGroupSequenceAction and MoveGroupSequenceService servers
     # RViz
     rviz_config_file = (
-        get_package_share_directory("ur20_workcell_moveit_config") + "/config/move_group_v2.rviz"
+        get_package_share_directory("ur20_workcell_moveit_config") + "/config/move_group_v3.rviz"
     )
     rviz_node = Node(
         package="rviz2",

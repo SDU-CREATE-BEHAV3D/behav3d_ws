@@ -73,14 +73,36 @@ to camera captures.
 
 Each cycle contains `attempted_beads` and `successful_beads`. Entries record
 the original target index, endpoint pose, segment start when applicable,
-nominal/requested material volumes, commanded forward steps, outcome and
-`volume_mm3`. An attempt is persisted before approach/planning; a pending
+nominal/requested net material steps and volumes, forward and retract counts,
+the bead's `extrusion_steps_per_mm3`, outcome, and `net_volume_mm3`. An attempt is persisted before approach/planning; a pending
 unknown-volume record is persisted before requesting extrusion. Updates replace
 the report atomically, retaining earlier cycles and repeat attempts.
 
-`volume_mm3` is the completed forward-step response minus the completed retract
-response, divided by `steps_per_mm3`. It is a calibrated command-based estimate,
-not measured material flow. Successful beads require a positive confirmed net
+Schema 2 writes a `step_accounting` legend and marks new beads with
+`record_schema_version: 2`. Counts distinguish requested commands from replies:
+
+| Field | Meaning |
+| --- | --- |
+| `nominal_net_steps` | Configured or volume-derived net material, before fault reduction. |
+| `requested_net_steps` | Net material after fault reduction, excluding retract compensation. |
+| `commanded_forward_steps` | Requested net material **plus** retract compensation. |
+| `commanded_retract_steps` | Requested reverse count, or zero if disabled/suppressed. |
+| `accepted_forward_steps`, `accepted_retract_steps` | Counts from successful PrintSteps responses. |
+| `accepted_net_steps` | Forward reply minus retract reply, clamped to zero. |
+| `net_volume_mm3` | Accepted net steps divided by this bead's conversion constant. |
+
+For example, 19,002 net steps with 4,000 retract steps produce an advance of
+23,002 and a reverse of 4,000: the net remains **19,002**. The advance includes
+retract compensation and must not be interpreted as net deposited material.
+`commanded_*` describes requested counts, including attempts that failed before
+extrusion; `accepted_*` is zero when no command ran and null when its reply is
+missing or failed. Net counts/volume remain null if a required reply is unknown.
+
+`volume_mm3` remains a compatibility alias for `net_volume_mm3`. Both represent
+the net balance of completed PrintSteps responses, not measured material flow.
+Existing bead records are retained unchanged when an older manifest is reopened;
+missing historical retract/calibration values are not inferred from current
+settings. Successful beads require a positive confirmed net
 amount, confirmed retract when enabled and confirmed segment motion. A failed
 lift after completed deposition does not erase that completed bead.
 
