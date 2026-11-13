@@ -32,6 +32,7 @@ from .utils.intrinsics import load_intrinsics, intrinsics_matrix
 from .utils.extrinsics import load_extrinsics
 from .utils.image_loader import load_images
 from .utils.integration import visualize_camera_poses
+from .utils.rectification import rectify_images as rectify_image_batch, validate_alignment_metadata
 
 DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260113_170839"
 DEFAULT_SCAN_FOLDER = "manual_caps"
@@ -207,6 +208,7 @@ class TSDF_Integration():
             depth_scale=1000.0,
             depth_bias_m=0.0,
             device='CPU:0',
+            rectify_images=False,
         ):
         # initialize session and load poses
         self.session = session
@@ -221,12 +223,15 @@ class TSDF_Integration():
         # load depth images
         self.image_paths = construct_image_paths(self.manifest, self.session, image_type="depth")
         self.images = load_images(self.image_paths, image_type="depth", library="cv2")
-        self._postprocess_depth_images_in_place()
 
         # load intrinsics
         self.device = o3c.Device(device)
         self.width, self.height, self.K, self.D = load_intrinsics(self.session.depth_intrinsics_path)
         self.pinhole_matrix = intrinsics_matrix(self.width, self.height, self.K)
+        if rectify_images:
+            self.images = rectify_image_batch(self.images, self.K, self.D, (self.width, self.height), depth=True)
+        self._postprocess_depth_images_in_place()
+        validate_alignment_metadata(C2D_DIR, session, len(self.images), rectified=bool(rectify_images))
 
         # TSDF parameters
         self.voxel_size = voxel_size
@@ -990,6 +995,7 @@ def run(
     auto_object_xy_margin_m=None,
     auto_object_top_margin_m=None,
     auto_object_table_below_margin_m=None,
+    rectify_images=False,
 ):
     global SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE
     global C2D_CENTER_CROP_ENABLE, C2D_CENTER_CROP_WIDTH, C2D_CENTER_CROP_HEIGHT
@@ -1004,7 +1010,7 @@ def run(
     scan_folder = scan_folder_override or DEFAULT_SCAN_FOLDER
     output_folder = _resolve_reconstruct_scan_dir(SESSION_PATH, scan_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
-    C2D_DIR = output_folder / "color_in_depth"
+    C2D_DIR = output_folder / ("color_in_depth_rectified" if rectify_images else "color_in_depth")
     TABLE_PLANE_FILE = output_folder / "table_plane.json"
 
     if center_crop_enable is not None:
@@ -1070,7 +1076,7 @@ def run(
         f"xy_margin={AUTO_OBJECT_XY_MARGIN_M}, top_margin={AUTO_OBJECT_TOP_MARGIN_M}, "
         f"table_below_margin={AUTO_OBJECT_TABLE_BELOW_MARGIN_M}"
     )
-    tsdf_integration = TSDF_Integration(session, device=device, depth_bias_m=depth_bias_m)
+    tsdf_integration = TSDF_Integration(session, device=device, depth_bias_m=depth_bias_m, rectify_images=rectify_images)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
     print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}")
     print(f"Number of color_in_depth loaded: {len(tsdf_integration.color_in_depth)}")
@@ -1227,6 +1233,8 @@ def main():
     parser.add_argument("--scan-folder", default=DEFAULT_SCAN_FOLDER)
     parser.add_argument("--no-vis", action="store_true")
     parser.add_argument("--device", default="CPU:0", help='Open3D device, e.g. "CPU:0" or "CUDA:0"')
+    parser.add_argument("--rectify-images", action="store_true", help="Rectify raw depth using saved distortion coefficients; requires matching rectified color alignment")
+    parser.add_argument("--no-center-crop", action="store_true", help="Integrate the complete depth frame; final world-space cropping remains available through run()")
     args = parser.parse_args()
 
     run(
@@ -1234,6 +1242,9 @@ def main():
         scan_folder_override=args.scan_folder,
         visualize=not args.no_vis,
         device=args.device,
+        rectify_images=args.rectify_images,
+        center_crop_enable=False if args.no_center_crop else None,
+        center_crop_apply_to_depth=False if args.no_center_crop else None,
     )
 
 
