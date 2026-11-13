@@ -3,6 +3,7 @@
 ## General Parameters
 
 - Bead height: 20 mm
+- Bead Width: 40 mm (+- 2)
 - Bead spacing: 35 mm
 - Net dot steps: 19002
 - Nominal volume per bead: 23.32 mL
@@ -14,6 +15,8 @@
 - **Targets:** `/home/lab/behav3d_ws/yaml/E01/targets_rule_based.yaml`
 - **Config:** `/home/lab/behav3d_ws/src/behav3d_orchestrator/config/print_yaml_and_scan_sequence_config.yaml`
 - **Sequence:** `/home/lab/behav3d_ws/src/behav3d_orchestrator/behav3d_orchestrator/print_yaml_and_scan_sequence.py`
+
+- **Pilot run:** `/home/lab/behav3d_ws/captures/261113_112808`
 
 - [ ] **Iterative**
 

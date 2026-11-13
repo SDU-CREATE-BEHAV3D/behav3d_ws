@@ -603,6 +603,7 @@ class GeometryRepresentationScanPrintLoopNode(Node):
                         ),
                         joint_current_log_label=f"{cycle_tag}:dots",
                     )
+                self.print_session.finalize_bead_logging(print_res)
                 if not print_res.get("ok", False):
                     log.warn(
                         "[geometry_representation_scan_print_loop] Print stage returned non-fatal failure: "
@@ -776,6 +777,10 @@ class GeometryRepresentationScanPrintLoopNode(Node):
         except Exception as exc:
             log.error(f"[geometry_representation_scan_print_loop] Sequence failed: {exc}")
         finally:
+            try:
+                self.print_session.finish_bead_logging()
+            except Exception as exc:
+                log.error(f"[geometry_representation_scan_print_loop] Failed to finalize print manifest: {exc}")
             rclpy.shutdown()
 
     @staticmethod

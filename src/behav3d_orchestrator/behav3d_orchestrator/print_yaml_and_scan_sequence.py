@@ -172,6 +172,7 @@ class PrintYamlAndScanSequenceNode(Node):
                     total_target_count=len(targets),
                     refresh_config=refresh_config,
                 )
+                self.print_session.finalize_bead_logging(print_res)
                 if not print_res.get("ok", False):
                     log.error(
                         f"[print_yaml_and_scan] Print failed in {cycle_tag} "
@@ -252,6 +253,10 @@ class PrintYamlAndScanSequenceNode(Node):
         except Exception as exc:
             log.error(f"[print_yaml_and_scan] Sequence failed: {exc}")
         finally:
+            try:
+                self.print_session.finish_bead_logging()
+            except Exception as exc:
+                log.error(f"[print_yaml_and_scan] Failed to finalize print manifest: {exc}")
             rclpy.shutdown()
 
     def _configure_run(self, cfg):

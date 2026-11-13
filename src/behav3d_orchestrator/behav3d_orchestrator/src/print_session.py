@@ -23,6 +23,21 @@ from .extrusion_calibration import (
 from .joint_current_logger import JointCurrentLogger
 from .yaml_session import TargetSegment, YamlSession
 
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+_YAML_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
+
+
+def _read_print_yaml(path):
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_YAML_LOADER)
+
+
+def _write_print_yaml(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pending = path.with_suffix(".yaml.pending")
+    pending.write_text(yaml.dump(data, Dumper=_YAML_DUMPER, sort_keys=False,
+                                 allow_unicode=True), encoding="utf-8")
+    pending.replace(path)
+
 
 class PrintSession(YamlSession):
     """Execute parsed print targets and own their per-cycle print manifest."""
@@ -37,36 +52,65 @@ class PrintSession(YamlSession):
         self.fault_session = None
 
     def configure_bead_logging(self, session_root, cycle):
-        """Attach the session print manifest independently of current logging."""
-        self._print_manifest_path = Path(session_root).expanduser().resolve() / "print_manifest.yaml"
-        self._print_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        """Cache one cycle; checkpoints never reread or rewrite earlier cycles."""
         if not hasattr(self, "_print_manifest_lock"):
             self._print_manifest_lock = threading.RLock()
-        self.bead_cycle = str(cycle)
+        root = Path(session_root).expanduser().resolve()
+        path = (root / str(cycle) / "print_manifest.yaml").resolve()
+        if not path.is_relative_to(root) or path == root / "print_manifest.yaml":
+            raise ValueError("Print cycle must be a directory within the session root")
+        with self._print_manifest_lock:
+            if getattr(self, "_print_manifest_path", None) == path:
+                return
+            self.finalize_bead_logging(outcome="closed")
+            self._print_manifest_root = root
+            self._print_manifest_path = path
+            self.bead_cycle = str(cycle)
+            if path.exists():
+                previous = _read_print_yaml(path)
+            else:
+                # Import an explicitly resumed legacy cycle once, without
+                # consulting the growing session file at every checkpoint.
+                if getattr(self, "_legacy_manifest_root", None) != root:
+                    legacy = root / "print_manifest.yaml"
+                    self._legacy_manifest_data = _read_print_yaml(legacy) if legacy.exists() else {}
+                    self._legacy_manifest_root = root
+                previous = self._legacy_manifest_data
+            bucket = deepcopy(previous.get("cycles", {}).get(self.bead_cycle,
+                              {"attempted_beads": [], "successful_beads": []}))
+            self._print_manifest_data = self._manifest_header()
+            self._print_manifest_data["storage"] = "per_cycle"
+            self._print_manifest_data["cycles"][self.bead_cycle] = bucket
+            # Merely selecting an existing cycle must not rewrite its history.
+            self._print_cycle_finalized = True
+
+    @staticmethod
+    def _manifest_header():
+        return dict(
+            schema_version=3,
+            volume_basis="Net PrintSteps response counts after subtracting retract, divided by extrusion_steps_per_mm3; not a physical flow measurement. Unknown net amounts remain null.",
+            step_accounting={
+                "nominal_net_steps": "Net bead steps before fault reduction; excludes retract compensation.",
+                "requested_net_steps": "Net bead steps after fault reduction; excludes retract compensation.",
+                "commanded_forward_steps": "Requested advance = requested_net_steps + commanded_retract_steps. Includes compensation; not evidence the command executed.",
+                "commanded_retract_steps": "Requested reverse compensation; zero when retract is disabled or extrusion is suppressed.",
+                "accepted_steps": "Counts from successful PrintSteps replies; zero if not sent, null if the reply is missing or failed.",
+                "accepted_net_steps": "max(0, accepted_forward_steps - accepted_retract_steps); null when the required replies are unknown.",
+                "net_volume_mm3": "accepted_net_steps / extrusion_steps_per_mm3. volume_mm3 is a compatibility alias for this net estimate.",
+                "legacy_records": "Only record_schema_version: 2 entries contain the full accounting. Earlier records are preserved without inferred retract values.",
+            },
+            cycles={},
+        )
 
     def _update_bead_record(self, attempt_id, record):
         if getattr(self, "_print_manifest_path", None) is None:
             return None
         with self._print_manifest_lock:
-            data = yaml.safe_load(self._print_manifest_path.read_text(encoding="utf-8")) if self._print_manifest_path.exists() else {
-                "schema_version": 2,
-                "cycles": {},
-            }
-            data.update(
-                schema_version=2,
-                volume_basis="Net PrintSteps response counts after subtracting retract, divided by extrusion_steps_per_mm3; not a physical flow measurement. Unknown net amounts remain null.",
-                step_accounting={
-                    "nominal_net_steps": "Net bead steps before fault reduction; excludes retract compensation.",
-                    "requested_net_steps": "Net bead steps after fault reduction; excludes retract compensation.",
-                    "commanded_forward_steps": "Requested advance = requested_net_steps + commanded_retract_steps. Includes compensation; not evidence the command executed.",
-                    "commanded_retract_steps": "Requested reverse compensation; zero when retract is disabled or extrusion is suppressed.",
-                    "accepted_steps": "Counts from successful PrintSteps replies; zero if not sent, null if the reply is missing or failed.",
-                    "accepted_net_steps": "max(0, accepted_forward_steps - accepted_retract_steps); null when the required replies are unknown.",
-                    "net_volume_mm3": "accepted_net_steps / extrusion_steps_per_mm3. volume_mm3 is a compatibility alias for this net estimate.",
-                    "legacy_records": "Only record_schema_version: 2 entries contain the full accounting. Earlier records are preserved without inferred retract values.",
-                },
-            )
-            bucket = data["cycles"].setdefault(str(self.bead_cycle), {"attempted_beads": [], "successful_beads": []})
+            data = self._print_manifest_data
+            bucket = data["cycles"][self.bead_cycle]
+            bucket["print_status"] = "printing"
+            bucket.pop("summary", None)
+            self._print_cycle_finalized = False
             attempts = bucket["attempted_beads"]
             if attempt_id is None:
                 attempt_id = len(attempts)
@@ -74,19 +118,72 @@ class PrintSession(YamlSession):
             else:
                 attempts[attempt_id] = deepcopy(record)
             bucket["successful_beads"] = [deepcopy(row) for row in attempts if row["status"] == "success"]
-            pending = self._print_manifest_path.with_suffix(".yaml.pending")
-            pending.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
-            pending.replace(self._print_manifest_path)
+            _write_print_yaml(self._print_manifest_path, data)
             return attempt_id
+
+    def finalize_bead_logging(self, result=None, *, outcome="closed"):
+        """Write the cycle assessment once, including stopped/failed attempts."""
+        if not getattr(self, "_print_manifest_data", None) or getattr(self, "_print_cycle_finalized", False):
+            return
+        with self._print_manifest_lock:
+            bucket = self._print_manifest_data["cycles"][self.bead_cycle]
+            attempts = bucket["attempted_beads"]
+            if not attempts:
+                return
+            if result is not None:
+                outcome = "stopped" if result.get("stopped_by_user") else "completed" if result.get("ok") else "failed"
+            bucket["print_status"] = outcome
+            counts = {}
+            for row in attempts:
+                counts[row["status"]] = counts.get(row["status"], 0) + 1
+            successful = bucket["successful_beads"]
+            bucket["summary"] = dict(
+                attempted_beads=len(attempts), successful_beads=len(successful), status_counts=counts,
+                failed_beads=sum(row["status"] == "motion_failed" or
+                                 row["status"] == "not_extruded" and bool(row.get("error")) for row in attempts),
+                unknown_beads=sum(row["status"] in ("attempted", "unknown", "motion_unknown") for row in attempts),
+                known_net_steps=sum(row.get("accepted_net_steps") or 0 for row in attempts),
+                unknown_net_steps_beads=sum(row.get("accepted_net_steps") is None for row in attempts),
+                known_net_volume_mm3=sum(row.get("volume_mm3") or 0.0 for row in attempts),
+                unknown_net_volume_beads=sum(row.get("volume_mm3") is None for row in attempts),
+                successful_net_volume_mm3=sum(row["volume_mm3"] for row in successful),
+            )
+            _write_print_yaml(self._print_manifest_path, self._print_manifest_data)
+            self._print_cycle_finalized = True
+
+    @staticmethod
+    def load_print_manifest(session_root):
+        """Read legacy/consolidated history and overlay authoritative cycle files."""
+        root = Path(session_root).expanduser().resolve()
+        path = root / "print_manifest.yaml"
+        data = PrintSession._manifest_header()
+        data["storage"] = "consolidated"
+        if path.exists():
+            data["cycles"].update(_read_print_yaml(path).get("cycles", {}))
+        for cycle_path in sorted(root.rglob("print_manifest.yaml")):
+            if cycle_path != path:
+                data["cycles"].update(_read_print_yaml(cycle_path).get("cycles", {}))
+        return data
+
+    def finish_bead_logging(self):
+        """Close an interrupted cycle and consolidate once when a run exits."""
+        if not getattr(self, "_print_manifest_root", None):
+            return
+        self.finalize_bead_logging(outcome="interrupted")
+        data = self.load_print_manifest(self._print_manifest_root)
+        if data["cycles"]:
+            _write_print_yaml(self._print_manifest_root / "print_manifest.yaml", data)
 
     @staticmethod
     def next_print_cycle_number(session_root, prefix):
-        path = Path(session_root).expanduser().resolve() / "print_manifest.yaml"
-        if not path.exists():
-            return 1
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        numbers = [int(key.rsplit("cycle_", 1)[1]) for key in data["cycles"]
-                   if key.startswith(prefix + "/cycle_") and key.rsplit("cycle_", 1)[1].isdigit()]
+        root = Path(session_root).expanduser().resolve()
+        numbers = [int(p.name[6:]) for p in (root / prefix).glob("cycle_*")
+                   if p.is_dir() and p.name[6:].isdigit()]
+        path = root / "print_manifest.yaml"
+        if path.exists():
+            data = _read_print_yaml(path)
+            numbers.extend(int(key.rsplit("cycle_", 1)[1]) for key in data.get("cycles", {})
+                           if key.startswith(prefix + "/cycle_") and key.rsplit("cycle_", 1)[1].isdigit())
         return max(numbers, default=0) + 1
 
     @staticmethod

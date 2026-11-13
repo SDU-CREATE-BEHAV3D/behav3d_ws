@@ -13,6 +13,7 @@ from behav3d_orchestrator.geometry_representation_scan_print_loop import Geometr
 from behav3d_orchestrator.geometry_representation_fault_scan_print_loop import GeometryRepresentationFaultScanPrintLoopNode
 from behav3d_orchestrator.src.control_session import ControlAwareSession
 from test_bead_execution import FakePrintSession, Commands, pose
+from behav3d_orchestrator.src.print_session import PrintSession
 
 
 class GeometryFaultLoopTests(unittest.TestCase):
@@ -112,7 +113,7 @@ class GeometryFaultLoopTests(unittest.TestCase):
                                scans=scans, reconstructions=reconstructions, markers=markers, rescans=rescans)
 
     def manifest(self, result):
-        return yaml.safe_load((result.output / "print_manifest.yaml").read_text())["cycles"]
+        return PrintSession.load_print_manifest(result.output)["cycles"]
 
     def test_fault_loop_prints_then_rescans_and_uses_the_updated_mesh(self):
         result = self.run_loop()

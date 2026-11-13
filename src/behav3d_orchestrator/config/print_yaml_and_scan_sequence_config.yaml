@@ -46,8 +46,8 @@ print_yaml_and_scan_sequence:
     print_accel_scale: 0.1
     dwell_s: 0.3
     print_publish_markers: true
-    print_axis_length: 0.05
-    print_axis_radius: 0.003
+    print_axis_length: 0.01
+    print_axis_radius: 0.002
     print_clear_markers_before: true
 
     # Active for print_mode=segments, or auto with segment YAML.

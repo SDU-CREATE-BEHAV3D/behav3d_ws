@@ -60,10 +60,30 @@ ros2 run behav3d_orchestrator print_yaml_fault_and_scan_sequence --ros-args -p c
 
 ## Bead Execution Report
 
-The existing `PrintSession` writes `print_manifest.yaml` for YAML-print and field-loop nodes in
-their capture-session root. This is independent of optional joint-current
-logging. Existing target-generation, current/event and contour-offset outputs
-retain their formats.
+`PrintSession` writes each YAML-print/field-loop cycle to
+`<session>/<scope>/cycle_xxxx/print_manifest.yaml`. The active cycle is cached in
+memory; bead checkpoints atomically replace only this small file, using the C
+safe YAML backend when available. Earlier cycles are never reread or rewritten
+for a bead checkpoint. This is independent of optional joint-current logging.
+Existing target-generation, current/event and contour-offset outputs retain
+their formats.
+
+After each print group, the cycle gets `print_status` and a `summary`: attempted,
+successful, failed and unknown bead counts, status counts, known net steps and
+volume, missing-value counts, and the volume from successful beads. Known
+material includes acknowledged extrusion even when segment motion failed;
+unknown amounts are excluded from sums and counted explicitly. A print group
+can finish while individual beads remain failed/unknown, so inspect the summary
+as well as `print_status`.
+
+At orderly run exit, `<session>/print_manifest.yaml` is generated once as a
+consolidated snapshot for existing analysis tools. It is not updated bead by
+bead and can be stale after a crash. Cycle files are authoritative;
+`PrintSession.load_print_manifest(session_root)` merges them with any legacy
+root manifest, preferring cycle files. Restart numbering checks cycle
+directories as well as legacy history, so an interrupted cycle is not
+overwritten. Existing captures are not migrated until explicitly resumed or
+consolidated by a run.
 
 Manifest updates, command-result tracking and capture-session path resolution
 live in `src/print_session.py`; there is no separate bead logger or session-path
@@ -78,8 +98,9 @@ the bead's `extrusion_steps_per_mm3`, outcome, and `net_volume_mm3`. An attempt 
 unknown-volume record is persisted before requesting extrusion. Updates replace
 the report atomically, retaining earlier cycles and repeat attempts.
 
-Schema 2 writes a `step_accounting` legend and marks new beads with
-`record_schema_version: 2`. Counts distinguish requested commands from replies:
+Manifest schema 3 uses cycle storage and retains the schema 2 bead accounting:
+the `step_accounting` legend and `record_schema_version: 2` entries. Counts
+distinguish requested commands from replies:
 
 | Field | Meaning |
 | --- | --- |
@@ -100,7 +121,7 @@ missing or failed. Net counts/volume remain null if a required reply is unknown.
 
 `volume_mm3` remains a compatibility alias for `net_volume_mm3`. Both represent
 the net balance of completed PrintSteps responses, not measured material flow.
-Existing bead records are retained unchanged when an older manifest is reopened;
+Existing bead records are retained unchanged when an older manifest is read;
 missing historical retract/calibration values are not inferred from current
 settings. Successful beads require a positive confirmed net
 amount, confirmed retract when enabled and confirmed segment motion. A failed
@@ -178,7 +199,7 @@ ros2 run behav3d_orchestrator geometry_representation_fault_scan_print_loop
 Use `--ros-args -p config_path:=/absolute/path/to/experiment.yaml` to select a
 different config. Per-cycle config snapshots remain under
 `field_loop/cycle_XXXX/config/`. Attempted and successful beads and their
-command-confirmed volume estimates remain in `print_manifest.yaml` at the
+command-confirmed volume estimates remain in each cycle's `print_manifest.yaml` and the final session snapshot at the
 capture-session root. The existing loop's original config and default print
 behavior are retained.
 

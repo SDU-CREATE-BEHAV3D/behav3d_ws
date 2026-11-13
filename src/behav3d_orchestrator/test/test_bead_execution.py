@@ -86,7 +86,7 @@ class BeadExecutionTests(unittest.TestCase):
         self.addCleanup(override.stop)
 
     def report(self):
-        return yaml.safe_load((self.root / "print_manifest.yaml").read_text())["cycles"][self.session.bead_cycle]
+        return yaml.safe_load(self.session._print_manifest_path.read_text())["cycles"][self.session.bead_cycle]
 
     def region(self, pct=40):
         path = self.root / "region.stl"
@@ -144,6 +144,84 @@ class BeadExecutionTests(unittest.TestCase):
                     self.assertEqual(row["net_volume_mm3"], net / 2)
                     self.assertEqual(row["volume_mm3"], row["net_volume_mm3"])
 
+    def test_cycle_checkpoints_are_cached_and_do_not_rewrite_history(self):
+        self.dots()
+        first = self.session._print_manifest_path
+        self.session.finalize_bead_logging(dict(ok=True))
+        original = first.read_bytes()
+        self.session.configure_bead_logging(self.root, "field_loop/cycle_0002")
+        with patch("behav3d_orchestrator.src.print_session._read_print_yaml",
+                   side_effect=AssertionError("checkpoint reread a YAML file")):
+            self.dots(target_indices=[12])
+            self.session.configure_bead_logging(self.root, "field_loop/cycle_0002")
+            self.dots(target_indices=[13])
+            self.session.finalize_bead_logging(dict(ok=True))
+        self.assertEqual(first.read_bytes(), original)
+        self.assertEqual(len(self.report()["attempted_beads"]), 2)
+        self.assertFalse((self.root / "print_manifest.yaml").exists())
+        self.assertEqual(self.session._print_manifest_path,
+                         self.root / "field_loop/cycle_0002/print_manifest.yaml")
+        self.session.finish_bead_logging()
+        consolidated = yaml.safe_load((self.root / "print_manifest.yaml").read_text())
+        self.assertEqual(set(consolidated["cycles"]), {"field_loop/cycle_0001", "field_loop/cycle_0002"})
+        self.assertEqual(first.read_bytes(), original)
+
+    def test_cycle_summary_distinguishes_known_material_from_unknown_and_failed_beads(self):
+        self.dots(target_indices=[1])
+        def timeout(item):
+            if item.kind == "print_steps":
+                raise TimeoutError("reply lost")
+        self.session.failure = timeout
+        with self.assertRaises(TimeoutError):
+            self.dots(target_indices=[2])
+        self.session.failure = None
+        self.session.fault_session = self.region(100)
+        self.dots(target_indices=[3])
+        self.session.fault_session = None
+        self.session.failure = lambda item: dict(ok=False, error="motion aborted") if item.kind == "exec" else None
+        self.session.run_print_segments(segments=[TargetSegment(4, pose(z=0.48), pose())],
+                                       segment_steps=100, steps_per_mm3=2)
+        self.session.finalize_bead_logging(dict(ok=False))
+        bucket = self.report()
+        self.assertEqual(bucket["print_status"], "failed")
+        summary = bucket["summary"]
+        self.assertEqual(summary["attempted_beads"], 4)
+        self.assertEqual(summary["successful_beads"], 1)
+        self.assertEqual(summary["failed_beads"], 1)
+        self.assertEqual(summary["unknown_beads"], 1)
+        self.assertEqual(summary["status_counts"], dict(success=1, unknown=1, not_extruded=1, motion_failed=1))
+        self.assertEqual(summary["known_net_steps"], 200)
+        self.assertEqual(summary["unknown_net_steps_beads"], 1)
+        self.assertEqual(summary["known_net_volume_mm3"], 100)
+        self.assertEqual(summary["unknown_net_volume_beads"], 1)
+        self.assertEqual(summary["successful_net_volume_mm3"], 50)
+
+    def test_restart_recovers_cycle_newer_than_the_last_consolidated_snapshot(self):
+        self.dots(target_indices=[42])
+        self.session.finish_bead_logging()
+        snapshot = (self.root / "print_manifest.yaml").read_bytes()
+        self.session.configure_bead_logging(self.root, "field_loop/cycle_0005")
+        def timeout(item):
+            if item.kind == "print_steps":
+                raise TimeoutError("interrupted")
+        self.session.failure = timeout
+        with self.assertRaises(TimeoutError):
+            self.dots(target_indices=[43])
+        self.assertEqual((self.root / "print_manifest.yaml").read_bytes(), snapshot)
+        self.assertEqual(PrintSession.next_print_cycle_number(self.root, "field_loop"), 6)
+        recovered = PrintSession.load_print_manifest(self.root)["cycles"]
+        self.assertEqual(recovered["field_loop/cycle_0005"]["attempted_beads"][0]["status"], "unknown")
+        fresh = FakePrintSession(self.root)
+        fresh.configure_bead_logging(self.root, "field_loop/cycle_0005")
+        fresh.run_print_dots_targets(targets=[pose()], target_indices=[44], dot_steps=100,
+                                     steps_per_mm3=2, dwell_s=0)
+        fresh.finalize_bead_logging(dict(ok=True))
+        rows = yaml.safe_load(fresh._print_manifest_path.read_text())["cycles"][fresh.bead_cycle]
+        self.assertEqual([r["index"] for r in rows["attempted_beads"]], [43, 44])
+        self.assertEqual([r["index"] for r in rows["successful_beads"]], [44])
+        self.assertEqual(rows["summary"]["unknown_beads"], 1)
+        self.assertEqual((self.root / "print_manifest.yaml").read_bytes(), snapshot)
+
     def test_manifest_uses_response_counts_and_handles_disabled_retract(self):
         self.session.failure = lambda item: dict(ok=True, metrics=dict(accepted_steps=110)) if (
             item.kind == "print_steps" and not item.payload.get("reverse")) else None
@@ -166,24 +244,29 @@ class BeadExecutionTests(unittest.TestCase):
 
     def test_manifest_schema_upgrade_preserves_legacy_bead_records(self):
         self.dots()
+        cycle_manifest = self.session._print_manifest_path
         manifest = self.root / "print_manifest.yaml"
-        data = yaml.safe_load(manifest.read_text())
+        data = yaml.safe_load(cycle_manifest.read_text())
         data["schema_version"] = 1
         data.pop("step_accounting")
         added = {"record_schema_version", "extrusion_steps_per_mm3", "nominal_net_steps",
                  "requested_net_steps", "commanded_retract_steps", "accepted_forward_steps",
                  "accepted_retract_steps", "accepted_net_steps", "net_volume_mm3"}
         bucket = data["cycles"][self.session.bead_cycle]
-        for rows in bucket.values():
+        for rows in (bucket["attempted_beads"], bucket["successful_beads"]):
             for row in rows:
                 for key in added:
                     row.pop(key)
         legacy = yaml.safe_load(yaml.safe_dump(bucket))
         manifest.write_text(yaml.safe_dump(data))
+        cycle_manifest.unlink()
+        original = manifest.read_bytes()
+        self.session = FakePrintSession(self.root)
         self.session.configure_bead_logging(self.root, "new_cycle")
         self.dots()
-        updated = yaml.safe_load(manifest.read_text())
-        self.assertEqual(updated["schema_version"], 2)
+        self.assertEqual(manifest.read_bytes(), original)
+        updated = self.session.load_print_manifest(self.root)
+        self.assertEqual(updated["schema_version"], 3)
         self.assertIn("net_volume_mm3", updated["step_accounting"])
         self.assertEqual(updated["cycles"]["field_loop/cycle_0001"], legacy)
         self.assertEqual(updated["cycles"]["new_cycle"]["successful_beads"][0]["record_schema_version"], 2)
@@ -211,7 +294,7 @@ class BeadExecutionTests(unittest.TestCase):
         self.assertEqual(row["index"], 17)
         self.assertEqual(row["volume_mm3"], 30)
         self.assertIn("start", row)
-        self.assertEqual(len(yaml.safe_load((self.root / "print_manifest.yaml").read_text())["cycles"]), 2)
+        self.assertEqual(len(self.session.load_print_manifest(self.root)["cycles"]), 2)
 
     def test_planning_failure_records_attempt_with_no_extrusion(self):
         self.session._plan_print_segment = lambda **k: dict(ok=False, stage="plan_segment", error="planning failed")
@@ -325,7 +408,7 @@ class BeadExecutionTests(unittest.TestCase):
     def test_operator_stop_does_not_create_attempted_beads(self):
         result = self.dots(before_target=lambda _: False)
         self.assertTrue(result["stopped_by_user"])
-        self.assertFalse((self.root / "print_manifest.yaml").exists())
+        self.assertFalse(self.session._print_manifest_path.exists())
 
     def test_repeat_attempts_and_restart_cycle_numbers_preserve_history(self):
         self.dots(target_indices=[42])
@@ -593,7 +676,8 @@ class BeadExecutionTests(unittest.TestCase):
                     node._configure_run = node._refresh_execution_config = lambda cfg: None
                     node._execution_session, node._execution_scope = self.root, "scan_schedule"
                     node._first_cycle_number = 8
-                    node.print_session = SimpleNamespace(configure_bead_logging=lambda *a: None)
+                    node.print_session = SimpleNamespace(configure_bead_logging=lambda *a: None,
+                        finalize_bead_logging=lambda *a: None, finish_bead_logging=lambda: None)
                     targets = [DotTarget(i, pose(x=float(i))) for i in range(count)]
                     node._load_print_targets = lambda **kwargs: targets
                     node._load_yaml_plane_types = lambda *a, **k: ["N"] * count
@@ -647,7 +731,8 @@ class BeadExecutionTests(unittest.TestCase):
                 node._configure_run = node._refresh_execution_config = lambda cfg: None
                 node._execution_session, node._execution_scope = self.root, "live_config"
                 node._first_cycle_number = 1
-                node.print_session = SimpleNamespace(configure_bead_logging=lambda *a: None)
+                node.print_session = SimpleNamespace(configure_bead_logging=lambda *a: None,
+                    finalize_bead_logging=lambda *a: None, finish_bead_logging=lambda: None)
                 node._load_print_targets = lambda **k: [DotTarget(i, pose()) for i in range(7)]
                 node._load_yaml_plane_types = lambda *a, **k: ["N"] * 7
                 node._publish_yaml_targets = lambda *a, **k: None
@@ -741,7 +826,7 @@ class BeadExecutionTests(unittest.TestCase):
                 self.assertEqual(markers[0].color.a, 0.2)
                 self.assertEqual(markers[0].header.frame_id, "world")
                 self.assertLessEqual(max(p.x for p in markers[0].points), 1)
-                data = yaml.safe_load((self.root / "print_manifest.yaml").read_text())["cycles"]
+                data = PrintSession.load_print_manifest(self.root)["cycles"]
                 success = [row for key, cycle in data.items() if key.startswith(prefix)
                            for row in cycle["successful_beads"]]
                 self.assertEqual([row["index"] for row in success], [20, 30, 40])

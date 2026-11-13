@@ -811,6 +811,7 @@ class PrintFieldOrientedSequenceV2Node(Node):
                         ),
                         joint_current_log_label=f"{cycle_tag}:dots",
                     )
+                self.print_session.finalize_bead_logging(print_res)
                 if not print_res.get("ok", False):
                     log.warn(
                         "[print_field_oriented] Print stage returned non-fatal failure: "
@@ -1010,6 +1011,10 @@ class PrintFieldOrientedSequenceV2Node(Node):
         except Exception as exc:
             log.error(f"[print_field_oriented] Sequence failed: {exc}")
         finally:
+            try:
+                self.print_session.finish_bead_logging()
+            except Exception as exc:
+                log.error(f"[print_field_oriented] Failed to finalize print manifest: {exc}")
             rclpy.shutdown()
 
     def _run_configured_scan(
