@@ -82,3 +82,44 @@ PYTHONPATH=src/behav3d_sense PYTHONDONTWRITEBYTECODE=1 python -B -m pytest \
 
 The ROS/ament lint suite needs the Linux ROS environment and was not available
 on this Mac. No robot or ROS service should be launched for this offline study.
+## November 2026 confidence audit
+
+The follow-up findings are in `reports/reconstruction_quality/NOVEMBER_CONFIDENCE.md`.
+These scripts inspect the November 4/13 experiment-folder layout. They do not
+modify production reconstruction settings or the source Drive files. The local
+artifact root used for the recorded results is:
+
+```
+/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_confidence
+```
+
+Use the same Open3D/Python environment recorded in `integrity.json`, with
+`OMP_NUM_THREADS=4`, `OPENBLAS_NUM_THREADS=1`, `PYTHONDONTWRITEBYTECODE=1`, and a
+writable `MPLCONFIGDIR`. Set `NOVEMBER_SOURCE` to the original `E01 - Scan Test`
+folder and `NOVEMBER_ROOT` to a **new** artifact directory. Run from the repository
+root with the configured Python interpreter:
+
+```sh
+python -B tools/reconstruction_quality/november_inventory.py "$NOVEMBER_SOURCE" "$NOVEMBER_ROOT"
+python -B tools/reconstruction_quality/november_confidence.py --data "$NOVEMBER_ROOT/data" --output "$NOVEMBER_ROOT/experiments" --variant legacy
+python -B tools/reconstruction_quality/november_confidence.py --data "$NOVEMBER_ROOT/data" --output "$NOVEMBER_ROOT/experiments" --variant rectified
+python -B tools/reconstruction_quality/november_contact_sheets.py "$NOVEMBER_ROOT/data" "$NOVEMBER_ROOT/contact_sheets"
+python -B tools/reconstruction_quality/november_results.py "$NOVEMBER_ROOT"
+python -B tools/reconstruction_quality/november_pcd_probe.py "$NOVEMBER_ROOT"
+python -B tools/reconstruction_quality/november_prefix_replay.py "$NOVEMBER_ROOT"
+python -B tools/reconstruction_quality/november_holdout.py "$NOVEMBER_ROOT"
+python -B tools/reconstruction_quality/november_raw_geometry.py "$NOVEMBER_ROOT"
+python -B tools/reconstruction_quality/november_review.py "$NOVEMBER_ROOT"
+python -B tools/reconstruction_quality/november_holdout.py "$NOVEMBER_ROOT" --profiles rectified_trunc8 rectified_trunc4 rectified_fine8 --sessions 261113_150006 261113_150432 --experiment heldout_tuning
+python -B tools/reconstruction_quality/november_integrity.py "$NOVEMBER_ROOT"
+```
+
+The full-volume audit extracts weights 3/2/1 from the same integrated grid. Its
+observation instrumentation asserts equality against the production colorizer.
+The prefix probe is parameter inference; the subsequent production replay is
+the stronger verification. Unmatched scans are explicitly marked unresolved.
+Holdout reconstruction excludes every fourth view before fusion. Geometry
+comparisons use fixed raw-depth rays and retain missing-ray denominators. The
+additional cube profiles are exploratory comparisons on that same holdout,
+not a second independent validation set. Saved meshes and input hashes remain
+available beside the experimental outputs.

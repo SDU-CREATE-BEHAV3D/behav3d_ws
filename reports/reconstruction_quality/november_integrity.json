@@ -1,0 +1,350 @@
+{
+  "selected_input_files": 883,
+  "selected_input_bytes": 630261407,
+  "input_changes": [],
+  "source_code_changes": [],
+  "source_hashes": {
+    "src/behav3d_sense/behav3d_sense/reconstruct/TSDF_cpu_cropped.py": "0cb703fcb0ec634795eb5f85ca6675d05e519d3edfd58b5076f36d099e34d657",
+    "src/behav3d_sense/behav3d_sense/reconstruct/TSDF_cpu_object_extract.py": "96ac67d008bcd98c39dcaf01cabce1e6860b5a3fd0175b6f5de623b1e151e7ce",
+    "src/behav3d_sense/behav3d_sense/reconstruct/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/behav3d_sense/behav3d_sense/reconstruct/color_to_depth.py": "5bd6d69ec9ff78e435f0232c82030bce7e4976c294ab05783085512690240245",
+    "src/behav3d_sense/behav3d_sense/reconstruct/reconstruct_services.py": "7d863017015346491b22be0d581e6570f2ab483b1832108e0b718f01ebc0a2dc",
+    "src/behav3d_sense/behav3d_sense/reconstruct/service_utils.py": "4e4950234539401cf787d6869fe20b602aea5d3580b5ab835134c94065387aaf",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/__init__.py": "5fc74510001f3eb617623127747aa611c312d1bf0fb8feb8e12de20a13dd076d",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/extrinsics.py": "4f9e931c1ccb06b8a085d335db3def944e60d8de5086e7023af9947721aad520",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/image_loader.py": "0fb18cdc952b9eca2f8a5260825b587fa901e041e933a205197179124c8bd8c8",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/integration.py": "01b78565c5d1a84f96660be45800f3ed1c2c9bb19e4b353538a53f93dcd59eb1",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/intrinsics.py": "cc0822ee799f81f0ca9b9dba3f7a88df197c661d4287dc3502940c7ed0b6fbf8",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/manifest.py": "080967e9114e0f36c097a3d4f89ee69b0d9442f0f3c841db22b60b6f902b1bbb",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/rectification.py": "8e6c369a23ab6937cb974aa773399fa9eff17dc0c05a86314b6085aede30d404",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/session.py": "a3fec6d21dfadae460318fc142ef13f8933f26d4abf74451943e42ca85e04a53",
+    "src/behav3d_sense/behav3d_sense/reconstruct/utils/transforms.py": "c8d791d28c12d9d7a2c72183e2f76f2fef2a6b6162696efbdb33fe85e158fd61"
+  },
+  "baseline_mesh_comparisons": {
+    "261104_145134": {
+      "replay_vertices": 241885,
+      "saved_vertices": 241885,
+      "replay_triangles": 479359,
+      "saved_triangles": 479359,
+      "replay_to_saved_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002384185791015625,
+        0.6638560444116592
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002384185791015625,
+        0.5613604446570314
+      ],
+      "replay_fraction_within_0p1mm": 0.9999586580399776,
+      "saved_fraction_within_0p1mm": 0.9999586580399776
+    },
+    "261104_150201": {
+      "replay_vertices": 137559,
+      "saved_vertices": 137559,
+      "replay_triangles": 272416,
+      "saved_triangles": 272416,
+      "replay_to_saved_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002980232238769531,
+        0.14442205429077148
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002980232238769531,
+        0.14442205429077148
+      ],
+      "replay_fraction_within_0p1mm": 0.9999854607840999,
+      "saved_fraction_within_0p1mm": 0.9999854607840999
+    },
+    "261104_150619": {
+      "replay_vertices": 243397,
+      "saved_vertices": 243400,
+      "replay_triangles": 479536,
+      "saved_triangles": 479534,
+      "replay_to_saved_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002511069178582422,
+        1.1249999856518937
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.000251090154051916,
+        1.0115206241607666
+      ],
+      "replay_fraction_within_0p1mm": 0.999971240401484,
+      "saved_fraction_within_0p1mm": 0.9999712407559572
+    },
+    "261104_151209": {
+      "replay_vertices": 244833,
+      "saved_vertices": 244833,
+      "replay_triangles": 482240,
+      "saved_triangles": 482240,
+      "replay_to_saved_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002682209014892578,
+        0.2989768981933594
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002682209014892578,
+        0.2989768981933594
+      ],
+      "replay_fraction_within_0p1mm": 0.9999673246662011,
+      "saved_fraction_within_0p1mm": 0.9999673246662011
+    },
+    "261104_151736": {
+      "replay_vertices": 227278,
+      "saved_vertices": 227280,
+      "replay_triangles": 448433,
+      "saved_triangles": 448433,
+      "replay_to_saved_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002980232238769531,
+        0.8333325386047363
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.00011920928955078125,
+        0.0002980232238769531,
+        0.8333325386047363
+      ],
+      "replay_fraction_within_0p1mm": 0.9999604009186986,
+      "saved_fraction_within_0p1mm": 0.9999604012671595
+    },
+    "261113_145255": {
+      "replay_vertices": 237137,
+      "saved_vertices": 237135,
+      "replay_triangles": 462455,
+      "saved_triangles": 462439,
+      "replay_to_saved_mm": [
+        0.0,
+        7.450580596923828e-05,
+        0.00025129318237350137,
+        0.41946998312044226
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        7.450580596923828e-05,
+        0.0002384185791015625,
+        0.7472336292266846
+      ],
+      "replay_fraction_within_0p1mm": 0.99993674542564,
+      "saved_fraction_within_0p1mm": 0.99995361292091
+    },
+    "261113_150006": {
+      "replay_vertices": 219814,
+      "saved_vertices": 219813,
+      "replay_triangles": 432321,
+      "saved_triangles": 432317,
+      "replay_to_saved_mm": [
+        0.0,
+        0.00010896474123001099,
+        0.00033061206340841143,
+        1.9565909276374316
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.00010803341865539551,
+        0.00032782554626464844,
+        0.8389716592858331
+      ],
+      "replay_fraction_within_0p1mm": 0.9998999153830056,
+      "saved_fraction_within_0p1mm": 0.9999226615350321
+    },
+    "261113_150432": {
+      "replay_vertices": 210963,
+      "saved_vertices": 210963,
+      "replay_triangles": 413301,
+      "saved_triangles": 413301,
+      "replay_to_saved_mm": [
+        0.0,
+        9.313225746154785e-05,
+        0.0002384185791015625,
+        0.06732344627380371
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        9.313225746154785e-05,
+        0.0002384185791015625,
+        0.06732344627380371
+      ],
+      "replay_fraction_within_0p1mm": 1.0,
+      "saved_fraction_within_0p1mm": 1.0
+    },
+    "261113_150709": {
+      "replay_vertices": 231954,
+      "saved_vertices": 231951,
+      "replay_triangles": 452555,
+      "saved_triangles": 452551,
+      "replay_to_saved_mm": [
+        0.0,
+        6.332993507385254e-05,
+        0.00025331974029541016,
+        0.7264018058776855
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        6.332993507385254e-05,
+        0.00025331974029541016,
+        0.4583001136779785
+      ],
+      "replay_fraction_within_0p1mm": 0.9999525768040215,
+      "saved_fraction_within_0p1mm": 0.9999482649352665
+    },
+    "261113_151101": {
+      "replay_vertices": 214411,
+      "saved_vertices": 214407,
+      "replay_triangles": 421864,
+      "saved_triangles": 421856,
+      "replay_to_saved_mm": [
+        0.0,
+        8.940696716308594e-05,
+        0.0002682209014892578,
+        0.5895671985802967
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        8.940696716308594e-05,
+        0.0002682209014892578,
+        0.32170116901397705
+      ],
+      "replay_fraction_within_0p1mm": 0.9999440327222018,
+      "saved_fraction_within_0p1mm": 0.999972015839035
+    },
+    "261113_151435": {
+      "replay_vertices": 209975,
+      "saved_vertices": 209976,
+      "replay_triangles": 411472,
+      "saved_triangles": 411471,
+      "replay_to_saved_mm": [
+        0.0,
+        0.0001043081283569336,
+        0.0002384185791015625,
+        0.2866991359938596
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.0001043081283569336,
+        0.0002384185791015625,
+        0.2902204261748608
+      ],
+      "replay_fraction_within_0p1mm": 0.9999857125848315,
+      "saved_fraction_within_0p1mm": 0.9999857126528746
+    },
+    "261113_151637": {
+      "replay_vertices": 235250,
+      "saved_vertices": 235250,
+      "replay_triangles": 458914,
+      "saved_triangles": 458914,
+      "replay_to_saved_mm": [
+        0.0,
+        7.450580596923828e-05,
+        0.0002887174487115323,
+        0.6646513938903809
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        7.450580596923828e-05,
+        0.0002887174487115323,
+        0.6646513938903809
+      ],
+      "replay_fraction_within_0p1mm": 0.9999872476089267,
+      "saved_fraction_within_0p1mm": 0.9999829968119023
+    },
+    "261113_152024": {
+      "replay_vertices": 219178,
+      "saved_vertices": 219178,
+      "replay_triangles": 431346,
+      "saved_triangles": 431350,
+      "replay_to_saved_mm": [
+        0.0,
+        0.00011027092114092627,
+        0.00032782554626464844,
+        1.0900733557442057
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.00011027092114092627,
+        0.00032782554626464844,
+        1.5072944129119894
+      ],
+      "replay_fraction_within_0p1mm": 0.9999726249897344,
+      "saved_fraction_within_0p1mm": 0.9999726249897344
+    },
+    "261113_152345": {
+      "replay_vertices": 212341,
+      "saved_vertices": 212340,
+      "replay_triangles": 416182,
+      "saved_triangles": 416186,
+      "replay_to_saved_mm": [
+        0.0,
+        0.0001043081283569336,
+        0.0002682209014892578,
+        0.25363266468048096
+      ],
+      "saved_to_replay_mm": [
+        0.0,
+        0.0001043081283569336,
+        0.0002666423097253865,
+        0.25363266468048096
+      ],
+      "replay_fraction_within_0p1mm": 0.9999905811878064,
+      "saved_fraction_within_0p1mm": 0.9999905811434492
+    }
+  },
+  "python": "3.11.14 (main, Oct  9 2025, 16:16:55) [Clang 17.0.0 (clang-1700.4.4.1)]",
+  "executable": "/Users/josephnamar/Documents/GitHub/3DP-DDS/.venv/bin/python",
+  "platform": "macOS-27.0.1-arm64-arm-64bit",
+  "packages": {
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "open3d": "0.19.0",
+    "opencv-python": "4.13.0.92",
+    "PyYAML": "6.0.3",
+    "matplotlib": "3.11.0"
+  },
+  "git_revision": "de476296ecf4b04b74cb29d7ca7d4a798e40de55",
+  "audit_script_hashes": {
+    "tools/reconstruction_quality/november_results.py": "cb6f23e8dd10d0936cc0d7b28680543e42c5456c2afd26fbd835edce0a24cd86",
+    "tools/reconstruction_quality/november_confidence.py": "85214e7c813918ea3532354421d684058bc3cb246699015385e899f6dbadc8d1",
+    "tools/reconstruction_quality/november_contact_sheets.py": "625f414c4938846c6c6a1ab87656908577012b3bba8f204a6244dddadc7e63ee",
+    "tools/reconstruction_quality/november_review.py": "999b3e00dd2b556c3ad07b553ec62e91b8bddb14e34eafc3105a72d54b19cd4c",
+    "tools/reconstruction_quality/november_holdout.py": "62a50716df9cf0d1eae87a01a5af1714db4fdda8a70720519536d2a252594000",
+    "tools/reconstruction_quality/november_pcd_probe.py": "83ef3e10febf45d05ebd1de60d7ded8475518cee4c983ce19dcb38d4834417ca",
+    "tools/reconstruction_quality/november_inventory.py": "8f4bc43737109541fe983d49805cff8ab9068ac74707abe94bc604f3952d12e1",
+    "tools/reconstruction_quality/november_prefix_replay.py": "ad072ef5dc67bfdb478da0ca660bb2e0e4ac057e445ffd72e19b67b2ea5b73ba",
+    "tools/reconstruction_quality/november_integrity.py": "3b8f5a4980f3258964442216d5a2bb05ee7639ed458e788cbf082147d08af71e",
+    "tools/reconstruction_quality/november_raw_geometry.py": "2b51fc02b21e5839bc8e44d61804be7b4cdd3769f31fc07c6d8f8b02645cdbf5"
+  },
+  "review_file_hashes": {
+    "261113_151101_cone_oriented_rectified_weight3.stl": "f826d7c57bc3cdcdc3cddc4fa46ec2c0e6b479625a3cc81fff4bf42db955d36c",
+    "261113_152345_sphere_planar_rectified_weight3.ply": "d96f4150dac61bcfa8ea7bf586b4cdfbb1336805297bc0de6822c6e74ffb845f",
+    "261113_151637_sphere_linear_rectified_weight3.stl": "ea2622cc42709869b3ee73f83d037dda167002df1bb440da64f80e3e51bc3746",
+    "settings.json": "7076d0364b96d1a6bf2738a77287c862702b8d727ebd71ae6811e9aa579a6be5",
+    "261113_145255_cube_linear_rectified_weight3.stl": "52c6de9f9820c1df67ec73bd5f24ef5bf2aebcdab8019226672d4440539855e3",
+    "261113_150006_cube_oriented_rectified_weight3.ply": "bf90749612c29b318b1087ac32db12cce59e1041d9740b9446067382c9a9ab73",
+    "261113_145255_cube_linear_rectified_weight3.ply": "cc7076fe69d95242d17074979f9c2d70ef89f6ddadb06dab9ef6146c43ded432",
+    "261113_150006_cube_oriented_rectified_weight3.stl": "45ec18dc8793d416de7673211cc7f7d9a6b21b0dad0623f7f951987de3da7195",
+    "261113_152345_sphere_planar_rectified_weight3.stl": "e2e3d3da267e85bad993966ceb614f3a41086ad4e9630600447b2c4e62338d80",
+    "261113_151637_sphere_linear_rectified_weight3.ply": "d18b010f8468a88092121ca0e43487ce3320a1543996359f43c35472dd42ff60",
+    "261113_151101_cone_oriented_rectified_weight3.ply": "29a164448042840f3b8e0d969791e96db767262e19073ede1efdff18dcc8b4a1",
+    "261113_150709_cone_linear_rectified_weight3.ply": "efe5e30641ebf40e9486784b43010bcd1870cdc5d1cace387faacf90a775e7a8",
+    "261113_151435_cone_planar_rectified_weight3.stl": "b400e38675a8656a2ed8ab75ab38c7f7e5a462b4412c915b992efaa34ff3b52e",
+    "261113_152024_sphere_oriented_rectified_weight3.ply": "7bffc92d58d425e92fc5e56c9bb81090c17e280a1091d20fa54c48791f4b6cc7",
+    "261113_150432_cube_planar_rectified_weight3.ply": "9f8a8426bf4890a1ff479c04ac438258130b05d3d34d76e91e4157592b80427f",
+    "261113_150432_cube_planar_rectified_weight3.stl": "c444e3a95158e9200b810a4dae75361551756f2d15ef4c6eeb8de07b26ce9828",
+    "261113_151435_cone_planar_rectified_weight3.ply": "5afa7a689b4be57dbdbebb1f18f6dc1c572eb2fcd6f6467cd900dde9df63ade5",
+    "261113_152024_sphere_oriented_rectified_weight3.stl": "06088c8ffb75b4bf518fd2e27344bfa48c43636e48ea371c63d49cd4492a7572",
+    "261113_150709_cone_linear_rectified_weight3.stl": "67b2c77dc28115a7636260f8af9a1b5ca5400be2ee2d87d40f99905fdef94d20"
+  }
+}
