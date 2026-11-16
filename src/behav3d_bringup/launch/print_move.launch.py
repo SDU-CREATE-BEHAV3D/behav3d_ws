@@ -74,6 +74,10 @@ def generate_launch_description():
         default_value="CPU:0",
         description='Default Open3D device for TSDF services, e.g. "CPU:0" or "CUDA:0"',
     )
+    reconstruct_rectify_images_arg = DeclareLaunchArgument(
+        "reconstruct_rectify_images", default_value="true",
+        description="Use saved distortion calibration for reconstruction alignment and depth fusion",
+    )
     world_mesh_frame_arg = DeclareLaunchArgument(
         "world_mesh_frame_id",
         default_value="ur20_base_link",
@@ -140,6 +144,7 @@ def generate_launch_description():
             "scan_folder": LaunchConfiguration("reconstruct_scan_folder"),
             "visualize": LaunchConfiguration("reconstruct_visualize"),
             "device": LaunchConfiguration("reconstruct_device"),
+            "rectify_images": LaunchConfiguration("reconstruct_rectify_images"),
             "enable_color_to_depth": "true",
             "enable_tsdf_cropped": "true",
             "enable_tsdf_object_extract": "true",
@@ -246,6 +251,7 @@ def generate_launch_description():
             reconstruct_scan_folder_arg,
             reconstruct_visualize_arg,
             reconstruct_device_arg,
+            reconstruct_rectify_images_arg,
             world_mesh_frame_arg,
             
             ur_driver,

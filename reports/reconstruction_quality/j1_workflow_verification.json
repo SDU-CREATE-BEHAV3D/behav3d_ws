@@ -1,0 +1,46 @@
+{
+  "checked_date": "2026-11-16",
+  "j1": {
+    "ref": "J1_Build",
+    "sha": "e0d25121105883fb6958c00a690329e839132c7b",
+    "url": "https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/commit/e0d25121105883fb6958c00a690329e839132c7b"
+  },
+  "driver": {
+    "ref": "v2.4.5",
+    "launch": {
+      "url": "https://github.com/orbbec/OrbbecSDK_ROS2/blob/v2.4.5/orbbec_camera/launch/femto_mega.launch.py",
+      "blob_sha": "e6ad030bb7cdbf40f41e7564ac3404ea296d36e1"
+    },
+    "node": {
+      "url": "https://github.com/orbbec/OrbbecSDK_ROS2/blob/v2.4.5/orbbec_camera/src/ob_camera_node.cpp",
+      "blob_sha": "cffcf024ac5686ef3c1dfa556ed63d8591ca9779",
+      "matching_lines": [
+        {
+          "line": 1720,
+          "text": "setAndGetNodeParameter<bool>(enable_color_undistortion_, \"enable_color_undistortion\", false);"
+        },
+        {
+          "line": 1999,
+          "text": "if (stream_index == COLOR && enable_color_undistortion_) {"
+        },
+        {
+          "line": 2002,
+          "text": "*node_, \"color/image_undistorted\", image_qos_profile);"
+        },
+        {
+          "line": 2005,
+          "text": "*node_, \"color/image_undistorted\", image_qos_profile);"
+        },
+        {
+          "line": 2810,
+          "text": "if (stream_index == COLOR && enable_color_undistortion_) {"
+        },
+        {
+          "line": 2872,
+          "text": "if (stream_index == COLOR && enable_color_undistortion_ &&"
+        }
+      ]
+    }
+  },
+  "conclusion": "J1 color alignment and TSDF load saved distortion coefficients but do not use them. Capture saves raw image topics. Driver optional color undistortion is disabled by default and publishes a separate topic. Historical deployed binaries/overrides were not supplied."
+}

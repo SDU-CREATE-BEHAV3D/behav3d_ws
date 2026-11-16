@@ -77,7 +77,8 @@ retained artifacts. Baseline reconstruction source itself was never edited.
 ```sh
 PYTHONPATH=src/behav3d_sense PYTHONDONTWRITEBYTECODE=1 python -B -m pytest \
   -p no:cacheprovider src/behav3d_sense/test/test_capture_validation.py \
-  src/behav3d_sense/test/test_rectification.py -q
+  src/behav3d_sense/test/test_rectification.py \
+  src/behav3d_sense/test/test_reconstruction_workflow.py -q
 ```
 
 The ROS/ament lint suite needs the Linux ROS environment and was not available
@@ -123,3 +124,100 @@ comparisons use fixed raw-depth rays and retain missing-ray denominators. The
 additional cube profiles are exploratory comparisons on that same holdout,
 not a second independent validation set. Saved meshes and input hashes remain
 available beside the experimental outputs.
+
+## November 13 distortion pairs and cube dimensions
+
+`november_pair_run.py` performs fresh production reconstructions of all nine
+November 13 scans with correction off/on, retaining extraction weight 3 and all
+other reconstruction settings. It verifies the 381 original and snapshot input
+files against the earlier inventory, waits for every aligned image, and writes
+18 separate reconstruction folders. The original captures are read only.
+
+```sh
+python -B tools/reconstruction_quality/november_pair_run.py \
+  --audit-root "$NOVEMBER_ROOT" --output /path/to/new-pairs
+python -B tools/reconstruction_quality/november_cube_bounds.py \
+  --audit-root "$NOVEMBER_ROOT" --root /path/to/new-pairs
+```
+
+The bounds script renders actual triangle meshes with matching views and scale.
+It measures the three cube scans in a table-aligned coordinate frame: X follows
+projected robot-base X, Y lies along the table, and height follows its normal.
+Both versions use the same saved table plane. A broad 200 mm square region
+locates the cube; points below three voxels (5.859375 mm) are excluded to remove
+the table band. The box bottom is anchored to the table, and the remaining
+vertices determine its X/Y limits and top. No nominal cube dimensions, smoothing,
+or shape fitting are used. Protrusions contribute to the reported dimensions;
+these are estimated mesh bounds, not independent physical measurements.
+
+`cube_dimensions.json` records exact dimensions, bounding corners in meters,
+mesh hashes, and sensitivity to two/four-voxel table exclusion. The script checks
+the coordinate transforms using a known tilted cuboid and verifies that every
+selected vertex is enclosed. Separate `cube_bounding_box.ply` line sets accompany
+the six cube meshes. The figures folder contains all nine comparisons and six
+individual dimensioned cube images.
+
+Recorded run: `reconstruction_quality/november_cube_dimensions` beside the
+November audit artifact folder above. `complete.json` confirms all 18 runs
+finished and the snapshot inputs and production source stayed unchanged.
+
+## ROS workflow verification and further refinement (16 November)
+
+The final section of `reports/reconstruction_quality/NOVEMBER_CONFIDENCE.md`
+records the J1 workflow trace, the new ROS defaults, and the refinement results.
+`j1_workflow_verification.json` identifies the verified remote J1 commit and
+pinned Orbbec driver sources. `refinement_summary.json` contains all nine scans.
+
+The new ROS service default is rectification enabled. Standalone Python/CLI
+rectification remains explicit. Both alignment modes publish `alignment.json`
+only after every indexed image has been written successfully; the orchestrator
+waits for that run's complete record. TSDF rejects incomplete or mismatched
+alignment instead of silently using fewer frames. The completion protocol and
+service parameter routing are covered by focused tests without a live ROS graph.
+
+For reproduction, `PAIRS_ROOT` is the completed November distortion-pair folder,
+`REFINEMENT_ROOT` is a new output root, and `NOVEMBER_ROOT` is the original audit
+folder. Use the interpreter/thread settings documented above. Source captures
+are read only; new output directories must not already exist.
+
+```sh
+python -B tools/reconstruction_quality/november_ros_replay.py \
+  --audit "$NOVEMBER_ROOT" --pairs "$PAIRS_ROOT" \
+  --output "$REFINEMENT_ROOT/ros_replay"
+
+python -B tools/reconstruction_quality/november_refine.py \
+  --audit "$NOVEMBER_ROOT" --pairs "$PAIRS_ROOT" \
+  --output "$REFINEMENT_ROOT/cube_discovery" \
+  --sessions 261113_145255 261113_150006 261113_150432
+
+python -B tools/reconstruction_quality/november_refine.py \
+  --audit "$NOVEMBER_ROOT" --pairs "$PAIRS_ROOT" \
+  --output "$REFINEMENT_ROOT/all_scan_validation" \
+  --sessions 261113_145255 261113_150006 261113_150432 261113_150709 261113_151101 261113_151435 261113_151637 261113_152024 261113_152345 \
+  --profiles baseline bias_minus6 bias_minus7 support5x3 pose_edge20
+```
+
+Every retained study includes `provenance.json` with its exact command/source
+hashes and `runner.py` matching the recorded runner hash. Those commands also
+cover the additional depth/support sweep, alternate cube split, fine-grid sweep,
+and full-scan review meshes. By default every fourth view (index 3 onwards) is
+withheld. `--offset 1` changes the split for a robustness check. `--full` fuses all
+views for visual review; its scores are training-view scores, not validation.
+Pose refinement and cross-view support use training frames only. All candidates
+are scored against the same raw rays and original poses/calibration, including
+the fixed -5 mm scoring bias. The trials therefore do not calibrate absolute
+depth bias. Experimental filters/pose changes are confined to this harness.
+
+The retained output root is `reconstruction_quality/november_refinement` beside
+the earlier audit. Once the six studies and ROS replay are complete, regenerate
+the compact results and full-scan figures with:
+
+```sh
+python -B tools/reconstruction_quality/november_refinement_results.py \
+  --root "$REFINEMENT_ROOT" --audit "$NOVEMBER_ROOT" --pairs "$PAIRS_ROOT"
+```
+
+`november_ros_replay.py` invokes actual service runner functions and production
+processing, with ROS imports stubbed. It does not validate ROS transport, launch
+startup, hardware, or Linux/ament integration. Nine full-frame replays matched
+the earlier corrected meshes; a separate object-extraction replay also passed.

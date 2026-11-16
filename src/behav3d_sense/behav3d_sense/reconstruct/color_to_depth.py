@@ -20,6 +20,8 @@
 #   - Open3D: colored point cloud in world frame
 
 from pathlib import Path
+import time
+import uuid
 
 import numpy as np
 import cv2
@@ -30,7 +32,7 @@ from .utils.manifest import read_manifest, load_robot_poses, construct_image_pat
 from .utils.intrinsics import load_intrinsics
 from .utils.extrinsics import load_extrinsics
 from .utils.image_loader import load_images
-from .utils.rectification import rectify_images as rectify_image_batch, write_alignment_metadata
+from .utils.rectification import rectify_images as rectify_image_batch, write_alignment_metadata, alignment_signature
 
 
 DEFAULT_SESSION_PATH = "/home/lab/behav3d_ws/captures/260206_171134"
@@ -233,7 +235,10 @@ class ColorToDepthAligner:
         # --- Remap (confirmed correct) ---
         color_in_depth, valid_map = self._align_color_to_depth(depth0, color0)
         color_in_depth_path = out_dir / f"color_in_depth_{frame_idx:04d}.png"
-        cv2.imwrite(str(color_in_depth_path), color_in_depth)
+        temporary = color_in_depth_path.with_suffix(".tmp.png")
+        if not cv2.imwrite(str(temporary), color_in_depth):
+            raise OSError(f"Failed writing aligned image: {temporary}")
+        temporary.replace(color_in_depth_path)
         print("Saved:")
         print(color_in_depth_path)
 
@@ -285,10 +290,13 @@ def run(session_path=None, scan_folder=None, visualize=False, device=None, save_
     output_folder = _resolve_reconstruct_scan_dir(session_path, scan_folder)
     color_in_depth_dir = output_folder / ("color_in_depth_rectified" if rectify_images else "color_in_depth")
     session = Session(session_path, scan_folder)
-    if rectify_images:
-        # Invalidate a previous completed run before image loading can fail.
-        frame_count = len(read_manifest(session.path, session._scan_folder).get("captures", []))
-        write_alignment_metadata(color_in_depth_dir, session, frame_count, complete=False)
+    # Invalidate a previous run before loading can fail, in either camera mode.
+    frame_count = len(read_manifest(session.path, session._scan_folder).get("captures", []))
+    metadata = dict(rectified=bool(rectify_images), run_id=uuid.uuid4().hex,
+                    started_at=time.time(), input_signature=alignment_signature(session))
+    write_alignment_metadata(color_in_depth_dir, session, frame_count, complete=False, **metadata)
+    for old in color_in_depth_dir.glob("color_in_depth*.png"):
+        old.unlink()
 
     aligner = ColorToDepthAligner(
         session,
@@ -301,12 +309,14 @@ def run(session_path=None, scan_folder=None, visualize=False, device=None, save_
     print(f"Depth frames: {len(aligner.depth_images)}")
     print(f"Color frames: {len(aligner.color_images)}")
     print(f"Robot poses:  {len(aligner.T_base_tool0_list)}")
+    if frame_count == 0 or not (len(aligner.depth_images) == len(aligner.color_images)
+                               == len(aligner.T_base_tool0_list) == frame_count):
+        raise ValueError("Alignment requires a depth image, color image and pose for every capture")
 
     for idx in range(len(aligner.depth_images)):
         aligner.test_one_frame(frame_idx=idx, visualize=bool(visualize))
         print(f"Processed frame {idx+1}/{len(aligner.depth_images)}")
-    if rectify_images:
-        write_alignment_metadata(color_in_depth_dir, session, len(aligner.depth_images), complete=True)
+    write_alignment_metadata(color_in_depth_dir, session, frame_count, complete=True, **metadata)
     return color_in_depth_dir
 
 

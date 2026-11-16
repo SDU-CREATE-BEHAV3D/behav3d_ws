@@ -17,7 +17,6 @@
 
 # local utils
 import json
-import re
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +31,7 @@ from .utils.intrinsics import load_intrinsics, intrinsics_matrix
 from .utils.extrinsics import load_extrinsics
 from .utils.image_loader import load_images
 from .utils.integration import visualize_camera_poses
-from .utils.rectification import rectify_images as rectify_image_batch, validate_alignment_metadata
+from .utils.rectification import rectify_images as rectify_image_batch, validate_alignment_metadata, aligned_image_paths
 
 DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260113_170839"
 DEFAULT_SCAN_FOLDER = "manual_caps"
@@ -303,44 +302,7 @@ class TSDF_Integration():
         if not C2D_DIR.exists():
             raise FileNotFoundError(f"color_in_depth folder not found: {C2D_DIR}")
 
-        paths = list(C2D_DIR.glob(C2D_GLOB))
-        if len(paths) == 0:
-            raise FileNotFoundError(f"No files matching '{C2D_GLOB}' found in {C2D_DIR}")
-
-        indexed = []
-        for p in paths:
-            match = re.search(r"(\d+)$", p.stem)
-            idx = int(match.group(1)) if match else None
-            indexed.append((idx, p))
-
-        # Prefer index-aligned ordering when filenames end with frame ids.
-        if all(idx is not None for idx, _ in indexed):
-            idx_to_path = {}
-            duplicate_ids = []
-            for idx, p in indexed:
-                if idx in idx_to_path:
-                    duplicate_ids.append(idx)
-                idx_to_path[idx] = p
-
-            expected_count = len(self.images)
-            if len(duplicate_ids) == 0 and all(i in idx_to_path for i in range(expected_count)):
-                paths = [idx_to_path[i] for i in range(expected_count)]
-            else:
-                paths = [p for _, p in sorted(indexed, key=lambda item: (item[0], item[1].name))]
-                if len(duplicate_ids) > 0:
-                    print(f"Warning: duplicate color_in_depth frame ids detected: {sorted(set(duplicate_ids))}")
-                missing = [i for i in range(expected_count) if i not in idx_to_path]
-                if len(missing) > 0:
-                    print(f"Warning: missing color_in_depth frame ids for depth frames: {missing}")
-        else:
-            paths = sorted(paths, key=lambda p: p.name)
-
-        if len(paths) != len(self.images):
-            print(
-                "Warning: frame-count mismatch "
-                f"(depth={len(self.images)}, color_in_depth={len(paths)}). "
-                f"Using first {min(len(self.images), len(paths))} frames."
-            )
+        paths = aligned_image_paths(C2D_DIR, len(self.images))
 
         imgs = []
         valid_pixels_before = 0
@@ -349,6 +311,8 @@ class TSDF_Integration():
             im = cv2.imread(str(p), cv2.IMREAD_COLOR)
             if im is None:
                 raise RuntimeError(f"Failed reading: {p}")
+            if im.shape[:2] != (self.height, self.width):
+                raise ValueError(f"Aligned image dimensions do not match depth calibration: {p}")
             valid_pixels_before += int(np.count_nonzero(np.any(im > 0, axis=2)))
             im = self._postprocess_color_in_depth(im)
             valid_pixels_after += int(np.count_nonzero(np.any(im > 0, axis=2)))

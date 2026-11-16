@@ -15,6 +15,7 @@ from rclpy.parameter_client import AsyncParameterClient
 
 from .control_session import ControlAwareSession
 from .scan_sequences import fibonacci, grid_sweep, half_cylinder, half_cylinder_side_caps
+from .reconstruction_outputs import alignment_is_complete
 
 
 STALE_FRAME_ERROR_PREFIX = "STALE_CAMERA_FRAME:"
@@ -792,23 +793,11 @@ class ScanSession(ControlAwareSession):
     def wait_for_fresh_alignment_output(self, *, output_path: str, start_ts: float, timeout_s: float) -> None:
         out_dir = Path(output_path)
 
-        def _fresh_alignment_exists() -> bool:
-            if not out_dir.exists() or not out_dir.is_dir():
-                return False
-            for pattern in ("color_in_depth*.png", "color_in_depth*.jpg", "*.npy"):
-                for p in out_dir.glob(pattern):
-                    try:
-                        if p.stat().st_mtime >= (float(start_ts) - 0.25):
-                            return True
-                    except OSError:
-                        continue
-            return False
-
         self.wait_for_fresh_file_output(
             output_path=str(out_dir),
             start_ts=start_ts,
             timeout_s=timeout_s,
-            exists_fn=_fresh_alignment_exists,
+            exists_fn=lambda: alignment_is_complete(out_dir, start_ts),
         )
 
     def wait_for_fresh_file_output(

@@ -99,3 +99,108 @@ The comparison region is fixed across candidates: base X in (−0.15, 0.15) m, Y
 Baseline replays closely match the saved meshes but are not bit-identical across platforms. The integrity record includes vertex/triangle counts and bidirectional nearest-neighbor distributions; rare differences reach about one voxel. Prefix replay results likewise report the small residual differences rather than claiming exact geometry. No runtime capture configuration, sensor-confidence map, independent dimensions, original software build record, or ground-truth mesh was supplied. The original IR files and duplicate STL copies were not needed for this depth/mesh audit.
 
 Reproducibility: [input inventory](/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_confidence/inventory.json), [integrity and runtime](/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_confidence/integrity.json), [prefix verification](/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_confidence/prefix_replay.json), [full-volume object metrics](/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_confidence/object_summary.json), [held-out metrics](/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_confidence/heldout_summary.json), [additional cube tests](/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_confidence/heldout_tuning_summary.json), and [per-view table fits](/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_confidence/raw_table_consistency.json). Commands are documented in the repository analysis-tools README.
+
+
+**16 November follow-up — ROS correction and further refinement**
+
+The checked J1 workflow did not apply the saved lens-distortion coefficients.
+GitHub was rechecked on 16 November: `J1_Build` still points to
+`e0d25121105883fb6958c00a690329e839132c7b`. Its [color alignment](https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/blob/e0d25121105883fb6958c00a690329e839132c7b/src/behav3d_sense/behav3d_sense/reconstruct/color_to_depth.py#L65)
+loads `Dd`/`Dc` but uses pinhole equations, and its
+[cropped TSDF](https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/blob/e0d25121105883fb6958c00a690329e839132c7b/src/behav3d_sense/behav3d_sense/reconstruct/TSDF_cpu_cropped.py#L228)
+loads `D` but supplies only `K` to fusion. The ROS wrappers call those paths;
+capture saves raw image topics without undistortion. In the pinned
+[Orbbec v2.4.5 driver](https://github.com/orbbec/OrbbecSDK_ROS2/blob/v2.4.5/orbbec_camera/src/ob_camera_node.cpp#L1720),
+optional color undistortion defaults to false and publishes a separate
+`color/image_undistorted` topic. This verifies the checked source path; no
+historical deployed binary or complete runtime override log was supplied.
+
+This branch now defaults all three ROS reconstruction services to
+`rectify_images=true`, including object extraction. `reconstruct_services.launch.py`
+passes the same setting to all nodes; `print_move.launch.py` exposes it as
+`reconstruct_rectify_images`. Offline Python/CLI entry points retain explicit
+opt-in behavior. No voxel size, extraction threshold, depth bias, or crop default
+was changed by this ROS integration.
+
+Alignment now writes images atomically and publishes a run-specific
+`alignment.json` only when every image is present, readable, and indexed
+correctly. The record binds image hashes to the manifest/calibration and records
+start/completion times. The orchestrator waits for a fresh complete record;
+TSDF rejects incomplete, mixed-camera-model, changed, or misindexed sets. A single
+fresh PNG can no longer start the downstream reconstruction. Both packages must
+be rebuilt together because old alignment workers do not publish this protocol.
+
+Nineteen focused tests passed. All nine November 13 sessions were replayed
+through the actual service runner functions with correction enabled by default.
+All full frame sets passed the completion handoff; bidirectional mesh vertex
+distances to the prior corrected replays were zero for every scan. The separate
+object-extraction service runner also completed on the planar cube. These are
+real image/geometry replays with ROS imports stubbed, not a live ROS transport or
+hardware test. Linux/ament/launch startup remains untested on this Mac.
+
+Further experiments performed 114 held-out reconstructions, followed by nine
+full-scan experimental meshes for visual review. The profiles test 10/20 mm depth
+jump rejection, 3/5 mm cross-view depth agreement with two/three total supporting
+views, bounded pose refinement, several depth biases, and 1 mm voxels with an
+8 mm truncation band. Pose fitting uses only training views, a fixed anchor,
+object/table balancing, and a robot-pose prior; per-axis corrections are bounded
+to 3 mm and 1 degree. These experimental changes remain in the analysis harness.
+
+The primary comparison below uses all nine scan types with every fourth view
+held out starting at index 3. P90 is the arithmetic mean of nine per-scan P90
+values, not a pooled percentile. The within-5-mm and coverage percentages pool
+12,085 valid reference rays, counting missing surfaces against the denominator.
+Raw scoring rays, original poses, calibration and the scoring depth bias (-5 mm)
+are fixed across candidates. These are sensor-consistency measures, not measured
+physical accuracy or an independent calibration of the depth bias.
+
+| Profile | Mean scan P90 (mm) | Within 5 mm | Mesh-hit coverage |
+|---|---:|---:|---:|
+| Corrected baseline | 21.75 | 74.30% | 99.72% |
+| Depth bias -6 mm | 16.15 | 73.46% | 99.63% |
+| Depth bias -7 mm | 12.33 | 71.49% | 99.61% |
+| Three-view depth support | 21.12 | 74.06% | 99.59% |
+| Pose + depth-edge rejection | 20.04 | 73.54% | 99.63% |
+| 1 mm voxels / 8 mm band | 28.65 | 75.11% | 98.27% |
+| 1 mm + pose / edge rejection | 26.54 | 74.93% | 98.50% |
+
+No further candidate improves both reported agreement measures and coverage
+consistently across the nine scans. A -6 mm bias reduces mean scan P90 by about
+26%, while reducing the within-5-mm rate from 74.30% to 73.46%. At -7 mm the tail
+improves further, but the within-5-mm rate falls to 71.49%. The stronger 10 mm edge
+mask removes substantial planar-cube surface (held-out coverage 98.3% to 82.9%).
+The 1 mm grid exposes finer structure and more noise, raises the mean P90, and
+loses coverage. None is enabled as a new production default.
+
+The alternate cube split (held-out indices 1, 5, 9, ...) is a robustness check,
+not an independent unseen dataset. The 1 mm pose/edge combination raises the
+within-5-mm rate from 69.1% to 75.7% on the linear cube and 69.3% to 74.2% on the
+oriented cube, but worsens both tail errors; on the planar cube coverage falls
+from 99.4% to 96.8%. Its artifact-inclusive box is 46.5 x 48.5 x 50.9 mm (linear),
+46.6 x 47.6 x 50.2 mm (oriented), and 49.0 x 82.3 x 50.5 mm (planar). Those extents
+use the same fixed 5.859375 mm table band/support plane as the earlier bounds.
+The planar extent catches an unwanted protrusion; fitting an ideal cube would
+hide that failure. Physical dimensions are still unknown.
+
+The full-scan figures below show actual meshes, with matched view/scale and no
+visual smoothing. Both columns use distortion correction and threshold 3.
+The right-hand mesh additionally uses the experimental 1 mm grid, 8 mm band,
+pose refinement, and 20 mm depth-edge rejection. These figures use all views
+for fusion; their same-view scores are not used as validation evidence.
+
+![All nine refinement comparisons](/Users/josephnamar/.codex/worktrees/j1-reconstruction-quality/behav3d_ws/reports/reconstruction_quality/figures/all_nine_refinement.png)
+
+![Held-out refinement measurements](/Users/josephnamar/.codex/worktrees/j1-reconstruction-quality/behav3d_ws/reports/reconstruction_quality/figures/refinement_metrics.png)
+
+[Full trials, meshes, provenance and integrity](/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_refinement) ·
+[Compact per-scan results](/Users/josephnamar/.codex/worktrees/j1-reconstruction-quality/behav3d_ws/reports/reconstruction_quality/refinement_summary.json) ·
+[J1 source verification](/Users/josephnamar/.codex/worktrees/j1-reconstruction-quality/behav3d_ws/reports/reconstruction_quality/j1_workflow_verification.json).
+
+All 381 original November 13 input files and their snapshot copies were verified
+unchanged after processing. All 123 experimental mesh hashes and all six frozen
+experiment-runner hashes were checked. The nine service-replay source/output
+hashes were also verified. Production now includes calibrated rectification and
+the complete-alignment handoff; further numerical refinements remain experimental.
+The next strong accuracy check is measured depth/hand-eye calibration and new
+stationary captures with stronger side-face coverage, rather than assuming a
+visually sharper mesh is dimensionally correct.

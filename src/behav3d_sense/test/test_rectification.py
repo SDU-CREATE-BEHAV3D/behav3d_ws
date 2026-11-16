@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
+import cv2
 
 SPEC = importlib.util.spec_from_file_location("rectification", Path(__file__).parents[1] / "behav3d_sense/reconstruct/utils/rectification.py")
 rectification = importlib.util.module_from_spec(SPEC)
@@ -69,6 +70,8 @@ class RectificationTests(unittest.TestCase):
             rectification.write_alignment_metadata(out, session, 3, complete=False)
             with self.assertRaises(ValueError):
                 rectification.validate_alignment_metadata(out, session, 3, rectified=True)
+            for i in range(3):
+                cv2.imwrite(str(out / f"color_in_depth_{i:04d}.png"), np.zeros((48,64,3),np.uint8))
             rectification.write_alignment_metadata(out, session, 3, complete=True)
             rectification.validate_alignment_metadata(out, session, 3, rectified=True)
             with self.assertRaises(ValueError):
@@ -90,11 +93,39 @@ class RectificationTests(unittest.TestCase):
                 (root / name).write_text(name)
             session = SimpleNamespace(path=root, _scan_folder="scan", depth_intrinsics_path=root/"depth", color_intrinsics_path=root/"color", _camera_extrinsics_path=root/"extrinsics")
             out = root / "scan/reconstruct/color_in_depth_rectified"
+            out.mkdir(parents=True)
+            for i in range(2):
+                cv2.imwrite(str(out / f"color_in_depth_{i:04d}.png"), np.zeros((48,64,3),np.uint8))
             rectification.write_alignment_metadata(out, session, 2, complete=True)
             with patch.object(color_to_depth, "Session", return_value=session), patch.object(color_to_depth, "ColorToDepthAligner", side_effect=ValueError("unreadable color")):
                 with self.assertRaisesRegex(ValueError, "unreadable color"):
                     color_to_depth.run(str(root), "scan", rectify_images=True)
             self.assertFalse(json.loads((out / rectification.ALIGNMENT_METADATA).read_text())["complete"])
+
+    def test_missing_middle_and_duplicate_frame_indices_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            out=Path(temporary)
+            for name in ('color_in_depth_0000.png','color_in_depth_0002.png'):
+                (out/name).touch()
+            with self.assertRaisesRegex(ValueError,'missing'):
+                rectification.aligned_image_paths(out,3)
+            (out/'color_in_depth_0001.png').touch()
+            self.assertEqual(len(rectification.aligned_image_paths(out,3)),3)
+            (out/'color_in_depth_1.png').touch()
+            with self.assertRaisesRegex(ValueError,'extra'):
+                rectification.aligned_image_paths(out,3)
+
+    def test_failed_image_write_cannot_complete_alignment(self):
+        from behav3d_sense.reconstruct.color_to_depth import ColorToDepthAligner
+        with tempfile.TemporaryDirectory() as temporary:
+            aligner=object.__new__(ColorToDepthAligner)
+            aligner.output_dir=Path(temporary)
+            aligner.depth_images=[np.ones((48,64),np.uint16)]
+            aligner.color_images=[np.zeros((48,64,3),np.uint8)]
+            with patch.object(aligner,'_align_color_to_depth',return_value=(aligner.color_images[0],None)), patch('cv2.imwrite',return_value=False):
+                with self.assertRaises(OSError):
+                    aligner.test_one_frame(0,visualize=False)
+            self.assertFalse((aligner.output_dir/'color_in_depth_0000.png').exists())
 
 
 if __name__ == "__main__":

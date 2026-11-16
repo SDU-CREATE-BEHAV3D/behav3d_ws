@@ -39,10 +39,13 @@ captures/260113_170839/
 
 Reconstruction outputs are now scoped inside each scan folder:
 
-- `captures/<session>/<scan_folder>/reconstruct/color_in_depth/` (from `color_to_depth`)
+- `captures/<session>/<scan_folder>/reconstruct/color_in_depth_rectified/` (default ROS alignment)
 - `captures/<session>/<scan_folder>/reconstruct/tsdf_surface_*.{stl,ply}` (from TSDF services)
 
-TSDF scripts read aligned images from `<scan_folder>/reconstruct/color_in_depth/`.
+TSDF reads the matching alignment folder. `color_in_depth/` is used only with
+rectification disabled. Both modes publish `alignment.json` after all images are
+successfully written. The orchestrator waits for a fresh complete record and
+verifies its manifest and image hashes before starting TSDF.
 
 ## Environment Setup
 
@@ -79,7 +82,7 @@ ros2 service call /reconstruct/color_to_depth behav3d_interfaces/srv/ColorToDept
 
 Output:
 
-- `<scan_folder>/reconstruct/color_in_depth/`
+- `<scan_folder>/reconstruct/color_in_depth_rectified/`
 
 ### 2) TSDF Cropped (Mesh + Point Clouds)
 
@@ -137,13 +140,26 @@ Outputs:
 
 ## Notes and Troubleshooting
 
-### Offline raw-image rectification
+### Saved-calibration rectification in ROS and offline
 
-The offline color-alignment and cropped-TSDF APIs accept `rectify_images=True`.
-Their CLIs accept `--rectify-images`; enable it in **both** stages for raw images
-whose saved OpenCV distortion coefficients describe the input. This is opt-in;
-do not apply it to an already rectified stream. Existing ROS service requests and
-defaults are unchanged. The separate `tsdf_object_extract` path is not converted.
+The J1 baseline (`e0d2512`) loaded camera distortion coefficients but did not
+apply them during color alignment or TSDF reconstruction. In this branch all
+three ROS reconstruction services now default to `rectify_images=true`. The
+request message definitions are unchanged. The launch file passes one setting
+to all three nodes, including the separate object-extraction service:
+
+```sh
+ros2 launch behav3d_sense reconstruct_services.launch.py rectify_images:=true
+```
+
+The `behav3d_bringup/print_move.launch.py` entry point exposes the same choice as
+`reconstruct_rectify_images` (default `true`). Disable it consistently for inputs
+that are already rectified; do not apply the saved raw-camera distortion twice.
+For individual service executables use `--ros-args -p rectify_images:=false` on
+both the alignment node and whichever TSDF node is used.
+
+Offline Python APIs retain their explicit opt-in `rectify_images=True`, and all
+three CLIs accept `--rectify-images`. Both stages must use the same setting.
 
 On a disposable **copy** of a session, run alignment first and wait for completion:
 
@@ -158,7 +174,10 @@ python -m behav3d_sense.reconstruct.TSDF_cpu_cropped \
 The package must be installed or present on `PYTHONPATH`. Reconstruction writes
 into the copy's `reconstruct/` folder. Rectified color uses its own
 `color_in_depth_rectified/` folder and a completion record bound to the manifest
-and calibration. An incomplete or stale record makes rectified TSDF fail clearly.
+and calibration. In either mode, an incomplete/stale record or a missing,
+misindexed, duplicate, modified, or unreadable aligned image makes TSDF fail.
+Old complete unmarked legacy image sets remain readable by offline TSDF; the
+updated ROS orchestrator requires a new alignment completion record.
 Depth uses nearest-neighbor rectification, with unchanged units, K, and image size.
 The original depth bias, TSDF and mesh cleanup settings remain in effect.
 
@@ -170,6 +189,9 @@ geometry; use a validated world-space crop after fusion where needed. See
 replay commands and the limitations of consistency-only evaluation.
 
 - Services return immediately while reconstruction runs in a background thread. Watch the console logs for completion or errors.
-- `tsdf_cropped` and `tsdf_object_extract` read aligned color images from `<scan_folder>/reconstruct/color_in_depth/`. Run `color_to_depth` first for the same `scan_folder`.
+- Run `color_to_depth` first for the same scan folder and rectification setting.
+- Rebuild/source both `behav3d_sense` and `behav3d_orchestrator` together: a fresh
+  PNG no longer counts as completed alignment. A service success response means
+  the worker was started; completion is recorded separately.
 - `tsdf_object_extract` expects `table_plane.json` in `<scan_folder>/reconstruct/`. Generate it with `tsdf_cropped` in plane fit mode for that same folder.
 - If you request `CUDA:0` but Open3D CUDA is not available, the code falls back to `CPU:0` with a warning.
