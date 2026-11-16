@@ -1,0 +1,354 @@
+{
+  "scope": "Processing fixed saved captures; camera calibration, robot poses, raw depth values of retained pixels and production settings unchanged. Binary observation selection is experimental.",
+  "fixed_settings": {
+    "rectified": true,
+    "voxel_size_m": 0.001953125,
+    "truncation_m": 0.015625,
+    "extraction_weight": 3,
+    "depth_bias_mm": -5,
+    "poses_unchanged": true,
+    "calibration_unchanged": true
+  },
+  "reconstructions": 27,
+  "scans": 9,
+  "aggregate": {
+    "baseline": {
+      "mean_scan_p90_mm": 21.74655832714505,
+      "within_5mm_percent": 74.29871741828713,
+      "mesh_hit_percent": 99.71865949524204
+    },
+    "angle55": {
+      "mean_scan_p90_mm": 42.73571774694653,
+      "within_5mm_percent": 45.75093090608192,
+      "mesh_hit_percent": 78.72569300786098
+    },
+    "angle70": {
+      "mean_scan_p90_mm": 29.4436606089274,
+      "within_5mm_percent": 64.3773272652048,
+      "mesh_hit_percent": 90.56681836988001
+    }
+  },
+  "per_scan": {
+    "261113_145255": {
+      "baseline": {
+        "valid_raw_rays": 2478,
+        "mesh_hits": 2478,
+        "hit_fraction": 1.0,
+        "median_signed_mm": -0.06259727478030719,
+        "median_abs_mm": 1.549641370773347,
+        "p90_abs_mm": 36.812406635284425,
+        "within_5mm_fraction": 0.7158999192897498,
+        "within_10mm_fraction": 0.817998385794996,
+        "gross_30mm_fraction": 0.11420500403551251
+      },
+      "angle55": {
+        "valid_raw_rays": 2478,
+        "mesh_hits": 1922,
+        "hit_fraction": 0.7756255044390638,
+        "median_signed_mm": 2.9154133796692183,
+        "median_abs_mm": 3.0684003829956064,
+        "p90_abs_mm": 72.64611535072329,
+        "within_5mm_fraction": 0.39991928974979823,
+        "within_10mm_fraction": 0.4023405972558515,
+        "gross_30mm_fraction": 0.31840193704600483
+      },
+      "angle70": {
+        "valid_raw_rays": 2478,
+        "mesh_hits": 2360,
+        "hit_fraction": 0.9523809523809523,
+        "median_signed_mm": 0.4208321571350093,
+        "median_abs_mm": 1.570065975189161,
+        "p90_abs_mm": 44.01335577964778,
+        "within_5mm_fraction": 0.6218724778046812,
+        "within_10mm_fraction": 0.6937046004842615,
+        "gross_30mm_fraction": 0.14487489911218726
+      }
+    },
+    "261113_150006": {
+      "baseline": {
+        "valid_raw_rays": 2345,
+        "mesh_hits": 2345,
+        "hit_fraction": 1.0,
+        "median_signed_mm": -0.8156824111938965,
+        "median_abs_mm": 1.6816911697388193,
+        "p90_abs_mm": 36.019110679626486,
+        "within_5mm_fraction": 0.7019189765458422,
+        "within_10mm_fraction": 0.817910447761194,
+        "gross_30mm_fraction": 0.11855010660980811
+      },
+      "angle55": {
+        "valid_raw_rays": 2345,
+        "mesh_hits": 2007,
+        "hit_fraction": 0.855863539445629,
+        "median_signed_mm": 0.8955292701721129,
+        "median_abs_mm": 1.9285249710082608,
+        "p90_abs_mm": 63.951576519012455,
+        "within_5mm_fraction": 0.48017057569296373,
+        "within_10mm_fraction": 0.5074626865671642,
+        "gross_30mm_fraction": 0.2814498933901919
+      },
+      "angle70": {
+        "valid_raw_rays": 2345,
+        "mesh_hits": 2305,
+        "hit_fraction": 0.9829424307036247,
+        "median_signed_mm": -0.5784420967102077,
+        "median_abs_mm": 1.5733428001404315,
+        "p90_abs_mm": 35.68199625015258,
+        "within_5mm_fraction": 0.6831556503198294,
+        "within_10mm_fraction": 0.7727078891257996,
+        "gross_30mm_fraction": 0.11812366737739873
+      }
+    },
+    "261113_150432": {
+      "baseline": {
+        "valid_raw_rays": 1984,
+        "mesh_hits": 1950,
+        "hit_fraction": 0.9828629032258065,
+        "median_signed_mm": 1.175941944122294,
+        "median_abs_mm": 1.9580934047698784,
+        "p90_abs_mm": 35.370077276229836,
+        "within_5mm_fraction": 0.6355846774193549,
+        "within_10mm_fraction": 0.6965725806451613,
+        "gross_30mm_fraction": 0.11391129032258064
+      },
+      "angle55": {
+        "valid_raw_rays": 1984,
+        "mesh_hits": 1492,
+        "hit_fraction": 0.7520161290322581,
+        "median_signed_mm": 1.7293009757995415,
+        "median_abs_mm": 1.7293009757995415,
+        "p90_abs_mm": 44.24773993492124,
+        "within_5mm_fraction": 0.5085685483870968,
+        "within_10mm_fraction": 0.5085685483870968,
+        "gross_30mm_fraction": 0.1622983870967742
+      },
+      "angle70": {
+        "valid_raw_rays": 1984,
+        "mesh_hits": 1502,
+        "hit_fraction": 0.7570564516129032,
+        "median_signed_mm": 1.7466096878051562,
+        "median_abs_mm": 1.7466096878051562,
+        "p90_abs_mm": 44.04018526077268,
+        "within_5mm_fraction": 0.5141129032258065,
+        "within_10mm_fraction": 0.5141129032258065,
+        "gross_30mm_fraction": 0.16028225806451613
+      }
+    },
+    "261113_150709": {
+      "baseline": {
+        "valid_raw_rays": 596,
+        "mesh_hits": 596,
+        "hit_fraction": 1.0,
+        "median_signed_mm": -1.300729990005467,
+        "median_abs_mm": 2.2810368537903303,
+        "p90_abs_mm": 15.26425909996032,
+        "within_5mm_fraction": 0.8473154362416108,
+        "within_10mm_fraction": 0.8926174496644296,
+        "gross_30mm_fraction": 0.07718120805369127
+      },
+      "angle55": {
+        "valid_raw_rays": 596,
+        "mesh_hits": 564,
+        "hit_fraction": 0.9463087248322147,
+        "median_signed_mm": -0.5546681880950755,
+        "median_abs_mm": 2.6381185054779044,
+        "p90_abs_mm": 16.9676654338836,
+        "within_5mm_fraction": 0.6862416107382551,
+        "within_10mm_fraction": 0.825503355704698,
+        "gross_30mm_fraction": 0.06040268456375839
+      },
+      "angle70": {
+        "valid_raw_rays": 596,
+        "mesh_hits": 596,
+        "hit_fraction": 1.0,
+        "median_signed_mm": -0.875272512435965,
+        "median_abs_mm": 2.23992443084714,
+        "p90_abs_mm": 15.024524211883495,
+        "within_5mm_fraction": 0.8120805369127517,
+        "within_10mm_fraction": 0.8909395973154363,
+        "gross_30mm_fraction": 0.07046979865771812
+      }
+    },
+    "261113_151101": {
+      "baseline": {
+        "valid_raw_rays": 550,
+        "mesh_hits": 550,
+        "hit_fraction": 1.0,
+        "median_signed_mm": -1.9450302124023322,
+        "median_abs_mm": 2.5589716434478715,
+        "p90_abs_mm": 17.644250631332394,
+        "within_5mm_fraction": 0.8290909090909091,
+        "within_10mm_fraction": 0.8927272727272727,
+        "gross_30mm_fraction": 0.0890909090909091
+      },
+      "angle55": {
+        "valid_raw_rays": 550,
+        "mesh_hits": 528,
+        "hit_fraction": 0.96,
+        "median_signed_mm": -0.996490478515577,
+        "median_abs_mm": 2.5874052047729634,
+        "p90_abs_mm": 16.44265275001522,
+        "within_5mm_fraction": 0.7254545454545455,
+        "within_10mm_fraction": 0.8472727272727273,
+        "gross_30mm_fraction": 0.07636363636363637
+      },
+      "angle70": {
+        "valid_raw_rays": 550,
+        "mesh_hits": 550,
+        "hit_fraction": 1.0,
+        "median_signed_mm": -1.4113903045653853,
+        "median_abs_mm": 2.0954985618590882,
+        "p90_abs_mm": 14.716417169570912,
+        "within_5mm_fraction": 0.82,
+        "within_10mm_fraction": 0.8963636363636364,
+        "gross_30mm_fraction": 0.08181818181818182
+      }
+    },
+    "261113_151435": {
+      "baseline": {
+        "valid_raw_rays": 462,
+        "mesh_hits": 462,
+        "hit_fraction": 1.0,
+        "median_signed_mm": 0.007946729660035512,
+        "median_abs_mm": 1.402189731597947,
+        "p90_abs_mm": 9.591661071777294,
+        "within_5mm_fraction": 0.829004329004329,
+        "within_10mm_fraction": 0.9069264069264069,
+        "gross_30mm_fraction": 0.0
+      },
+      "angle55": {
+        "valid_raw_rays": 462,
+        "mesh_hits": 257,
+        "hit_fraction": 0.5562770562770563,
+        "median_signed_mm": 2.9659519195556205,
+        "median_abs_mm": 2.9659519195556205,
+        "p90_abs_mm": 15.400704574584912,
+        "within_5mm_fraction": 0.33116883116883117,
+        "within_10mm_fraction": 0.4264069264069264,
+        "gross_30mm_fraction": 0.0
+      },
+      "angle70": {
+        "valid_raw_rays": 462,
+        "mesh_hits": 462,
+        "hit_fraction": 1.0,
+        "median_signed_mm": 0.7110204696654798,
+        "median_abs_mm": 1.3705120086669464,
+        "p90_abs_mm": 10.755582952499344,
+        "within_5mm_fraction": 0.7922077922077922,
+        "within_10mm_fraction": 0.8917748917748918,
+        "gross_30mm_fraction": 0.0
+      }
+    },
+    "261113_151637": {
+      "baseline": {
+        "valid_raw_rays": 1323,
+        "mesh_hits": 1323,
+        "hit_fraction": 1.0,
+        "median_signed_mm": -0.3313007354736053,
+        "median_abs_mm": 1.553135395050087,
+        "p90_abs_mm": 14.636903762817427,
+        "within_5mm_fraction": 0.8291761148904006,
+        "within_10mm_fraction": 0.8820861678004536,
+        "gross_30mm_fraction": 0.050642479213907785
+      },
+      "angle55": {
+        "valid_raw_rays": 1323,
+        "mesh_hits": 1094,
+        "hit_fraction": 0.8269085411942555,
+        "median_signed_mm": 2.5591211318969354,
+        "median_abs_mm": 3.708362579345703,
+        "p90_abs_mm": 57.83339676856997,
+        "within_5mm_fraction": 0.42403628117913833,
+        "within_10mm_fraction": 0.4346182917611489,
+        "gross_30mm_fraction": 0.2849584278155707
+      },
+      "angle70": {
+        "valid_raw_rays": 1323,
+        "mesh_hits": 1221,
+        "hit_fraction": 0.9229024943310657,
+        "median_signed_mm": 0.4145860671996848,
+        "median_abs_mm": 1.5659141540527166,
+        "p90_abs_mm": 32.87752676010136,
+        "within_5mm_fraction": 0.6772486772486772,
+        "within_10mm_fraction": 0.6938775510204082,
+        "gross_30mm_fraction": 0.1111111111111111
+      }
+    },
+    "261113_152024": {
+      "baseline": {
+        "valid_raw_rays": 1249,
+        "mesh_hits": 1249,
+        "hit_fraction": 1.0,
+        "median_signed_mm": -1.1006102561951225,
+        "median_abs_mm": 1.5480742454528906,
+        "p90_abs_mm": 8.940204524993927,
+        "within_5mm_fraction": 0.8342674139311449,
+        "within_10mm_fraction": 0.9063250600480385,
+        "gross_30mm_fraction": 0.028823058446757407
+      },
+      "angle55": {
+        "valid_raw_rays": 1249,
+        "mesh_hits": 1071,
+        "hit_fraction": 0.8574859887910328,
+        "median_signed_mm": 0.8105282783508194,
+        "median_abs_mm": 2.9885120391845987,
+        "p90_abs_mm": 57.729676246643045,
+        "within_5mm_fraction": 0.45716573258606885,
+        "within_10mm_fraction": 0.47157726180944753,
+        "gross_30mm_fraction": 0.28422738190552443
+      },
+      "angle70": {
+        "valid_raw_rays": 1249,
+        "mesh_hits": 1176,
+        "hit_fraction": 0.9415532425940752,
+        "median_signed_mm": -0.03354096412661045,
+        "median_abs_mm": 1.5931289196014498,
+        "p90_abs_mm": 34.5590131282807,
+        "within_5mm_fraction": 0.6973578863090473,
+        "within_10mm_fraction": 0.710968775020016,
+        "gross_30mm_fraction": 0.12169735788630905
+      }
+    },
+    "261113_152345": {
+      "baseline": {
+        "valid_raw_rays": 1098,
+        "mesh_hits": 1098,
+        "hit_fraction": 1.0,
+        "median_signed_mm": 0.720863819122286,
+        "median_abs_mm": 1.853265047073338,
+        "p90_abs_mm": 21.440151262283294,
+        "within_5mm_fraction": 0.7422586520947176,
+        "within_10mm_fraction": 0.843351548269581,
+        "gross_30mm_fraction": 0.0610200364298725
+      },
+      "angle55": {
+        "valid_raw_rays": 1098,
+        "mesh_hits": 579,
+        "hit_fraction": 0.5273224043715847,
+        "median_signed_mm": 2.4378995895385502,
+        "median_abs_mm": 2.4378995895385502,
+        "p90_abs_mm": 39.40193214416502,
+        "within_5mm_fraction": 0.28233151183970856,
+        "within_10mm_fraction": 0.28233151183970856,
+        "gross_30mm_fraction": 0.14207650273224043
+      },
+      "angle70": {
+        "valid_raw_rays": 1098,
+        "mesh_hits": 773,
+        "hit_fraction": 0.7040072859744991,
+        "median_signed_mm": 1.5259742736816184,
+        "median_abs_mm": 1.5475368499755504,
+        "p90_abs_mm": 33.32434396743772,
+        "within_5mm_fraction": 0.5,
+        "within_10mm_fraction": 0.5036429872495446,
+        "gross_30mm_fraction": 0.09198542805100182
+      }
+    }
+  },
+  "integrity": {
+    "input_files_verified_original_and_snapshot": 381,
+    "mesh_hashes_verified": 27,
+    "baseline_metrics_identical_to_previous_trial": true,
+    "normal_estimation_analytic_self_check_passed": true
+  }
+}

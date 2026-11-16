@@ -221,3 +221,26 @@ python -B tools/reconstruction_quality/november_refinement_results.py \
 processing, with ROS imports stubbed. It does not validate ROS transport, launch
 startup, hardware, or Linux/ament integration. Nine full-frame replays matched
 the earlier corrected meshes; a separate object-extraction replay also passed.
+
+## Processing-only angle selection
+
+Further work is scoped to processing the existing saved data. The corrected
+baseline keeps its original 1.953125 mm voxel size and weight threshold 3.
+`november_angles.py` tests binary selection by surface incidence angle without
+altering calibration, poses, or surviving depth values. It estimates normals
+from 5x5 camera-space PCA neighbourhoods; discontinuities and uncertain normals
+are retained. Synthetic frontal/tilted planes and a depth step check the normal
+estimation and preservation of input values before the campaign starts.
+
+```sh
+python -B tools/reconstruction_quality/november_angles.py \
+  --audit "$NOVEMBER_ROOT" --pairs "$PAIRS_ROOT" \
+  --output /path/to/new-angle-trial --angles 55 70
+```
+
+This runs the baseline and both angle cutoffs on all nine November scans with
+the same held-out views/rays. The retained trial is
+`reconstruction_quality/november_processing_angles`, with results in
+`reports/reconstruction_quality/processing_angles.json`. Both cutoffs worsen
+coverage and the within-5-mm rate; the method remains experimental. These tests
+evaluate hard rejection, not continuous observation weighting during fusion.

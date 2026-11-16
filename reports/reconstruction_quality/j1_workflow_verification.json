@@ -42,5 +42,61 @@
       ]
     }
   },
-  "conclusion": "J1 color alignment and TSDF load saved distortion coefficients but do not use them. Capture saves raw image topics. Driver optional color undistortion is disabled by default and publishes a separate topic. Historical deployed binaries/overrides were not supplied."
+  "conclusion": "J1 color alignment and TSDF load saved distortion coefficients but do not use them. Capture saves raw image topics. Driver optional color undistortion is disabled by default and publishes a separate topic. Historical deployed binaries/overrides were not supplied.",
+  "summer_school": {
+    "checked_date": "2026-11-16",
+    "remote_ref": "summer_school_26",
+    "remote_verified_with": "GitHub fetch_commit",
+    "commits": {
+      "remote_summer_school": "8290731231fa46f850643962351641333248deb8",
+      "local_summer_school": "2ba8bf293171156716cfd3f00cd112d947b4fb44",
+      "j1": "e0d25121105883fb6958c00a690329e839132c7b"
+    },
+    "identical_git_objects": {
+      "src/behav3d_sense": {
+        "remote_summer_school": "065de1bb7ccb08cea9bdedbbbaf9d626be39ce94",
+        "local_summer_school": "065de1bb7ccb08cea9bdedbbbaf9d626be39ce94",
+        "j1": "065de1bb7ccb08cea9bdedbbbaf9d626be39ce94"
+      },
+      "src/behav3d_sense/behav3d_sense/reconstruct": {
+        "remote_summer_school": "2d4a7ea3be4eca51546cbbf0f7cd896da21a8376",
+        "local_summer_school": "2d4a7ea3be4eca51546cbbf0f7cd896da21a8376",
+        "j1": "2d4a7ea3be4eca51546cbbf0f7cd896da21a8376"
+      },
+      "src/behav3d_sense/launch/reconstruct_services.launch.py": {
+        "remote_summer_school": "aa89bbba58a88f66f22fa9755af906f4b0e0ce52",
+        "local_summer_school": "aa89bbba58a88f66f22fa9755af906f4b0e0ce52",
+        "j1": "aa89bbba58a88f66f22fa9755af906f4b0e0ce52"
+      }
+    },
+    "sources": [
+      {
+        "url": "https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/blob/8290731231fa46f850643962351641333248deb8/src/behav3d_sense/behav3d_sense/reconstruct/color_to_depth.py#L65-L104",
+        "finding": "Dd and Dc loaded; depth backprojection and color projection use K only."
+      },
+      {
+        "url": "https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/blob/8290731231fa46f850643962351641333248deb8/src/behav3d_sense/behav3d_sense/reconstruct/TSDF_cpu_cropped.py#L221-L229",
+        "finding": "Depth read directly; D loaded but pinhole matrix uses K only."
+      },
+      {
+        "url": "https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/blob/8290731231fa46f850643962351641333248deb8/src/behav3d_sense/behav3d_sense/reconstruct/reconstruct_services.py#L28-L59",
+        "finding": "ROS wrappers call these implementations without rectification."
+      },
+      {
+        "url": "https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/blob/8290731231fa46f850643962351641333248deb8/src/behav3d_bringup/launch/print_move.launch.py#L134-L146",
+        "finding": "Bringup includes and enables the three reconstruction services."
+      },
+      {
+        "url": "https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/blob/8290731231fa46f850643962351641333248deb8/src/behav3d_sense/setup.py#L24-L32",
+        "finding": "Installed console entry points use reconstruct_services, not legacy reconstruction.py."
+      },
+      {
+        "url": "https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/blob/8290731231fa46f850643962351641333248deb8/src/behav3d_sense/behav3d_sense/reconstruction.py#L163-L189",
+        "finding": "Legacy file undistorts color only; depth still uses uncorrected pinhole projection."
+      }
+    ],
+    "conclusion": "Both the remote summer-school head and the local last-day summer-school commit contain exactly the same sensing/reconstruction package as J1. The launched ROS reconstruction path does not apply saved camera distortion coefficients. Legacy color-only undistortion is not wired into this path.",
+    "limit": "Checked-in source verified; historical deployed binaries and runtime overrides not supplied.",
+    "summer_school_branch_modified": false
+  }
 }

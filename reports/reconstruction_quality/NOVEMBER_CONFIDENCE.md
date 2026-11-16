@@ -201,6 +201,51 @@ unchanged after processing. All 123 experimental mesh hashes and all six frozen
 experiment-runner hashes were checked. The nine service-replay source/output
 hashes were also verified. Production now includes calibrated rectification and
 the complete-alignment handoff; further numerical refinements remain experimental.
-The next strong accuracy check is measured depth/hand-eye calibration and new
-stationary captures with stronger side-face coverage, rather than assuming a
-visually sharper mesh is dimensionally correct.
+Further work is scoped to processing the saved captures, keeping acquisition,
+camera calibration and robot poses fixed. Physical accuracy remains unverified
+without independent measurements.
+
+## Processing-only follow-up, 2026-11-16
+
+All nine November scans were reconstructed with the corrected baseline and
+55-degree / 70-degree incidence-angle rejection: 27 reconstructions. The
+baseline retains 1.953125 mm voxels and extraction weight 3. Reliable surface
+normals are estimated from 5x5 camera-space PCA neighbourhoods; uncertain
+normals and discontinuity neighbourhoods are retained. Surviving depth values,
+calibration and poses are unchanged. This evaluates hard rejection, not soft
+observation weighting.
+
+| Profile | Mean scan P90 (mm) | Within 5 mm | Mesh-hit coverage |
+|---|---:|---:|---:|
+| Corrected baseline | 21.75 | 74.30% | 99.72% |
+| Reject incidence above 55 degrees | 42.74 | 45.75% | 78.73% |
+| Reject incidence above 70 degrees | 29.44 | 64.38% | 90.57% |
+
+Both cutoffs reduce the within-5-mm rate on every scan and lose surface coverage.
+Neither is adopted. The reference rays, held-out split and scoring convention
+match the previous study; all nine baseline metric dictionaries are identical.
+All 27 mesh hashes, the frozen runner hash and all 381 original/snapshot input
+file hashes were verified. Results: `processing_angles.json`; reproducible
+runner: `tools/reconstruction_quality/november_angles.py`.
+
+## Summer school source audit, 2026-11-16
+
+GitHub reports `summer_school_26` at
+`8290731231fa46f850643962351641333248deb8` (2026-08-18). The local summer-school
+branch remains at `2ba8bf293171156716cfd3f00cd112d947b4fb44` (2026-08-14,
+"last day summerschool"). Both have the exact same `src/behav3d_sense` Git tree
+as J1 `e0d25121105883fb6958c00a690329e839132c7b`:
+`065de1bb7ccb08cea9bdedbbbaf9d626be39ce94`.
+
+The launched reconstruction services therefore share J1's omission: color
+alignment loads depth/color distortion coefficients but projects with only K;
+TSDF loads D but integrates raw depth with a pinhole model. Bringup enables
+those services; neither their launch nor service API applies rectification.
+
+An older `behav3d_sense/reconstruction.py` does undistort color at line 165,
+using hard-coded coefficients. It does not correct depth and is not registered
+as a console entry point or referenced by the branch's launch files. Its
+presence does not establish correction in the launched reconstruction path.
+This audit verifies checked-in source, not historical deployed binaries or
+runtime overrides. No summer-school branch files or references were changed.
+Exact references and source links are recorded in `j1_workflow_verification.json`.
