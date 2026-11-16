@@ -25,12 +25,13 @@ def _resolve_reconstruct_scan_dir(session_dir: Path, scan_folder: str) -> Path:
     return (session_dir / _normalized_scan_folder(scan_folder) / "reconstruct").resolve()
 
 
-def _run_color_to_depth(session_dir: Path, scan_folder: str, visualize: bool, device: str = None):
+def _run_color_to_depth(session_dir: Path, scan_folder: str, visualize: bool, device: str = None, *, rectify_images=True):
     return color_to_depth.run(
         session_path=str(session_dir),
         scan_folder=scan_folder,
         visualize=visualize,
-        device=device
+        device=device,
+        rectify_images=rectify_images,
     )
 
 
@@ -39,6 +40,7 @@ def _run_tsdf_cropped(
     scan_folder: str,
     visualize: bool,
     device: str = None,
+    rectify_images=True,
     **kwargs,
 ):
     return TSDF_cpu_cropped.run(
@@ -46,38 +48,40 @@ def _run_tsdf_cropped(
         scan_folder_override=scan_folder,
         visualize=visualize,
         device=device,
+        rectify_images=rectify_images,
         **kwargs,
     )
 
 
-def _run_tsdf_object_extract(session_dir: Path, scan_folder: str, visualize: bool, device: str = None):
+def _run_tsdf_object_extract(session_dir: Path, scan_folder: str, visualize: bool, device: str = None, *, rectify_images=True):
     return TSDF_cpu_object_extract.run(
         session_path=str(session_dir),
         scan_folder_override=scan_folder,
         visualize=visualize,
-        device=device
+        device=device,
+        rectify_images=rectify_images,
     )
 
 
-def _resolve_color_to_depth_outputs(session_dir: Path, scan_folder: str) -> Dict[str, Any]:
+def _resolve_color_to_depth_outputs(session_dir: Path, scan_folder: str, *, rectify_images=True) -> Dict[str, Any]:
     run_dir = _resolve_reconstruct_scan_dir(session_dir, scan_folder)
     return {
-        "output_path": run_dir / "color_in_depth",
+        "output_path": run_dir / ("color_in_depth_rectified" if rectify_images else "color_in_depth"),
     }
 
 
-def _resolve_tsdf_cropped_outputs(session_dir: Path, scan_folder: str) -> Dict[str, Any]:
+def _resolve_tsdf_cropped_outputs(session_dir: Path, scan_folder: str, *, rectify_images=True) -> Dict[str, Any]:
     run_dir = _resolve_reconstruct_scan_dir(session_dir, scan_folder)
     return {
         # Keep legacy output_path mapped to RGB PLY for backward compatibility.
         "output_path": run_dir / "tsdf_surface_rgb_colored.ply",
-        "mesh_path": run_dir / "tsdf_surface_mesh.stl",
+        "mesh_path": run_dir / "tsdf_surface_mesh.ply",
         "rgb_ply_path": run_dir / "tsdf_surface_rgb_colored.ply",
         "confidence_ply_path": run_dir / "tsdf_surface_confidence_colored.ply",
     }
 
 
-def _resolve_tsdf_object_extract_outputs(session_dir: Path, scan_folder: str) -> Dict[str, Any]:
+def _resolve_tsdf_object_extract_outputs(session_dir: Path, scan_folder: str, *, rectify_images=True) -> Dict[str, Any]:
     run_dir = _resolve_reconstruct_scan_dir(session_dir, scan_folder)
     return {
         # Legacy output_path remains the primary RGB point cloud output.
@@ -99,6 +103,7 @@ class _BaseReconstructService(Node):
         self.scan_folder = self.declare_parameter('scan_folder', 'manual_caps').value
         self.visualize = self.declare_parameter('visualize', False).value
         self.device = self.declare_parameter('device', 'CPU:0').value
+        self.declare_parameter('rectify_images', True)
 
         self.srv = self.create_service(srv_type, service_name, self.handle_request)
         self.get_logger().info(f"Service active: {service_name}")
@@ -158,8 +163,11 @@ class _BaseReconstructService(Node):
             self._clear_output_fields(response)
             return response
 
-        expected = self._output_resolver(session_dir, scan_folder) or {}
         runner_kwargs = self._build_runner_kwargs(request)
+        expected = self._output_resolver(
+            session_dir, scan_folder, rectify_images=runner_kwargs["rectify_images"]
+        ) or {}
+        self.get_logger().info(f"Saved-calibration rectification: {runner_kwargs['rectify_images']}")
         self._running = True
         thread = threading.Thread(
             target=self._run_thread,
@@ -193,7 +201,7 @@ class _BaseReconstructService(Node):
 
     def _build_runner_kwargs(self, request) -> Dict[str, Any]:
         _ = request
-        return {}
+        return {"rectify_images": bool(self.get_parameter("rectify_images").value)}
 
 
 class ColorToDepthService(_BaseReconstructService):
@@ -216,6 +224,7 @@ class TSDFCroppedService(_BaseReconstructService):
             output_resolver=_resolve_tsdf_cropped_outputs,
             srv_type=TsdfCropped,
         )
+        self.declare_parameter("mesh_min_component_triangles", int(TSDF_cpu_cropped.MESH_MIN_COMPONENT_TRIANGLES))
         self.declare_parameter("center_crop_enable", bool(TSDF_cpu_cropped.C2D_CENTER_CROP_ENABLE))
         self.declare_parameter(
             "center_crop_width",
@@ -286,6 +295,8 @@ class TSDFCroppedService(_BaseReconstructService):
             crop_max = [0.3, -0.65, 0.5]
 
         return {
+            **super()._build_runner_kwargs(request),
+            "mesh_min_component_triangles": int(self.get_parameter("mesh_min_component_triangles").value),
             "center_crop_enable": bool(self.get_parameter("center_crop_enable").value),
             "center_crop_width": int(self.get_parameter("center_crop_width").value),
             "center_crop_height": int(self.get_parameter("center_crop_height").value),

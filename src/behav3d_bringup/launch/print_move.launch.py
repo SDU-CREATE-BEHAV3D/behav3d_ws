@@ -28,6 +28,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
 
@@ -74,10 +75,18 @@ def generate_launch_description():
         default_value="CPU:0",
         description='Default Open3D device for TSDF services, e.g. "CPU:0" or "CUDA:0"',
     )
+    reconstruct_rectify_images_arg = DeclareLaunchArgument(
+        "reconstruct_rectify_images", default_value="true",
+        description="Use saved distortion calibration for reconstruction alignment and depth fusion",
+    )
     world_mesh_frame_arg = DeclareLaunchArgument(
         "world_mesh_frame_id",
         default_value="ur20_base_link",
         description="Frame for published reconstructed mesh marker",
+    )
+    world_mesh_use_colors_arg = DeclareLaunchArgument(
+        "world_mesh_use_colors", default_value="true",
+        description="Display reconstructed mesh vertex colors in RViz",
     )
     # -------------------------------------------------------------------------
     # 2) Common paths
@@ -140,6 +149,7 @@ def generate_launch_description():
             "scan_folder": LaunchConfiguration("reconstruct_scan_folder"),
             "visualize": LaunchConfiguration("reconstruct_visualize"),
             "device": LaunchConfiguration("reconstruct_device"),
+            "rectify_images": LaunchConfiguration("reconstruct_rectify_images"),
             "enable_color_to_depth": "true",
             "enable_tsdf_cropped": "true",
             "enable_tsdf_object_extract": "true",
@@ -225,6 +235,7 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {"mesh_frame_id": LaunchConfiguration("world_mesh_frame_id")},
+            {"ply_marker_use_colors": ParameterValue(LaunchConfiguration("world_mesh_use_colors"), value_type=bool)},
         ],
     )
     world_node_call = TimerAction(period=2.0, actions=[world_node])
@@ -246,6 +257,8 @@ def generate_launch_description():
             reconstruct_scan_folder_arg,
             reconstruct_visualize_arg,
             reconstruct_device_arg,
+            reconstruct_rectify_images_arg,
+            world_mesh_use_colors_arg,
             world_mesh_frame_arg,
             
             ur_driver,

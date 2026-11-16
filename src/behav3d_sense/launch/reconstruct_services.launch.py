@@ -40,6 +40,10 @@ def generate_launch_description():
         default_value="CPU:0",
         description="Default Open3D device for TSDF services",
     )
+    rectify_images_arg = DeclareLaunchArgument(
+        "rectify_images", default_value="true",
+        description="Apply saved distortion calibration consistently to alignment and both TSDF services",
+    )
 
     color_to_depth_node = Node(
         package="behav3d_sense",
@@ -50,6 +54,7 @@ def generate_launch_description():
         parameters=[
             {
                 "scan_folder": LaunchConfiguration("scan_folder"),
+                "rectify_images": ParameterValue(LaunchConfiguration("rectify_images"), value_type=bool),
                 "visualize": ParameterValue(LaunchConfiguration("visualize"), value_type=bool),
             }
         ],
@@ -64,6 +69,7 @@ def generate_launch_description():
         parameters=[
             {
                 "scan_folder": LaunchConfiguration("scan_folder"),
+                "rectify_images": ParameterValue(LaunchConfiguration("rectify_images"), value_type=bool),
                 "visualize": ParameterValue(LaunchConfiguration("visualize"), value_type=bool),
                 "device": LaunchConfiguration("device"),
             }
@@ -79,6 +85,7 @@ def generate_launch_description():
         parameters=[
             {
                 "scan_folder": LaunchConfiguration("scan_folder"),
+                "rectify_images": ParameterValue(LaunchConfiguration("rectify_images"), value_type=bool),
                 "visualize": ParameterValue(LaunchConfiguration("visualize"), value_type=bool),
                 "device": LaunchConfiguration("device"),
             }
@@ -93,6 +100,7 @@ def generate_launch_description():
             scan_folder_arg,
             visualize_arg,
             device_arg,
+            rectify_images_arg,
             color_to_depth_node,
             tsdf_cropped_node,
             tsdf_object_extract_node,

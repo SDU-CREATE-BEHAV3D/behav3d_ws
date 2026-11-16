@@ -17,7 +17,6 @@
 
 # local utils
 import json
-import re
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +31,7 @@ from .utils.intrinsics import load_intrinsics, intrinsics_matrix
 from .utils.extrinsics import load_extrinsics
 from .utils.image_loader import load_images
 from .utils.integration import visualize_camera_poses
+from .utils.rectification import rectify_images as rectify_image_batch, validate_alignment_metadata, aligned_image_paths
 
 DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260113_170839"
 DEFAULT_SCAN_FOLDER = "manual_caps"
@@ -97,7 +97,7 @@ OUTLIER_METHOD = "statistical"
 # Mesh export cleanup. TSDF edge noise commonly produces many tiny disconnected
 # triangle islands; remove those without smoothing away object detail.
 MESH_REMOVE_SMALL_COMPONENTS = True
-MESH_MIN_COMPONENT_TRIANGLES = 50
+MESH_MIN_COMPONENT_TRIANGLES = 100
 
 # Statistical outlier params
 OUTLIER_NB_NEIGHBORS = 35
@@ -207,6 +207,7 @@ class TSDF_Integration():
             depth_scale=1000.0,
             depth_bias_m=0.0,
             device='CPU:0',
+            rectify_images=False,
         ):
         # initialize session and load poses
         self.session = session
@@ -221,12 +222,15 @@ class TSDF_Integration():
         # load depth images
         self.image_paths = construct_image_paths(self.manifest, self.session, image_type="depth")
         self.images = load_images(self.image_paths, image_type="depth", library="cv2")
-        self._postprocess_depth_images_in_place()
 
         # load intrinsics
         self.device = o3c.Device(device)
         self.width, self.height, self.K, self.D = load_intrinsics(self.session.depth_intrinsics_path)
         self.pinhole_matrix = intrinsics_matrix(self.width, self.height, self.K)
+        if rectify_images:
+            self.images = rectify_image_batch(self.images, self.K, self.D, (self.width, self.height), depth=True)
+        self._postprocess_depth_images_in_place()
+        validate_alignment_metadata(C2D_DIR, session, len(self.images), rectified=bool(rectify_images))
 
         # TSDF parameters
         self.voxel_size = voxel_size
@@ -298,44 +302,7 @@ class TSDF_Integration():
         if not C2D_DIR.exists():
             raise FileNotFoundError(f"color_in_depth folder not found: {C2D_DIR}")
 
-        paths = list(C2D_DIR.glob(C2D_GLOB))
-        if len(paths) == 0:
-            raise FileNotFoundError(f"No files matching '{C2D_GLOB}' found in {C2D_DIR}")
-
-        indexed = []
-        for p in paths:
-            match = re.search(r"(\d+)$", p.stem)
-            idx = int(match.group(1)) if match else None
-            indexed.append((idx, p))
-
-        # Prefer index-aligned ordering when filenames end with frame ids.
-        if all(idx is not None for idx, _ in indexed):
-            idx_to_path = {}
-            duplicate_ids = []
-            for idx, p in indexed:
-                if idx in idx_to_path:
-                    duplicate_ids.append(idx)
-                idx_to_path[idx] = p
-
-            expected_count = len(self.images)
-            if len(duplicate_ids) == 0 and all(i in idx_to_path for i in range(expected_count)):
-                paths = [idx_to_path[i] for i in range(expected_count)]
-            else:
-                paths = [p for _, p in sorted(indexed, key=lambda item: (item[0], item[1].name))]
-                if len(duplicate_ids) > 0:
-                    print(f"Warning: duplicate color_in_depth frame ids detected: {sorted(set(duplicate_ids))}")
-                missing = [i for i in range(expected_count) if i not in idx_to_path]
-                if len(missing) > 0:
-                    print(f"Warning: missing color_in_depth frame ids for depth frames: {missing}")
-        else:
-            paths = sorted(paths, key=lambda p: p.name)
-
-        if len(paths) != len(self.images):
-            print(
-                "Warning: frame-count mismatch "
-                f"(depth={len(self.images)}, color_in_depth={len(paths)}). "
-                f"Using first {min(len(self.images), len(paths))} frames."
-            )
+        paths = aligned_image_paths(C2D_DIR, len(self.images))
 
         imgs = []
         valid_pixels_before = 0
@@ -344,6 +311,8 @@ class TSDF_Integration():
             im = cv2.imread(str(p), cv2.IMREAD_COLOR)
             if im is None:
                 raise RuntimeError(f"Failed reading: {p}")
+            if im.shape[:2] != (self.height, self.width):
+                raise ValueError(f"Aligned image dimensions do not match depth calibration: {p}")
             valid_pixels_before += int(np.count_nonzero(np.any(im > 0, axis=2)))
             im = self._postprocess_color_in_depth(im)
             valid_pixels_after += int(np.count_nonzero(np.any(im > 0, axis=2)))
@@ -510,6 +479,11 @@ class TSDF_Integration():
         return pcd
 
     def colorize_tsdf_surface_points(self, pcd, sample_step=1, z_band_m=0.02, min_obs=3):
+        """Color the input surface and return its sufficiently observed subset.
+
+        Unsupported vertices retain neutral gray on the complete mesh; the
+        returned RGB point cloud keeps the existing observation-count filter.
+        """
         pts_w = np.asarray(pcd.points, dtype=np.float64)
         N = pts_w.shape[0]
         pts_h = np.concatenate([pts_w, np.ones((N, 1), dtype=np.float64)], axis=1)
@@ -571,8 +545,9 @@ class TSDF_Integration():
 
         keep = obs >= int(min_obs)
 
-        colors = np.zeros((N, 3), dtype=np.float64)
+        colors = np.full((N, 3), 0.8, dtype=np.float64)
         colors[keep] = accum[keep] / obs[keep][:, None]
+        pcd.colors = o3d.utility.Vector3dVector(colors)
 
         pcd_out = o3d.geometry.PointCloud()
         pcd_out.points = o3d.utility.Vector3dVector(pts_w[keep])
@@ -731,11 +706,15 @@ def _slice_pcd_by_plane(pcd, conf, plane_model, keep_side="above", margin=0.0):
     return pcd2, conf2
 
 
-def _clean_mesh_for_export(mesh):
+def _clean_mesh_for_export(mesh, min_component_triangles=None):
     """Remove invalid geometry and small disconnected TSDF fragments."""
+    minimum = MESH_MIN_COMPONENT_TRIANGLES if min_component_triangles is None else int(min_component_triangles)
+    if minimum < 0:
+        raise ValueError("mesh_min_component_triangles must be nonnegative")
+    # Vertex merging can itself create degenerate/duplicate triangles.
+    mesh.remove_duplicated_vertices()
     mesh.remove_duplicated_triangles()
     mesh.remove_degenerate_triangles()
-    mesh.remove_duplicated_vertices()
     mesh.remove_unreferenced_vertices()
 
     if MESH_REMOVE_SMALL_COMPONENTS and len(mesh.triangles) > 0:
@@ -744,7 +723,7 @@ def _clean_mesh_for_export(mesh):
         )
         triangle_clusters = np.asarray(triangle_clusters, dtype=np.int64)
         cluster_n_triangles = np.asarray(cluster_n_triangles, dtype=np.int64)
-        remove_cluster = cluster_n_triangles < int(MESH_MIN_COMPONENT_TRIANGLES)
+        remove_cluster = cluster_n_triangles < minimum
         remove_triangles = remove_cluster[triangle_clusters]
         removed = int(np.count_nonzero(remove_triangles))
         if removed > 0:
@@ -753,7 +732,7 @@ def _clean_mesh_for_export(mesh):
             print(
                 "Mesh cleanup removed "
                 f"{removed} triangles from {int(np.count_nonzero(remove_cluster))} "
-                f"components smaller than {MESH_MIN_COMPONENT_TRIANGLES} triangles"
+                f"components smaller than {minimum} triangles"
             )
 
     mesh.compute_vertex_normals()
@@ -990,6 +969,8 @@ def run(
     auto_object_xy_margin_m=None,
     auto_object_top_margin_m=None,
     auto_object_table_below_margin_m=None,
+    rectify_images=False,
+    mesh_min_component_triangles=None,
 ):
     global SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE
     global C2D_CENTER_CROP_ENABLE, C2D_CENTER_CROP_WIDTH, C2D_CENTER_CROP_HEIGHT
@@ -1004,7 +985,7 @@ def run(
     scan_folder = scan_folder_override or DEFAULT_SCAN_FOLDER
     output_folder = _resolve_reconstruct_scan_dir(SESSION_PATH, scan_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
-    C2D_DIR = output_folder / "color_in_depth"
+    C2D_DIR = output_folder / ("color_in_depth_rectified" if rectify_images else "color_in_depth")
     TABLE_PLANE_FILE = output_folder / "table_plane.json"
 
     if center_crop_enable is not None:
@@ -1070,7 +1051,7 @@ def run(
         f"xy_margin={AUTO_OBJECT_XY_MARGIN_M}, top_margin={AUTO_OBJECT_TOP_MARGIN_M}, "
         f"table_below_margin={AUTO_OBJECT_TABLE_BELOW_MARGIN_M}"
     )
-    tsdf_integration = TSDF_Integration(session, device=device, depth_bias_m=depth_bias_m)
+    tsdf_integration = TSDF_Integration(session, device=device, depth_bias_m=depth_bias_m, rectify_images=rectify_images)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
     print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}")
     print(f"Number of color_in_depth loaded: {len(tsdf_integration.color_in_depth)}")
@@ -1087,6 +1068,10 @@ def run(
         z_band_m=0.02,
         min_obs=3
     )
+    # The surface point cloud has the same vertex order as the extracted mesh.
+    # Transfer colors before point-only filtering; no vertices/faces are moved
+    # or removed just because their color observations are insufficient.
+    mesh.vertex_colors = o3d.utility.Vector3dVector(np.asarray(pcd_surface.colors))
 
     if CROP_ENABLE:
         pcd_rgb, conf = tsdf_integration.crop_pcd_aabb_with_conf(pcd_rgb, conf, CROP_MIN, CROP_MAX)
@@ -1202,14 +1187,18 @@ def run(
     elif CROP_ENABLE:
         aabb = o3d.geometry.AxisAlignedBoundingBox(CROP_MIN, CROP_MAX)
         mesh_out = mesh.crop(aabb)
-    mesh_out = _clean_mesh_for_export(mesh_out)
+    mesh_out = _clean_mesh_for_export(mesh_out, mesh_min_component_triangles)
     o3d.io.write_triangle_mesh(str(out_mesh), mesh_out)
     print("Saved:", out_mesh)
 
     # Keep an indexed mesh alongside STL. STL duplicates vertices by design;
-    # PLY is smaller and better for inspection or downstream processing.
+    # PLY also retains measured vertex colors for RViz and downstream processing.
+    # Publish this service output atomically so readers never see a partial PLY.
     out_mesh_ply = output_folder / "tsdf_surface_mesh.ply"
-    o3d.io.write_triangle_mesh(str(out_mesh_ply), mesh_out)
+    temp_mesh_ply = output_folder / ".tsdf_surface_mesh.tmp.ply"
+    if not o3d.io.write_triangle_mesh(str(temp_mesh_ply), mesh_out):
+        raise IOError(f"Failed to write colored mesh: {temp_mesh_ply}")
+    temp_mesh_ply.replace(out_mesh_ply)
     print("Saved:", out_mesh_ply)
 
     out_rgb = output_folder / "tsdf_surface_rgb_colored.ply"
@@ -1227,6 +1216,10 @@ def main():
     parser.add_argument("--scan-folder", default=DEFAULT_SCAN_FOLDER)
     parser.add_argument("--no-vis", action="store_true")
     parser.add_argument("--device", default="CPU:0", help='Open3D device, e.g. "CPU:0" or "CUDA:0"')
+    parser.add_argument("--rectify-images", action="store_true", help="Rectify raw depth using saved distortion coefficients; requires matching rectified color alignment")
+    parser.add_argument("--no-center-crop", action="store_true", help="Integrate the complete depth frame; final world-space cropping remains available through run()")
+    parser.add_argument("--mesh-min-component-triangles", type=int, default=None,
+                        help="Remove disconnected mesh islands below this size (default 100; 0 retains all components)")
     args = parser.parse_args()
 
     run(
@@ -1234,6 +1227,10 @@ def main():
         scan_folder_override=args.scan_folder,
         visualize=not args.no_vis,
         device=args.device,
+        rectify_images=args.rectify_images,
+        mesh_min_component_triangles=args.mesh_min_component_triangles,
+        center_crop_enable=False if args.no_center_crop else None,
+        center_crop_apply_to_depth=False if args.no_center_crop else None,
     )
 
 

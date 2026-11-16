@@ -15,6 +15,7 @@ from .utils.manifest import read_manifest, load_robot_poses, construct_image_pat
 from .utils.intrinsics import load_intrinsics, intrinsics_matrix
 from .utils.extrinsics import load_extrinsics
 from .utils.image_loader import load_images
+from .utils.rectification import rectify_images as rectify_image_batch, validate_alignment_metadata, aligned_image_paths
 
 DEFAULT_SESSION_PATH = "/Users/josephnamar/Desktop/SDU/PHD/behav3d/Captures/260114_112631"
 DEFAULT_SCAN_FOLDER = "manual_caps"
@@ -104,6 +105,7 @@ class TSDF_Integration:
             depth_max=1.0,
             depth_scale=1000.0,
             device='CPU:0',
+            rectify_images=False,
         ):
         # initialize session and load poses
         self.session = session
@@ -135,6 +137,10 @@ class TSDF_Integration:
         self.width, self.height, self.K, self.D = load_intrinsics(self.session.depth_intrinsics_path)
         self.pinhole_matrix = intrinsics_matrix(self.width, self.height, self.K)
         self.wc, self.hc, self.Kc, self.Dc = load_intrinsics(self.session.color_intrinsics_path)
+        if rectify_images:
+            self.images = rectify_image_batch(self.images, self.K, self.D, (self.width, self.height), depth=True)
+            self.color_images = rectify_image_batch(self.color_images, self.Kc, self.Dc, (self.wc, self.hc))
+        validate_alignment_metadata(C2D_DIR, session, len(self.images), rectified=bool(rectify_images))
 
         # TSDF parameters
         self.voxel_size = voxel_size
@@ -163,12 +169,14 @@ class TSDF_Integration:
         if not C2D_DIR.exists():
             raise FileNotFoundError(f"color_in_depth folder not found: {C2D_DIR}")
 
-        paths = sorted(C2D_DIR.glob(C2D_GLOB))
+        paths = aligned_image_paths(C2D_DIR, len(self.images))
         imgs = []
         for p in paths:
             im = cv2.imread(str(p), cv2.IMREAD_COLOR)
             if im is None:
                 raise RuntimeError(f"Failed reading: {p}")
+            if im.shape[:2] != (self.height, self.width):
+                raise ValueError(f"Aligned image dimensions do not match depth calibration: {p}")
             imgs.append(im)
 
         print(f"Loaded {len(imgs)} color_in_depth frames from {C2D_DIR}")
@@ -478,20 +486,20 @@ def _draw_geoms(geoms):
         o3d.visualization.draw_geometries(geoms)
 
 
-def run(session_path=None, scan_folder_override=None, visualize=True, device=None):
+def run(session_path=None, scan_folder_override=None, visualize=True, device=None, rectify_images=False):
     global SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE
 
     SESSION_PATH = session_path or DEFAULT_SESSION_PATH
     scan_folder = scan_folder_override or DEFAULT_SCAN_FOLDER
     output_folder = _resolve_reconstruct_scan_dir(SESSION_PATH, scan_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
-    C2D_DIR = output_folder / "color_in_depth"
+    C2D_DIR = output_folder / ("color_in_depth_rectified" if rectify_images else "color_in_depth")
     TABLE_PLANE_FILE = output_folder / "table_plane.json"
 
     session = Session(SESSION_PATH, scan_folder)
     device = _validate_device(_normalize_device(device))
     print(f"Using device: {device}")
-    tsdf_integration = TSDF_Integration(session, device=device)
+    tsdf_integration = TSDF_Integration(session, device=device, rectify_images=rectify_images)
     print(f"Number of depth images loaded: {len(tsdf_integration.images)}")
     print(f"Number of robot poses loaded: {len(tsdf_integration.T_base_tool0_list)}")
     print(f"Number of color images loaded: {len(tsdf_integration.color_images)}")
@@ -582,13 +590,15 @@ def main():
     parser.add_argument("--scan-folder", default=DEFAULT_SCAN_FOLDER)
     parser.add_argument("--no-vis", action="store_true")
     parser.add_argument("--device", default="CPU:0", help='Open3D device, e.g. "CPU:0" or "CUDA:0"')
+    parser.add_argument("--rectify-images", action="store_true", help="Use saved distortion calibration; alignment must use the same setting")
     args = parser.parse_args()
 
     run(
         session_path=args.session_path,
         scan_folder_override=args.scan_folder,
         visualize=not args.no_vis,
-        device=args.device
+        device=args.device,
+        rectify_images=args.rectify_images,
     )
 
 

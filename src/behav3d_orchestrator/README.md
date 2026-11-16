@@ -3,6 +3,162 @@
 ROS 2 sequence nodes that compose motion, scanning, field candidate generation,
 and printing through the shared session classes in `behav3d_orchestrator/src/`.
 
+## Scan, undistort, reconstruct and inspect in RViz
+
+Use the existing `scan_yaml_targets_sequence` on branch `J1_Build`.
+It runs the configured scan targets, waits for
+complete color alignment, reconstructs the saved depth, and updates the RViz
+mesh through `/behav3d/update_world_mesh`. Both color and depth use the session's
+saved distortion calibration. Bringup enables this with
+`reconstruct_rectify_images:=true`; all three reconstruction services also
+default to `rectify_images=true` when started individually.
+
+On the lab PC, stop the old bringup, update `J1_Build`, and rebuild
+the processing, orchestration, launch and RViz packages together:
+
+```bash
+cd ~/behav3d_ws
+git fetch origin
+git switch J1_Build
+git pull --ff-only origin J1_Build
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-select behav3d_sense behav3d_orchestrator \
+  behav3d_bringup ur20_workcell_moveit_config --executor sequential
+source install/setup.bash
+```
+
+Start the usual bringup using the lab's existing robot address (replace
+`YOUR_EXISTING_ROBOT_IP`):
+
+```bash
+ros2 launch behav3d_bringup print_move.launch.py \
+  use_mock_hardware:=false robot_ip:=YOUR_EXISTING_ROBOT_IP \
+  orbbec_enable:=true enable_reconstruct_services:=true \
+  reconstruct_rectify_images:=true world_mesh_frame_id:=ur20_base_link \
+  world_mesh_use_colors:=true
+```
+
+In a second sourced terminal, check the running nodes report `True` for both
+processing stages. Display only the latest reconstruction during this test:
+
+```bash
+cd ~/behav3d_ws
+source install/setup.bash
+ros2 param get /color_to_depth_service rectify_images
+ros2 param get /tsdf_cropped_service rectify_images
+ros2 param set /behav3d_world mesh_accumulate false
+```
+
+Select the existing scan trajectory through `yaml_path` in
+`src/behav3d_orchestrator/config/scan_yaml_targets_sequence_config.yaml`. The
+checked-in path is the November 13 linear-barrel scan. The existing config
+already has `run_reconstruction`, `wait_reconstruction_outputs` and
+`update_world_mesh` enabled, with center/AABB/adaptive crops disabled. It keeps
+the normal 1.953125 mm TSDF grid and threshold 3. No experimental 1 mm grid,
+angle rejection or pose refinement is enabled. Motion settings and target
+coordinates remain those of the existing scan config.
+
+Run the existing sequence when ready to execute that scan:
+
+```bash
+ros2 run behav3d_orchestrator scan_yaml_targets_sequence --ros-args \
+  -p config_path:="$PWD/src/behav3d_orchestrator/config/scan_yaml_targets_sequence_config.yaml"
+```
+
+This command executes robot motion and capture. Wait for the sequence to finish,
+including the configured `home_after`, before manually moving toward the object.
+The corrected mesh appears after reconstruction finishes; it is a fixed scan
+result while the robot model follows live joint states. This is not continuous
+live meshing. RViz should use fixed frame `world`, with the Marker display on
+`/visualization_marker`, namespace `reconstructed_mesh`, enabled. The supplied
+RViz configuration uses Transient Local durability to receive the latest marker
+after reconnecting. Mesh coordinates are metres in `ur20_base_link`; the
+world-to-base transform places them alongside the robot. The mesh marker is a
+visual overlay, not a MoveIt collision object.
+
+The processing console reports `Saved-calibration rectification: True`.
+Alignment is written under
+`<session>/scan_yaml_targets/reconstruct/color_in_depth_rectified/`; its
+`alignment.json` must report `rectified: true` and `complete: true`. The final
+colored mesh is `tsdf_surface_mesh.ply` in the same `reconstruct/` directory;
+an STL copy is also exported. The scan
+sequence reports `Reconstruction complete`, and the world node logs
+`Published world mesh` with the actual source path.
+
+Local validation covers distortion correction, complete-image handoff and
+service dispatch, plus saved-scan service replays. Live ROS transport, RViz and
+robot alignment still require this lab test.
+
+### Changes from original J1 (`e0d2512`)
+
+| Stage | Original J1 | Updated ROS workflow |
+|---|---|---|
+| Camera distortion | Coefficients loaded but unused | Saved color/depth calibration applied by default |
+| Alignment handoff | First fresh image could trigger TSDF | Complete indexed frame set, matching calibration and file hashes required |
+| Mesh display | Uniform STL | RGB vertex-colored PLY triangles; STL remains available |
+| Detached fragments | Components below 50 triangles removed | Adjustable cutoff of 100; duplicate/degenerate cleanup ordered correctly |
+| RViz marker | Zero quaternion; volatile display subscription | Identity rotation; retained marker received on reconnect |
+
+Scan targets, capture settings, robot poses, calibration files, voxel size and
+fusion confidence threshold are unchanged. Experimental angle/pose filters and
+the 1 mm grid are not enabled. The complete study and its reproducible tools
+remain on the [reconstruction-quality branch](https://github.com/SDU-CREATE-BEHAV3D/behav3d_ws/tree/codex/j1-reconstruction-quality).
+
+The focused offline checks can be run from the workspace root in an environment
+with Open3D, OpenCV, NumPy, SciPy, PyYAML and pytest installed:
+
+```bash
+PYTHONPATH=src/behav3d_sense python3 -m pytest \
+  src/behav3d_sense/test/test_capture_validation.py \
+  src/behav3d_sense/test/test_rectification.py \
+  src/behav3d_sense/test/test_reconstruction_workflow.py \
+  src/behav3d_sense/test/test_colored_mesh.py \
+  src/behav3d_sense/test/test_mesh_cleanup.py -q
+```
+
+### Camera-colored meshes
+
+The same scan command now publishes a triangle mesh with measured RGB vertex
+colors. The reconstruction service returns the colored PLY, and the world node
+renders its triangles even when point-cloud display is otherwise preferred.
+Colors come from the aligned camera images with the existing depth-visibility
+check and minimum of three observations. Vertices with insufficient color
+support remain neutral gray. Their geometry is retained.
+
+`world_mesh_use_colors:=true` is the bringup default. Launch with
+`world_mesh_use_colors:=false` for the uniform-gray comparison. Both modes use
+the same saved vertices and faces. Reconstruct older sessions again to produce
+vertex colors; their existing STL files do not contain RGB data. Colored point
+clouds remain available through `mesh_prefer: ply`; keep `mesh_prefer: mesh` for
+the filled triangle surface used by this test.
+
+The default `ply_marker_max_triangles=0` displays the full mesh. Large scans can
+take longer to publish and render. If needed, starting the world node with a
+positive `ply_marker_max_triangles` applies display-only quadric simplification;
+the saved reconstruction remains unchanged. Keep zero for geometry comparisons.
+
+### Detached-fragment cleanup
+
+The mesh export removes disconnected components with fewer than 100 triangles
+before saving either PLY or STL. The earlier 50-triangle cutoff let the visible
+62- and 63-triangle floating patches survive. This operation keeps the exact
+vertices and faces of retained components, including attached thin details;
+it does not smooth the surface. Fusion confidence remains at 3.
+
+The separate RGB point cloud also has statistical outlier filtering, which does
+not by itself clean the exported triangle mesh. Noise connected to a retained
+surface is unaffected by the component-size filter.
+
+To change the component cutoff for subsequent reconstructions:
+
+```bash
+ros2 param set /tsdf_cropped_service mesh_min_component_triangles 100
+```
+
+Use 50 to reproduce the earlier cutoff or 0 to retain all disconnected parts.
+Small genuine detached parts below the selected size are also removed, so lower
+the cutoff when those are intentional features of the object being scanned.
+
 ## YAML Fault Print and Scan
 
 `print_yaml_fault_and_scan_sequence` reuses the YAML-print sequence, scan and
