@@ -18,7 +18,7 @@
 
 - **Pilot run:** `/home/lab/behav3d_ws/captures/261113_112808`
 
-- [ ] **Iterative**
+- [x] **Iterative**
 
 - **Field:** `/home/lab/behav3d_ws/mesh/fields/field_state_centered_30.npz`
 - **Config:** `/home/lab/behav3d_ws/src/behav3d_orchestrator/config/geometry_representation_scan_print_loop_config.yaml`

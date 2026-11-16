@@ -1243,6 +1243,10 @@ class GeometryRepresentationScanPrintLoopNode(Node):
     def _set_fields_node_candidate_params(self, rt: SimpleNamespace) -> None:
         params = [
             Parameter("target_output_mode", value=rt.print_mode),
+            # The fields service treats a zero request as its node default.
+            # Keep that default aligned so an explicit world-frame yaw of 0
+            # cannot silently become the legacy 180-degree rotation.
+            Parameter("target_base_to_world_yaw_deg", value=rt.oriented_base_to_world_yaw_deg),
             Parameter("candidate_width_mode", value=rt.candidate_width_mode),
             Parameter("candidate_bead_width_mm", value=rt.candidate_bead_width_mm),
             Parameter("candidate_width_field_path", value=rt.candidate_width_field_path),

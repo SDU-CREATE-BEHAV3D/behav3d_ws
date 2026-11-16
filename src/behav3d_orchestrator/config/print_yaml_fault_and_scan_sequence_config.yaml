@@ -73,7 +73,8 @@ print_yaml_fault_and_scan_sequence:
     scan_axis_radius: 0.003
     scan_clear_markers_before: true
     scan_clear_markers_after: true
-    scan_follow_printed_z: false
+    # Grid scan Z = highest printed target Z + grid_z_off.
+    scan_follow_printed_z: true
 
     # Grid sweep parameters from scan_sequence_test.yaml.
     grid_width: 0.40

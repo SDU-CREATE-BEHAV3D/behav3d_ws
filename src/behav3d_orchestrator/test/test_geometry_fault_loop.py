@@ -40,6 +40,10 @@ class GeometryFaultLoopTests(unittest.TestCase):
                    contour_offset_estimation=False, log_joint_currents=False,
                    resume_scan_mesh_path=str(output / "scan_initial.ply"),
                    print_mode="segments" if segments else "dots", extrusion_steps_per_mm3=2,
+                   # Compare fault behavior with identical candidate settings,
+                   # independent of the operator's normal/fault campaign configs.
+                   candidate_beads_per_step=2, candidate_bead_separation_mm=35,
+                   candidate_bead_height_mm=20, oriented_base_to_world_yaw_deg=0,
                    segment_steps_per_second=60, post_segment_retract_steps=20,
                    post_dot_retract_steps=20, dot_dwell_s=0)
         if fault:
@@ -114,6 +118,21 @@ class GeometryFaultLoopTests(unittest.TestCase):
 
     def manifest(self, result):
         return PrintSession.load_print_manifest(result.output)["cycles"]
+
+    def test_zero_target_yaw_is_synchronized_with_the_fields_node(self):
+        node = object.__new__(GeometryRepresentationScanPrintLoopNode)
+        node.get_logger = lambda: SimpleNamespace(info=lambda *a: None)
+        config = Path(__file__).resolve().parents[1] / "config/geometry_representation_scan_print_loop_config.yaml"
+        cfg = yaml.safe_load(config.read_text())["geometry_representation_scan_print_loop"]["ros__parameters"]
+        cfg.update(oriented_base_to_world_yaw_deg=0.0, print_mode="dots", candidate_width_mode="fixed")
+        rt = node._parse_runtime_state(cfg, self.root)
+        with patch("behav3d_orchestrator.geometry_representation_scan_print_loop.set_remote_parameters",
+                   return_value="/behav3d_fields") as update:
+            node._set_fields_node_candidate_params(rt)
+        values = {p.name: p.value for p in update.call_args.kwargs["params"]}
+        self.assertEqual(values["target_base_to_world_yaw_deg"], 0.0)
+        self.assertEqual(values["target_output_mode"], "dots")
+        self.assertEqual(values["candidate_width_mode"], "fixed")
 
     def test_fault_loop_prints_then_rescans_and_uses_the_updated_mesh(self):
         result = self.run_loop()
