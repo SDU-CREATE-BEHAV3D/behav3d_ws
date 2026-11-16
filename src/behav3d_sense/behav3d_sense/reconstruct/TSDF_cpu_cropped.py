@@ -97,7 +97,7 @@ OUTLIER_METHOD = "statistical"
 # Mesh export cleanup. TSDF edge noise commonly produces many tiny disconnected
 # triangle islands; remove those without smoothing away object detail.
 MESH_REMOVE_SMALL_COMPONENTS = True
-MESH_MIN_COMPONENT_TRIANGLES = 50
+MESH_MIN_COMPONENT_TRIANGLES = 100
 
 # Statistical outlier params
 OUTLIER_NB_NEIGHBORS = 35
@@ -706,11 +706,15 @@ def _slice_pcd_by_plane(pcd, conf, plane_model, keep_side="above", margin=0.0):
     return pcd2, conf2
 
 
-def _clean_mesh_for_export(mesh):
+def _clean_mesh_for_export(mesh, min_component_triangles=None):
     """Remove invalid geometry and small disconnected TSDF fragments."""
+    minimum = MESH_MIN_COMPONENT_TRIANGLES if min_component_triangles is None else int(min_component_triangles)
+    if minimum < 0:
+        raise ValueError("mesh_min_component_triangles must be nonnegative")
+    # Vertex merging can itself create degenerate/duplicate triangles.
+    mesh.remove_duplicated_vertices()
     mesh.remove_duplicated_triangles()
     mesh.remove_degenerate_triangles()
-    mesh.remove_duplicated_vertices()
     mesh.remove_unreferenced_vertices()
 
     if MESH_REMOVE_SMALL_COMPONENTS and len(mesh.triangles) > 0:
@@ -719,7 +723,7 @@ def _clean_mesh_for_export(mesh):
         )
         triangle_clusters = np.asarray(triangle_clusters, dtype=np.int64)
         cluster_n_triangles = np.asarray(cluster_n_triangles, dtype=np.int64)
-        remove_cluster = cluster_n_triangles < int(MESH_MIN_COMPONENT_TRIANGLES)
+        remove_cluster = cluster_n_triangles < minimum
         remove_triangles = remove_cluster[triangle_clusters]
         removed = int(np.count_nonzero(remove_triangles))
         if removed > 0:
@@ -728,7 +732,7 @@ def _clean_mesh_for_export(mesh):
             print(
                 "Mesh cleanup removed "
                 f"{removed} triangles from {int(np.count_nonzero(remove_cluster))} "
-                f"components smaller than {MESH_MIN_COMPONENT_TRIANGLES} triangles"
+                f"components smaller than {minimum} triangles"
             )
 
     mesh.compute_vertex_normals()
@@ -966,6 +970,7 @@ def run(
     auto_object_top_margin_m=None,
     auto_object_table_below_margin_m=None,
     rectify_images=False,
+    mesh_min_component_triangles=None,
 ):
     global SESSION_PATH, scan_folder, output_folder, C2D_DIR, TABLE_PLANE_FILE
     global C2D_CENTER_CROP_ENABLE, C2D_CENTER_CROP_WIDTH, C2D_CENTER_CROP_HEIGHT
@@ -1182,7 +1187,7 @@ def run(
     elif CROP_ENABLE:
         aabb = o3d.geometry.AxisAlignedBoundingBox(CROP_MIN, CROP_MAX)
         mesh_out = mesh.crop(aabb)
-    mesh_out = _clean_mesh_for_export(mesh_out)
+    mesh_out = _clean_mesh_for_export(mesh_out, mesh_min_component_triangles)
     o3d.io.write_triangle_mesh(str(out_mesh), mesh_out)
     print("Saved:", out_mesh)
 
@@ -1213,6 +1218,8 @@ def main():
     parser.add_argument("--device", default="CPU:0", help='Open3D device, e.g. "CPU:0" or "CUDA:0"')
     parser.add_argument("--rectify-images", action="store_true", help="Rectify raw depth using saved distortion coefficients; requires matching rectified color alignment")
     parser.add_argument("--no-center-crop", action="store_true", help="Integrate the complete depth frame; final world-space cropping remains available through run()")
+    parser.add_argument("--mesh-min-component-triangles", type=int, default=None,
+                        help="Remove disconnected mesh islands below this size (default 100; 0 retains all components)")
     args = parser.parse_args()
 
     run(
@@ -1221,6 +1228,7 @@ def main():
         visualize=not args.no_vis,
         device=args.device,
         rectify_images=args.rectify_images,
+        mesh_min_component_triangles=args.mesh_min_component_triangles,
         center_crop_enable=False if args.no_center_crop else None,
         center_crop_apply_to_depth=False if args.no_center_crop else None,
     )

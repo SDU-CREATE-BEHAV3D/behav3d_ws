@@ -79,7 +79,8 @@ PYTHONPATH=src/behav3d_sense PYTHONDONTWRITEBYTECODE=1 python -B -m pytest \
   -p no:cacheprovider src/behav3d_sense/test/test_capture_validation.py \
   src/behav3d_sense/test/test_rectification.py \
   src/behav3d_sense/test/test_reconstruction_workflow.py \
-  src/behav3d_sense/test/test_colored_mesh.py -q
+  src/behav3d_sense/test/test_colored_mesh.py \
+  src/behav3d_sense/test/test_mesh_cleanup.py -q
 ```
 
 The ROS/ament lint suite needs the Linux ROS environment and was not available

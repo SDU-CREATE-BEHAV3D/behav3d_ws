@@ -107,6 +107,28 @@ take longer to publish and render. If needed, starting the world node with a
 positive `ply_marker_max_triangles` applies display-only quadric simplification;
 the saved reconstruction remains unchanged. Keep zero for geometry comparisons.
 
+### Detached-fragment cleanup
+
+The mesh export removes disconnected components with fewer than 100 triangles
+before saving either PLY or STL. The earlier 50-triangle cutoff let the visible
+62- and 63-triangle floating patches survive. This operation keeps the exact
+vertices and faces of retained components, including attached thin details;
+it does not smooth the surface. Fusion confidence remains at 3.
+
+The separate RGB point cloud also has statistical outlier filtering, which does
+not by itself clean the exported triangle mesh. Noise connected to a retained
+surface is unaffected by the component-size filter.
+
+To change the component cutoff for subsequent reconstructions:
+
+```bash
+ros2 param set /tsdf_cropped_service mesh_min_component_triangles 100
+```
+
+Use 50 to reproduce the earlier cutoff or 0 to retain all disconnected parts.
+Small genuine detached parts below the selected size are also removed, so lower
+the cutoff when those are intentional features of the object being scanned.
+
 ## YAML Fault Print and Scan
 
 `print_yaml_fault_and_scan_sequence` reuses the YAML-print sequence, scan and

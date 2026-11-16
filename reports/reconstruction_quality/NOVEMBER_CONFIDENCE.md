@@ -272,3 +272,34 @@ alignment still require the lab test. Colors improve appearance without changing
 dimensional accuracy. Details are in `colored_mesh_validation.json`.
 
 ![Actual mesh with and without vertex colors (offline preview)](/Users/josephnamar/.codex/worktrees/j1-reconstruction-quality/behav3d_ws/reports/reconstruction_quality/figures/colored_mesh_preview.png)
+
+## Detached mesh fragments, 2026-11-16
+
+The floating patches in the colored oriented-cube preview are two disconnected
+components with 62 and 63 triangles, approximately 6.8 and 7.9 mm from the main
+surface. They survived the previous 50-triangle mesh cutoff. Statistical outlier
+filtering of the RGB point cloud did not remove these exported mesh triangles.
+
+The production cutoff is now 100 triangles, adjustable through the cropped-TSDF
+parameter `mesh_min_component_triangles` (50 restores the old cutoff; 0 retains
+all components). Cleanup also now merges duplicate vertices before removing
+duplicate/degenerate triangles, preventing invalid faces from surviving that
+merge. There is no smoothing or movement of retained vertices. Confidence stays
+at 3 and the grid at 1.953125 mm.
+
+Validated all nine full-scan meshes and their nine held-out baseline meshes.
+The full-scan outputs lose 64 small components containing 4,289 triangles, plus
+eight degenerate faces from the cleanup-order fix. Every retained valid face and
+its vertex colors match exactly, allowing for indexing/order changes. The main
+connected surface's valid faces are retained in every case. All 18 source meshes
+were checked unchanged. Thirty-two focused checks pass, including attached thin
+details, separate valid objects, threshold boundaries, and ROS parameter routing.
+
+Held-out mesh-hit coverage remains 99.7187%, unchanged on each scan. The pooled
+within-5-mm rate changes from 74.2987% to 74.3815%; mean scan P90 changes from
+21.7466 to 21.7714 mm. This is targeted artifact removal, not evidence of a broad
+accuracy gain. Small genuine separate parts below the cutoff can also be removed;
+artifacts connected to a larger surface remain. Live ROS/RViz is untested here.
+Full results: `mesh_cleanup_validation.json`.
+
+![Floating fragments before and after cleanup (offline preview)](/Users/josephnamar/.codex/worktrees/j1-reconstruction-quality/behav3d_ws/reports/reconstruction_quality/figures/mesh_cleanup_preview.png)

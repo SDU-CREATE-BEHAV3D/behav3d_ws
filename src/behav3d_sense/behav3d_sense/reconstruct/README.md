@@ -189,6 +189,14 @@ these vertex colors, and the cropped-TSDF service returns that mesh in `mesh_pat
 STL and the separate filtered RGB point cloud are still exported. RViz uses
 colored triangle markers for mesh requests; no texture files are required.
 
+Mesh export removes disconnected components smaller than 100 triangles, without
+smoothing or moving any retained vertices. Set the cropped-TSDF ROS parameter
+`mesh_min_component_triangles` to adjust this cutoff (50 reproduces the earlier
+setting; 0 keeps all components). The offline equivalent is
+`--mesh-min-component-triangles`. This can remove small genuine separate parts
+as well as noise; it does not remove artifacts connected to a larger surface.
+The statistical outlier filter still applies separately to the RGB point cloud.
+
 `--no-center-crop` integrates the full depth frame. This was the strongest tested
 coverage profile on the saved June/July 2026 examples. It can retain background
 geometry; use a validated world-space crop after fusion where needed. See

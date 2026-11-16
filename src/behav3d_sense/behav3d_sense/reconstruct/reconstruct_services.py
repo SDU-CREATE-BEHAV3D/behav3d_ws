@@ -224,6 +224,7 @@ class TSDFCroppedService(_BaseReconstructService):
             output_resolver=_resolve_tsdf_cropped_outputs,
             srv_type=TsdfCropped,
         )
+        self.declare_parameter("mesh_min_component_triangles", int(TSDF_cpu_cropped.MESH_MIN_COMPONENT_TRIANGLES))
         self.declare_parameter("center_crop_enable", bool(TSDF_cpu_cropped.C2D_CENTER_CROP_ENABLE))
         self.declare_parameter(
             "center_crop_width",
@@ -295,6 +296,7 @@ class TSDFCroppedService(_BaseReconstructService):
 
         return {
             **super()._build_runner_kwargs(request),
+            "mesh_min_component_triangles": int(self.get_parameter("mesh_min_component_triangles").value),
             "center_crop_enable": bool(self.get_parameter("center_crop_enable").value),
             "center_crop_width": int(self.get_parameter("center_crop_width").value),
             "center_crop_height": int(self.get_parameter("center_crop_height").value),

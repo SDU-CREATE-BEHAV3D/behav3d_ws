@@ -1,0 +1,624 @@
+{
+  "threshold_before": 50,
+  "threshold_after": 100,
+  "method": "Disconnected component removal only; no smoothing or vertex movement",
+  "per_scan": {
+    "261113_145255": {
+      "full": {
+        "invalid_faces_removed": 2,
+        "triangles_before": 491900,
+        "triangles_after": 490617,
+        "removed_triangles": 1283,
+        "removed_components": 19,
+        "removed_component_sizes": [
+          52,
+          52,
+          64,
+          96,
+          80,
+          56,
+          66,
+          60,
+          64,
+          88,
+          56,
+          96,
+          60,
+          67,
+          91,
+          55,
+          52,
+          64,
+          64
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "231d84654842ae766ba14b8eaace940dbf5d362e6d2c73eda49803cd77a38896",
+        "output_sha256": "1b5107cad15511b805da4f340e688fd0981ff53d5f9d1c8d7383c4d0a48c0126"
+      },
+      "heldout": {
+        "invalid_faces_removed": 8,
+        "triangles_before": 381695,
+        "triangles_after": 381123,
+        "removed_triangles": 572,
+        "removed_components": 9,
+        "removed_component_sizes": [
+          68,
+          64,
+          60,
+          52,
+          56,
+          80,
+          76,
+          52,
+          64
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "43d690304594940562a8e4d50b1da58fa58281a589f6c6e1e366266801b2db2c",
+        "output_sha256": "09cc651117676299d49e46a9635283dd5ae8c53f70a89a1fc5678c3c9c2fc46f",
+        "before": {
+          "valid_raw_rays": 2478,
+          "mesh_hits": 2478,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -0.06259727478030719,
+          "median_abs_mm": 1.549641370773347,
+          "p90_abs_mm": 36.812406635284425,
+          "within_5mm_fraction": 0.7158999192897498,
+          "within_10mm_fraction": 0.817998385794996,
+          "gross_30mm_fraction": 0.11420500403551251
+        },
+        "after": {
+          "valid_raw_rays": 2478,
+          "mesh_hits": 2478,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -0.050739765167284734,
+          "median_abs_mm": 1.549641370773347,
+          "p90_abs_mm": 37.036353683471745,
+          "within_5mm_fraction": 0.7199354317998385,
+          "within_10mm_fraction": 0.8224374495560937,
+          "gross_30mm_fraction": 0.11339790153349476
+        }
+      }
+    },
+    "261113_150006": {
+      "full": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 457748,
+        "triangles_after": 457519,
+        "removed_triangles": 229,
+        "removed_components": 4,
+        "removed_component_sizes": [
+          62,
+          63,
+          52,
+          52
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "1728a53d1a87cb24da8d2e33874b4449b5026f59f85af5a047103679f59bdbd1",
+        "output_sha256": "bcbea32161b5e127640e2bd9ce8f7a9fd89e2497037cd49e2bc96b3bcfcfda54"
+      },
+      "heldout": {
+        "invalid_faces_removed": 8,
+        "triangles_before": 418515,
+        "triangles_after": 418199,
+        "removed_triangles": 316,
+        "removed_components": 5,
+        "removed_component_sizes": [
+          64,
+          52,
+          56,
+          64,
+          80
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "497e1512ffcac920b26bacc281605d9f56f5e6e603d9bf0fcad0709b330e7ec2",
+        "output_sha256": "70ed88cf53a250c6c4bf557220a3f0899632e782f495e7b4e5ca06cc6fa226d4",
+        "before": {
+          "valid_raw_rays": 2345,
+          "mesh_hits": 2345,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -0.8156824111938965,
+          "median_abs_mm": 1.6816911697388193,
+          "p90_abs_mm": 36.019110679626486,
+          "within_5mm_fraction": 0.7019189765458422,
+          "within_10mm_fraction": 0.817910447761194,
+          "gross_30mm_fraction": 0.11855010660980811
+        },
+        "after": {
+          "valid_raw_rays": 2345,
+          "mesh_hits": 2345,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -0.8156824111938965,
+          "median_abs_mm": 1.6816911697388193,
+          "p90_abs_mm": 36.019110679626486,
+          "within_5mm_fraction": 0.7019189765458422,
+          "within_10mm_fraction": 0.817910447761194,
+          "gross_30mm_fraction": 0.11855010660980811
+        }
+      }
+    },
+    "261113_150432": {
+      "full": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 524653,
+        "triangles_after": 524590,
+        "removed_triangles": 63,
+        "removed_components": 1,
+        "removed_component_sizes": [
+          63
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "266865b1e6296f1b65b959962019518b6acfb65c35ec1fd0e8fc0541b1ee85ea",
+        "output_sha256": "fd6378ccaf9d5814fb7e0f5afdae6af64acfe609d6930a858c43b545283145fb"
+      },
+      "heldout": {
+        "invalid_faces_removed": 4,
+        "triangles_before": 477796,
+        "triangles_after": 477733,
+        "removed_triangles": 63,
+        "removed_components": 1,
+        "removed_component_sizes": [
+          63
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "f6e09eb9537b18d235fd4f2dd9b9548610507b8d9957d019f1cd5ae08c609ba2",
+        "output_sha256": "fd5699a90edb202e66e5608272e80d5134a7af984bb8c7bc386af6053d9c7f0a",
+        "before": {
+          "valid_raw_rays": 1984,
+          "mesh_hits": 1950,
+          "hit_fraction": 0.9828629032258065,
+          "median_signed_mm": 1.175941944122294,
+          "median_abs_mm": 1.9580934047698784,
+          "p90_abs_mm": 35.370077276229836,
+          "within_5mm_fraction": 0.6355846774193549,
+          "within_10mm_fraction": 0.6965725806451613,
+          "gross_30mm_fraction": 0.11391129032258064
+        },
+        "after": {
+          "valid_raw_rays": 1984,
+          "mesh_hits": 1950,
+          "hit_fraction": 0.9828629032258065,
+          "median_signed_mm": 1.175941944122294,
+          "median_abs_mm": 1.9580934047698784,
+          "p90_abs_mm": 35.370077276229836,
+          "within_5mm_fraction": 0.6355846774193549,
+          "within_10mm_fraction": 0.6965725806451613,
+          "gross_30mm_fraction": 0.11391129032258064
+        }
+      }
+    },
+    "261113_150709": {
+      "full": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 487894,
+        "triangles_after": 486885,
+        "removed_triangles": 1009,
+        "removed_components": 15,
+        "removed_component_sizes": [
+          88,
+          86,
+          74,
+          68,
+          52,
+          51,
+          68,
+          68,
+          64,
+          70,
+          64,
+          72,
+          64,
+          56,
+          64
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "923380da13cdf86d66e4710c18786b0fa6d415be96e202f950dbd7e4adbb3443",
+        "output_sha256": "015ed5324ff2327c47b481b903906703facb15868ce93837ee2711e6098bedd6"
+      },
+      "heldout": {
+        "invalid_faces_removed": 2,
+        "triangles_before": 377832,
+        "triangles_after": 376914,
+        "removed_triangles": 918,
+        "removed_components": 13,
+        "removed_component_sizes": [
+          64,
+          88,
+          84,
+          50,
+          88,
+          60,
+          56,
+          56,
+          56,
+          80,
+          80,
+          88,
+          68
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "9a10b5bda2190950dee8957ca43dcef9f3438e7868a529bfa88b2ca3bacb02e7",
+        "output_sha256": "26e8966ac6023ecd627463167d4e2b6cde4a87496f98c791457adbf641dd823e",
+        "before": {
+          "valid_raw_rays": 596,
+          "mesh_hits": 596,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -1.300729990005467,
+          "median_abs_mm": 2.2810368537903303,
+          "p90_abs_mm": 15.26425909996032,
+          "within_5mm_fraction": 0.8473154362416108,
+          "within_10mm_fraction": 0.8926174496644296,
+          "gross_30mm_fraction": 0.07718120805369127
+        },
+        "after": {
+          "valid_raw_rays": 596,
+          "mesh_hits": 596,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -1.300729990005467,
+          "median_abs_mm": 2.2810368537903303,
+          "p90_abs_mm": 15.26425909996032,
+          "within_5mm_fraction": 0.8473154362416108,
+          "within_10mm_fraction": 0.8926174496644296,
+          "gross_30mm_fraction": 0.07718120805369127
+        }
+      }
+    },
+    "261113_151101": {
+      "full": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 452591,
+        "triangles_after": 452239,
+        "removed_triangles": 352,
+        "removed_components": 6,
+        "removed_component_sizes": [
+          52,
+          52,
+          64,
+          68,
+          52,
+          64
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "743b71c637fec47df00e9c8ca293ec008ff15ab927792f31686109f7438d9ca5",
+        "output_sha256": "d0b8422eda3cb68005ceef7d60030f0473c7e7aed70ade69876facc4b17f2e3f"
+      },
+      "heldout": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 411971,
+        "triangles_after": 411767,
+        "removed_triangles": 204,
+        "removed_components": 3,
+        "removed_component_sizes": [
+          72,
+          56,
+          76
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "50cda34f0bca370dbafad8c029b3faf3b135849773b90dff9d490eca32f96a81",
+        "output_sha256": "095a4542f1b3658cf17ad39519ac77001aee11bc6141d13c094b3382ca0e2084",
+        "before": {
+          "valid_raw_rays": 550,
+          "mesh_hits": 550,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -1.9450302124023322,
+          "median_abs_mm": 2.5589716434478715,
+          "p90_abs_mm": 17.644250631332394,
+          "within_5mm_fraction": 0.8290909090909091,
+          "within_10mm_fraction": 0.8927272727272727,
+          "gross_30mm_fraction": 0.0890909090909091
+        },
+        "after": {
+          "valid_raw_rays": 550,
+          "mesh_hits": 550,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -1.9450302124023322,
+          "median_abs_mm": 2.5589716434478715,
+          "p90_abs_mm": 17.644250631332394,
+          "within_5mm_fraction": 0.8290909090909091,
+          "within_10mm_fraction": 0.8927272727272727,
+          "gross_30mm_fraction": 0.0890909090909091
+        }
+      }
+    },
+    "261113_151435": {
+      "full": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 520928,
+        "triangles_after": 520859,
+        "removed_triangles": 69,
+        "removed_components": 1,
+        "removed_component_sizes": [
+          69
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "19e164d96d9474b0ba0a1c55e418891683ab147b7fd6a56f80f424532394dce8",
+        "output_sha256": "578acf1332b55c24fad9e0da2270b2d6ec92c8ccee7d25c2526ba4b75a07dfe6"
+      },
+      "heldout": {
+        "invalid_faces_removed": 4,
+        "triangles_before": 477288,
+        "triangles_after": 477219,
+        "removed_triangles": 69,
+        "removed_components": 1,
+        "removed_component_sizes": [
+          69
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "9bfc3a93e0106e6b54bca10a9b725b344b40259109cf1c5ddd0fa0d72149583c",
+        "output_sha256": "ba33b3a1f1fedcdb97969cd572853a81679085878334ca8984ff852c9e4d5cef",
+        "before": {
+          "valid_raw_rays": 462,
+          "mesh_hits": 462,
+          "hit_fraction": 1.0,
+          "median_signed_mm": 0.007946729660035512,
+          "median_abs_mm": 1.402189731597947,
+          "p90_abs_mm": 9.591661071777294,
+          "within_5mm_fraction": 0.829004329004329,
+          "within_10mm_fraction": 0.9069264069264069,
+          "gross_30mm_fraction": 0.0
+        },
+        "after": {
+          "valid_raw_rays": 462,
+          "mesh_hits": 462,
+          "hit_fraction": 1.0,
+          "median_signed_mm": 0.007946729660035512,
+          "median_abs_mm": 1.402189731597947,
+          "p90_abs_mm": 9.591661071777294,
+          "within_5mm_fraction": 0.829004329004329,
+          "within_10mm_fraction": 0.9069264069264069,
+          "gross_30mm_fraction": 0.0
+        }
+      }
+    },
+    "261113_151637": {
+      "full": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 493512,
+        "triangles_after": 492468,
+        "removed_triangles": 1044,
+        "removed_components": 14,
+        "removed_component_sizes": [
+          76,
+          98,
+          64,
+          80,
+          99,
+          60,
+          86,
+          96,
+          68,
+          56,
+          56,
+          53,
+          92,
+          60
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "b18c9aaa5f3a584efce7ff0211a5f9a5dc63a595a344c14958bd0e4d3e73a304",
+        "output_sha256": "58d16a4ea9c9aa7f11fed5256937235799e41c7fe467d316c5a8c1e9f43d4fd5"
+      },
+      "heldout": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 381147,
+        "triangles_after": 380286,
+        "removed_triangles": 861,
+        "removed_components": 13,
+        "removed_component_sizes": [
+          76,
+          92,
+          77,
+          56,
+          64,
+          56,
+          70,
+          53,
+          60,
+          52,
+          56,
+          91,
+          58
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "73338cb41f7dd5e1467ca4948920c2a8fc1c48ea3655edd408957a6acb77fad3",
+        "output_sha256": "a299e838facec10d756cf4ab204a83536fb463e31e417923bfdac191cfd5cb97",
+        "before": {
+          "valid_raw_rays": 1323,
+          "mesh_hits": 1323,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -0.3313007354736053,
+          "median_abs_mm": 1.553135395050087,
+          "p90_abs_mm": 14.636903762817427,
+          "within_5mm_fraction": 0.8291761148904006,
+          "within_10mm_fraction": 0.8820861678004536,
+          "gross_30mm_fraction": 0.050642479213907785
+        },
+        "after": {
+          "valid_raw_rays": 1323,
+          "mesh_hits": 1323,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -0.3313007354736053,
+          "median_abs_mm": 1.553135395050087,
+          "p90_abs_mm": 14.636903762817427,
+          "within_5mm_fraction": 0.8291761148904006,
+          "within_10mm_fraction": 0.8820861678004536,
+          "gross_30mm_fraction": 0.050642479213907785
+        }
+      }
+    },
+    "261113_152024": {
+      "full": {
+        "invalid_faces_removed": 0,
+        "triangles_before": 455270,
+        "triangles_after": 455101,
+        "removed_triangles": 169,
+        "removed_components": 3,
+        "removed_component_sizes": [
+          52,
+          66,
+          51
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "397def03e7365cfb3a7cc91e7fa9f0a7f0252627d145116f7c517b46d95cd028",
+        "output_sha256": "faeaedf49d99ca1d7f2c396b10841174764544222998712bb6d73dc56e09be59"
+      },
+      "heldout": {
+        "invalid_faces_removed": 4,
+        "triangles_before": 415508,
+        "triangles_after": 415252,
+        "removed_triangles": 256,
+        "removed_components": 4,
+        "removed_component_sizes": [
+          64,
+          52,
+          76,
+          64
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "3c8e4bf6d5b6f834935def8cb76358eec69d39548618af332be608d37add44e9",
+        "output_sha256": "3acde497a62cd455e458e2ad36dc11af8bc40cd520bbad399b9aca684da52ea6",
+        "before": {
+          "valid_raw_rays": 1249,
+          "mesh_hits": 1249,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -1.1006102561951225,
+          "median_abs_mm": 1.5480742454528906,
+          "p90_abs_mm": 8.940204524993927,
+          "within_5mm_fraction": 0.8342674139311449,
+          "within_10mm_fraction": 0.9063250600480385,
+          "gross_30mm_fraction": 0.028823058446757407
+        },
+        "after": {
+          "valid_raw_rays": 1249,
+          "mesh_hits": 1249,
+          "hit_fraction": 1.0,
+          "median_signed_mm": -1.1006102561951225,
+          "median_abs_mm": 1.5480742454528906,
+          "p90_abs_mm": 8.940204524993927,
+          "within_5mm_fraction": 0.8342674139311449,
+          "within_10mm_fraction": 0.9063250600480385,
+          "gross_30mm_fraction": 0.028823058446757407
+        }
+      }
+    },
+    "261113_152345": {
+      "full": {
+        "invalid_faces_removed": 6,
+        "triangles_before": 523261,
+        "triangles_after": 523190,
+        "removed_triangles": 71,
+        "removed_components": 1,
+        "removed_component_sizes": [
+          71
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "52fe75d6bc3e4929a248f01c644b90cc672e8b632680619b1971b4ddabdde923",
+        "output_sha256": "a5f312c079cb4e83f2a3ca06107771441761094c649c5c318868910018a7af72"
+      },
+      "heldout": {
+        "invalid_faces_removed": 12,
+        "triangles_before": 478910,
+        "triangles_after": 478839,
+        "removed_triangles": 71,
+        "removed_components": 1,
+        "removed_component_sizes": [
+          71
+        ],
+        "all_retained_faces_and_colors_unchanged": true,
+        "largest_component_untouched": true,
+        "input_sha256": "6b11e078e6d3a8b23428b6849000d5aedee28c8fc23e5b4e96c06626192306f3",
+        "output_sha256": "820f06328cc719ab0603b364db0fe8d89b509d50962e3b52e5ac87a11a796ff2",
+        "before": {
+          "valid_raw_rays": 1098,
+          "mesh_hits": 1098,
+          "hit_fraction": 1.0,
+          "median_signed_mm": 0.720863819122286,
+          "median_abs_mm": 1.853265047073338,
+          "p90_abs_mm": 21.440151262283294,
+          "within_5mm_fraction": 0.7422586520947176,
+          "within_10mm_fraction": 0.843351548269581,
+          "gross_30mm_fraction": 0.0610200364298725
+        },
+        "after": {
+          "valid_raw_rays": 1098,
+          "mesh_hits": 1098,
+          "hit_fraction": 1.0,
+          "median_signed_mm": 0.720863819122286,
+          "median_abs_mm": 1.853265047073338,
+          "p90_abs_mm": 21.440151262283294,
+          "within_5mm_fraction": 0.7422586520947176,
+          "within_10mm_fraction": 0.843351548269581,
+          "gross_30mm_fraction": 0.0610200364298725
+        }
+      }
+    }
+  },
+  "production_source_sha256": "b0e73ff0df168c8acae7404c456df5868fd8790197ecd4e59f672c3aae4192a4",
+  "before": {
+    "mean_scan_p90_mm": 21.74655832714505,
+    "within_5mm_percent": 74.29871741828713,
+    "mesh_hit_percent": 99.71865949524204
+  },
+  "after": {
+    "mean_scan_p90_mm": 21.771441332499194,
+    "within_5mm_percent": 74.38146462556888,
+    "mesh_hit_percent": 99.71865949524204
+  },
+  "meshes_checked": 18,
+  "input_meshes_unchanged": true,
+  "tests_passed": 32,
+  "artifact_root": "/Users/josephnamar/.codex/visualizations/2026/11/13/01a1d591-ef53-71a1-b5d1-4895a2ba80d2/reconstruction_quality/november_mesh_cleanup",
+  "visible_fragments": [
+    {
+      "id": 2,
+      "triangles": 62,
+      "area_mm2": 79.47557825458163,
+      "extent_mm": [
+        3.7658866494894028,
+        8.65936279296875,
+        6.239712238311768
+      ],
+      "height_mm": [
+        36.94305522658789,
+        43.182618555011516
+      ],
+      "gap_to_main_mm": 6.8403128534555435
+    },
+    {
+      "id": 3,
+      "triangles": 63,
+      "area_mm2": 78.91823963596325,
+      "extent_mm": [
+        6.40149787068367,
+        11.417031288146973,
+        3.736332058906555
+      ],
+      "height_mm": [
+        42.10188316758342,
+        45.85652795706455
+      ],
+      "gap_to_main_mm": 7.869163528084755
+    }
+  ],
+  "limits": "Component-size filtering can remove genuine small separate parts and leaves artifacts attached to a larger surface. Held-out results measure consistency with saved depth, not physical dimensional accuracy. Live ROS/RViz has not been tested.",
+  "full_scan_totals": {
+    "removed_components": 64,
+    "removed_triangles": 4289,
+    "invalid_faces_removed": 8
+  }
+}

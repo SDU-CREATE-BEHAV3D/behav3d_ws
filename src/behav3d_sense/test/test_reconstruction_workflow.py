@@ -128,3 +128,15 @@ def test_service_wrappers_forward_model_to_actual_reconstruction_modules(service
         run=Mock();monkeypatch.setattr(module,'run',run)
         runner(tmp_path,'scan',False,rectify_images=enabled)
         assert run.call_args.kwargs['rectify_images'] is enabled
+
+
+@pytest.mark.parametrize('minimum', [0, 50, 100])
+def test_mesh_island_threshold_reaches_actual_processing(services, monkeypatch, tmp_path, minimum):
+    node = services.TSDFCroppedService()
+    assert node.get_parameter('mesh_min_component_triangles').value == 100
+    node.params['mesh_min_component_triangles'].value = minimum
+    run = Mock()
+    monkeypatch.setattr(services.TSDF_cpu_cropped, 'run', run)
+    options = node._build_runner_kwargs(SimpleNamespace())
+    services._run_tsdf_cropped(tmp_path, 'scan', False, **options)
+    assert run.call_args.kwargs['mesh_min_component_triangles'] == minimum
