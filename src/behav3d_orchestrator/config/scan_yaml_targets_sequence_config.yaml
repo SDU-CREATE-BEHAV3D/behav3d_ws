@@ -39,6 +39,8 @@ scan_yaml_targets_sequence:
     clear_markers_after: true
 
     # Final reconstruction and RViz world-mesh update.
+    # Undistortion is enabled on the reconstruction service nodes by bringup's
+    # reconstruct_rectify_images:=true (the default); this YAML controls the scan.
     run_reconstruction: true
     reconstruct_device: CPU:0
     reconstruct_request_timeout_s: 10.0

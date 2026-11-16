@@ -478,6 +478,7 @@ class WorldNode(Node):
         marker.action = Marker.ADD
         marker.mesh_resource = staged_path.as_uri()
         marker.pose = Pose()
+        marker.pose.orientation.w = 1.0
 
         scale = max(1e-6, float(self._mesh_scale))
         marker.scale.x = scale
@@ -518,6 +519,7 @@ class WorldNode(Node):
         marker.id = int(marker_id)
         marker.action = Marker.ADD
         marker.pose = Pose()
+        marker.pose.orientation.w = 1.0
         marker.color.r = float(self._mesh_rgba[0])
         marker.color.g = float(self._mesh_rgba[1])
         marker.color.b = float(self._mesh_rgba[2])

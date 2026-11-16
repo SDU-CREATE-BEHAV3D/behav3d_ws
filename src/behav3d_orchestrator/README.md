@@ -3,6 +3,87 @@
 ROS 2 sequence nodes that compose motion, scanning, field candidate generation,
 and printing through the shared session classes in `behav3d_orchestrator/src/`.
 
+## Scan, undistort, reconstruct and inspect in RViz
+
+Use the existing `scan_yaml_targets_sequence` on branch
+`codex/j1-reconstruction-quality`. It runs the configured scan targets, waits for
+complete color alignment, reconstructs the saved depth, and updates the RViz
+mesh through `/behav3d/update_world_mesh`. Both color and depth use the session's
+saved distortion calibration. Bringup enables this with
+`reconstruct_rectify_images:=true`; all three reconstruction services also
+default to `rectify_images=true` when started individually.
+
+On the lab PC with this branch checked out, stop the old bringup and rebuild
+the processing, orchestration, launch and RViz packages together:
+
+```bash
+cd ~/behav3d_ws
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-select behav3d_sense behav3d_orchestrator \
+  behav3d_bringup ur20_workcell_moveit_config --executor sequential
+source install/setup.bash
+```
+
+Start the usual bringup using the lab's existing robot address (replace
+`YOUR_EXISTING_ROBOT_IP`):
+
+```bash
+ros2 launch behav3d_bringup print_move.launch.py \
+  use_mock_hardware:=false robot_ip:=YOUR_EXISTING_ROBOT_IP \
+  orbbec_enable:=true enable_reconstruct_services:=true \
+  reconstruct_rectify_images:=true world_mesh_frame_id:=ur20_base_link
+```
+
+In a second sourced terminal, check the running nodes report `True` for both
+processing stages. Display only the latest reconstruction during this test:
+
+```bash
+cd ~/behav3d_ws
+source install/setup.bash
+ros2 param get /color_to_depth_service rectify_images
+ros2 param get /tsdf_cropped_service rectify_images
+ros2 param set /behav3d_world mesh_accumulate false
+```
+
+Select the existing scan trajectory through `yaml_path` in
+`src/behav3d_orchestrator/config/scan_yaml_targets_sequence_config.yaml`. The
+checked-in path is the November 13 linear-barrel scan. The existing config
+already has `run_reconstruction`, `wait_reconstruction_outputs` and
+`update_world_mesh` enabled, with center/AABB/adaptive crops disabled. It keeps
+the normal 1.953125 mm TSDF grid and threshold 3. No experimental 1 mm grid,
+angle rejection or pose refinement is enabled. Motion settings and target
+coordinates remain those of the existing scan config.
+
+Run the existing sequence when ready to execute that scan:
+
+```bash
+ros2 run behav3d_orchestrator scan_yaml_targets_sequence --ros-args \
+  -p config_path:="$PWD/src/behav3d_orchestrator/config/scan_yaml_targets_sequence_config.yaml"
+```
+
+This command executes robot motion and capture. Wait for the sequence to finish,
+including the configured `home_after`, before manually moving toward the object.
+The corrected mesh appears after reconstruction finishes; it is a fixed scan
+result while the robot model follows live joint states. This is not continuous
+live meshing. RViz should use fixed frame `world`, with the Marker display on
+`/visualization_marker`, namespace `reconstructed_mesh`, enabled. The supplied
+RViz configuration uses Transient Local durability to receive the latest marker
+after reconnecting. Mesh coordinates are metres in `ur20_base_link`; the
+world-to-base transform places them alongside the robot. The mesh marker is a
+visual overlay, not a MoveIt collision object.
+
+The processing console reports `Saved-calibration rectification: True`.
+Alignment is written under
+`<session>/scan_yaml_targets/reconstruct/color_in_depth_rectified/`; its
+`alignment.json` must report `rectified: true` and `complete: true`. The final
+mesh is `tsdf_surface_mesh.stl` in the same `reconstruct/` directory. The scan
+sequence reports `Reconstruction complete`, and the world node logs
+`Published world mesh` with the actual source path.
+
+Local validation covers distortion correction, complete-image handoff and
+service dispatch, plus saved-scan service replays. Live ROS transport, RViz and
+robot alignment still require this lab test.
+
 ## YAML Fault Print and Scan
 
 `print_yaml_fault_and_scan_sequence` reuses the YAML-print sequence, scan and
