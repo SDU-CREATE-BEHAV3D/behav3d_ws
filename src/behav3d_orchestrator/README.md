@@ -31,7 +31,8 @@ Start the usual bringup using the lab's existing robot address (replace
 ros2 launch behav3d_bringup print_move.launch.py \
   use_mock_hardware:=false robot_ip:=YOUR_EXISTING_ROBOT_IP \
   orbbec_enable:=true enable_reconstruct_services:=true \
-  reconstruct_rectify_images:=true world_mesh_frame_id:=ur20_base_link
+  reconstruct_rectify_images:=true world_mesh_frame_id:=ur20_base_link \
+  world_mesh_use_colors:=true
 ```
 
 In a second sourced terminal, check the running nodes report `True` for both
@@ -76,13 +77,35 @@ The processing console reports `Saved-calibration rectification: True`.
 Alignment is written under
 `<session>/scan_yaml_targets/reconstruct/color_in_depth_rectified/`; its
 `alignment.json` must report `rectified: true` and `complete: true`. The final
-mesh is `tsdf_surface_mesh.stl` in the same `reconstruct/` directory. The scan
+colored mesh is `tsdf_surface_mesh.ply` in the same `reconstruct/` directory;
+an STL copy is also exported. The scan
 sequence reports `Reconstruction complete`, and the world node logs
 `Published world mesh` with the actual source path.
 
 Local validation covers distortion correction, complete-image handoff and
 service dispatch, plus saved-scan service replays. Live ROS transport, RViz and
 robot alignment still require this lab test.
+
+### Camera-colored meshes
+
+The same scan command now publishes a triangle mesh with measured RGB vertex
+colors. The reconstruction service returns the colored PLY, and the world node
+renders its triangles even when point-cloud display is otherwise preferred.
+Colors come from the aligned camera images with the existing depth-visibility
+check and minimum of three observations. Vertices with insufficient color
+support remain neutral gray. Their geometry is retained.
+
+`world_mesh_use_colors:=true` is the bringup default. Launch with
+`world_mesh_use_colors:=false` for the uniform-gray comparison. Both modes use
+the same saved vertices and faces. Reconstruct older sessions again to produce
+vertex colors; their existing STL files do not contain RGB data. Colored point
+clouds remain available through `mesh_prefer: ply`; keep `mesh_prefer: mesh` for
+the filled triangle surface used by this test.
+
+The default `ply_marker_max_triangles=0` displays the full mesh. Large scans can
+take longer to publish and render. If needed, starting the world node with a
+positive `ply_marker_max_triangles` applies display-only quadric simplification;
+the saved reconstruction remains unchanged. Keep zero for geometry comparisons.
 
 ## YAML Fault Print and Scan
 

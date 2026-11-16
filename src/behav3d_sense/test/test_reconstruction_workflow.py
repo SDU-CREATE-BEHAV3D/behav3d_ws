@@ -116,6 +116,8 @@ def test_service_dispatch_keeps_alignment_and_tsdf_camera_models_together(servic
         assert runner.call_args.kwargs['rectify_images'] is enabled
         if cls is services.ColorToDepthService:
             assert Path(response.output_path).name==('color_in_depth_rectified' if enabled else 'color_in_depth')
+        elif cls is services.TSDFCroppedService:
+            assert Path(response.mesh_path).name == 'tsdf_surface_mesh.ply'
 
 
 @pytest.mark.parametrize('enabled',[True,False])

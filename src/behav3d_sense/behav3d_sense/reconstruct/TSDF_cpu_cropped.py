@@ -479,6 +479,11 @@ class TSDF_Integration():
         return pcd
 
     def colorize_tsdf_surface_points(self, pcd, sample_step=1, z_band_m=0.02, min_obs=3):
+        """Color the input surface and return its sufficiently observed subset.
+
+        Unsupported vertices retain neutral gray on the complete mesh; the
+        returned RGB point cloud keeps the existing observation-count filter.
+        """
         pts_w = np.asarray(pcd.points, dtype=np.float64)
         N = pts_w.shape[0]
         pts_h = np.concatenate([pts_w, np.ones((N, 1), dtype=np.float64)], axis=1)
@@ -540,8 +545,9 @@ class TSDF_Integration():
 
         keep = obs >= int(min_obs)
 
-        colors = np.zeros((N, 3), dtype=np.float64)
+        colors = np.full((N, 3), 0.8, dtype=np.float64)
         colors[keep] = accum[keep] / obs[keep][:, None]
+        pcd.colors = o3d.utility.Vector3dVector(colors)
 
         pcd_out = o3d.geometry.PointCloud()
         pcd_out.points = o3d.utility.Vector3dVector(pts_w[keep])
@@ -1057,6 +1063,10 @@ def run(
         z_band_m=0.02,
         min_obs=3
     )
+    # The surface point cloud has the same vertex order as the extracted mesh.
+    # Transfer colors before point-only filtering; no vertices/faces are moved
+    # or removed just because their color observations are insufficient.
+    mesh.vertex_colors = o3d.utility.Vector3dVector(np.asarray(pcd_surface.colors))
 
     if CROP_ENABLE:
         pcd_rgb, conf = tsdf_integration.crop_pcd_aabb_with_conf(pcd_rgb, conf, CROP_MIN, CROP_MAX)
@@ -1177,9 +1187,13 @@ def run(
     print("Saved:", out_mesh)
 
     # Keep an indexed mesh alongside STL. STL duplicates vertices by design;
-    # PLY is smaller and better for inspection or downstream processing.
+    # PLY also retains measured vertex colors for RViz and downstream processing.
+    # Publish this service output atomically so readers never see a partial PLY.
     out_mesh_ply = output_folder / "tsdf_surface_mesh.ply"
-    o3d.io.write_triangle_mesh(str(out_mesh_ply), mesh_out)
+    temp_mesh_ply = output_folder / ".tsdf_surface_mesh.tmp.ply"
+    if not o3d.io.write_triangle_mesh(str(temp_mesh_ply), mesh_out):
+        raise IOError(f"Failed to write colored mesh: {temp_mesh_ply}")
+    temp_mesh_ply.replace(out_mesh_ply)
     print("Saved:", out_mesh_ply)
 
     out_rgb = output_folder / "tsdf_surface_rgb_colored.ply"

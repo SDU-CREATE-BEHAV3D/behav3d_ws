@@ -249,3 +249,26 @@ presence does not establish correction in the launched reconstruction path.
 This audit verifies checked-in source, not historical deployed binaries or
 runtime overrides. No summer-school branch files or references were changed.
 Exact references and source links are recorded in `j1_workflow_verification.json`.
+
+## Colored RViz mesh validation, 2026-11-16
+
+The existing corrected pipeline now exports measured RGB vertex colors on
+`tsdf_surface_mesh.ply`; the ROS cropped-TSDF service returns that mesh for RViz.
+Unsupported vertices remain gray. Point-only confidence/outlier filters do not
+remove mesh geometry. The world node publishes triangles with per-vertex colors
+and retains every face by default; STL and RGB point-cloud exports remain.
+
+Replayed oriented-cube scan `261113_150006` using its completed rectified image
+alignment and the production TSDF service runner. All 230,947 vertices and
+457,748 triangles match the earlier corrected reconstruction, allowing for
+Open3D's output ordering; maximum vertex displacement is 0.0 mm. All 45 original
+and snapshot input files for the scan were verified unchanged. Full-size marker
+generation produced 1,373,244 positions and colors without geometry decimation.
+24 focused checks passed, including RGB channel order/visibility, gray fallback,
+mesh-versus-point routing, opacity, and the uniform-color display option.
+
+ROS messages and transport were stubbed locally; live RViz rendering and robot
+alignment still require the lab test. Colors improve appearance without changing
+dimensional accuracy. Details are in `colored_mesh_validation.json`.
+
+![Actual mesh with and without vertex colors (offline preview)](/Users/josephnamar/.codex/worktrees/j1-reconstruction-quality/behav3d_ws/reports/reconstruction_quality/figures/colored_mesh_preview.png)

@@ -75,7 +75,7 @@ def _resolve_tsdf_cropped_outputs(session_dir: Path, scan_folder: str, *, rectif
     return {
         # Keep legacy output_path mapped to RGB PLY for backward compatibility.
         "output_path": run_dir / "tsdf_surface_rgb_colored.ply",
-        "mesh_path": run_dir / "tsdf_surface_mesh.stl",
+        "mesh_path": run_dir / "tsdf_surface_mesh.ply",
         "rgb_ply_path": run_dir / "tsdf_surface_rgb_colored.ply",
         "confidence_ply_path": run_dir / "tsdf_surface_confidence_colored.ply",
     }

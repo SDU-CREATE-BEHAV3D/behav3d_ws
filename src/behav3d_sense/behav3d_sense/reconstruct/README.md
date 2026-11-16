@@ -13,7 +13,7 @@ This folder contains the ROS 2 services and reconstruction scripts for Behav3D. 
   - Produces aligned color-in-depth images and alignment diagnostics.
 - `TSDF_cpu_cropped.py`
   - TSDF integration, cropping, optional plane fitting/slicing, point clouds.
-  - Exports a mesh as `tsdf_surface_mesh.stl`.
+  - Exports an RGB vertex-colored mesh as `tsdf_surface_mesh.ply`, plus an STL copy.
 - `TSDF_cpu_object_extract.py`
   - TSDF integration and object extraction using a precomputed table plane.
 
@@ -108,7 +108,8 @@ ros2 service call /reconstruct/tsdf_cropped behav3d_interfaces/srv/TsdfCropped \
 
 Outputs:
 
-- `<scan_folder>/reconstruct/tsdf_surface_mesh.stl`
+- `<scan_folder>/reconstruct/tsdf_surface_mesh.ply` (colored triangles; service `mesh_path`)
+- `<scan_folder>/reconstruct/tsdf_surface_mesh.stl` (geometry-only copy)
 - `<scan_folder>/reconstruct/tsdf_surface_rgb_colored.ply`
 - `<scan_folder>/reconstruct/tsdf_surface_confidence_colored.ply`
 
@@ -180,6 +181,13 @@ Old complete unmarked legacy image sets remain readable by offline TSDF; the
 updated ROS orchestrator requires a new alignment completion record.
 Depth uses nearest-neighbor rectification, with unchanged units, K, and image size.
 The original depth bias, TSDF and mesh cleanup settings remain in effect.
+
+The TSDF mesh now retains the RGB observations already used for point coloring.
+Each vertex with at least three valid color observations receives their average;
+unsupported vertices are gray, without removing geometry. PLY export preserves
+these vertex colors, and the cropped-TSDF service returns that mesh in `mesh_path`.
+STL and the separate filtered RGB point cloud are still exported. RViz uses
+colored triangle markers for mesh requests; no texture files are required.
 
 `--no-center-crop` integrates the full depth frame. This was the strongest tested
 coverage profile on the saved June/July 2026 examples. It can retain background

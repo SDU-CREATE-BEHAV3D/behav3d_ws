@@ -55,7 +55,9 @@ class WorldNode(Node):
         self.declare_parameter("mesh_accumulate_max_markers", 2)
         self.declare_parameter("ply_marker_point_size", 0.0015)
         self.declare_parameter("ply_marker_max_points", 120000)
-        self.declare_parameter("ply_marker_max_triangles", 80000)
+        # Zero retains the full reconstructed surface. A positive limit enables
+        # display-only simplification instead of dropping disconnected faces.
+        self.declare_parameter("ply_marker_max_triangles", 0)
         self.declare_parameter("ply_marker_prefer_points", True)
         self.declare_parameter("ply_marker_use_colors", True)
 
@@ -79,7 +81,7 @@ class WorldNode(Node):
         )
         self._ply_marker_point_size = max(1e-6, float(self.get_parameter("ply_marker_point_size").value))
         self._ply_marker_max_points = max(1, int(self.get_parameter("ply_marker_max_points").value))
-        self._ply_marker_max_triangles = max(1, int(self.get_parameter("ply_marker_max_triangles").value))
+        self._ply_marker_max_triangles = max(0, int(self.get_parameter("ply_marker_max_triangles").value))
         self._ply_marker_prefer_points = bool(self.get_parameter("ply_marker_prefer_points").value)
         self._ply_marker_use_colors = bool(self.get_parameter("ply_marker_use_colors").value)
         self._mesh_next_marker_id = 0
@@ -451,7 +453,9 @@ class WorldNode(Node):
         marker_id = self._reserve_marker_id()
 
         if suffix == ".ply":
-            ply_marker, render_mode = self._build_ply_marker(staged_path=staged_path, marker_id=marker_id)
+            ply_marker, render_mode = self._build_ply_marker(
+                staged_path=staged_path, marker_id=marker_id, prefer_mesh=(kind == "mesh")
+            )
             if ply_marker is not None:
                 self._mesh_pub.publish(ply_marker)
                 if self._mesh_accumulate:
@@ -526,8 +530,8 @@ class WorldNode(Node):
         marker.color.a = float(self._mesh_rgba[3])
         return marker
 
-    def _build_ply_marker(self, staged_path: Path, marker_id: int) -> tuple[Optional[Marker], str]:
-        if self._ply_marker_prefer_points:
+    def _build_ply_marker(self, staged_path: Path, marker_id: int, *, prefer_mesh: bool = False) -> tuple[Optional[Marker], str]:
+        if self._ply_marker_prefer_points and not prefer_mesh:
             marker = self._build_ply_points_marker(staged_path, marker_id)
             if marker is not None:
                 return marker, "points"
@@ -594,6 +598,14 @@ class WorldNode(Node):
             self.get_logger().warn(f"Failed to read PLY triangle mesh '{staged_path}': {exc}")
             return None
 
+        if 0 < self._ply_marker_max_triangles < len(mesh.triangles):
+            before = len(mesh.triangles)
+            mesh = mesh.simplify_quadric_decimation(self._ply_marker_max_triangles)
+            self.get_logger().warn(
+                f"RViz display mesh simplified from {before} to {len(mesh.triangles)} triangles; "
+                "set ply_marker_max_triangles=0 for the full reconstructed surface."
+            )
+
         vertices = np.asarray(mesh.vertices, dtype=np.float64)
         triangles = np.asarray(mesh.triangles, dtype=np.int32)
         if (
@@ -612,10 +624,6 @@ class WorldNode(Node):
             if c.shape[0] == vertices.shape[0] and c.shape[1] == 3:
                 vcolors = np.clip(c, 0.0, 1.0)
 
-        if triangles.shape[0] > self._ply_marker_max_triangles:
-            stride = int(math.ceil(float(triangles.shape[0]) / float(self._ply_marker_max_triangles)))
-            triangles = triangles[::stride][: self._ply_marker_max_triangles]
-
         marker = self._build_base_add_marker(marker_id)
         marker.type = Marker.TRIANGLE_LIST
         marker.scale.x = 1.0
@@ -624,8 +632,12 @@ class WorldNode(Node):
 
         out_points: List[Point] = []
         out_colors: List[ColorRGBA] = []
-        alpha = float(self._mesh_rgba[3])
         use_colors = self._ply_marker_use_colors and (vcolors is not None)
+        alpha = float(self._mesh_rgba[3])
+        if use_colors:
+            # RViz multiplies both alphas and enables blending from vertex
+            # alpha. Put opacity there once, with a neutral overall factor.
+            marker.color.a = 1.0
 
         for tri in triangles:
             for vid in tri:
