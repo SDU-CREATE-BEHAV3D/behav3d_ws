@@ -14,6 +14,7 @@ import rclpy
 from rclpy.node import Node
 
 from .src.yaml_session import YamlSession
+from .src.free_z_yaw import transport_free_z_yaw
 
 
 class PolylineMotionSequenceNode(Node):
@@ -27,6 +28,10 @@ class PolylineMotionSequenceNode(Node):
         self.declare_parameter("accel_scale", 0.05)
         self.declare_parameter("blend_radius", 0.005)
         self.declare_parameter("target_speed_mm_s", 0.0)
+        self.declare_parameter("speed_control_mode", "legacy")
+        self.declare_parameter("pilz_max_trans_vel_m_s", 1.0)
+        self.declare_parameter("orientation_mode", "fixed")
+        self.declare_parameter("execute_motion", True)
         self.declare_parameter("retime_constant_tcp_speed", False)
         self.declare_parameter("retime_min_dt_s", 0.001)
         self.declare_parameter("tcp_sample_spacing_mm", 2.0)
@@ -61,6 +66,10 @@ class PolylineMotionSequenceNode(Node):
         blend_radius = float(self.get_parameter("blend_radius").value)
         target_speed_mm_s = float(self.get_parameter("target_speed_mm_s").value)
         retime_constant_tcp_speed = bool(self.get_parameter("retime_constant_tcp_speed").value)
+        speed_control_mode = str(self.get_parameter("speed_control_mode").value).strip().lower()
+        pilz_max_trans_vel_m_s = float(self.get_parameter("pilz_max_trans_vel_m_s").value)
+        orientation_mode = str(self.get_parameter("orientation_mode").value).strip().lower()
+        execute_motion = bool(self.get_parameter("execute_motion").value)
         retime_min_dt_s = float(self.get_parameter("retime_min_dt_s").value)
         tcp_sample_spacing_mm = float(self.get_parameter("tcp_sample_spacing_mm").value)
         speed_tolerance = float(self.get_parameter("speed_tolerance").value)
@@ -88,6 +97,20 @@ class PolylineMotionSequenceNode(Node):
             return
 
         try:
+            if speed_control_mode not in ("legacy", "pilz_native", "retime"):
+                raise ValueError("speed_control_mode must be one of: legacy, pilz_native, retime")
+            if orientation_mode not in ("fixed", "free_z_yaw"):
+                raise ValueError("orientation_mode must be one of: fixed, free_z_yaw")
+            if speed_control_mode == "pilz_native":
+                if not math.isfinite(pilz_max_trans_vel_m_s) or pilz_max_trans_vel_m_s <= 0.0:
+                    raise ValueError("pilz_max_trans_vel_m_s must be finite and > 0")
+                if not math.isfinite(target_speed_mm_s) or target_speed_mm_s <= 0.0:
+                    raise ValueError("pilz_native requires target_speed_mm_s > 0")
+                if target_speed_mm_s * 1e-3 > pilz_max_trans_vel_m_s:
+                    raise ValueError("requested speed exceeds configured Pilz max_trans_vel")
+                if retime_constant_tcp_speed:
+                    raise ValueError("pilz_native and retime_constant_tcp_speed cannot both be enabled")
+
             polylines = self.session.parse_yaml_polylines(yaml_path=yaml_path, frame_id=frame_id)
             path = [pose for polyline in polylines for pose in polyline.poses]
             if not polylines:
@@ -97,7 +120,9 @@ class PolylineMotionSequenceNode(Node):
                 "Starting polyline motion sequence: "
                 f"path='{yaml_path}', polylines={len(polylines)}, poses={len(path)}, frame='{frame_id}', "
                 f"eef='{eef_link}', v={vel_scale:.3f}, a={accel_scale:.3f}, blend={blend_radius:.4f}, "
-                f"target_speed_mm_s={target_speed_mm_s:.3f}, retime_constant_tcp_speed={retime_constant_tcp_speed}, "
+                f"target_speed_mm_s={target_speed_mm_s:.3f}, speed_mode={speed_control_mode}, "
+                f"orientation_mode={orientation_mode}, execute_motion={execute_motion}, "
+                f"retime_constant_tcp_speed={retime_constant_tcp_speed}, "
                 f"tcp_sample_spacing_mm={tcp_sample_spacing_mm:.3f}, retime_min_dt_s={retime_min_dt_s:.4f}, "
                 f"move_to_polyline_start={move_to_polyline_start}, start_motion={start_motion}, "
                 f"start_v={start_vel_scale:.3f}, start_a={start_accel_scale:.3f}"
@@ -111,8 +136,10 @@ class PolylineMotionSequenceNode(Node):
                 if not clear_res.get("ok", False):
                     raise RuntimeError(f"Target marker cleanup failed: {clear_res.get('error', 'unknown')}")
 
-            if home_before:
-                self.session.run_sync(self.session.motion.home(enqueue=False), timeout_s=timeout_s)
+            if home_before and execute_motion:
+                home_res = self.session.run_sync(self.session.motion.home(enqueue=False), timeout_s=timeout_s)
+                if not home_res.get("ok", False):
+                    raise RuntimeError(f"home_before failed: {home_res.get('error', 'unknown')}")
 
             self.session.run_sync(self.session.motion.setLIN(enqueue=False), timeout_s=timeout_s)
             self.session.run_sync(self.session.motion.setSpd(vel_scale, enqueue=False), timeout_s=timeout_s)
@@ -125,10 +152,31 @@ class PolylineMotionSequenceNode(Node):
             skipped_polylines: list[int] = []
             for polyline in polylines:
                 sequence_poses = list(polyline.poses)
+                if orientation_mode == "free_z_yaw":
+                    pose_result = self.session.run_sync(
+                        self.session.camera.get_pose(
+                            eef=eef_link,
+                            base_frame=frame_id,
+                            use_tf=True,
+                            enqueue=False,
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                    reference_pose = pose_result.get("pose")
+                    if not pose_result.get("ok", False) or reference_pose is None:
+                        raise RuntimeError(
+                            "free_z_yaw requires current EEF pose from TF: "
+                            f"{pose_result.get('error', 'pose unavailable')}"
+                        )
+                    sequence_poses = transport_free_z_yaw(sequence_poses, reference_pose)
+                    log.info(
+                        f"[polyline_motion] Free Z-yaw minimal-twist orientation applied "
+                        f"to polyline index={polyline.index}; EEF={eef_link}"
+                    )
                 if publish_markers:
                     marker_res = self.session.run_sync(
                         self.session.util.publish_targets(
-                            polyline.poses,
+                            sequence_poses,
                             axis_length=axis_length,
                             axis_radius=axis_radius,
                             clear_before=True,
@@ -148,7 +196,7 @@ class PolylineMotionSequenceNode(Node):
                         f"polyline index={polyline.index} poses={len(polyline.poses)}."
                     )
 
-                if move_to_polyline_start:
+                if move_to_polyline_start and execute_motion:
                     if not sequence_poses:
                         skipped_polylines.append(int(polyline.index))
                         log.error(f"[polyline_motion] Skipping polyline index={polyline.index}: no poses")
@@ -183,6 +231,11 @@ class PolylineMotionSequenceNode(Node):
 
                     if len(sequence_poses) > 2:
                         sequence_poses = sequence_poses[1:]
+                    else:
+                        log.warn(
+                            "[polyline_motion] Two-plane sequences include the start pose as the "
+                            "first Pilz target; add an intermediate plane if planning fails."
+                        )
 
                 log.info(
                     f"[polyline_motion] Planning sequence for polyline index={polyline.index} "
@@ -202,7 +255,9 @@ class PolylineMotionSequenceNode(Node):
                     seed_accel_scale=accel_scale,
                     blend_radius=blend_radius,
                     target_speed_mm_s=target_speed_mm_s,
-                    retime_constant_tcp_speed=retime_constant_tcp_speed,
+                    retime_constant_tcp_speed=(retime_constant_tcp_speed or speed_control_mode == "retime"),
+                    speed_control_mode=speed_control_mode,
+                    pilz_max_trans_vel_m_s=pilz_max_trans_vel_m_s,
                     retime_min_dt_s=retime_min_dt_s,
                     tcp_sample_spacing_m=max(0.0, tcp_sample_spacing_mm) * 1e-3,
                     speed_tolerance=speed_tolerance,
@@ -235,6 +290,10 @@ class PolylineMotionSequenceNode(Node):
                     f"{int(metrics.get('tcp_speed_sample_count', 0))}"
                 )
 
+                if not execute_motion:
+                    log.info(f"[polyline_motion] Preview only; polyline index={polyline.index} not executed")
+                    continue
+
                 exec_res = self.session.run_sync(self.session.motion.exec(enqueue=False), timeout_s=timeout_s)
                 if not exec_res.get("ok", False):
                     skipped_polylines.append(int(polyline.index))
@@ -246,8 +305,10 @@ class PolylineMotionSequenceNode(Node):
                 executed += len(polyline.poses)
                 executed_polylines += 1
 
-            if home_after:
-                self.session.run_sync(self.session.motion.home(enqueue=False), timeout_s=timeout_s)
+            if home_after and execute_motion:
+                home_res = self.session.run_sync(self.session.motion.home(enqueue=False), timeout_s=timeout_s)
+                if not home_res.get("ok", False):
+                    log.error(f"home_after failed: {home_res.get('error', 'unknown')}")
 
             log.info(
                 f"Polyline motion sequence complete. Executed polylines={executed_polylines}, "
@@ -269,6 +330,8 @@ class PolylineMotionSequenceNode(Node):
         blend_radius: float,
         target_speed_mm_s: float,
         retime_constant_tcp_speed: bool,
+        speed_control_mode: str,
+        pilz_max_trans_vel_m_s: float,
         retime_min_dt_s: float,
         tcp_sample_spacing_m: float,
         speed_tolerance: float,
@@ -282,6 +345,63 @@ class PolylineMotionSequenceNode(Node):
         tcp_speed_threshold_m_s = 0.0
         if float(target_speed_mm_s) > 0.0 and float(tcp_speed_warn_fraction) > 0.0:
             tcp_speed_threshold_m_s = float(target_speed_mm_s) * float(tcp_speed_warn_fraction) * 1e-3
+
+        if speed_control_mode == "pilz_native":
+            native_vel_scale = float(target_speed_mm_s) * 1e-3 / float(pilz_max_trans_vel_m_s)
+            plan_res = self.session.run_sync(
+                self.session.motion.plan_sequence(
+                    poses,
+                    eef=eef_link,
+                    vel_scale=native_vel_scale,
+                    accel_scale=float(seed_accel_scale),
+                    blend_radius=float(blend_radius),
+                    frame_id=frame_id,
+                    tcp_speed_threshold_m_s=tcp_speed_threshold_m_s,
+                    enqueue=False,
+                ),
+                timeout_s=timeout_s,
+            )
+            if not plan_res.get("ok", False):
+                return plan_res
+
+            metrics = dict(plan_res.get("metrics", {}))
+            metrics["target_speed_mm_s"] = float(target_speed_mm_s)
+            metrics["native_vel_scale"] = native_vel_scale
+            metrics["speed_control_mode"] = "pilz_native"
+            plan_res["metrics"] = metrics
+            samples = int(metrics.get("tcp_speed_sample_count", 0))
+            max_speed = float(metrics.get("tcp_speed_max_mm_s", 0.0))
+            mean_speed = float(metrics.get("tcp_speed_mean_mm_s", 0.0))
+            upper = float(target_speed_mm_s) * (1.0 + max(0.0, float(speed_tolerance)))
+            lower = float(target_speed_mm_s) * (1.0 - max(0.0, float(speed_tolerance)))
+            if samples <= 0:
+                return {
+                    "ok": False,
+                    "error": "native Pilz speed validation unavailable (no FK speed samples)",
+                    "metrics": metrics,
+                }
+            # Never execute a plan which exceeds the requested TCP speed tolerance.
+            if max_speed > upper:
+                return {
+                    "ok": False,
+                    "error": f"Pilz TCP max speed {max_speed:.3f}mm/s exceeds {upper:.3f}mm/s",
+                    "metrics": metrics,
+                }
+            # Mean speed includes start/end ramps; require_convergence is opt-in.
+            if mean_speed < lower:
+                message = (
+                    f"Pilz TCP mean speed {mean_speed:.3f}mm/s below "
+                    f"{lower:.3f}mm/s (includes ramps and orientation changes)"
+                )
+                if require_convergence:
+                    return {"ok": False, "error": message, "metrics": metrics}
+                log.warn(f"[polyline_motion] {message}")
+            log.info(
+                f"[polyline_motion] Native Pilz v={native_vel_scale:.6f} from "
+                f"target={target_speed_mm_s:.3f}mm/s, "
+                f"configured_max={pilz_max_trans_vel_m_s:.3f}m/s"
+            )
+            return plan_res
 
         if float(target_speed_mm_s) <= 0.0 or bool(retime_constant_tcp_speed):
             return self.session.run_sync(

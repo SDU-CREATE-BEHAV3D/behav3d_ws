@@ -1,0 +1,50 @@
+polyline_motion_sequence:
+  ros__parameters:
+    # Polyline geometry.
+    yaml_path: "yaml/Old files/pilz_polyline_dummy.yaml"
+    frame_id: world
+    eef_link: extruder_tcp
+
+    # Speed control. Options: legacy, pilz_native, retime
+    speed_control_mode: pilz_native
+    target_speed_mm_s: 1.0
+    # Must match moveit_config/config/pilz_cartesian_limits.yaml max_trans_vel.
+    pilz_max_trans_vel_m_s: 1.0
+    # Scale for Pilz Cartesian acceleration/deceleration.
+    accel_scale: 0.05
+    # Legacy seed scaling; used only in legacy/retime modes.
+    vel_scale: 0.05
+
+    # Orientation modes. Options: fixed, free_z_yaw
+    orientation_mode: free_z_yaw
+
+    # Pilz sequence.
+    blend_radius: 0.002
+    move_to_polyline_start: true
+    # Start motion options: LIN, PTP
+    start_motion: LIN
+    start_vel_scale: 0.05
+    start_accel_scale: 0.05
+
+    # Preview only by default for the new example configuration.
+    execute_motion: false
+    home_before: false
+    home_after: false
+
+    # Validation.
+    speed_tolerance: 0.05
+    speed_require_convergence: false
+    tcp_speed_warn_fraction: 0.8
+
+    # Legacy speed controls.
+    retime_constant_tcp_speed: false
+    retime_min_dt_s: 0.001
+    tcp_sample_spacing_mm: 2.0
+    speed_max_iterations: 5
+
+    # Presentation and timeouts.
+    publish_markers: true
+    clear_markers_before: true
+    axis_length: 0.05
+    axis_radius: 0.003
+    timeout_s: 0.0
