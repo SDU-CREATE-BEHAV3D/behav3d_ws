@@ -1,7 +1,7 @@
 polyline_motion_sequence:
   ros__parameters:
     # Polyline geometry.
-    yaml_path: "yaml/Old files/pilz_polyline_dummy.yaml"
+    yaml_path: "yaml/test2.yaml"
     frame_id: world
     eef_link: extruder_tcp
 
@@ -26,12 +26,14 @@ polyline_motion_sequence:
     start_vel_scale: 0.05
     start_accel_scale: 0.05
 
-    # Preview only by default for the new example configuration.
+    # Execution mode. Options: true, false
     execute_motion: false
+    # Preview start modes. Options: current, planned
+    preview_start_mode: planned
     home_before: false
     home_after: false
 
-    # Validation.
+    # Validation. Strict mean-speed check includes start/end ramps.
     speed_tolerance: 0.05
     speed_require_convergence: false
     tcp_speed_warn_fraction: 0.8

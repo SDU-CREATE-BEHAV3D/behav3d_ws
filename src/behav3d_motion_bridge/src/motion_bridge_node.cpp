@@ -48,6 +48,7 @@
 #include "behav3d_interfaces/srv/plan_pilz_lin.hpp"
 #include "behav3d_interfaces/srv/plan_pilz_ptp.hpp"
 #include "behav3d_interfaces/srv/plan_pilz_sequence.hpp"
+#include "behav3d_interfaces/srv/plan_pilz_sequence_virtual.hpp"
 #include "behav3d_interfaces/srv/get_link_pose.hpp"
 #include "behav3d_interfaces/srv/publish_targets.hpp"
 #include "behav3d_interfaces/srv/delete_markers.hpp"
@@ -118,6 +119,13 @@ public:
     pilz_seq_srv_ = this->create_service<behav3d_interfaces::srv::PlanPilzSequence>(
         "/behav3d/plan_pilz_sequence",
         std::bind(&MotionBridge::planPilzSequenceCallback, this, _1, _2));
+
+    // Additive preview-only service: start a Pilz sequence from explicit joint positions.
+    // Existing motion command and sequence service contracts remain unchanged.
+    pilz_seq_virtual_srv_ =
+        this->create_service<behav3d_interfaces::srv::PlanPilzSequenceVirtual>(
+            "/behav3d/plan_pilz_sequence_virtual",
+            std::bind(&MotionBridge::planPilzSequenceVirtualCallback, this, _1, _2));
 
     // Action client for controller execution
     fjt_client_ = rclcpp_action::create_client<FJT>(this, controller_action_name_);
@@ -1371,7 +1379,50 @@ private:
       const std::shared_ptr<behav3d_interfaces::srv::PlanPilzSequence::Request> req,
       std::shared_ptr<behav3d_interfaces::srv::PlanPilzSequence::Response> res)
   {
-    if (req->targets.size() < 2)
+    planPilzSequenceImpl(req, res, nullptr);
+  }
+
+  void planPilzSequenceVirtualCallback(
+      const std::shared_ptr<behav3d_interfaces::srv::PlanPilzSequenceVirtual::Request> req,
+      std::shared_ptr<behav3d_interfaces::srv::PlanPilzSequenceVirtual::Response> res)
+  {
+    const auto normal = std::make_shared<behav3d_interfaces::srv::PlanPilzSequence::Request>();
+    normal->group_name = req->group_name;
+    normal->frame_id = req->frame_id;
+    normal->targets = req->targets;
+    normal->blend_radii = req->blend_radii;
+    normal->velocity_scale = req->velocity_scale;
+    normal->accel_scale = req->accel_scale;
+    normal->eef_link = req->eef_link;
+    normal->preview_only = true;
+    normal->tcp_speed_threshold_m_s = req->tcp_speed_threshold_m_s;
+    normal->target_tcp_speed_m_s = req->target_tcp_speed_m_s;
+    normal->retime_min_dt_s = req->retime_min_dt_s;
+    normal->tcp_sample_spacing_m = req->tcp_sample_spacing_m;
+
+    const auto normal_res = std::make_shared<behav3d_interfaces::srv::PlanPilzSequence::Response>();
+    planPilzSequenceImpl(normal, normal_res, &req->start_joints);
+
+    res->trajectory = normal_res->trajectory;
+    res->success = normal_res->success;
+    res->message = normal_res->message;
+    res->tcp_speed_retimed = normal_res->tcp_speed_retimed;
+    res->tcp_speed_retime_fallback = normal_res->tcp_speed_retime_fallback;
+    res->tcp_path_length_m = normal_res->tcp_path_length_m;
+    res->tcp_duration_s = normal_res->tcp_duration_s;
+    res->tcp_speed_min_m_s = normal_res->tcp_speed_min_m_s;
+    res->tcp_speed_mean_m_s = normal_res->tcp_speed_mean_m_s;
+    res->tcp_speed_max_m_s = normal_res->tcp_speed_max_m_s;
+    res->tcp_speed_sample_count = normal_res->tcp_speed_sample_count;
+    res->tcp_speed_low_sample_count = normal_res->tcp_speed_low_sample_count;
+  }
+
+  void planPilzSequenceImpl(
+      const std::shared_ptr<behav3d_interfaces::srv::PlanPilzSequence::Request> req,
+      std::shared_ptr<behav3d_interfaces::srv::PlanPilzSequence::Response> res,
+      const sensor_msgs::msg::JointState* virtual_start_joints)
+  {
+    if (req->targets.size() < (virtual_start_joints == nullptr ? 2U : 1U))
     {
       RCLCPP_ERROR(this->get_logger(), "[Pilz SEQ] Need at least 2 targets");
       res->success = false;
@@ -1388,6 +1439,48 @@ private:
     // Build current start state message
     auto robot_model = mgi.getRobotModel();
     auto start_state_core = makeStartStateFromJointState(robot_model);
+    if (virtual_start_joints != nullptr)
+    {
+      const auto* jmg = robot_model->getJointModelGroup(req->group_name);
+      if (!jmg || virtual_start_joints->name.size() != virtual_start_joints->position.size())
+      {
+        res->success = false;
+        res->message = "Invalid virtual start joint names/positions";
+        return;
+      }
+
+      // Require every active group variable. Never silently mix stale physical
+      // joint values with a partial virtual state.
+      const auto& names = jmg->getVariableNames();
+      for (const auto& name : names)
+      {
+        const auto it = std::find(
+            virtual_start_joints->name.begin(), virtual_start_joints->name.end(), name);
+        if (it == virtual_start_joints->name.end())
+        {
+          res->success = false;
+          res->message = "Virtual start missing joint: " + name;
+          return;
+        }
+        const auto index = static_cast<size_t>(
+            std::distance(virtual_start_joints->name.begin(), it));
+        const double value = virtual_start_joints->position[index];
+        if (!std::isfinite(value))
+        {
+          res->success = false;
+          res->message = "Non-finite virtual start joint: " + name;
+          return;
+        }
+        start_state_core.setVariablePosition(name, value);
+      }
+      start_state_core.update();
+      if (!start_state_core.satisfiesBounds(jmg))
+      {
+        res->success = false;
+        res->message = "Virtual start violates joint bounds";
+        return;
+      }
+    }
     moveit_msgs::msg::RobotState start_state_msg;
     moveit::core::robotStateToRobotStateMsg(start_state_core, start_state_msg);
 
@@ -1441,6 +1534,35 @@ private:
                 std::clamp<double>(req->accel_scale, 0.0, 1.0),
                 blend_summary.c_str());
 
+    moveit_msgs::msg::RobotTrajectory planned;
+    size_t planned_segment_count = 0;
+
+    if (virtual_start_joints != nullptr && req->targets.size() == 1)
+    {
+      // A two-plane polyline is a single LIN from virtual P0 to P1.
+      // Avoid adding a zero-length LIN toward P0 to the Pilz sequence.
+      mgi.setPlanningPipelineId("pilz_industrial_motion_planner");
+      mgi.setPlannerId("LIN");
+      mgi.setStartState(start_state_core);
+      mgi.setEndEffectorLink(eef);
+      mgi.setPoseReferenceFrame(target_frame);
+      mgi.setMaxVelocityScalingFactor(std::clamp<double>(req->velocity_scale, 0.0, 1.0));
+      mgi.setMaxAccelerationScalingFactor(std::clamp<double>(req->accel_scale, 0.0, 1.0));
+      mgi.setPoseTarget(req->targets.front(), eef);
+      moveit::planning_interface::MoveGroupInterface::Plan single_plan;
+      const auto code = mgi.plan(single_plan);
+      mgi.clearPoseTargets();
+      if (!code)
+      {
+        res->success = false;
+        res->message = "Virtual single-LIN planning failed (code=" + std::to_string(code.val) + ")";
+        return;
+      }
+      planned = single_plan.trajectory;
+      planned_segment_count = 1;
+    }
+    else
+    {
     // Use the dedicated action client/node (avoid executor double-add)
     if (!mgs_client_->wait_for_action_server(3s))
     {
@@ -1505,7 +1627,6 @@ private:
       return;
     }
 
-    moveit_msgs::msg::RobotTrajectory planned;
     if (resp.planned_trajectories.size() == 1)
     {
       planned = resp.planned_trajectories.front();
@@ -1524,6 +1645,10 @@ private:
         ref_state = combined.getLastWayPoint();
       }
       combined.getRobotTrajectoryMsg(planned);
+    }
+
+
+      planned_segment_count = resp.planned_trajectories.size();
     }
 
     robot_trajectory::RobotTrajectory rt(robot_model, req->group_name);
@@ -1622,7 +1747,7 @@ private:
 
     RCLCPP_INFO(this->get_logger(),
                 "[Pilz SEQ] Planned %zu sequence segment(s), combined trajectory points=%zu",
-                resp.planned_trajectories.size(), planned.joint_trajectory.points.size());
+                planned_segment_count, planned.joint_trajectory.points.size());
 
     std::string final_validation_error;
     if (!validateTrajectoryTimingAndValues(planned, 1e-4, final_validation_error))
@@ -1714,6 +1839,7 @@ private:
   rclcpp::Service<behav3d_interfaces::srv::PlanPilzLin>::SharedPtr pilz_lin_srv_;
   rclcpp::Service<behav3d_interfaces::srv::PlanPilzPtp>::SharedPtr pilz_ptp_srv_;
   rclcpp::Service<behav3d_interfaces::srv::PlanPilzSequence>::SharedPtr pilz_seq_srv_;
+  rclcpp::Service<behav3d_interfaces::srv::PlanPilzSequenceVirtual>::SharedPtr pilz_seq_virtual_srv_;
   rclcpp::Service<behav3d_interfaces::srv::GetLinkPose>::SharedPtr get_link_pose_srv_;
   rclcpp::Service<behav3d_interfaces::srv::PublishTargets>::SharedPtr publish_targets_srv_;
   rclcpp::Service<behav3d_interfaces::srv::DeleteMarkers>::SharedPtr delete_markers_srv_;

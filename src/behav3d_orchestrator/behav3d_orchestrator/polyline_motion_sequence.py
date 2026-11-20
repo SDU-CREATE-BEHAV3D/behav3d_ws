@@ -12,6 +12,8 @@ import threading
 
 import rclpy
 from rclpy.node import Node
+from sensor_msgs.msg import JointState
+from behav3d_interfaces.srv import PlanPilzSequenceVirtual
 
 from .src.yaml_session import YamlSession
 from .src.free_z_yaw import transport_free_z_yaw
@@ -32,6 +34,7 @@ class PolylineMotionSequenceNode(Node):
         self.declare_parameter("pilz_max_trans_vel_m_s", 1.0)
         self.declare_parameter("orientation_mode", "fixed")
         self.declare_parameter("execute_motion", True)
+        self.declare_parameter("preview_start_mode", "current")
         self.declare_parameter("retime_constant_tcp_speed", False)
         self.declare_parameter("retime_min_dt_s", 0.001)
         self.declare_parameter("tcp_sample_spacing_mm", 2.0)
@@ -52,6 +55,9 @@ class PolylineMotionSequenceNode(Node):
         self.declare_parameter("clear_markers_before", True)
 
         self.session = YamlSession(self)
+        self._virtual_seq_client = self.create_client(
+            PlanPilzSequenceVirtual, "/behav3d/plan_pilz_sequence_virtual"
+        )
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
 
@@ -70,6 +76,7 @@ class PolylineMotionSequenceNode(Node):
         pilz_max_trans_vel_m_s = float(self.get_parameter("pilz_max_trans_vel_m_s").value)
         orientation_mode = str(self.get_parameter("orientation_mode").value).strip().lower()
         execute_motion = bool(self.get_parameter("execute_motion").value)
+        preview_start_mode = str(self.get_parameter("preview_start_mode").value).strip().lower()
         retime_min_dt_s = float(self.get_parameter("retime_min_dt_s").value)
         tcp_sample_spacing_mm = float(self.get_parameter("tcp_sample_spacing_mm").value)
         speed_tolerance = float(self.get_parameter("speed_tolerance").value)
@@ -101,6 +108,10 @@ class PolylineMotionSequenceNode(Node):
                 raise ValueError("speed_control_mode must be one of: legacy, pilz_native, retime")
             if orientation_mode not in ("fixed", "free_z_yaw"):
                 raise ValueError("orientation_mode must be one of: fixed, free_z_yaw")
+            if preview_start_mode not in ("current", "planned"):
+                raise ValueError("preview_start_mode must be one of: current, planned")
+            if preview_start_mode == "planned" and speed_control_mode != "pilz_native":
+                raise ValueError("preview_start_mode=planned currently requires speed_control_mode=pilz_native")
             if speed_control_mode == "pilz_native":
                 if not math.isfinite(pilz_max_trans_vel_m_s) or pilz_max_trans_vel_m_s <= 0.0:
                     raise ValueError("pilz_max_trans_vel_m_s must be finite and > 0")
@@ -122,6 +133,7 @@ class PolylineMotionSequenceNode(Node):
                 f"eef='{eef_link}', v={vel_scale:.3f}, a={accel_scale:.3f}, blend={blend_radius:.4f}, "
                 f"target_speed_mm_s={target_speed_mm_s:.3f}, speed_mode={speed_control_mode}, "
                 f"orientation_mode={orientation_mode}, execute_motion={execute_motion}, "
+                f"preview_start_mode={preview_start_mode}, 
                 f"retime_constant_tcp_speed={retime_constant_tcp_speed}, "
                 f"tcp_sample_spacing_mm={tcp_sample_spacing_mm:.3f}, retime_min_dt_s={retime_min_dt_s:.4f}, "
                 f"move_to_polyline_start={move_to_polyline_start}, start_motion={start_motion}, "
@@ -196,20 +208,15 @@ class PolylineMotionSequenceNode(Node):
                         f"polyline index={polyline.index} poses={len(polyline.poses)}."
                     )
 
-                if move_to_polyline_start and execute_motion:
+                virtual_start_joints = None
+                if move_to_polyline_start and (execute_motion or preview_start_mode == "planned"):
                     if not sequence_poses:
                         skipped_polylines.append(int(polyline.index))
                         log.error(f"[polyline_motion] Skipping polyline index={polyline.index}: no poses")
                         continue
 
                     start_pose = sequence_poses[0]
-                    log.info(
-                        f"[polyline_motion] Moving to polyline index={polyline.index} start with {start_motion}: "
-                        f"({start_pose.pose.position.x:.3f}, "
-                        f"{start_pose.pose.position.y:.3f}, "
-                        f"{start_pose.pose.position.z:.3f})"
-                    )
-                    start_res = self.session.run_sync(
+                    start_command = (
                         self.session.motion.goto(
                             pose=start_pose,
                             eef=eef_link,
@@ -218,24 +225,57 @@ class PolylineMotionSequenceNode(Node):
                             motion=start_motion,
                             exec=True,
                             enqueue=False,
-                        ),
-                        timeout_s=timeout_s,
+                        )
+                        if execute_motion else
+                        self.session.motion.plan(
+                            pose=start_pose,
+                            eef=eef_link,
+                            vel_scale=start_vel_scale,
+                            accel_scale=start_accel_scale,
+                            motion=start_motion,
+                            enqueue=False,
+                        )
                     )
+                    log.info(
+                        f"[polyline_motion] {'Moving' if execute_motion else 'Preview-planning'} "
+                        f"to polyline index={polyline.index} start with {start_motion}: "
+                        f"({start_pose.pose.position.x:.3f}, "
+                        f"{start_pose.pose.position.y:.3f}, "
+                        f"{start_pose.pose.position.z:.3f})"
+                    )
+                    start_res = self.session.run_sync(start_command, timeout_s=timeout_s)
                     if not start_res.get("ok", False):
                         skipped_polylines.append(int(polyline.index))
                         log.error(
                             f"[polyline_motion] Skipping polyline index={polyline.index}: "
-                            f"start move failed: {start_res.get('error', 'unknown')}"
+                            f"start plan/move failed: {start_res.get('error', 'unknown')}"
                         )
                         continue
 
-                    if len(sequence_poses) > 2:
-                        sequence_poses = sequence_poses[1:]
-                    else:
-                        log.warn(
-                            "[polyline_motion] Two-plane sequences include the start pose as the "
-                            "first Pilz target; add an intermediate plane if planning fails."
+                    if not execute_motion:
+                        approach_jt = getattr(self.session.motion, "_planned_jt", None)
+                        if approach_jt is None or not approach_jt.points:
+                            raise RuntimeError("Planned approach has no joint trajectory")
+                        final_point = approach_jt.points[-1]
+                        if len(approach_jt.joint_names) != len(final_point.positions):
+                            raise RuntimeError("Planned approach has inconsistent joint names/positions")
+                        virtual_start_joints = JointState()
+                        virtual_start_joints.name = list(approach_jt.joint_names)
+                        virtual_start_joints.position = list(final_point.positions)
+                        log.info(
+                            f"[polyline_motion] Virtual start ready for polyline "
+                            f"index={polyline.index}: {len(virtual_start_joints.name)} joints"
                         )
+
+                    # P0 is the (real or virtual) start, not a redundant Pilz target.
+                    # P0 -> P1 is one LIN when a polyline contains only two planes.
+                    sequence_poses = sequence_poses[1:]
+
+                if not execute_motion and preview_start_mode == "current" and move_to_polyline_start:
+                    log.warn(
+                        "[polyline_motion] preview_start_mode=current: planning from "
+                        "physical joint state; results include the approach to P0"
+                    )
 
                 log.info(
                     f"[polyline_motion] Planning sequence for polyline index={polyline.index} "
@@ -247,26 +287,81 @@ class PolylineMotionSequenceNode(Node):
                         f"({pose.pose.position.x:.3f}, {pose.pose.position.y:.3f}, {pose.pose.position.z:.3f})"
                     )
 
-                plan_res = self._plan_polyline_sequence(
-                    poses=sequence_poses,
-                    polyline_index=int(polyline.index),
-                    eef_link=eef_link,
-                    seed_vel_scale=vel_scale,
-                    seed_accel_scale=accel_scale,
-                    blend_radius=blend_radius,
-                    target_speed_mm_s=target_speed_mm_s,
-                    retime_constant_tcp_speed=(retime_constant_tcp_speed or speed_control_mode == "retime"),
-                    speed_control_mode=speed_control_mode,
-                    pilz_max_trans_vel_m_s=pilz_max_trans_vel_m_s,
-                    retime_min_dt_s=retime_min_dt_s,
-                    tcp_sample_spacing_m=max(0.0, tcp_sample_spacing_mm) * 1e-3,
-                    speed_tolerance=speed_tolerance,
-                    max_iterations=speed_max_iterations,
-                    require_convergence=speed_require_convergence,
-                    frame_id=frame_id,
-                    tcp_speed_warn_fraction=tcp_speed_warn_fraction,
-                    timeout_s=timeout_s,
-                )
+                if virtual_start_joints is not None:
+                    plan_res = self._plan_virtual_polyline(
+                        poses=sequence_poses,
+                        start_joints=virtual_start_joints,
+                        eef_link=eef_link,
+                        frame_id=frame_id,
+                        target_speed_mm_s=target_speed_mm_s,
+                        pilz_max_trans_vel_m_s=pilz_max_trans_vel_m_s,
+                        seed_accel_scale=accel_scale,
+                        blend_radius=blend_radius,
+                        speed_tolerance=speed_tolerance,
+                        require_convergence=speed_require_convergence,
+                        tcp_speed_warn_fraction=tcp_speed_warn_fraction,
+                        timeout_s=timeout_s,
+                    )
+                elif len(sequence_poses) == 1:
+                    # A two-plane polyline with executed P0 uses one Pilz LIN to P1.
+                    if speed_control_mode == "retime" or retime_constant_tcp_speed:
+                        plan_res = {
+                            "ok": False,
+                            "error": "single LIN does not support the legacy TCP retimer",
+                        }
+                    else:
+                        single_scale = (
+                            target_speed_mm_s * 1e-3 / pilz_max_trans_vel_m_s
+                            if speed_control_mode == "pilz_native" else vel_scale
+                        )
+                        plan_res = self.session.run_sync(
+                            self.session.motion.plan(
+                                pose=sequence_poses[0],
+                                eef=eef_link,
+                                vel_scale=single_scale,
+                                accel_scale=accel_scale,
+                                motion="LIN",
+                                enqueue=False,
+                            ),
+                            timeout_s=timeout_s,
+                        )
+                        if plan_res.get("ok", False):
+                            plan_res.setdefault("metrics", {}).update({
+                                "mode": "LIN",
+                                "native_vel_scale": single_scale,
+                                "target_speed_mm_s": target_speed_mm_s,
+                            })
+                            log.warn(
+                                "[polyline_motion] Single LIN has no FK TCP-speed metrics "
+                                "in the existing PlanPilzLin service"
+                            )
+                            if speed_control_mode == "pilz_native" and speed_require_convergence:
+                                plan_res = {
+                                    "ok": False,
+                                    "error": "strict speed validation unavailable for single LIN",
+                                    "metrics": plan_res["metrics"],
+                                }
+                else:
+                    plan_res = self._plan_polyline_sequence(
+                        poses=sequence_poses,
+                        polyline_index=int(polyline.index),
+                        eef_link=eef_link,
+                        seed_vel_scale=vel_scale,
+                        seed_accel_scale=accel_scale,
+                        blend_radius=blend_radius,
+                        target_speed_mm_s=target_speed_mm_s,
+                        retime_constant_tcp_speed=(retime_constant_tcp_speed or speed_control_mode == "retime"),
+                        speed_control_mode=speed_control_mode,
+                        pilz_max_trans_vel_m_s=pilz_max_trans_vel_m_s,
+                        retime_min_dt_s=retime_min_dt_s,
+                        tcp_sample_spacing_m=max(0.0, tcp_sample_spacing_mm) * 1e-3,
+                        speed_tolerance=speed_tolerance,
+                        max_iterations=speed_max_iterations,
+                        require_convergence=speed_require_convergence,
+                        frame_id=frame_id,
+                        tcp_speed_warn_fraction=tcp_speed_warn_fraction,
+                        timeout_s=timeout_s,
+                    )
                 if not plan_res.get("ok", False):
                     skipped_polylines.append(int(polyline.index))
                     log.error(
@@ -318,6 +413,102 @@ class PolylineMotionSequenceNode(Node):
             log.error(f"[polyline_motion_sequence] Sequence failed: {exc}")
         finally:
             rclpy.shutdown()
+
+    def _plan_virtual_polyline(
+        self,
+        *,
+        poses,
+        start_joints: JointState,
+        eef_link: str,
+        frame_id: str,
+        target_speed_mm_s: float,
+        pilz_max_trans_vel_m_s: float,
+        seed_accel_scale: float,
+        blend_radius: float,
+        speed_tolerance: float,
+        require_convergence: bool,
+        tcp_speed_warn_fraction: float,
+        timeout_s,
+    ) -> dict:
+        """Preview a complete polyline starting at P0 without moving the robot."""
+        if not poses:
+            return {"ok": False, "error": "virtual preview has no remaining targets"}
+        if not self._virtual_seq_client.wait_for_service(timeout_sec=2.0):
+            return {"ok": False, "error": "virtual Pilz sequence service unavailable"}
+
+        req = PlanPilzSequenceVirtual.Request()
+        req.group_name = "ur_arm"
+        req.frame_id = frame_id
+        req.eef_link = eef_link
+        req.start_joints = start_joints
+        req.targets = [pose.pose for pose in poses]
+        req.blend_radii = [float(blend_radius)] * len(poses)
+        req.blend_radii[-1] = 0.0
+        req.velocity_scale = float(target_speed_mm_s) * 1e-3 / float(pilz_max_trans_vel_m_s)
+        req.accel_scale = float(seed_accel_scale)
+        req.tcp_speed_threshold_m_s = (
+            float(target_speed_mm_s) * float(tcp_speed_warn_fraction) * 1e-3
+            if tcp_speed_warn_fraction > 0.0 else 0.0
+        )
+        req.target_tcp_speed_m_s = 0.0
+        req.retime_min_dt_s = 0.001
+        req.tcp_sample_spacing_m = 0.0
+
+        finished = threading.Event()
+        future = self._virtual_seq_client.call_async(req)
+        future.add_done_callback(lambda _: finished.set())
+        if not finished.wait(120.0 if timeout_s is None else float(timeout_s)):
+            return {"ok": False, "error": "virtual sequence planning timeout"}
+        try:
+            response = future.result()
+        except Exception as exc:
+            return {"ok": False, "error": f"virtual sequence call failed: {exc}"}
+        if response is None or not response.success:
+            return {
+                "ok": False,
+                "error": str(getattr(response, "message", "no virtual planning response")),
+            }
+
+        jt = response.trajectory
+        metrics = {
+            "points": len(jt.points),
+            "duration_s": self.session.motion._trajectory_duration_s(jt),
+            "interior_zero_velocity_points": self.session.motion._interior_zero_velocity_points(jt),
+            "tcp_path_length_m": float(response.tcp_path_length_m),
+            "tcp_speed_min_mm_s": 1000.0 * float(response.tcp_speed_min_m_s),
+            "tcp_speed_mean_mm_s": 1000.0 * float(response.tcp_speed_mean_m_s),
+            "tcp_speed_max_mm_s": 1000.0 * float(response.tcp_speed_max_m_s),
+            "tcp_speed_sample_count": int(response.tcp_speed_sample_count),
+            "tcp_speed_low_sample_count": int(response.tcp_speed_low_sample_count),
+            "tcp_speed_retimed": bool(response.tcp_speed_retimed),
+            "tcp_speed_retime_fallback": bool(response.tcp_speed_retime_fallback),
+            "target_speed_mm_s": float(target_speed_mm_s),
+            "native_vel_scale": float(req.velocity_scale),
+            "mode": "SEQ_VIRTUAL" if len(poses) > 1 else "LIN_VIRTUAL",
+        }
+
+        samples = metrics["tcp_speed_sample_count"]
+        max_speed = metrics["tcp_speed_max_mm_s"]
+        mean_speed = metrics["tcp_speed_mean_mm_s"]
+        upper = target_speed_mm_s * (1.0 + max(0.0, speed_tolerance))
+        lower = target_speed_mm_s * (1.0 - max(0.0, speed_tolerance))
+        if samples <= 0:
+            return {"ok": False, "error": "virtual preview has no FK speed samples", "metrics": metrics}
+        if max_speed > upper:
+            return {
+                "ok": False,
+                "error": f"TCP max speed {max_speed:.3f}mm/s exceeds {upper:.3f}mm/s",
+                "metrics": metrics,
+            }
+        if mean_speed < lower:
+            msg = (
+                f"TCP mean speed {mean_speed:.3f}mm/s below {lower:.3f}mm/s "
+                "(includes start/end ramps)"
+            )
+            if require_convergence:
+                return {"ok": False, "error": msg, "metrics": metrics}
+            self.get_logger().warn(f"[polyline_motion] {msg}")
+        return {"ok": True, "metrics": metrics}
 
     def _plan_polyline_sequence(
         self,

@@ -28,6 +28,7 @@ set(srv_files
   srv/PlanPilzLin.srv
   srv/PlanPilzPtp.srv
   srv/PlanPilzSequence.srv
+  srv/PlanPilzSequenceVirtual.srv
   srv/GetLinkPose.srv
   srv/ReconstructMesh.srv
   srv/ColorToDepth.srv
