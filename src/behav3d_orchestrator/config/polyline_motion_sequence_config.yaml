@@ -6,7 +6,7 @@ polyline_motion_sequence:
     eef_link: extruder_tcp
 
     # Speed control. Options: legacy, pilz_native, retime
-    speed_control_mode: pilz_native
+    speed_control_mode: retime
     target_speed_mm_s: 1.0
     # Must match moveit_config/config/pilz_cartesian_limits.yaml max_trans_vel.
     pilz_max_trans_vel_m_s: 1.0
@@ -27,10 +27,11 @@ polyline_motion_sequence:
     start_accel_scale: 0.05
 
     # Execution mode. Options: true, false
-    execute_motion: false
+    execute_motion: true
     # Preview start modes. Options: current, planned
-    preview_start_mode: planned
-    home_before: false
+    preview_start_mode: current
+    # Same motion.home() as print_yaml_and_scan; only runs with execute_motion=true.
+    home_before: true
     home_after: false
 
     # Validation. Strict mean-speed check includes start/end ramps.
@@ -39,7 +40,7 @@ polyline_motion_sequence:
     tcp_speed_warn_fraction: 0.8
 
     # Legacy speed controls.
-    retime_constant_tcp_speed: false
+    retime_constant_tcp_speed: true
     retime_min_dt_s: 0.001
     tcp_sample_spacing_mm: 2.0
     speed_max_iterations: 5
@@ -47,6 +48,6 @@ polyline_motion_sequence:
     # Presentation and timeouts.
     publish_markers: true
     clear_markers_before: true
-    axis_length: 0.05
-    axis_radius: 0.003
+    axis_length: 0.01
+    axis_radius: 0.002
     timeout_s: 0.0

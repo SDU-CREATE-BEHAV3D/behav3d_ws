@@ -133,7 +133,7 @@ class PolylineMotionSequenceNode(Node):
                 f"eef='{eef_link}', v={vel_scale:.3f}, a={accel_scale:.3f}, blend={blend_radius:.4f}, "
                 f"target_speed_mm_s={target_speed_mm_s:.3f}, speed_mode={speed_control_mode}, "
                 f"orientation_mode={orientation_mode}, execute_motion={execute_motion}, "
-                f"preview_start_mode={preview_start_mode}, 
+                f"preview_start_mode={preview_start_mode}, "
                 f"retime_constant_tcp_speed={retime_constant_tcp_speed}, "
                 f"tcp_sample_spacing_mm={tcp_sample_spacing_mm:.3f}, retime_min_dt_s={retime_min_dt_s:.4f}, "
                 f"move_to_polyline_start={move_to_polyline_start}, start_motion={start_motion}, "
@@ -149,9 +149,12 @@ class PolylineMotionSequenceNode(Node):
                     raise RuntimeError(f"Target marker cleanup failed: {clear_res.get('error', 'unknown')}")
 
             if home_before and execute_motion:
+                log.info("[polyline_motion] Moving to shared motion.home() before the polyline sequence")
                 home_res = self.session.run_sync(self.session.motion.home(enqueue=False), timeout_s=timeout_s)
                 if not home_res.get("ok", False):
                     raise RuntimeError(f"home_before failed: {home_res.get('error', 'unknown')}")
+            elif home_before:
+                log.info("[polyline_motion] Preview only; home_before skipped (no home trajectory preview)")
 
             self.session.run_sync(self.session.motion.setLIN(enqueue=False), timeout_s=timeout_s)
             self.session.run_sync(self.session.motion.setSpd(vel_scale, enqueue=False), timeout_s=timeout_s)

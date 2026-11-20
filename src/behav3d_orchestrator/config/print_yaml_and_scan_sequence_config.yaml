@@ -9,7 +9,7 @@ print_yaml_and_scan_sequence:
     # segments: extrude along each start-to-end path; requires segment YAML.
     # auto: segments for segment YAML, otherwise dots.
     print_mode: dots
-    yaml_path: /home/lab/behav3d_ws/yaml/E01/targets_rule_based.yaml
+    yaml_path: /home/lab/behav3d_ws/yaml/E01/lamine_lattice10edge.yaml
     frame_id: world
     # Reload before each bead/scan and after their ENTER confirmations.
     # Group size edits apply to the next group; target file/frame need a restart.
@@ -28,8 +28,8 @@ print_yaml_and_scan_sequence:
     # E01 pilot: 20 mm target height is encoded by the YAML geometry.
     # 27 mL = 27000 mm3; round(27000 * 0.8148733086) = 22002 net steps.
     print_eef_link: extruder_tcp
-    dot_steps_n: 19002
-    dot_steps_e: 19002
+    dot_steps_n: 19500  # Normal (N): absolute net steps per bead.
+    dot_steps_e: 14000  # Edge (E): absolute net steps per bead.
     # Used only when a YAML target provides volume_mm3; it overrides N/E steps.
     # Theoretical unit calibration: 64000 steps / (pi * 50^2 mm2 * 10 mm).
     # Do not use this conversion constant to tune extrusion. Adjust the source
@@ -149,7 +149,7 @@ print_yaml_and_scan_sequence:
     reconstruct_device: CPU:0
     reconstruct_request_timeout_s: 10.0
     wait_reconstruction_outputs: true
-    color_to_depth_wait_timeout_s: 60.0
+    color_to_depth_wait_timeout_s: 65.0
     tsdf_wait_timeout_s: 180.0
     update_world_mesh: true
     tsdf_center_crop_enable: true
